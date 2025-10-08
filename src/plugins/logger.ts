@@ -1,28 +1,7 @@
-import { FastifyInstance, FastifyPluginOptions } from 'fastify';
 import fp from 'fastify-plugin';
 import pino from 'pino';
-import { config } from '../config/env';
+import { env } from '../config/env.js';
 
-const loggerPlugin = async (
-  fastify: FastifyInstance,
-  _options: FastifyPluginOptions
-): Promise<void> => {
-  const logger = pino({
-    level: config.NODE_ENV === 'production' ? 'info' : 'debug',
-    transport:
-      config.NODE_ENV !== 'production'
-        ? {
-            target: 'pino-pretty',
-            options: {
-              colorize: true,
-              translateTime: 'HH:MM:ss Z',
-              ignore: 'pid,hostname',
-            },
-          }
-        : undefined,
-  });
-
-  fastify.decorate('logger', logger);
-};
-
-export default fp(loggerPlugin);
+export default fp(async (app) => {
+  app.log = pino({ level: env.logLevel });
+});

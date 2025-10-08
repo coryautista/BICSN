@@ -1,47 +1,31 @@
-import dotenv from 'dotenv';
+import 'dotenv/config';
 
-dotenv.config();
-
-interface EnvConfig {
-  NODE_ENV: string;
-  PORT: number;
-  HOST: string;
-  DB_SERVER: string;
-  DB_DATABASE: string;
-  DB_USER: string;
-  DB_PASSWORD: string;
-  DB_PORT: number;
-  DB_ENCRYPT: boolean;
-  DB_TRUST_SERVER_CERTIFICATE: boolean;
-}
-
-const getEnvVar = (key: string, defaultValue?: string): string => {
-  const value = process.env[key] || defaultValue;
-  if (!value) {
-    throw new Error(`Missing required environment variable: ${key}`);
+export const env = {
+  port: Number(process.env.PORT ?? 4000),
+  nodeEnv: process.env.NODE_ENV ?? 'development',
+  logLevel: process.env.LOG_LEVEL ?? 'info',
+  sql: {
+    user: process.env.SQLSERVER_USER!,
+    password: process.env.SQLSERVER_PASSWORD!,
+    server: process.env.SQLSERVER_SERVER!,
+    database: process.env.SQLSERVER_DB!,
+    port: Number(process.env.SQLSERVER_PORT ?? 1433),
+    options: {
+      encrypt: process.env.SQLSERVER_ENCRYPT === 'true',
+      trustServerCertificate: process.env.SQLSERVER_TRUST_CERT === 'true'
+    },
+    pool: { max: 10, min: 1, idleTimeoutMillis: 30000 }
+  },
+  jwt: {
+    accessSecret: process.env.JWT_ACCESS_SECRET!,
+    accessTtl: process.env.JWT_ACCESS_TTL ?? '15m',
+    iss: process.env.JWT_ISS ?? 'api',
+    aud: process.env.JWT_AUD ?? 'api-clients'
+  },
+  cookie: {
+    domain: process.env.COOKIE_DOMAIN ?? 'localhost',
+    secure: process.env.COOKIE_SECURE === 'true',
+    refreshTtlMin: Number(process.env.REFRESH_TTL_MIN ?? 10080)
   }
-  return value;
-};
 
-const getEnvNumber = (key: string, defaultValue: number): number => {
-  const value = process.env[key];
-  return value ? parseInt(value, 10) : defaultValue;
-};
-
-const getEnvBoolean = (key: string, defaultValue: boolean): boolean => {
-  const value = process.env[key];
-  return value ? value === 'true' : defaultValue;
-};
-
-export const config: EnvConfig = {
-  NODE_ENV: getEnvVar('NODE_ENV', 'development'),
-  PORT: getEnvNumber('PORT', 3000),
-  HOST: getEnvVar('HOST', '0.0.0.0'),
-  DB_SERVER: getEnvVar('DB_SERVER'),
-  DB_DATABASE: getEnvVar('DB_DATABASE'),
-  DB_USER: getEnvVar('DB_USER'),
-  DB_PASSWORD: getEnvVar('DB_PASSWORD'),
-  DB_PORT: getEnvNumber('DB_PORT', 1433),
-  DB_ENCRYPT: getEnvBoolean('DB_ENCRYPT', true),
-  DB_TRUST_SERVER_CERTIFICATE: getEnvBoolean('DB_TRUST_SERVER_CERTIFICATE', false),
 };

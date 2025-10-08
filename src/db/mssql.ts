@@ -1,21 +1,17 @@
 import sql, { config as SqlConfig } from 'mssql';
-import { config } from '../config/env';
+import { env as config } from '../config/env.js';
 
 const sqlConfig: SqlConfig = {
-  server: config.DB_SERVER,
-  database: config.DB_DATABASE,
-  user: config.DB_USER,
-  password: config.DB_PASSWORD,
-  port: config.DB_PORT,
+  server: config.sql.server,
+  database: config.sql.database,
+  user: config.sql.user,
+  password: config.sql.password,
+  port: config.sql.port,
   options: {
-    encrypt: config.DB_ENCRYPT,
-    trustServerCertificate: config.DB_TRUST_SERVER_CERTIFICATE,
+    encrypt: config.sql.options.encrypt,
+    trustServerCertificate: config.sql.options.trustServerCertificate,
   },
-  pool: {
-    max: 10,
-    min: 0,
-    idleTimeoutMillis: 30000,
-  },
+  pool: config.sql.pool,
 };
 
 let pool: sql.ConnectionPool | null = null;
@@ -48,6 +44,18 @@ export const getPool = (): sql.ConnectionPool => {
     throw new Error('Database pool not initialized. Call connectDatabase() first.');
   }
   return pool;
+};
+
+export const ping = async (): Promise<boolean> => {
+  if (!pool) {
+    throw new Error('Database pool not initialized. Call connectDatabase() first.');
+  }
+  try {
+    await pool.request().query('SELECT 1');
+    return true;
+  } catch (error) {
+    throw error;
+  }
 };
 
 export { sql };
