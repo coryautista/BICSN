@@ -1,14 +1,16 @@
 import { createRole, findRoleByName, listRoles, findUserById, assignUserRole, unassignUserRole } from './role.repo.js';
 import { getUserRoles } from '../auth/auth.repo.js';
 
-export async function createRoleIfNotExists(name: string, description?: string, isSystem = false) {
+export async function createRoleIfNotExists(name: string, description?: string, isSystem = false, isEntidad = false) {
   const existing = await findRoleByName(name);
   if (existing) return existing; // idempotente
-  return createRole(name, description, isSystem);
+  return createRole(name, description, isSystem, isEntidad);
 }
 
 export async function getAllRoles() {
-  return listRoles();
+  const roles = await listRoles();
+  console.log('getAllRoles result:', JSON.stringify(roles, null, 2));
+  return roles;
 }
 
 export async function addRoleToUserByName(userId: string, roleName: string) {

@@ -12,14 +12,36 @@ import {
 type AccessClaims = {
   sub: string;
   roles: string[];
+  entidades: boolean[];
   jti: string;
   iss: string;
   aud: string;
 };
 
-export async function register(username: string, email: string | undefined, password: string) {
+export async function register(
+  username: string,
+  email: string | undefined,
+  password: string,
+  displayName?: string,
+  photoPath?: string,
+  idOrganica0?: number,
+  idOrganica1?: number,
+  idOrganica2?: number,
+  idOrganica3?: number
+) {
   const { hash, algo } = await hashPassword(password);
-  const u = await createUser(username, email ?? null, hash, algo);
+  const u = await createUser(
+    username,
+    email ?? null,
+    hash,
+    algo,
+    displayName,
+    photoPath,
+    idOrganica0,
+    idOrganica1,
+    idOrganica2,
+    idOrganica3
+  );
   return u;
 }
 
@@ -39,14 +61,16 @@ export async function login(usernameOrEmail: string, password: string, ip?: stri
 
   await registerSuccessfulLogin(u.id);
 
-  const roles = await getUserRoles(u.id);
-  const access = signAccessToken(u.id, roles);
+  const rolesData = await getUserRoles(u.id);
+  const roles = rolesData.map(r => r.name);
+  const entidades = rolesData.map(r => r.isEntidad);
+  const access = signAccessToken(u.id, roles, entidades);
   const refreshPlain = newRefreshTokenOpaque();
   const refreshHash = sha256(refreshPlain);
 
   await issueRefreshToken(u.id, refreshHash, env.cookie.refreshTtlMin, ip, ua);
 
-  return { userId: u.id, accessToken: access.token, accessExp: access.exp, refreshToken: refreshPlain };
+  return { userId: u.id, username: u.username, accessToken: access.token, accessExp: access.exp, refreshToken: refreshPlain };
 }
 
 export async function rotateRefresh(currentRefreshPlain: string, ip?: string, ua?: string) {
@@ -62,9 +86,9 @@ export async function logoutAll(userId: string) {
   await revokeAllRefreshTokensForUser(userId);
 }
 
-export function signAccessToken(userId: string, roles: string[]) {
+export function signAccessToken(userId: string, roles: string[], entidades: boolean[]) {
   const jti = uuidv4();
-  const payload: AccessClaims = { sub: userId, roles, jti, iss: env.jwt.iss, aud: env.jwt.aud };
+  const payload: AccessClaims = { sub: userId, roles, entidades, jti, iss: env.jwt.iss, aud: env.jwt.aud };
   const token = (jwt.sign as any)(payload, env.jwt.accessSecret, {
     expiresIn: env.jwt.accessTtl
   });

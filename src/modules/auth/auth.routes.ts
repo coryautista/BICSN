@@ -3,14 +3,18 @@ import { ok, fail } from '../../utils/http.js';
 import { RegisterSchema, LoginSchema } from './auth.schemas.js';
 import { register, login, rotateRefresh, denylistAccessToken } from './auth.service.js';
 import { requireAuth } from './auth.middleware.js';
+function setCookie(reply: any, name: string, value: string, path: string) {
+  const host = reply.request.hostname;
+  const isLocalhost = host === 'localhost' || host === '127.0.0.1';
+  const isDevTunnel = host.endsWith('.devtunnels.ms');
 
-function setRefreshCookie(reply: any, refreshPlain: string, secure: boolean, domain: string) {
-  reply.setCookie('refresh_token', refreshPlain, {
+  reply.setCookie(name, value, {
     httpOnly: true,
-    secure,
-    sameSite: secure ? 'strict' : 'lax',
-    path: '/api/auth',
-    domain
+    secure: true,
+    sameSite: 'none',
+    path,
+    domain: (isLocalhost || isDevTunnel) ? undefined : process.env.COOKIE_DOMAIN,
+    ...(name === 'access_token' && { maxAge: 15 * 60 * 1000 })
   });
 }
 
@@ -25,7 +29,13 @@ export default async function authRoutes(app: FastifyInstance) {
         properties: {
           username: { type: 'string', minLength: 3, maxLength: 100 },
           email: { type: 'string', format: 'email' },
-          password: { type: 'string', minLength: 8 }
+          password: { type: 'string', minLength: 8 },
+          displayName: { type: 'string', maxLength: 255 },
+          photoPath: { type: 'string', maxLength: 255 },
+          idOrganica0: { type: 'integer' },
+          idOrganica1: { type: 'integer' },
+          idOrganica2: { type: 'integer' },
+          idOrganica3: { type: 'integer' }
         }
       },
       response: {
@@ -38,7 +48,13 @@ export default async function authRoutes(app: FastifyInstance) {
               properties: {
                 id: { type: 'string' },
                 username: { type: 'string' },
-                email: { type: 'string' }
+                email: { type: 'string' },
+                displayName: { type: 'string' },
+                photoPath: { type: 'string' },
+                idOrganica0: { type: 'integer' },
+                idOrganica1: { type: 'integer' },
+                idOrganica2: { type: 'integer' },
+                idOrganica3: { type: 'integer' }
               }
             }
           }
@@ -75,8 +91,28 @@ export default async function authRoutes(app: FastifyInstance) {
     const parsed = RegisterSchema.safeParse(req.body);
     if (!parsed.success) return reply.code(400).send(fail(parsed.error.message));
     try {
-      const u = await register(parsed.data.username, parsed.data.email, parsed.data.password);
-      return reply.code(201).send(ok({ id: u.id, username: u.username, email: u.email }));
+      const u = await register(
+        parsed.data.username,
+        parsed.data.email,
+        parsed.data.password,
+        parsed.data.displayName,
+        parsed.data.photoPath,
+        parsed.data.idOrganica0,
+        parsed.data.idOrganica1,
+        parsed.data.idOrganica2,
+        parsed.data.idOrganica3
+      );
+      return reply.code(201).send(ok({
+        id: u.id,
+        username: u.username,
+        email: u.email,
+        displayName: u.displayName,
+        photoPath: u.photoPath,
+        idOrganica0: u.idOrganica0,
+        idOrganica1: u.idOrganica1,
+        idOrganica2: u.idOrganica2,
+        idOrganica3: u.idOrganica3
+      }));
     } catch (e: any) {
       return reply.code(500).send(fail(e.message || 'REGISTER_FAILED'));
     }
@@ -172,7 +208,8 @@ export default async function authRoutes(app: FastifyInstance) {
       const { userId, accessToken, accessExp, refreshToken } =
         await login(parsed.data.usernameOrEmail, parsed.data.password, ip, ua);
 
-      setRefreshCookie(reply, refreshToken, app.config.cookie.secure, app.config.cookie.domain);
+      setCookie(reply, 'refresh_token', refreshToken, '/v1/auth');
+      setCookie(reply, 'access_token', accessToken, '/');
       return reply.send(ok({ userId, accessToken, accessExp }));
     } catch (e: any) {
       app.log.error(e);
@@ -222,7 +259,7 @@ export default async function authRoutes(app: FastifyInstance) {
       const ip = req.ip;
       const ua = req.headers['user-agent'] as string | undefined;
       const newPlain = await rotateRefresh(token, ip, ua);
-      setRefreshCookie(reply, newPlain, app.config.cookie.secure, app.config.cookie.domain);
+      setCookie(reply, 'refresh_token', newPlain, '/v1/auth');
       return reply.send(ok({ rotated: true }));
     } catch {
       return reply.code(401).send(fail('Invalid or expired refresh token', 'UNAUTHORIZED'));
@@ -249,7 +286,12 @@ export default async function authRoutes(app: FastifyInstance) {
     if (req.user?.jti && req.user?.exp) {
       await denylistAccessToken(req.user.jti, req.user.sub, req.user.exp);
     }
-    reply.clearCookie('refresh_token', { path: '/api/auth', domain: app.config.cookie.domain });
+    const clearOptions: any = { path: '/v1/auth' };
+    if (app.config.cookie.domain && app.config.cookie.domain !== 'localhost') {
+      clearOptions.domain = app.config.cookie.domain;
+    }
+    reply.clearCookie('refresh_token', clearOptions);
+    reply.clearCookie('access_token', { path: '/' });
     return reply.send(ok({}));
   });
 

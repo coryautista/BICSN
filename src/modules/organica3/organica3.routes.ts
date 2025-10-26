@@ -1,0 +1,558 @@
+import { FastifyInstance } from 'fastify';
+import { requireAuth } from '../auth/auth.middleware.js';
+import { CreateOrganica3Schema, UpdateOrganica3Schema, DynamicQuerySchema } from './organica3.schemas.js';
+import { getOrganica3ById, getAllOrganica3, createOrganica3Record, updateOrganica3Record, deleteOrganica3Record, queryOrganica3Dynamic } from './organica3.service.js';
+import { ok, fail, validationError, conflict, badRequest, internalError } from '../../utils/http.js';
+
+// [FIREBIRD] Routes for ORGANICA_3 CRUD operations
+export default async function organica3Routes(app: FastifyInstance) {
+
+  // GET /organica3 - List all records
+  app.get('/organica3', {
+    preHandler: [requireAuth],
+    schema: {
+      description: '[FIREBIRD] List all ORGANICA_3 records',
+      tags: ['organica3', 'firebird'],
+      security: [{ bearerAuth: [] }],
+      response: {
+        200: {
+          type: 'object',
+          properties: {
+            ok: { type: 'boolean' },
+            data: {
+              type: 'array',
+              items: {
+                type: 'object',
+                properties: {
+                  claveOrganica0: { type: 'string' },
+                  claveOrganica1: { type: 'string' },
+                  claveOrganica2: { type: 'string' },
+                  claveOrganica3: { type: 'string' },
+                  descripcion: { type: 'string' },
+                  titular: { type: 'number' },
+                  calleNum: { type: 'string' },
+                  fraccionamiento: { type: 'string' },
+                  codigoPostal: { type: 'string' },
+                  telefono: { type: 'string' },
+                  fax: { type: 'string' },
+                  localidad: { type: 'string' },
+                  municipio: { type: 'number' },
+                  estado: { type: 'number' },
+                  fechaRegistro3: { type: 'string', format: 'date-time' },
+                  fechaFin3: { type: 'string', format: 'date-time' },
+                  usuario: { type: 'string' },
+                  estatus: { type: 'string' }
+                }
+              }
+            }
+          }
+        },
+        500: {
+          type: 'object',
+          properties: {
+            ok: { type: 'boolean' },
+            error: {
+              type: 'object',
+              properties: {
+                code: { type: 'string' },
+                message: { type: 'string' }
+              }
+            }
+          }
+        }
+      }
+    }
+  }, async (_req, reply) => {
+    try {
+      const records = await getAllOrganica3();
+      return reply.send(ok(records));
+    } catch (error: any) {
+      console.error('Error listing organica3:', error);
+      return reply.code(500).send(fail('ORGANICA3_LIST_FAILED'));
+    }
+  });
+
+  // GET /organica3/:claveOrganica0/:claveOrganica1/:claveOrganica2/:claveOrganica3 - Get single record
+  app.get('/organica3/:claveOrganica0/:claveOrganica1/:claveOrganica2/:claveOrganica3', {
+    preHandler: [requireAuth],
+    schema: {
+      description: '[FIREBIRD] Get ORGANICA_3 record by composite key',
+      tags: ['organica3', 'firebird'],
+      security: [{ bearerAuth: [] }],
+      params: {
+        type: 'object',
+        required: ['claveOrganica0', 'claveOrganica1', 'claveOrganica2', 'claveOrganica3'],
+        properties: {
+          claveOrganica0: { type: 'string', minLength: 1, maxLength: 2 },
+          claveOrganica1: { type: 'string', minLength: 1, maxLength: 2 },
+          claveOrganica2: { type: 'string', minLength: 1, maxLength: 2 },
+          claveOrganica3: { type: 'string', minLength: 1, maxLength: 2 }
+        }
+      },
+      response: {
+        200: {
+          type: 'object',
+          properties: {
+            ok: { type: 'boolean' },
+            data: {
+              type: 'object',
+              properties: {
+                claveOrganica0: { type: 'string' },
+                claveOrganica1: { type: 'string' },
+                claveOrganica2: { type: 'string' },
+                claveOrganica3: { type: 'string' },
+                descripcion: { type: 'string' },
+                titular: { type: 'number' },
+                calleNum: { type: 'string' },
+                fraccionamiento: { type: 'string' },
+                codigoPostal: { type: 'string' },
+                telefono: { type: 'string' },
+                fax: { type: 'string' },
+                localidad: { type: 'string' },
+                municipio: { type: 'number' },
+                estado: { type: 'number' },
+                fechaRegistro3: { type: 'string', format: 'date-time' },
+                fechaFin3: { type: 'string', format: 'date-time' },
+                usuario: { type: 'string' },
+                estatus: { type: 'string' }
+              }
+            }
+          }
+        },
+        400: {
+          type: 'object',
+          properties: {
+            ok: { type: 'boolean' },
+            error: {
+              type: 'object',
+              properties: {
+                code: { type: 'string' },
+                message: { type: 'string' }
+              }
+            }
+          }
+        },
+        404: {
+          type: 'object',
+          properties: {
+            ok: { type: 'boolean' },
+            error: {
+              type: 'object',
+              properties: {
+                code: { type: 'string' },
+                message: { type: 'string' }
+              }
+            }
+          }
+        },
+        500: {
+          type: 'object',
+          properties: {
+            ok: { type: 'boolean' },
+            error: {
+              type: 'object',
+              properties: {
+                code: { type: 'string' },
+                message: { type: 'string' }
+              }
+            }
+          }
+        }
+      }
+    }
+  }, async (req, reply) => {
+    try {
+      const { claveOrganica0, claveOrganica1, claveOrganica2, claveOrganica3 } = req.params as { claveOrganica0: string; claveOrganica1: string; claveOrganica2: string; claveOrganica3: string };
+      const record = await getOrganica3ById(claveOrganica0, claveOrganica1, claveOrganica2, claveOrganica3);
+      return reply.send(ok(record));
+    } catch (error: any) {
+      if (error.message === 'ORGANICA3_NOT_FOUND') {
+        return reply.code(404).send(fail('ORGANICA3_NOT_FOUND'));
+      }
+      console.error('Error getting organica3:', error);
+      return reply.code(500).send(fail('ORGANICA3_GET_FAILED'));
+    }
+  });
+
+  // POST /organica3 - Create new record
+  app.post('/organica3', {
+    preHandler: [requireAuth],
+    schema: {
+      description: '[FIREBIRD] Create new ORGANICA_3 record',
+      tags: ['organica3', 'firebird'],
+      security: [{ bearerAuth: [] }],
+      body: {
+        type: 'object',
+        required: ['claveOrganica0', 'claveOrganica1', 'claveOrganica2', 'claveOrganica3'],
+        properties: {
+          claveOrganica0: { type: 'string', minLength: 1, maxLength: 2 },
+          claveOrganica1: { type: 'string', minLength: 1, maxLength: 2 },
+          claveOrganica2: { type: 'string', minLength: 1, maxLength: 2 },
+          claveOrganica3: { type: 'string', minLength: 1, maxLength: 2 },
+          descripcion: { type: 'string', maxLength: 40 },
+          titular: { type: 'number' },
+          calleNum: { type: 'string', maxLength: 40 },
+          fraccionamiento: { type: 'string', maxLength: 40 },
+          codigoPostal: { type: 'string', maxLength: 5 },
+          telefono: { type: 'string', maxLength: 15 },
+          fax: { type: 'string', maxLength: 15 },
+          localidad: { type: 'string', maxLength: 25 },
+          municipio: { type: 'number' },
+          estado: { type: 'number' },
+          fechaFin3: { type: 'string', format: 'date-time' },
+          usuario: { type: 'string', maxLength: 13 },
+          estatus: { type: 'string', minLength: 1, maxLength: 1 }
+        }
+      },
+      response: {
+        201: {
+          type: 'object',
+          properties: {
+            ok: { type: 'boolean' },
+            data: { type: 'object' }
+          }
+        },
+        400: {
+          type: 'object',
+          properties: {
+            ok: { type: 'boolean' },
+            error: {
+              type: 'object',
+              properties: {
+                code: { type: 'string' },
+                message: { type: 'string' }
+              }
+            }
+          }
+        },
+        409: {
+          type: 'object',
+          properties: {
+            ok: { type: 'boolean' },
+            error: {
+              type: 'object',
+              properties: {
+                code: { type: 'string' },
+                message: { type: 'string' }
+              }
+            }
+          }
+        },
+        500: {
+          type: 'object',
+          properties: {
+            ok: { type: 'boolean' },
+            error: {
+              type: 'object',
+              properties: {
+                code: { type: 'string' },
+                message: { type: 'string' }
+              }
+            }
+          }
+        }
+      }
+    }
+  }, async (req, reply) => {
+    const parsed = CreateOrganica3Schema.safeParse(req.body);
+    if (!parsed.success) {
+      return reply.code(400).send(validationError(parsed.error.issues));
+    }
+
+    try {
+      const record = await createOrganica3Record(parsed.data, req);
+      return reply.code(201).send(ok(record));
+    } catch (error: any) {
+      if (error.message === 'ORGANICA3_EXISTS') {
+        return reply.code(409).send(conflict('ORGANICA3 record', 'Record with this composite key already exists'));
+      }
+      if (error.code === 'ER_DUP_ENTRY') {
+        return reply.code(409).send(conflict('ORGANICA3 record', 'Duplicate entry detected'));
+      }
+      if (error.code === 'ER_NO_REFERENCED_ROW') {
+        return reply.code(400).send(badRequest('Invalid reference: related ORGANICA2 record not found'));
+      }
+      console.error('Error creating organica3:', error);
+      return reply.code(500).send(internalError('Failed to create ORGANICA3 record'));
+    }
+  });
+
+  // PUT /organica3/:claveOrganica0/:claveOrganica1/:claveOrganica2/:claveOrganica3 - Update record
+  app.put('/organica3/:claveOrganica0/:claveOrganica1/:claveOrganica2/:claveOrganica3', {
+    preHandler: [requireAuth],
+    schema: {
+      description: '[FIREBIRD] Update ORGANICA_3 record',
+      tags: ['organica3', 'firebird'],
+      security: [{ bearerAuth: [] }],
+      params: {
+        type: 'object',
+        required: ['claveOrganica0', 'claveOrganica1', 'claveOrganica2', 'claveOrganica3'],
+        properties: {
+          claveOrganica0: { type: 'string', minLength: 1, maxLength: 2 },
+          claveOrganica1: { type: 'string', minLength: 1, maxLength: 2 },
+          claveOrganica2: { type: 'string', minLength: 1, maxLength: 2 },
+          claveOrganica3: { type: 'string', minLength: 1, maxLength: 2 }
+        }
+      },
+      body: {
+        type: 'object',
+        properties: {
+          descripcion: { type: 'string', maxLength: 40 },
+          titular: { type: 'number' },
+          calleNum: { type: 'string', maxLength: 40 },
+          fraccionamiento: { type: 'string', maxLength: 40 },
+          codigoPostal: { type: 'string', maxLength: 5 },
+          telefono: { type: 'string', maxLength: 15 },
+          fax: { type: 'string', maxLength: 15 },
+          localidad: { type: 'string', maxLength: 25 },
+          municipio: { type: 'number' },
+          estado: { type: 'number' },
+          fechaFin3: { type: 'string', format: 'date-time' },
+          usuario: { type: 'string', maxLength: 13 },
+          estatus: { type: 'string', minLength: 1, maxLength: 1 }
+        }
+      },
+      response: {
+        200: {
+          type: 'object',
+          properties: {
+            ok: { type: 'boolean' },
+            data: { type: 'object' }
+          }
+        },
+        400: {
+          type: 'object',
+          properties: {
+            ok: { type: 'boolean' },
+            error: {
+              type: 'object',
+              properties: {
+                code: { type: 'string' },
+                message: { type: 'string' }
+              }
+            }
+          }
+        },
+        404: {
+          type: 'object',
+          properties: {
+            ok: { type: 'boolean' },
+            error: {
+              type: 'object',
+              properties: {
+                code: { type: 'string' },
+                message: { type: 'string' }
+              }
+            }
+          }
+        },
+        500: {
+          type: 'object',
+          properties: {
+            ok: { type: 'boolean' },
+            error: {
+              type: 'object',
+              properties: {
+                code: { type: 'string' },
+                message: { type: 'string' }
+              }
+            }
+          }
+        }
+      }
+    }
+  }, async (req, reply) => {
+    const { claveOrganica0, claveOrganica1, claveOrganica2, claveOrganica3 } = req.params as { claveOrganica0: string; claveOrganica1: string; claveOrganica2: string; claveOrganica3: string };
+    const parsed = UpdateOrganica3Schema.safeParse(req.body);
+    if (!parsed.success) {
+      return reply.code(400).send(validationError(parsed.error.issues));
+    }
+
+    try {
+      const record = await updateOrganica3Record(claveOrganica0, claveOrganica1, claveOrganica2, claveOrganica3, parsed.data, req);
+      return reply.send(ok(record));
+    } catch (error: any) {
+      if (error.message === 'ORGANICA3_NOT_FOUND') {
+        return reply.code(404).send(fail('ORGANICA3_NOT_FOUND'));
+      }
+      console.error('Error updating organica3:', error);
+      return reply.code(500).send(fail('ORGANICA3_UPDATE_FAILED'));
+    }
+  });
+
+  // DELETE /organica3/:claveOrganica0/:claveOrganica1/:claveOrganica2/:claveOrganica3 - Delete record
+  app.delete('/organica3/:claveOrganica0/:claveOrganica1/:claveOrganica2/:claveOrganica3', {
+    preHandler: [requireAuth],
+    schema: {
+      description: '[FIREBIRD] Delete ORGANICA_3 record',
+      tags: ['organica3', 'firebird'],
+      security: [{ bearerAuth: [] }],
+      params: {
+        type: 'object',
+        required: ['claveOrganica0', 'claveOrganica1', 'claveOrganica2', 'claveOrganica3'],
+        properties: {
+          claveOrganica0: { type: 'string', minLength: 1, maxLength: 2 },
+          claveOrganica1: { type: 'string', minLength: 1, maxLength: 2 },
+          claveOrganica2: { type: 'string', minLength: 1, maxLength: 2 },
+          claveOrganica3: { type: 'string', minLength: 1, maxLength: 2 }
+        }
+      },
+      response: {
+        200: {
+          type: 'object',
+          properties: {
+            ok: { type: 'boolean' },
+            data: { type: 'object' }
+          }
+        },
+        404: {
+          type: 'object',
+          properties: {
+            ok: { type: 'boolean' },
+            error: {
+              type: 'object',
+              properties: {
+                code: { type: 'string' },
+                message: { type: 'string' }
+              }
+            }
+          }
+        },
+        409: {
+          type: 'object',
+          properties: {
+            ok: { type: 'boolean' },
+            error: {
+              type: 'object',
+              properties: {
+                code: { type: 'string' },
+                message: { type: 'string' }
+              }
+            }
+          }
+        },
+        500: {
+          type: 'object',
+          properties: {
+            ok: { type: 'boolean' },
+            error: {
+              type: 'object',
+              properties: {
+                code: { type: 'string' },
+                message: { type: 'string' }
+              }
+            }
+          }
+        }
+      }
+    }
+  }, async (req, reply) => {
+    try {
+      const { claveOrganica0, claveOrganica1, claveOrganica2, claveOrganica3 } = req.params as { claveOrganica0: string; claveOrganica1: string; claveOrganica2: string; claveOrganica3: string };
+      const result = await deleteOrganica3Record(claveOrganica0, claveOrganica1, claveOrganica2, claveOrganica3, req);
+      return reply.send(ok(result));
+    } catch (error: any) {
+      if (error.message === 'ORGANICA3_NOT_FOUND') {
+        return reply.code(404).send(fail('ORGANICA3_NOT_FOUND'));
+      }
+      console.error('Error deleting organica3:', error);
+      return reply.code(500).send(fail('ORGANICA3_DELETE_FAILED'));
+    }
+  });
+
+  // POST /organica3/query - Dynamic query endpoint
+  app.post('/organica3/query', {
+    preHandler: [requireAuth],
+    schema: {
+      description: '[FIREBIRD] Dynamic query for ORGANICA_3 records with filters, sorting, and pagination',
+      tags: ['organica3', 'firebird', 'query'],
+      security: [{ bearerAuth: [] }],
+      body: {
+        type: 'object',
+        properties: {
+          filters: {
+            type: 'object',
+            additionalProperties: true
+          },
+          sortBy: { type: 'string' },
+          sortOrder: { type: 'string', enum: ['ASC', 'DESC'] },
+          limit: { type: 'number', minimum: 1, maximum: 1000 },
+          offset: { type: 'number', minimum: 0 }
+        }
+      },
+      response: {
+        200: {
+          type: 'object',
+          properties: {
+            ok: { type: 'boolean' },
+            data: {
+              type: 'array',
+              items: {
+                type: 'object',
+                properties: {
+                  claveOrganica0: { type: 'string' },
+                  claveOrganica1: { type: 'string' },
+                  claveOrganica2: { type: 'string' },
+                  claveOrganica3: { type: 'string' },
+                  descripcion: { type: 'string' },
+                  titular: { type: 'number' },
+                  calleNum: { type: 'string' },
+                  fraccionamiento: { type: 'string' },
+                  codigoPostal: { type: 'string' },
+                  telefono: { type: 'string' },
+                  fax: { type: 'string' },
+                  localidad: { type: 'string' },
+                  municipio: { type: 'number' },
+                  estado: { type: 'number' },
+                  fechaRegistro3: { type: 'string', format: 'date-time' },
+                  fechaFin3: { type: 'string', format: 'date-time' },
+                  usuario: { type: 'string' },
+                  estatus: { type: 'string' }
+                }
+              }
+            }
+          }
+        },
+        400: {
+          type: 'object',
+          properties: {
+            ok: { type: 'boolean' },
+            error: {
+              type: 'object',
+              properties: {
+                code: { type: 'string' },
+                message: { type: 'string' }
+              }
+            }
+          }
+        },
+        500: {
+          type: 'object',
+          properties: {
+            ok: { type: 'boolean' },
+            error: {
+              type: 'object',
+              properties: {
+                code: { type: 'string' },
+                message: { type: 'string' }
+              }
+            }
+          }
+        }
+      }
+    }
+  }, async (req, reply) => {
+    const parsed = DynamicQuerySchema.safeParse(req.body);
+    if (!parsed.success) {
+      return reply.code(400).send(validationError(parsed.error.issues));
+    }
+
+    try {
+      const records = await queryOrganica3Dynamic(parsed.data);
+      return reply.send(ok(records));
+    } catch (error: any) {
+      console.error('Error querying organica3:', error);
+      return reply.code(500).send(fail('ORGANICA3_QUERY_FAILED'));
+    }
+  });
+}

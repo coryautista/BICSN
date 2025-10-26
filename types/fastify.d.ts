@@ -14,6 +14,7 @@ declare module 'fastify' {
     user?: {
       sub: string;
       roles: string[];
+      entidades: boolean[];
       jti: string;
       iat?: number;
       exp?: number;

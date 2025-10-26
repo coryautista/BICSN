@@ -18,7 +18,7 @@ export const env = {
   },
   jwt: {
     accessSecret: process.env.JWT_ACCESS_SECRET!,
-    accessTtl: process.env.JWT_ACCESS_TTL ?? '15m',
+    accessTtl: process.env.JWT_ACCESS_TTL ?? '12h',
     iss: process.env.JWT_ISS ?? 'api',
     aud: process.env.JWT_AUD ?? 'api-clients'
   },
@@ -26,6 +26,13 @@ export const env = {
     domain: process.env.COOKIE_DOMAIN ?? 'localhost',
     secure: process.env.COOKIE_SECURE === 'true',
     refreshTtlMin: Number(process.env.REFRESH_TTL_MIN ?? 10080)
+  },
+  firebird: {
+    host: process.env.FIREBIRD_HOST!,
+    port: Number(process.env.FIREBIRD_PORT ?? 3050),
+    database: process.env.FIREBIRD_DATABASE!,
+    user: process.env.FIREBIRD_USER!,
+    password: process.env.FIREBIRD_PASSWORD!
   }
 
 };

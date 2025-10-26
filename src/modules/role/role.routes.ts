@@ -6,9 +6,14 @@ import { ok, fail } from '../../utils/http.js';
 
 export default async function roleRoutes(app: FastifyInstance) {
 
-  // Crear rol (solo admin)
+  // Crear rol (requiere auth, admin para roles no sistema)
   app.post('/roles', {
-    preHandler: [requireAuth, requireRole('admin')],
+    preHandler: [requireAuth, async (req: any, reply) => {
+      const body = req.body as any;
+      if (body?.isSystem !== true && !req.user?.roles?.includes('admin')) {
+        return reply.code(403).send({ ok:false, error:{code:'FORBIDDEN', message:'Insufficient role'}});
+      }
+    }],
     schema: {
       description: 'Create a new role',
       tags: ['roles'],
@@ -19,7 +24,8 @@ export default async function roleRoutes(app: FastifyInstance) {
         properties: {
           name: { type: 'string', minLength: 1, maxLength: 100 },
           description: { type: 'string' },
-          isSystem: { type: 'boolean' }
+          isSystem: { type: 'boolean' },
+          isEntidad: { type: 'boolean' }
         }
       },
       response: {
@@ -31,6 +37,19 @@ export default async function roleRoutes(app: FastifyInstance) {
           }
         },
         400: {
+          type: 'object',
+          properties: {
+            ok: { type: 'boolean' },
+            error: {
+              type: 'object',
+              properties: {
+                code: { type: 'string' },
+                message: { type: 'string' }
+              }
+            }
+          }
+        },
+        403: {
           type: 'object',
           properties: {
             ok: { type: 'boolean' },
@@ -76,7 +95,7 @@ export default async function roleRoutes(app: FastifyInstance) {
     if (!parsed.success) return reply.code(400).send(fail(parsed.error.message));
 
     try {
-      const r = await createRoleIfNotExists(parsed.data.name, parsed.data.description, parsed.data.isSystem);
+      const r = await createRoleIfNotExists(parsed.data.name, parsed.data.description, parsed.data.isSystem, parsed.data.isEntidad);
       return reply.code(201).send(ok(r));
     } catch (e: any) {
       // Unique constraint de normalizedName -> 409
@@ -87,9 +106,9 @@ export default async function roleRoutes(app: FastifyInstance) {
     }
   });
 
-  // Listar roles (admin)
+  // Listar roles (requiere auth)
   app.get('/roles', {
-    preHandler: [requireAuth, requireRole('admin')],
+    preHandler: [requireAuth],
     schema: {
       description: 'List all roles',
       tags: ['roles'],
@@ -98,18 +117,45 @@ export default async function roleRoutes(app: FastifyInstance) {
         200: {
           type: 'object',
           properties: {
-            ok: { type: 'boolean' },
             data: {
               type: 'array',
-              items: { type: 'object' }
+              items: {
+                type: 'object',
+                properties: {
+                  id: { type: 'string' },
+                  name: { type: 'string' },
+                  description: { type: 'string' },
+                  isSystem: { type: 'boolean' },
+                  isEntidad: { type: 'boolean' },
+                  createdAt: { type: 'string' }
+                }
+              }
+            }
+          }
+        },
+        500: {
+          type: 'object',
+          properties: {
+            ok: { type: 'boolean' },
+            error: {
+              type: 'object',
+              properties: {
+                code: { type: 'string' },
+                message: { type: 'string' }
+              }
             }
           }
         }
       }
     }
   }, async (_req, reply) => {
-    const roles = await getAllRoles();
-    return reply.send(ok(roles));
+    try {
+      const roles = await getAllRoles();
+      return reply.send({ data: roles });
+    } catch (error: any) {
+      console.error('Error listing roles:', error);
+      return reply.code(500).send(fail('ROLE_LIST_FAILED'));
+    }
   });
 
   // Asignar rol a usuario (admin)

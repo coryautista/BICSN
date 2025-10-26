@@ -3,7 +3,8 @@ import { z } from 'zod';
 export const CreateRoleSchema = z.object({
   name: z.string().min(1).max(100),
   description: z.string().optional(),
-  isSystem: z.boolean().optional()
+  isSystem: z.boolean().optional(),
+  isEntidad: z.boolean().optional()
 });
 
 export const AssignRoleSchema = z.object({
@@ -18,6 +19,7 @@ export const UnassignRoleSchema = z.object({
 
 export const UpdateRoleSchema = z.object({
   name: z.string().min(1).max(100).optional(),
-  description: z.string().optional()
+  description: z.string().optional(),
+  isEntidad: z.boolean().optional()
 });
 // Role schemas

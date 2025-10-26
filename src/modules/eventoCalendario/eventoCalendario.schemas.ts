@@ -1,0 +1,21 @@
+import { z } from 'zod';
+
+const TipoEventoEnum = z.enum(['ARCHIVO_APLICACION', 'ASUETO', 'ALTA_BAJA_CAMBIO', 'PAGO', 'HIPOTECARIO']);
+
+export const CreateEventoCalendarioSchema = z.object({
+  fecha: z.string().date(), // YYYY-MM-DD
+  tipo: TipoEventoEnum,
+  anio: z.number().int(),
+  createdAt: z.string().datetime().optional().default(() => new Date().toISOString())
+});
+
+export const UpdateEventoCalendarioSchema = z.object({
+  fecha: z.string().date().optional(),
+  tipo: TipoEventoEnum.optional(),
+  anio: z.number().int().optional(),
+  createdAt: z.string().datetime().optional()
+});
+
+export const EventoCalendarioIdSchema = z.object({
+  id: z.number().int()
+});
