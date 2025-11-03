@@ -33,15 +33,21 @@ export async function findOrganica0ById(claveOrganica: string): Promise<Organica
 
 export async function listOrganica0(): Promise<Organica0[]> {
   const db = getFirebirdDb();
+  const startTime = Date.now();
+  console.log(`[DEBUG] listOrganica0: Starting query at ${new Date().toISOString()}`);
   return new Promise((resolve, reject) => {
     db.query(
       'SELECT CLAVE_ORGANICA, NOMBRE_ORGANICA, USUARIO, FECHA_REGISTRO, FECHA_FIN, ESTATUS FROM ORGANICA_0 ORDER BY CLAVE_ORGANICA',
       [],
       (err: any, result: any) => {
+        const queryEndTime = Date.now();
+        console.log(`[DEBUG] listOrganica0: Query completed in ${queryEndTime - startTime}ms`);
         if (err) {
           reject(err);
           return;
         }
+        console.log(`[DEBUG] listOrganica0: Raw result count: ${result ? result.length : 0}`);
+        const mapStartTime = Date.now();
         const records = result.map((row: any) => ({
           claveOrganica: row.CLAVE_ORGANICA,
           nombreOrganica: row.NOMBRE_ORGANICA,
@@ -50,6 +56,9 @@ export async function listOrganica0(): Promise<Organica0[]> {
           fechaFin: row.FECHA_FIN ? new Date(row.FECHA_FIN) : undefined,
           estatus: row.ESTATUS
         }));
+        const mapEndTime = Date.now();
+        console.log(`[DEBUG] listOrganica0: Mapping completed in ${mapEndTime - mapStartTime}ms, total records: ${records.length}`);
+        console.log(`[DEBUG] listOrganica0: Total function time: ${mapEndTime - startTime}ms`);
         resolve(records);
       }
     );

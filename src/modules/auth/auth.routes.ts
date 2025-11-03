@@ -139,6 +139,7 @@ export default async function authRoutes(app: FastifyInstance) {
               type: 'object',
               properties: {
                 userId: { type: 'string' },
+                username: { type: 'string' },
                 accessToken: { type: 'string' },
                 accessExp: { type: 'number' }
               }
@@ -200,18 +201,25 @@ export default async function authRoutes(app: FastifyInstance) {
       }
     }
   }, async (req, reply) => {
+    console.log('Auth login request body:', req.body);
     const parsed = LoginSchema.safeParse(req.body);
-    if (!parsed.success) return reply.code(400).send(fail(parsed.error.message));
+    if (!parsed.success) {
+      console.log('Auth login validation error:', parsed.error.issues);
+      return reply.code(400).send(fail(parsed.error.message));
+    }
+    console.log('Auth login attempt for:', parsed.data.usernameOrEmail);
     try {
       const ip = req.ip;
       const ua = req.headers['user-agent'] as string | undefined;
-      const { userId, accessToken, accessExp, refreshToken } =
+      const { userId, username, accessToken, accessExp, refreshToken } =
         await login(parsed.data.usernameOrEmail, parsed.data.password, ip, ua);
 
+      console.log('Auth login successful for user:', userId);
       setCookie(reply, 'refresh_token', refreshToken, '/v1/auth');
       setCookie(reply, 'access_token', accessToken, '/');
-      return reply.send(ok({ userId, accessToken, accessExp }));
+      return reply.send(ok({ userId, username, accessToken, accessExp }));
     } catch (e: any) {
+      console.log('Auth login error:', e.message);
       app.log.error(e);
       const msg = e.message;
       if (msg === 'INVALID_CREDENTIALS') return reply.code(401).send(fail(msg, 'UNAUTHORIZED'));

@@ -46,7 +46,9 @@ export async function register(
 }
 
 export async function login(usernameOrEmail: string, password: string, ip?: string, ua?: string) {
+  console.log('Login service called for:', usernameOrEmail);
   const u = await findUserByUsernameOrEmail(usernameOrEmail);
+  console.log('User found:', u ? 'YES' : 'NO');
   if (!u) throw new Error('INVALID_CREDENTIALS');
 
   if (u.isLockedOut && u.lockoutEndAt && new Date(u.lockoutEndAt) > new Date()) {
@@ -54,6 +56,7 @@ export async function login(usernameOrEmail: string, password: string, ip?: stri
   }
 
   const ok = await verifyPassword(u.passwordHash, password, u.passwordAlgo);
+  console.log('Password verification:', ok ? 'SUCCESS' : 'FAILED');
   if (!ok) {
     await registerFailedLogin(u.id);
     throw new Error('INVALID_CREDENTIALS');
@@ -62,17 +65,18 @@ export async function login(usernameOrEmail: string, password: string, ip?: stri
   await registerSuccessfulLogin(u.id);
 
   const rolesData = await getUserRoles(u.id);
+  console.log('User roles:', rolesData);
   const roles = rolesData.map(r => r.name);
   const entidades = rolesData.map(r => r.isEntidad);
   const access = signAccessToken(u.id, roles, entidades);
   const refreshPlain = newRefreshTokenOpaque();
+
   const refreshHash = sha256(refreshPlain);
 
   await issueRefreshToken(u.id, refreshHash, env.cookie.refreshTtlMin, ip, ua);
 
   return { userId: u.id, username: u.username, accessToken: access.token, accessExp: access.exp, refreshToken: refreshPlain };
 }
-
 export async function rotateRefresh(currentRefreshPlain: string, ip?: string, ua?: string) {
   const currentHash = sha256(currentRefreshPlain);
   const newPlain = newRefreshTokenOpaque();

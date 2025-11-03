@@ -8,8 +8,8 @@ import { ok, fail } from '../../utils/http.js';
 export default async function organica0Routes(app: FastifyInstance) {
 
   // GET /organica0 - List all records
-  app.get('/organica0', {
-    preHandler: [requireAuth],
+   app.get('/organica0', {
+     preHandler: [requireAuth],
     schema: {
       description: '[FIREBIRD] List all ORGANICA_0 records',
       tags: ['organica0', 'firebird'],
@@ -26,7 +26,7 @@ export default async function organica0Routes(app: FastifyInstance) {
                 properties: {
                   claveOrganica: { type: 'string' },
                   nombreOrganica: { type: 'string' },
-                  usuario: { type: 'string' },
+                  usuario: { type: ['string', 'null'] },
                   fechaRegistro: { type: 'string', format: 'date-time' },
                   fechaFin: { type: 'string', format: 'date-time' },
                   estatus: { type: 'string' }
@@ -52,7 +52,7 @@ export default async function organica0Routes(app: FastifyInstance) {
     }
   }, async (_req, reply) => {
     try {
-      const records = await getAllOrganica0();
+      const records = await getAllOrganica0();     
       return reply.send(ok(records));
     } catch (error: any) {
       console.error('Error listing organica0:', error);
@@ -84,7 +84,7 @@ export default async function organica0Routes(app: FastifyInstance) {
               properties: {
                 claveOrganica: { type: 'string' },
                 nombreOrganica: { type: 'string' },
-                usuario: { type: 'string' },
+                usuario: { type: ['string', 'null'] },
                 fechaRegistro: { type: 'string', format: 'date-time' },
                 fechaFin: { type: 'string', format: 'date-time' },
                 estatus: { type: 'string' }
@@ -148,7 +148,7 @@ export default async function organica0Routes(app: FastifyInstance) {
           claveOrganica: { type: 'string', minLength: 1, maxLength: 2 },
           nombreOrganica: { type: 'string', minLength: 1, maxLength: 72 },
           usuario: { type: 'string', maxLength: 13 },
-          fechaFin: { type: 'string', format: 'date-time' },
+          fechaFin: { type: ['string', 'null'], format: 'date-time' },
           estatus: { type: 'string', minLength: 1, maxLength: 1 }
         }
       },
@@ -238,7 +238,7 @@ export default async function organica0Routes(app: FastifyInstance) {
         properties: {
           nombreOrganica: { type: 'string', minLength: 1, maxLength: 72 },
           usuario: { type: 'string', maxLength: 13 },
-          fechaFin: { type: 'string', format: 'date-time' },
+          fechaFin: { type: ['string', 'null'], format: 'date-time' },
           estatus: { type: 'string', minLength: 1, maxLength: 1 }
         }
       },

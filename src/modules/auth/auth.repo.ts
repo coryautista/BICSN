@@ -185,4 +185,31 @@ export async function isJtiDenylisted(jti: string): Promise<boolean> {
     .query(`SELECT 1 FROM auth.jwtDenylist WHERE jti = @jti AND expiresAt > SYSUTCDATETIME()`);
   return r.recordset.length > 0;
 }
+
+export async function findUserById(userId: string) {
+  const p = await getPool();
+  const r = await p.request()
+    .input('userId', sql.UniqueIdentifier, userId)
+    .query(`
+      SELECT TOP 1
+        CAST(u.id AS NVARCHAR(50)) as id,
+        u.username,
+        u.idOrganica0,
+        u.idOrganica1,
+        u.idOrganica2,
+        u.idOrganica3
+      FROM auth.[user] u
+      WHERE u.id = @userId
+    `);
+  const row = r.recordset[0];
+  if (!row) return undefined;
+  return {
+    id: row.id,
+    username: row.username,
+    idOrganica0: row.idOrganica0,
+    idOrganica1: row.idOrganica1,
+    idOrganica2: row.idOrganica2,
+    idOrganica3: row.idOrganica3
+  };
+}
 // Auth repository

@@ -33,6 +33,12 @@ export const env = {
     database: process.env.FIREBIRD_DATABASE!,
     user: process.env.FIREBIRD_USER!,
     password: process.env.FIREBIRD_PASSWORD!
+  },
+  ftp: {
+    host: process.env.FTP_HOST ?? 'codigosingular.com',
+    port: Number(process.env.FTP_PORT ?? 2222),
+    user: process.env.FTP_USER ?? 'cory',
+    password: process.env.FTP_PASS ?? 'Documentos123'
   }
 
 };

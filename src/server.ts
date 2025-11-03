@@ -36,12 +36,19 @@ import indicadorAnualRoutes from './modules/tablero/indicador-anual/indicador-an
 import codigosPostalesRoutes from './modules/codigosPostales/codigosPostales.routes.js';
 import coloniasRoutes from './modules/colonias/colonias.routes.js';
 import callesRoutes from './modules/calles/calles.routes.js';
+import afiliadosPersonalRoutes from './modules/afiliadosPersonal/afiliadosPersonal.routes.js';
 import tipoMovimientoRoutes from './modules/tipoMovimiento/tipoMovimiento.routes.js';
 import afiliadoRoutes from './modules/afiliado/afiliado.routes.js';
 import afiliadoOrgRoutes from './modules/afiliadoOrg/afiliadoOrg.routes.js';
 import movimientoRoutes from './modules/movimiento/movimiento.routes.js';
 import personalRoutes from './modules/personal/personal.routes.js';
 import orgPersonalRoutes from './modules/orgPersonal/orgPersonal.routes.js';
+import categoriaPuestoOrgRoutes from './modules/categoriaPuestoOrg/categoriaPuestoOrg.routes.js';
+import expedienteRoutes from './modules/expediente/expediente.routes.js';
+import usuariosRoutes from './modules/usuarios/usuarios.routes.js';
+import userRoleRoutes from './modules/userRole/userRole.routes.js';
+import afectacionOrgRoutes from './modules/afectacionOrg/afectacionOrg.routes.js';
+import organicaCascadeRoutes from './modules/organicaCascade/organicaCascade.routes.js';
 
 async function buildApp() {
   const app = Fastify({ logger: { level: env.logLevel } });
@@ -132,13 +139,20 @@ async function buildApp() {
   await app.register(codigosPostalesRoutes, { prefix: '/v1' });
   await app.register(coloniasRoutes, { prefix: '/v1' });
   await app.register(callesRoutes, { prefix: '/v1' });
+  await app.register(afiliadosPersonalRoutes, { prefix: '/v1' });
   await app.register(tipoMovimientoRoutes, { prefix: '/v1' });
   await app.register(afiliadoRoutes, { prefix: '/v1' });
   await app.register(afiliadoOrgRoutes, { prefix: '/v1' });
   await app.register(movimientoRoutes, { prefix: '/v1' });
   await app.register(personalRoutes, { prefix: '/v1' });
   await app.register(orgPersonalRoutes, { prefix: '/v1' });
-  
+  await app.register(categoriaPuestoOrgRoutes, { prefix: '/v1' });
+  await app.register(expedienteRoutes, { prefix: '/v1' });
+  await app.register(usuariosRoutes, { prefix: '/v1' });
+  await app.register(userRoleRoutes, { prefix: '/v1' });
+  await app.register(afectacionOrgRoutes, { prefix: '/v1' });
+  await app.register(organicaCascadeRoutes, { prefix: '/v1' });
+
   // health checks
   app.get('/health', async () => ({ ok: true, ts: new Date().toISOString() }));
   app.get('/health/db', async (_req, reply) => {

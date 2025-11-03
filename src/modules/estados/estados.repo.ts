@@ -69,7 +69,7 @@ export async function createEstado(estadoId: string, nombreEstado: string, esVal
     throw new Error('Invalid esValido: must be a boolean');
   }
   const req = tx ? new sqlType.Request(tx) : (await getPool()).request();
-  const r = await req
+  await req
     .input('estadoId', sql.Char(2), estadoId)
     .input('nombreEstado', sql.VarChar(50), nombreEstado)
     .input('esValido', sql.Bit, esValido)
@@ -77,15 +77,24 @@ export async function createEstado(estadoId: string, nombreEstado: string, esVal
     .input('updatedBy', sql.VarChar(128), userId ?? null)
     .query(`
       INSERT INTO geo.Estados (EstadoID, NombreEstado, EsValido, createdBy, updatedBy)
-      OUTPUT
-        INSERTED.EstadoID,
-        INSERTED.NombreEstado,
-        INSERTED.EsValido,
-        INSERTED.createdAt,
-        INSERTED.updatedAt,
-        INSERTED.createdBy,
-        INSERTED.updatedBy
       VALUES (@estadoId, @nombreEstado, @esValido, @createdBy, @updatedBy)
+    `);
+
+  // Retrieve the inserted record
+  const selectReq = tx ? new sqlType.Request(tx) : (await getPool()).request();
+  const r = await selectReq
+    .input('estadoId', sql.Char(2), estadoId)
+    .query(`
+      SELECT
+        EstadoID,
+        NombreEstado,
+        EsValido,
+        createdAt,
+        updatedAt,
+        createdBy,
+        updatedBy
+      FROM geo.Estados
+      WHERE EstadoID = @estadoId
     `);
   const row = r.recordset[0];
   return {
@@ -110,7 +119,7 @@ export async function updateEstado(estadoId: string, nombreEstado?: string, esVa
     throw new Error('Invalid esValido: must be a boolean');
   }
   const req = tx ? new sqlType.Request(tx) : (await getPool()).request();
-  const r = await req
+  const updateResult = await req
     .input('estadoId', sql.Char(2), estadoId)
     .input('nombreEstado', sql.VarChar(50), nombreEstado ?? null)
     .input('esValido', sql.Bit, esValido ?? null)
@@ -118,17 +127,31 @@ export async function updateEstado(estadoId: string, nombreEstado?: string, esVa
     .query(`
       UPDATE geo.Estados
       SET NombreEstado = @nombreEstado,
-           EsValido = @esValido,
-           updatedAt = SYSUTCDATETIME(),
-           updatedBy = @updatedBy
-      OUTPUT
-        INSERTED.EstadoID,
-        INSERTED.NombreEstado,
-        INSERTED.EsValido,
-        INSERTED.createdAt,
-        INSERTED.updatedAt,
-        INSERTED.createdBy,
-        INSERTED.updatedBy
+            EsValido = @esValido,
+            updatedAt = SYSUTCDATETIME(),
+            updatedBy = @updatedBy
+      WHERE EstadoID = @estadoId
+    `);
+
+  // Check if update affected any rows
+  if (updateResult.rowsAffected && updateResult.rowsAffected[0] === 0) {
+    return undefined;
+  }
+
+  // Retrieve the updated record
+  const selectReq = tx ? new sqlType.Request(tx) : (await getPool()).request();
+  const r = await selectReq
+    .input('estadoId', sql.Char(2), estadoId)
+    .query(`
+      SELECT
+        EstadoID,
+        NombreEstado,
+        EsValido,
+        createdAt,
+        updatedAt,
+        createdBy,
+        updatedBy
+      FROM geo.Estados
       WHERE EstadoID = @estadoId
     `);
   const row = r.recordset[0];

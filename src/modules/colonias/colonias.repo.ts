@@ -186,7 +186,6 @@ export async function searchColonias(filters: {
   `;
 
   const params: any[] = [];
-  let paramIndex = 1;
 
   if (filters.estadoId) {
     query += ` AND e.EstadoID = @estadoId`;
@@ -276,7 +275,9 @@ export async function createColonia(municipioId: number, codigoPostalId: number,
   }
 
   const req = tx ? new sqlType.Request(tx) : (await getPool()).request();
-  const r = await req
+  
+  // First, insert the record
+  await req
     .input('municipioId', sql.Int, municipioId)
     .input('codigoPostalId', sql.Int, codigoPostalId)
     .input('nombreColonia', sql.VarChar(100), nombreColonia)
@@ -286,20 +287,37 @@ export async function createColonia(municipioId: number, codigoPostalId: number,
     .input('updatedBy', sql.VarChar(128), userId ?? null)
     .query(`
       INSERT INTO geo.Colonias (MunicipioID, CodigoPostalID, NombreColonia, TipoAsentamiento, EsValido, createdBy, updatedBy)
-      OUTPUT
-        INSERTED.ColoniaID,
-        INSERTED.MunicipioID,
-        INSERTED.CodigoPostalID,
-        INSERTED.NombreColonia,
-        INSERTED.TipoAsentamiento,
-        INSERTED.EsValido,
-        INSERTED.createdAt,
-        INSERTED.updatedAt,
-        INSERTED.createdBy,
-        INSERTED.updatedBy
       VALUES (@municipioId, @codigoPostalId, @nombreColonia, @tipoAsentamiento, @esValido, @createdBy, @updatedBy)
     `);
-  const row = r.recordset[0];
+
+  // Retrieve the inserted record by matching the unique combination
+  const selectReq = tx ? new sqlType.Request(tx) : (await getPool()).request();
+  const r = await selectReq
+    .input('municipioId', sql.Int, municipioId)
+    .input('codigoPostalId', sql.Int, codigoPostalId)
+    .input('nombreColonia', sql.VarChar(100), nombreColonia)
+    .query(`
+      SELECT TOP 1
+        ColoniaID,
+        MunicipioID,
+        CodigoPostalID,
+        NombreColonia,
+        TipoAsentamiento,
+        EsValido,
+        createdAt,
+        updatedAt,
+        createdBy,
+        updatedBy
+      FROM geo.Colonias
+      WHERE MunicipioID = @municipioId 
+        AND CodigoPostalID = @codigoPostalId 
+        AND NombreColonia = @nombreColonia
+      ORDER BY ColoniaID DESC
+    `);
+  const row = r.recordset?.[0];
+  if (!row) {
+    throw new Error('Failed to retrieve inserted colonia');
+  }
   return {
     coloniaId: row.ColoniaID,
     municipioId: row.MunicipioID,
@@ -329,7 +347,7 @@ export async function updateColonia(coloniaId: number, nombreColonia?: string, t
   }
 
   const req = tx ? new sqlType.Request(tx) : (await getPool()).request();
-  const r = await req
+  const updateResult = await req
     .input('coloniaId', sql.Int, coloniaId)
     .input('nombreColonia', sql.VarChar(100), nombreColonia ?? null)
     .input('tipoAsentamiento', sql.VarChar(50), tipoAsentamiento ?? null)
@@ -342,17 +360,31 @@ export async function updateColonia(coloniaId: number, nombreColonia?: string, t
           EsValido = @esValido,
           updatedAt = SYSUTCDATETIME(),
           updatedBy = @updatedBy
-      OUTPUT
-        INSERTED.ColoniaID,
-        INSERTED.MunicipioID,
-        INSERTED.CodigoPostalID,
-        INSERTED.NombreColonia,
-        INSERTED.TipoAsentamiento,
-        INSERTED.EsValido,
-        INSERTED.createdAt,
-        INSERTED.updatedAt,
-        INSERTED.createdBy,
-        INSERTED.updatedBy
+      WHERE ColoniaID = @coloniaId
+    `);
+
+  // Check if update affected any rows
+  if (updateResult.rowsAffected && updateResult.rowsAffected[0] === 0) {
+    return undefined;
+  }
+
+  // Retrieve the updated record
+  const selectReq = tx ? new sqlType.Request(tx) : (await getPool()).request();
+  const r = await selectReq
+    .input('coloniaId', sql.Int, coloniaId)
+    .query(`
+      SELECT
+        ColoniaID,
+        MunicipioID,
+        CodigoPostalID,
+        NombreColonia,
+        TipoAsentamiento,
+        EsValido,
+        createdAt,
+        updatedAt,
+        createdBy,
+        updatedBy
+      FROM geo.Colonias
       WHERE ColoniaID = @coloniaId
     `);
   const row = r.recordset[0];

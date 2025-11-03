@@ -98,24 +98,38 @@ export async function createCodigoPostal(codigoPostal: string, esValido: boolean
     throw new Error('Invalid esValido: must be a boolean');
   }
   const req = tx ? new sqlType.Request(tx) : (await getPool()).request();
-  const r = await req
+  
+  // First, insert the record
+  await req
     .input('codigoPostal', sql.Char(5), codigoPostal)
     .input('esValido', sql.Bit, esValido)
     .input('createdBy', sql.VarChar(128), userId ?? null)
     .input('updatedBy', sql.VarChar(128), userId ?? null)
     .query(`
       INSERT INTO geo.CodigosPostales (CodigoPostal, EsValido, createdBy, updatedBy)
-      OUTPUT
-        INSERTED.CodigoPostalID,
-        INSERTED.CodigoPostal,
-        INSERTED.EsValido,
-        INSERTED.createdAt,
-        INSERTED.updatedAt,
-        INSERTED.createdBy,
-        INSERTED.updatedBy
       VALUES (@codigoPostal, @esValido, @createdBy, @updatedBy)
     `);
-  const row = r.recordset[0];
+
+  // Retrieve the inserted record by the unique CodigoPostal value
+  const selectReq = tx ? new sqlType.Request(tx) : (await getPool()).request();
+  const r = await selectReq
+    .input('codigoPostal', sql.Char(5), codigoPostal)
+    .query(`
+      SELECT
+        CodigoPostalID,
+        CodigoPostal,
+        EsValido,
+        createdAt,
+        updatedAt,
+        createdBy,
+        updatedBy
+      FROM geo.CodigosPostales
+      WHERE CodigoPostal = @codigoPostal
+    `);
+  const row = r.recordset?.[0];
+  if (!row) {
+    throw new Error('Failed to retrieve inserted codigo postal');
+  }
   return {
     codigoPostalId: row.CodigoPostalID,
     codigoPostal: row.CodigoPostal,
@@ -135,7 +149,7 @@ export async function updateCodigoPostal(codigoPostalId: number, esValido?: bool
     throw new Error('Invalid esValido: must be a boolean');
   }
   const req = tx ? new sqlType.Request(tx) : (await getPool()).request();
-  const r = await req
+  const updateResult = await req
     .input('codigoPostalId', sql.Int, codigoPostalId)
     .input('esValido', sql.Bit, esValido ?? null)
     .input('updatedBy', sql.VarChar(128), userId ?? null)
@@ -144,14 +158,28 @@ export async function updateCodigoPostal(codigoPostalId: number, esValido?: bool
       SET EsValido = @esValido,
           updatedAt = SYSUTCDATETIME(),
           updatedBy = @updatedBy
-      OUTPUT
-        INSERTED.CodigoPostalID,
-        INSERTED.CodigoPostal,
-        INSERTED.EsValido,
-        INSERTED.createdAt,
-        INSERTED.updatedAt,
-        INSERTED.createdBy,
-        INSERTED.updatedBy
+      WHERE CodigoPostalID = @codigoPostalId
+    `);
+
+  // Check if update affected any rows
+  if (updateResult.rowsAffected && updateResult.rowsAffected[0] === 0) {
+    return undefined;
+  }
+
+  // Retrieve the updated record
+  const selectReq = tx ? new sqlType.Request(tx) : (await getPool()).request();
+  const r = await selectReq
+    .input('codigoPostalId', sql.Int, codigoPostalId)
+    .query(`
+      SELECT
+        CodigoPostalID,
+        CodigoPostal,
+        EsValido,
+        createdAt,
+        updatedAt,
+        createdBy,
+        updatedBy
+      FROM geo.CodigosPostales
       WHERE CodigoPostalID = @codigoPostalId
     `);
   const row = r.recordset[0];

@@ -115,7 +115,9 @@ export async function createMunicipio(estadoId: string, claveMunicipio: string, 
     throw new Error('Invalid esValido: must be a boolean');
   }
   const req = tx ? new sqlType.Request(tx) : (await getPool()).request();
-  const r = await req
+  
+  // First, insert the record
+  await req
     .input('estadoId', sql.Char(2), estadoId)
     .input('claveMunicipio', sql.Char(3), claveMunicipio)
     .input('nombreMunicipio', sql.VarChar(100), nombreMunicipio)
@@ -124,19 +126,32 @@ export async function createMunicipio(estadoId: string, claveMunicipio: string, 
     .input('updatedBy', sql.VarChar(128), userId ?? null)
     .query(`
       INSERT INTO geo.Municipios (EstadoID, ClaveMunicipio, NombreMunicipio, EsValido, createdBy, updatedBy)
-      OUTPUT
-        INSERTED.MunicipioID,
-        INSERTED.EstadoID,
-        INSERTED.ClaveMunicipio,
-        INSERTED.NombreMunicipio,
-        INSERTED.EsValido,
-        INSERTED.createdAt,
-        INSERTED.updatedAt,
-        INSERTED.createdBy,
-        INSERTED.updatedBy
       VALUES (@estadoId, @claveMunicipio, @nombreMunicipio, @esValido, @createdBy, @updatedBy)
     `);
-  const row = r.recordset[0];
+
+  // Retrieve the inserted record by the unique combination (EstadoID, ClaveMunicipio)
+  const selectReq = tx ? new sqlType.Request(tx) : (await getPool()).request();
+  const r = await selectReq
+    .input('estadoId', sql.Char(2), estadoId)
+    .input('claveMunicipio', sql.Char(3), claveMunicipio)
+    .query(`
+      SELECT
+        MunicipioID,
+        EstadoID,
+        ClaveMunicipio,
+        NombreMunicipio,
+        EsValido,
+        createdAt,
+        updatedAt,
+        createdBy,
+        updatedBy
+      FROM geo.Municipios
+      WHERE EstadoID = @estadoId AND ClaveMunicipio = @claveMunicipio
+    `);
+  const row = r.recordset?.[0];
+  if (!row) {
+    throw new Error('Failed to retrieve inserted municipio');
+  }
   return {
     municipioId: row.MunicipioID,
     estadoId: row.EstadoID,
@@ -161,7 +176,7 @@ export async function updateMunicipio(municipioId: number, nombreMunicipio?: str
     throw new Error('Invalid esValido: must be a boolean');
   }
   const req = tx ? new sqlType.Request(tx) : (await getPool()).request();
-  const r = await req
+  const updateResult = await req
     .input('municipioId', sql.Int, municipioId)
     .input('nombreMunicipio', sql.VarChar(100), nombreMunicipio ?? null)
     .input('esValido', sql.Bit, esValido ?? null)
@@ -169,19 +184,33 @@ export async function updateMunicipio(municipioId: number, nombreMunicipio?: str
     .query(`
       UPDATE geo.Municipios
       SET NombreMunicipio = @nombreMunicipio,
-           EsValido = @esValido,
-           updatedAt = SYSUTCDATETIME(),
-           updatedBy = @updatedBy
-      OUTPUT
-        INSERTED.MunicipioID,
-        INSERTED.EstadoID,
-        INSERTED.ClaveMunicipio,
-        INSERTED.NombreMunicipio,
-        INSERTED.EsValido,
-        INSERTED.createdAt,
-        INSERTED.updatedAt,
-        INSERTED.createdBy,
-        INSERTED.updatedBy
+            EsValido = @esValido,
+            updatedAt = SYSUTCDATETIME(),
+            updatedBy = @updatedBy
+      WHERE MunicipioID = @municipioId
+    `);
+
+  // Check if update affected any rows
+  if (updateResult.rowsAffected && updateResult.rowsAffected[0] === 0) {
+    return undefined;
+  }
+
+  // Retrieve the updated record
+  const selectReq = tx ? new sqlType.Request(tx) : (await getPool()).request();
+  const r = await selectReq
+    .input('municipioId', sql.Int, municipioId)
+    .query(`
+      SELECT
+        MunicipioID,
+        EstadoID,
+        ClaveMunicipio,
+        NombreMunicipio,
+        EsValido,
+        createdAt,
+        updatedAt,
+        createdBy,
+        updatedBy
+      FROM geo.Municipios
       WHERE MunicipioID = @municipioId
     `);
   const row = r.recordset[0];

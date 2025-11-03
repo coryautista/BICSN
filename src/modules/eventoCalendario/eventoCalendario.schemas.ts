@@ -19,3 +19,10 @@ export const UpdateEventoCalendarioSchema = z.object({
 export const EventoCalendarioIdSchema = z.object({
   id: z.number().int()
 });
+
+// This schema is used in the routes for querystring validation
+export const QueryEventoCalendarioByDateRangeSchema = z.object({
+  fechaInicio: z.string().date(),
+  fechaFin: z.string().date(),
+  tipo: z.enum(['ARCHIVO_APLICACION', 'ASUETO', 'ALTA_BAJA_CAMBIO', 'PAGO', 'HIPOTECARIO']).optional()
+});

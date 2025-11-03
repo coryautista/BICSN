@@ -1,12 +1,13 @@
 import { FastifyInstance } from 'fastify';
 import { requireAuth } from '../auth/auth.middleware.js';
-import { CreateAfiliadoSchema, UpdateAfiliadoSchema } from './afiliado.schemas.js';
+import { CreateAfiliadoSchema, UpdateAfiliadoSchema, CreateAfiliadoAfiliadoOrgMovimientoSchema } from './afiliado.schemas.js';
 import {
   getAllAfiliadosService,
   getAfiliadoByIdService,
   createAfiliadoService,
   updateAfiliadoService,
-  deleteAfiliadoService
+  deleteAfiliadoService,
+  createAfiliadoAfiliadoOrgMovimientoService
 } from './afiliado.service.js';
 import { ok, fail } from '../../utils/http.js';
 
@@ -43,6 +44,8 @@ export default async function afiliadoRoutes(app: FastifyInstance) {
                   domicilioCalle: { type: 'string', nullable: true },
                   domicilioNumeroExterior: { type: 'string', nullable: true },
                   domicilioNumeroInterior: { type: 'string', nullable: true },
+                  domicilioEntreCalle1: { type: 'string', nullable: true },
+                  domicilioEntreCalle2: { type: 'string', nullable: true },
                   domicilioColonia: { type: 'string', nullable: true },
                   domicilioCodigoPostal: { type: 'number', nullable: true },
                   telefono: { type: 'string', nullable: true },
@@ -130,6 +133,8 @@ export default async function afiliadoRoutes(app: FastifyInstance) {
                 domicilioCalle: { type: 'string', nullable: true },
                 domicilioNumeroExterior: { type: 'string', nullable: true },
                 domicilioNumeroInterior: { type: 'string', nullable: true },
+                domicilioEntreCalle1: { type: 'string', nullable: true },
+                domicilioEntreCalle2: { type: 'string', nullable: true },
                 domicilioColonia: { type: 'string', nullable: true },
                 domicilioCodigoPostal: { type: 'number', nullable: true },
                 telefono: { type: 'string', nullable: true },
@@ -221,6 +226,8 @@ export default async function afiliadoRoutes(app: FastifyInstance) {
           domicilioCalle: { type: 'string', maxLength: 255 },
           domicilioNumeroExterior: { type: 'string', maxLength: 50 },
           domicilioNumeroInterior: { type: 'string', maxLength: 50 },
+          domicilioEntreCalle1: { type: 'string', maxLength: 120 },
+          domicilioEntreCalle2: { type: 'string', maxLength: 120 },
           domicilioColonia: { type: 'string', maxLength: 255 },
           domicilioCodigoPostal: { type: 'number' },
           telefono: { type: 'string', maxLength: 10 },
@@ -299,6 +306,8 @@ export default async function afiliadoRoutes(app: FastifyInstance) {
         domicilioCalle: parsed.data.domicilioCalle ?? null,
         domicilioNumeroExterior: parsed.data.domicilioNumeroExterior ?? null,
         domicilioNumeroInterior: parsed.data.domicilioNumeroInterior ?? null,
+        domicilioEntreCalle1: parsed.data.domicilioEntreCalle1 ?? null,
+        domicilioEntreCalle2: parsed.data.domicilioEntreCalle2 ?? null,
         domicilioColonia: parsed.data.domicilioColonia ?? null,
         domicilioCodigoPostal: parsed.data.domicilioCodigoPostal ?? null,
         telefono: parsed.data.telefono ?? null,
@@ -318,7 +327,9 @@ export default async function afiliadoRoutes(app: FastifyInstance) {
         nacionalidad: parsed.data.nacionalidad ?? null,
         fechaAlta: parsed.data.fechaAlta ?? null,
         celular: parsed.data.celular ?? null,
-        expediente: parsed.data.expediente ?? null
+        expediente: parsed.data.expediente ?? null,
+        quincenaAplicacion: parsed.data.quincenaAplicacion ?? null,
+        anioAplicacion: parsed.data.anioAplicacion ?? null
       });
       return reply.code(201).send(ok(record));
     } catch (error: any) {
@@ -355,6 +366,8 @@ export default async function afiliadoRoutes(app: FastifyInstance) {
           domicilioCalle: { type: 'string', maxLength: 255 },
           domicilioNumeroExterior: { type: 'string', maxLength: 50 },
           domicilioNumeroInterior: { type: 'string', maxLength: 50 },
+          domicilioEntreCalle1: { type: 'string', maxLength: 120 },
+          domicilioEntreCalle2: { type: 'string', maxLength: 120 },
           domicilioColonia: { type: 'string', maxLength: 255 },
           domicilioCodigoPostal: { type: 'number' },
           telefono: { type: 'string', maxLength: 10 },
@@ -442,6 +455,121 @@ export default async function afiliadoRoutes(app: FastifyInstance) {
       }
       console.error('Error updating afiliado:', error);
       return reply.code(500).send(fail('AFILIADO_UPDATE_FAILED'));
+    }
+  });
+
+  // POST /afiliado/complete - Create afiliado, afiliadoOrg and movimiento together
+  app.post('/afiliado/complete', {
+    preHandler: [requireAuth],
+    schema: {
+      description: 'Crear registro completo de Afiliado con AfiliadoOrg y Movimiento. NOTA: claveOrganica0 a claveOrganica3 se obtienen automáticamente del usuario autenticado. nivel0Id a nivel3Id no deben enviarse. orgs1-orgs4 se construyen automáticamente concatenando las claveOrganica. tipoMovimientoId es siempre 1. creadoPor es el usuario autenticado. folio, fechaAlta, fechaCarta, fechaMovAlt, quincenaId, fechaMov, folioMov, estatusMov, aplicar, activo, poseeInmuebles y dependientes se calculan/asignan automáticamente.',
+      tags: ['afiliado'],
+      security: [{ bearerAuth: [] }],
+      body: {
+        type: 'object',
+        required: ['nombre', 'apellidoPaterno', 'apellidoMaterno', 'curp', 'rfc', 'numeroSeguroSocial', 'fechaNacimiento', 'entidadFederativaNacId', 'domicilioCalle', 'domicilioNumeroExterior', 'domicilioColonia', 'domicilioCodigoPostal', 'telefono', 'estadoCivilId', 'sexo', 'correoElectronico', 'noEmpleado', 'localidad', 'municipio', 'estado', 'pais', 'nacionalidad', 'celular', 'expediente', 'sueldo', 'otrasPrestaciones', 'quinquenios'],
+        properties: {
+          // Afiliado fields
+          apellidoPaterno: { type: 'string', maxLength: 255 },
+          apellidoMaterno: { type: 'string', maxLength: 255 },
+          nombre: { type: 'string', maxLength: 200 },
+          curp: { type: 'string', maxLength: 18 },
+          rfc: { type: 'string', maxLength: 13 },
+          numeroSeguroSocial: { type: 'string', maxLength: 50 },
+          fechaNacimiento: { type: 'string', format: 'date' },
+          entidadFederativaNacId: { type: 'number' },
+          domicilioCalle: { type: 'string', maxLength: 255 },
+          domicilioNumeroExterior: { type: 'string', maxLength: 50 },
+          domicilioNumeroInterior: { type: 'string', maxLength: 50, nullable: true },
+          domicilioEntreCalle1: { type: 'string', maxLength: 120, nullable: true },
+          domicilioEntreCalle2: { type: 'string', maxLength: 120, nullable: true },
+          domicilioColonia: { type: 'string', maxLength: 255 },
+          domicilioCodigoPostal: { type: 'number' },
+          telefono: { type: 'string', maxLength: 10 },
+          estadoCivilId: { type: 'number' },
+          sexo: { type: 'string', maxLength: 1 },
+          correoElectronico: { type: 'string', maxLength: 255 },
+          estatus: { type: 'boolean', nullable: true },
+          interno: { type: 'number', nullable: true },
+          noEmpleado: { type: 'string', maxLength: 20 },
+          localidad: { type: 'string', maxLength: 150 },
+          municipio: { type: 'string', maxLength: 150 },
+          estado: { type: 'string', maxLength: 150 },
+          pais: { type: 'string', maxLength: 100 },
+          fechaCarta: { type: 'string', format: 'date', nullable: true },
+          nacionalidad: { type: 'string', maxLength: 80 },
+          fechaAlta: { type: 'string', format: 'date', nullable: true },
+          celular: { type: 'string', maxLength: 15 },
+          expediente: { type: 'string', maxLength: 50 },
+          // AfiliadoOrg fields (solo los que deben enviarse)
+          internoOrg: { type: 'number', nullable: true },
+          sueldo: { type: 'number' },
+          otrasPrestaciones: { type: 'number' },
+          quinquenios: { type: 'number' },
+          dSueldo: { type: 'string', maxLength: 200, nullable: true },
+          dOtrasPrestaciones: { type: 'string', maxLength: 200, nullable: true },
+          dQuinquenios: { type: 'string', maxLength: 200, nullable: true },
+          bc: { type: 'string', maxLength: 30, nullable: true },
+          porcentaje: { type: 'number', nullable: true },
+          // Movimiento fields
+          observaciones: { type: 'string', maxLength: 1024, nullable: true }
+        }
+      }
+      // Response schema removed to allow full object serialization
+    }
+  }, async (req, reply) => {
+    const parsed = CreateAfiliadoAfiliadoOrgMovimientoSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return reply.code(400).send(fail(parsed.error.message));
+    }
+
+    try {
+      // Obtener userId del token
+      const userId = req.user?.sub ? parseInt(req.user.sub, 10) : null;
+      
+      // Obtener claveOrganica0 a claveOrganica3 del usuario autenticado (ya son strings)
+      const claveOrganica0 = req.user?.idOrganica0 ?? null;
+      const claveOrganica1 = req.user?.idOrganica1 ?? null;
+      const claveOrganica2 = req.user?.idOrganica2 ?? null;
+      const claveOrganica3 = req.user?.idOrganica3 ?? null;
+      
+      const result = await createAfiliadoAfiliadoOrgMovimientoService({
+        ...parsed.data,
+        // Valores por defecto que pueden ser sobrescritos
+        estatus: parsed.data.estatus ?? true,
+        interno: parsed.data.interno ?? 0,
+        creadoPor: userId ?? 1,
+        tipoMovimientoId: 1,
+        // Valores opcionales vacíos
+        domicilioNumeroInterior: parsed.data.domicilioNumeroInterior ?? '',
+        bc: parsed.data.bc ?? '',
+        // Campos automáticos que no están en el swagger
+        activo: true,
+        aplicar: true,
+        poseeInmuebles: false,
+        dependientes: 0,
+        estatusMov: 'A',
+        folioMov: '',
+        // Asignar claveOrganica del usuario autenticado (sobrescribe los valores del body)
+        claveOrganica0,
+        claveOrganica1,
+        claveOrganica2,
+        claveOrganica3,
+        // nivel0Id a nivel3Id no se registran (siempre null)
+        nivel0Id: null,
+        nivel1Id: null,
+        nivel2Id: null,
+        nivel3Id: null,
+        // Construir orgs1 a orgs4 concatenando claveOrganica
+        orgs1: [claveOrganica0, claveOrganica1].filter(Boolean).join(''),
+        orgs2: [claveOrganica0, claveOrganica1, claveOrganica2].filter(Boolean).join(''),
+        orgs3: [claveOrganica0, claveOrganica1, claveOrganica2, claveOrganica3].filter(Boolean).join(''),
+        orgs4: [claveOrganica0, claveOrganica1, claveOrganica2, claveOrganica3].filter(Boolean).join('')
+      });
+      return reply.code(201).send(ok(result));
+    } catch (error: any) {
+      console.error('Error creating complete afiliado:', error);
+      return reply.code(500).send(fail(`AFILIADO_CREATE_FAILED: ${error.message || error}`));
     }
   });
 

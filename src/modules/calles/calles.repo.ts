@@ -135,7 +135,6 @@ export async function searchCalles(filters: {
   `;
 
   const params: any[] = [];
-  let paramIndex = 1;
 
   if (filters.estadoId) {
     query += ` AND e.EstadoID = @estadoId`;
@@ -222,7 +221,9 @@ export async function createCalle(coloniaId: number, nombreCalle: string, esVali
   }
 
   const req = tx ? new sqlType.Request(tx) : (await getPool()).request();
-  const r = await req
+  
+  // First, insert the record
+  await req
     .input('coloniaId', sql.Int, coloniaId)
     .input('nombreCalle', sql.VarChar(150), nombreCalle)
     .input('esValido', sql.Bit, esValido)
@@ -230,18 +231,32 @@ export async function createCalle(coloniaId: number, nombreCalle: string, esVali
     .input('updatedBy', sql.VarChar(128), userId ?? null)
     .query(`
       INSERT INTO geo.Calles (ColoniaID, NombreCalle, EsValido, createdBy, updatedBy)
-      OUTPUT
-        INSERTED.CalleID,
-        INSERTED.ColoniaID,
-        INSERTED.NombreCalle,
-        INSERTED.EsValido,
-        INSERTED.createdAt,
-        INSERTED.updatedAt,
-        INSERTED.createdBy,
-        INSERTED.updatedBy
       VALUES (@coloniaId, @nombreCalle, @esValido, @createdBy, @updatedBy)
     `);
-  const row = r.recordset[0];
+
+  // Retrieve the inserted record by matching the unique combination
+  const selectReq = tx ? new sqlType.Request(tx) : (await getPool()).request();
+  const r = await selectReq
+    .input('coloniaId', sql.Int, coloniaId)
+    .input('nombreCalle', sql.VarChar(150), nombreCalle)
+    .query(`
+      SELECT TOP 1
+        CalleID,
+        ColoniaID,
+        NombreCalle,
+        EsValido,
+        createdAt,
+        updatedAt,
+        createdBy,
+        updatedBy
+      FROM geo.Calles
+      WHERE ColoniaID = @coloniaId AND NombreCalle = @nombreCalle
+      ORDER BY CalleID DESC
+    `);
+  const row = r.recordset?.[0];
+  if (!row) {
+    throw new Error('Failed to retrieve inserted calle');
+  }
   return {
     calleId: row.CalleID,
     coloniaId: row.ColoniaID,
@@ -266,29 +281,40 @@ export async function updateCalle(calleId: number, nombreCalle?: string, esValid
   }
 
   const req = tx ? new sqlType.Request(tx) : (await getPool()).request();
-  const r = await req
+  
+  // First, update the record
+  await req
     .input('calleId', sql.Int, calleId)
     .input('nombreCalle', sql.VarChar(150), nombreCalle ?? null)
     .input('esValido', sql.Bit, esValido ?? null)
     .input('updatedBy', sql.VarChar(128), userId ?? null)
     .query(`
       UPDATE geo.Calles
-      SET NombreCalle = @nombreCalle,
-          EsValido = @esValido,
+      SET NombreCalle = COALESCE(@nombreCalle, NombreCalle),
+          EsValido = COALESCE(@esValido, EsValido),
           updatedAt = SYSUTCDATETIME(),
           updatedBy = @updatedBy
-      OUTPUT
-        INSERTED.CalleID,
-        INSERTED.ColoniaID,
-        INSERTED.NombreCalle,
-        INSERTED.EsValido,
-        INSERTED.createdAt,
-        INSERTED.updatedAt,
-        INSERTED.createdBy,
-        INSERTED.updatedBy
       WHERE CalleID = @calleId
     `);
-  const row = r.recordset[0];
+
+  // Retrieve the updated record
+  const selectReq = tx ? new sqlType.Request(tx) : (await getPool()).request();
+  const r = await selectReq
+    .input('calleId', sql.Int, calleId)
+    .query(`
+      SELECT
+        CalleID,
+        ColoniaID,
+        NombreCalle,
+        EsValido,
+        createdAt,
+        updatedAt,
+        createdBy,
+        updatedBy
+      FROM geo.Calles
+      WHERE CalleID = @calleId
+    `);
+  const row = r.recordset?.[0];
   if (!row) return undefined;
   return {
     calleId: row.CalleID,

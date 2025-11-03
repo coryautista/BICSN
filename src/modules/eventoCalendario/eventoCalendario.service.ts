@@ -1,4 +1,4 @@
-import { findEventoCalendarioById, listEventoCalendarios, findEventoCalendariosByAnio, createEventoCalendario, updateEventoCalendario, deleteEventoCalendario } from './eventoCalendario.repo.js';
+import { findEventoCalendarioById, listEventoCalendarios, findEventoCalendariosByAnio, createEventoCalendario, updateEventoCalendario, deleteEventoCalendario, findEventoCalendariosByDateRange } from './eventoCalendario.repo.js';
 
 export async function getAllEventoCalendarios() {
   return listEventoCalendarios();
@@ -32,4 +32,8 @@ export async function deleteEventoCalendarioItem(id: number, tx?: any) {
   if (!existing) throw new Error('EVENTO_CALENDARIO_NOT_FOUND');
 
   return deleteEventoCalendario(id, tx);
+}
+
+export async function getEventoCalendariosByDateRange(fechaInicio: string, fechaFin: string, tipo?: string) {
+  return findEventoCalendariosByDateRange(fechaInicio, fechaFin, tipo);
 }
