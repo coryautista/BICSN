@@ -1,11 +1,71 @@
 import { FastifyInstance } from 'fastify';
 import { requireAuth } from '../auth/auth.middleware.js';
 import { CreateOrganica2Schema, UpdateOrganica2Schema, DynamicQuerySchema } from './organica2.schemas.js';
-import { getOrganica2ById, getAllOrganica2, createOrganica2Record, updateOrganica2Record, deleteOrganica2Record, queryOrganica2Dynamic } from './organica2.service.js';
+import { getOrganica2ById, getAllOrganica2, createOrganica2Record, updateOrganica2Record, deleteOrganica2Record, queryOrganica2Dynamic, getOrganica2ByUserToken } from './organica2.service.js';
 import { ok, fail, validationError, notFound, conflict, badRequest, internalError } from '../../utils/http.js';
 
 // [FIREBIRD] Routes for ORGANICA_2 CRUD operations
 export default async function organica2Routes(app: FastifyInstance) {
+
+  // GET /organica2/my - Get organica2 records for authenticated user
+  app.get('/organica2/my', {
+    preHandler: [requireAuth],
+    schema: {
+      description: '[FIREBIRD] Get ORGANICA_2 records linked to authenticated user',
+      tags: ['organica2', 'firebird'],
+      security: [{ bearerAuth: [] }],
+      response: {
+        200: {
+          type: 'object',
+          properties: {
+            ok: { type: 'boolean' },
+            data: {
+              type: 'array',
+              items: {
+                type: 'object',
+                properties: {
+                  claveOrganica0: { type: 'string' },
+                  claveOrganica1: { type: 'string' },
+                  claveOrganica2: { type: 'string' },
+                  descripcion: { type: 'string' },
+                  titular: { type: 'number' },
+                  fechaRegistro2: { type: 'string', format: 'date-time' },
+                  fechaFin2: { type: 'string', format: 'date-time' },
+                  usuario: { type: 'string' },
+                  estatus: { type: 'string' }
+                }
+              }
+            }
+          }
+        },
+        500: {
+          type: 'object',
+          properties: {
+            ok: { type: 'boolean' },
+            error: {
+              type: 'object',
+              properties: {
+                code: { type: 'string' },
+                message: { type: 'string' }
+              }
+            }
+          }
+        }
+      }
+    }
+  }, async (req, reply) => {
+    try {
+      const user = (req as any).user;
+      const claveOrganica0 = user?.idOrganica0?.toString().padStart(2, '0');
+      const claveOrganica1 = user?.idOrganica1?.toString().padStart(2, '0');
+      
+      const records = await getOrganica2ByUserToken(claveOrganica0, claveOrganica1);
+      return reply.send(ok(records));
+    } catch (error: any) {
+      console.error('Error getting user organica2:', error);
+      return reply.code(500).send(fail('ORGANICA2_USER_FAILED'));
+    }
+  });
 
   // GET /organica2 - List all records
   app.get('/organica2', {

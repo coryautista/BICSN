@@ -4,6 +4,7 @@ import { CreateOrgPersonalSchema, UpdateOrgPersonalSchema } from './orgPersonal.
 import {
   getAllOrgPersonalService,
   getOrgPersonalByIdService,
+  getOrgPersonalBySearchService,
   createOrgPersonalService,
   updateOrgPersonalService,
   deleteOrgPersonalService
@@ -46,7 +47,7 @@ export default async function orgPersonalRoutes(app: FastifyInstance) {
                   orgs: { type: 'string', nullable: true },
                   dsueldo: { type: 'number', nullable: true },
                   dotras_prestaciones: { type: 'number', nullable: true },
-                  daquinquenios: { type: 'number', nullable: true },
+                  dquinquenios: { type: 'number', nullable: true },
                   aplicar: { type: 'string', nullable: true },
                   bc: { type: 'string', nullable: true },
                   porcentaje: { type: 'number', nullable: true }
@@ -77,6 +78,94 @@ export default async function orgPersonalRoutes(app: FastifyInstance) {
     } catch (error: any) {
       console.error('Error listing orgPersonal:', error);
       return reply.code(500).send(fail('ORG_PERSONAL_LIST_FAILED'));
+    }
+  });
+
+  // GET /orgPersonal/search/:searchTerm - Get record by CURP, INE or Full Name
+  app.get('/orgPersonal/search/:searchTerm', {
+    preHandler: [requireAuth],
+    schema: {
+      description: 'Get OrgPersonal record by CURP, INE or Full Name',
+      tags: ['orgPersonal'],
+      security: [{ bearerAuth: [] }],
+      params: {
+        type: 'object',
+        required: ['searchTerm'],
+        properties: {
+          searchTerm: { type: 'string' }
+        }
+      },
+      response: {
+        200: {
+          type: 'object',
+          properties: {
+            ok: { type: 'boolean' },
+            data: {
+              type: 'object',
+              properties: {
+                interno: { type: 'number' },
+                clave_organica_0: { type: 'string', nullable: true },
+                clave_organica_1: { type: 'string', nullable: true },
+                clave_organica_2: { type: 'string', nullable: true },
+                clave_organica_3: { type: 'string', nullable: true },
+                sueldo: { type: 'number', nullable: true },
+                otras_prestaciones: { type: 'number', nullable: true },
+                quinquenios: { type: 'number', nullable: true },
+                activo: { type: 'string', nullable: true },
+                fecha_mov_alt: { type: 'string', nullable: true },
+                orgs1: { type: 'string', nullable: true },
+                orgs2: { type: 'string', nullable: true },
+                orgs3: { type: 'string', nullable: true },
+                orgs: { type: 'string', nullable: true },
+                dsueldo: { type: 'number', nullable: true },
+                dotras_prestaciones: { type: 'number', nullable: true },
+                dquinquenios: { type: 'number', nullable: true },
+                aplicar: { type: 'string', nullable: true },
+                bc: { type: 'string', nullable: true },
+                porcentaje: { type: 'number', nullable: true }
+              }
+            }
+          }
+        },
+        404: {
+          type: 'object',
+          properties: {
+            ok: { type: 'boolean' },
+            error: {
+              type: 'object',
+              properties: {
+                code: { type: 'string' },
+                message: { type: 'string' }
+              }
+            }
+          }
+        },
+        500: {
+          type: 'object',
+          properties: {
+            ok: { type: 'boolean' },
+            error: {
+              type: 'object',
+              properties: {
+                code: { type: 'string' },
+                message: { type: 'string' }
+              }
+            }
+          }
+        }
+      }
+    }
+  }, async (req, reply) => {
+    try {
+      const { searchTerm } = req.params as { searchTerm: string };
+      const record = await getOrgPersonalBySearchService(searchTerm);
+      return reply.send(ok(record));
+    } catch (error: any) {
+      if (error.message === 'ORG_PERSONAL_NOT_FOUND') {
+        return reply.code(404).send(fail('ORG_PERSONAL_NOT_FOUND'));
+      }
+      console.error('Error getting orgPersonal by search term:', error);
+      return reply.code(500).send(fail('ORG_PERSONAL_GET_FAILED'));
     }
   });
 
@@ -118,7 +207,7 @@ export default async function orgPersonalRoutes(app: FastifyInstance) {
                 orgs: { type: 'string', nullable: true },
                 dsueldo: { type: 'number', nullable: true },
                 dotras_prestaciones: { type: 'number', nullable: true },
-                daquinquenios: { type: 'number', nullable: true },
+                dquinquenios: { type: 'number', nullable: true },
                 aplicar: { type: 'string', nullable: true },
                 bc: { type: 'string', nullable: true },
                 porcentaje: { type: 'number', nullable: true }
@@ -191,7 +280,7 @@ export default async function orgPersonalRoutes(app: FastifyInstance) {
           fecha_mov_alt: { type: 'string', format: 'date-time' },
           dsueldo: { type: 'number' },
           dotras_prestaciones: { type: 'number' },
-          daquinquenios: { type: 'number' },
+          dquinquenios: { type: 'number' },
           aplicar: { type: 'string', maxLength: 1 },
           bc: { type: 'string', maxLength: 1 },
           porcentaje: { type: 'number' }
@@ -253,7 +342,7 @@ export default async function orgPersonalRoutes(app: FastifyInstance) {
         fecha_mov_alt: parsed.data.fecha_mov_alt ?? null,
         dsueldo: parsed.data.dsueldo ?? null,
         dotras_prestaciones: parsed.data.dotras_prestaciones ?? null,
-        daquinquenios: parsed.data.daquinquenios ?? null,
+        dquinquenios: parsed.data.dquinquenios ?? null,
         aplicar: parsed.data.aplicar ?? null,
         bc: parsed.data.bc ?? null,
         porcentaje: parsed.data.porcentaje ?? null
@@ -293,7 +382,7 @@ export default async function orgPersonalRoutes(app: FastifyInstance) {
           fecha_mov_alt: { type: 'string', format: 'date-time' },
           dsueldo: { type: 'number' },
           dotras_prestaciones: { type: 'number' },
-          daquinquenios: { type: 'number' },
+          dquinquenios: { type: 'number' },
           aplicar: { type: 'string', maxLength: 1 },
           bc: { type: 'string', maxLength: 1 },
           porcentaje: { type: 'number' }

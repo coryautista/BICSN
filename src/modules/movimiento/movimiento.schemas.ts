@@ -10,6 +10,7 @@ export const MovimientoSchema = z.object({
   folio: z.string().max(100).nullable(),
   estatus: z.string().max(30).nullable(),
   creadoPor: z.number().int().nullable(),
+  creadoPorUid: z.string().uuid().nullable(),
   createdAt: z.string().datetime()
 });
 
@@ -21,7 +22,8 @@ export const CreateMovimientoSchema = z.object({
   observaciones: z.string().max(1024).nullable().optional(),
   folio: z.string().max(100).nullable().optional(),
   estatus: z.string().max(30).nullable().optional(),
-  creadoPor: z.number().int().nullable().optional()
+  creadoPor: z.number().int().nullable().optional(),
+  creadoPorUid: z.string().uuid().optional()
 });
 
 export const UpdateMovimientoSchema = z.object({
@@ -32,7 +34,8 @@ export const UpdateMovimientoSchema = z.object({
   observaciones: z.string().max(1024).nullable().optional(),
   folio: z.string().max(100).nullable().optional(),
   estatus: z.string().max(30).nullable().optional(),
-  creadoPor: z.number().int().nullable().optional()
+  creadoPor: z.number().int().nullable().optional(),
+  creadoPorUid: z.string().uuid().optional()
 }).refine(
   (data) => Object.keys(data).length > 0,
   { message: 'At least one field must be provided for update' }

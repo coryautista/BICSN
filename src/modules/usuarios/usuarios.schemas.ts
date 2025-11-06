@@ -1,7 +1,7 @@
 import { z } from 'zod';
 
 export const CreateUsuarioSchema = z.object({
-  usuarioId: z.string().uuid('UsuarioID must be a valid UUID'),
+  usuarioId: z.string().uuid('UsuarioID must be a valid UUID').optional(),
   nombre: z.string().min(1, 'Nombre is required').max(100, 'Nombre must be at most 100 characters'),
   email: z.string().email('Invalid email format'),
   password: z.string().min(8, 'Password must be at least 8 characters'),
@@ -17,7 +17,7 @@ export const CreateUsuarioSchema = z.object({
 export const UpdateUsuarioSchema = z.object({
   nombre: z.string().min(1, 'Nombre is required').max(100, 'Nombre must be at most 100 characters').optional(),
   email: z.string().email('Invalid email format').optional(),
-  roleId: z.string().min(1, 'RoleID is required').optional(),
+  roleId: z.string().uuid('RoleID must be a valid UUID').optional(),
   esActivo: z.boolean().optional()
 }).refine(data => Object.keys(data).length > 0, {
   message: 'At least one field must be provided for update'

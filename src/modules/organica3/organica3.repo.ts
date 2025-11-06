@@ -312,3 +312,62 @@ export async function dynamicQueryOrganica3(query: DynamicQuery): Promise<Organi
     });
   });
 }
+
+export async function findOrganica3ByUserAndParam(claveOrganica0?: string, claveOrganica1?: string, claveOrganica2?: string): Promise<Organica3[]> {
+  const db = getFirebirdDb();
+  
+  let sql = 'SELECT CLAVE_ORGANICA_0, CLAVE_ORGANICA_1, CLAVE_ORGANICA_2, CLAVE_ORGANICA_3, DESCRIPCION, TITULAR, CALLE_NUM, FRACCIONAMIENTO, CODIGO_POSTAL, TELEFONO, FAX, LOCALIDAD, MUNICIPIO, ESTADO, FECHA_REGISTRO_3, FECHA_FIN_3, USUARIO, ESTATUS FROM ORGANICA_3';
+  const params: any[] = [];
+  const conditions: string[] = [];
+
+  if (claveOrganica0) {
+    conditions.push('CLAVE_ORGANICA_0 = ?');
+    params.push(claveOrganica0);
+  }
+
+  if (claveOrganica1) {
+    conditions.push('CLAVE_ORGANICA_1 = ?');
+    params.push(claveOrganica1);
+  }
+
+  if (claveOrganica2) {
+    conditions.push('CLAVE_ORGANICA_2 = ?');
+    params.push(claveOrganica2);
+  }
+
+  if (conditions.length > 0) {
+    sql += ' WHERE ' + conditions.join(' AND ');
+  }
+
+  sql += ' ORDER BY CLAVE_ORGANICA_0, CLAVE_ORGANICA_1, CLAVE_ORGANICA_2, CLAVE_ORGANICA_3';
+
+  return new Promise((resolve, reject) => {
+    db.query(sql, params, (err: any, result: any) => {
+      if (err) {
+        reject(err);
+        return;
+      }
+      const records = result.map((row: any) => ({
+        claveOrganica0: row.CLAVE_ORGANICA_0,
+        claveOrganica1: row.CLAVE_ORGANICA_1,
+        claveOrganica2: row.CLAVE_ORGANICA_2,
+        claveOrganica3: row.CLAVE_ORGANICA_3,
+        descripcion: row.DESCRIPCION,
+        titular: row.TITULAR,
+        calleNum: row.CALLE_NUM,
+        fraccionamiento: row.FRACCIONAMIENTO,
+        codigoPostal: row.CODIGO_POSTAL,
+        telefono: row.TELEFONO,
+        fax: row.FAX,
+        localidad: row.LOCALIDAD,
+        municipio: row.MUNICIPIO,
+        estado: row.ESTADO,
+        fechaRegistro3: new Date(row.FECHA_REGISTRO_3),
+        fechaFin3: row.FECHA_FIN_3 ? new Date(row.FECHA_FIN_3) : undefined,
+        usuario: row.USUARIO,
+        estatus: row.ESTATUS
+      }));
+      resolve(records);
+    });
+  });
+}

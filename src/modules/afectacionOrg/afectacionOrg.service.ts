@@ -4,7 +4,8 @@ import {
   getProgresoUsuario,
   getBitacoraAfectacion,
   getTableroAfectaciones,
-  getUltimaAfectacion
+  getUltimaAfectacion,
+  getQuincenaAltaAfectacion
 } from './afectacionOrg.repo.js';
 import { createExpedienteArchivoItem } from '../expediente/expediente.service.js';
 import { withDbContext } from '../../db/context.js';
@@ -237,5 +238,20 @@ export async function calculateQuincenaFromDate(fecha: string) {
   } catch (error: any) {
     console.error('Error calculating quincena from date:', error);
     throw new Error('FAILED_TO_CALCULATE_QUINCENA');
+  }
+}
+
+export async function getQuincenaAltaAfectacionService(filters?: {
+  entidad?: string;
+  org0?: string;
+  org1?: string;
+  org2?: string;
+  org3?: string;
+}) {
+  try {
+    return await getQuincenaAltaAfectacion(filters);
+  } catch (error: any) {
+    console.error('Error getting quincena alta afectacion:', error);
+    throw new Error('FAILED_TO_GET_QUINCENA_ALTA_AFECTACION');
   }
 }

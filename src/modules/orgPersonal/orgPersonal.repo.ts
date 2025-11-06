@@ -17,7 +17,7 @@ export type OrgPersonal = {
   orgs: string | null;
   dsueldo: number | null;
   dotras_prestaciones: number | null;
-  daquinquenios: number | null;
+  dquinquenios: number | null;
   aplicar: string | null;
   bc: string | null;
   porcentaje: number | null;
@@ -30,7 +30,7 @@ export async function getAllOrgPersonal(): Promise<OrgPersonal[]> {
       SELECT
         INTERNO, CLAVE_ORGANICA_0, CLAVE_ORGANICA_1, CLAVE_ORGANICA_2, CLAVE_ORGANICA_3,
         SUELDO, OTRAS_PRESTACIONES, QUINQUENIOS, ACTIVO, FECHA_MOV_ALT,
-        ORGS1, ORGS2, ORGS3, ORGS, DSUELDO, DOTRAS_PRESTACIONES, DAQUINQUENIOS,
+        ORGS1, ORGS2, ORGS3, ORGS, DSUELDO, DOTRAS_PRESTACIONES, DQUINQUENIOS,
         APLICAR, BC, PORCENTAJE
       FROM ORG_PERSONAL
       ORDER BY INTERNO
@@ -59,13 +59,71 @@ export async function getAllOrgPersonal(): Promise<OrgPersonal[]> {
         orgs: row.ORGS || null,
         dsueldo: row.DSUELDO || null,
         dotras_prestaciones: row.DOTRAS_PRESTACIONES || null,
-        daquinquenios: row.DAQUINQUENIOS || null,
+        dquinquenios: row.DQUINQUENIOS || null,
         aplicar: row.APLICAR || null,
         bc: row.BC || null,
         porcentaje: row.PORCENTAJE || null
       }));
 
       resolve(records);
+    });
+  });
+}
+
+export async function getOrgPersonalBySearch(searchTerm: string): Promise<OrgPersonal | undefined> {
+  const db = getFirebirdDb();
+  return new Promise((resolve, reject) => {
+    // Truncate searchTerm to 13 characters for RFC field (database limitation)
+    const rfcTerm = searchTerm.substring(0, 13);
+    
+    const sql = `
+      SELECT FIRST 1
+        OP.INTERNO, OP.CLAVE_ORGANICA_0, OP.CLAVE_ORGANICA_1, OP.CLAVE_ORGANICA_2, OP.CLAVE_ORGANICA_3,
+        OP.SUELDO, OP.OTRAS_PRESTACIONES, OP.QUINQUENIOS, OP.ACTIVO, OP.FECHA_MOV_ALT,
+        OP.ORGS1, OP.ORGS2, OP.ORGS3, OP.ORGS, OP.DSUELDO, OP.DOTRAS_PRESTACIONES, OP.DQUINQUENIOS,
+        OP.APLICAR, OP.BC, OP.PORCENTAJE
+      FROM ORG_PERSONAL OP
+      INNER JOIN PERSONAL P ON OP.INTERNO = P.INTERNO
+      WHERE UPPER(P.CURP) = UPPER(?) OR UPPER(P.RFC) = UPPER(?) OR UPPER(P.FULLNAME) = UPPER(?)
+      ORDER BY OP.FECHA_MOV_ALT DESC
+    `;
+
+    db.query(sql, [searchTerm, rfcTerm, searchTerm], (err: any, result: any) => {
+      if (err) {
+        reject(err);
+        return;
+      }
+
+      if (result.length === 0) {
+        resolve(undefined);
+        return;
+      }
+
+      const row = result[0];
+      const record = {
+        interno: row.INTERNO,
+        clave_organica_0: row.CLAVE_ORGANICA_0 || null,
+        clave_organica_1: row.CLAVE_ORGANICA_1 || null,
+        clave_organica_2: row.CLAVE_ORGANICA_2 || null,
+        clave_organica_3: row.CLAVE_ORGANICA_3 || null,
+        sueldo: row.SUELDO || null,
+        otras_prestaciones: row.OTRAS_PRESTACIONES || null,
+        quinquenios: row.QUINQUENIOS || null,
+        activo: row.ACTIVO || null,
+        fecha_mov_alt: row.FECHA_MOV_ALT ? row.FECHA_MOV_ALT.toISOString() : null,
+        orgs1: row.ORGS1 || null,
+        orgs2: row.ORGS2 || null,
+        orgs3: row.ORGS3 || null,
+        orgs: row.ORGS || null,
+        dsueldo: row.DSUELDO || null,
+        dotras_prestaciones: row.DOTRAS_PRESTACIONES || null,
+        dquinquenios: row.DQUINQUENIOS || null,
+        aplicar: row.APLICAR || null,
+        bc: row.BC || null,
+        porcentaje: row.PORCENTAJE || null
+      };
+
+      resolve(record);
     });
   });
 }
@@ -77,7 +135,7 @@ export async function getOrgPersonalById(interno: number): Promise<OrgPersonal |
       SELECT
         INTERNO, CLAVE_ORGANICA_0, CLAVE_ORGANICA_1, CLAVE_ORGANICA_2, CLAVE_ORGANICA_3,
         SUELDO, OTRAS_PRESTACIONES, QUINQUENIOS, ACTIVO, FECHA_MOV_ALT,
-        ORGS1, ORGS2, ORGS3, ORGS, DSUELDO, DOTRAS_PRESTACIONES, DAQUINQUENIOS,
+        ORGS1, ORGS2, ORGS3, ORGS, DSUELDO, DOTRAS_PRESTACIONES, DQUINQUENIOS,
         APLICAR, BC, PORCENTAJE
       FROM ORG_PERSONAL
       WHERE INTERNO = ?
@@ -112,7 +170,7 @@ export async function getOrgPersonalById(interno: number): Promise<OrgPersonal |
         orgs: row.ORGS || null,
         dsueldo: row.DSUELDO || null,
         dotras_prestaciones: row.DOTRAS_PRESTACIONES || null,
-        daquinquenios: row.DAQUINQUENIOS || null,
+        dquinquenios: row.DQUINQUENIOS || null,
         aplicar: row.APLICAR || null,
         bc: row.BC || null,
         porcentaje: row.PORCENTAJE || null
@@ -130,12 +188,12 @@ export async function createOrgPersonal(data: Omit<OrgPersonal, 'orgs1' | 'orgs2
       INSERT INTO ORG_PERSONAL (
         INTERNO, CLAVE_ORGANICA_0, CLAVE_ORGANICA_1, CLAVE_ORGANICA_2, CLAVE_ORGANICA_3,
         SUELDO, OTRAS_PRESTACIONES, QUINQUENIOS, ACTIVO, FECHA_MOV_ALT,
-        DSUELDO, DOTRAS_PRESTACIONES, DAQUINQUENIOS, APLICAR, BC, PORCENTAJE
+        DSUELDO, DOTRAS_PRESTACIONES, DQUINQUENIOS, APLICAR, BC, PORCENTAJE
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       RETURNING
         INTERNO, CLAVE_ORGANICA_0, CLAVE_ORGANICA_1, CLAVE_ORGANICA_2, CLAVE_ORGANICA_3,
         SUELDO, OTRAS_PRESTACIONES, QUINQUENIOS, ACTIVO, FECHA_MOV_ALT,
-        ORGS1, ORGS2, ORGS3, ORGS, DSUELDO, DOTRAS_PRESTACIONES, DAQUINQUENIOS,
+        ORGS1, ORGS2, ORGS3, ORGS, DSUELDO, DOTRAS_PRESTACIONES, DQUINQUENIOS,
         APLICAR, BC, PORCENTAJE
     `;
 
@@ -152,7 +210,7 @@ export async function createOrgPersonal(data: Omit<OrgPersonal, 'orgs1' | 'orgs2
       data.fecha_mov_alt ? new Date(data.fecha_mov_alt) : null,
       data.dsueldo,
       data.dotras_prestaciones,
-      data.daquinquenios,
+      data.dquinquenios,
       data.aplicar,
       data.bc,
       data.porcentaje
@@ -182,7 +240,7 @@ export async function createOrgPersonal(data: Omit<OrgPersonal, 'orgs1' | 'orgs2
         orgs: row.ORGS || null,
         dsueldo: row.DSUELDO || null,
         dotras_prestaciones: row.DOTRAS_PRESTACIONES || null,
-        daquinquenios: row.DAQUINQUENIOS || null,
+        dquinquenios: row.DQUINQUENIOS || null,
         aplicar: row.APLICAR || null,
         bc: row.BC || null,
         porcentaje: row.PORCENTAJE || null
@@ -243,9 +301,9 @@ export async function updateOrgPersonal(interno: number, data: Partial<Omit<OrgP
       updates.push('DOTRAS_PRESTACIONES = ?');
       params.push(data.dotras_prestaciones);
     }
-    if (data.daquinquenios !== undefined) {
-      updates.push('DAQUINQUENIOS = ?');
-      params.push(data.daquinquenios);
+    if (data.dquinquenios !== undefined) {
+      updates.push('DQUINQUENIOS = ?');
+      params.push(data.dquinquenios);
     }
     if (data.aplicar !== undefined) {
       updates.push('APLICAR = ?');
@@ -269,7 +327,7 @@ export async function updateOrgPersonal(interno: number, data: Partial<Omit<OrgP
       RETURNING
         INTERNO, CLAVE_ORGANICA_0, CLAVE_ORGANICA_1, CLAVE_ORGANICA_2, CLAVE_ORGANICA_3,
         SUELDO, OTRAS_PRESTACIONES, QUINQUENIOS, ACTIVO, FECHA_MOV_ALT,
-        ORGS1, ORGS2, ORGS3, ORGS, DSUELDO, DOTRAS_PRESTACIONES, DAQUINQUENIOS,
+        ORGS1, ORGS2, ORGS3, ORGS, DSUELDO, DOTRAS_PRESTACIONES, DQUINQUENIOS,
         APLICAR, BC, PORCENTAJE
     `;
 
@@ -302,7 +360,7 @@ export async function updateOrgPersonal(interno: number, data: Partial<Omit<OrgP
         orgs: row.ORGS || null,
         dsueldo: row.DSUELDO || null,
         dotras_prestaciones: row.DOTRAS_PRESTACIONES || null,
-        daquinquenios: row.DAQUINQUENIOS || null,
+        dquinquenios: row.DQUINQUENIOS || null,
         aplicar: row.APLICAR || null,
         bc: row.BC || null,
         porcentaje: row.PORCENTAJE || null

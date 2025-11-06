@@ -1,4 +1,4 @@
-import { findOrganica3ById, listOrganica3, createOrganica3, updateOrganica3, deleteOrganica3, dynamicQueryOrganica3 } from './organica3.repo.js';
+import { findOrganica3ById, listOrganica3, createOrganica3, updateOrganica3, deleteOrganica3, dynamicQueryOrganica3, findOrganica3ByUserAndParam } from './organica3.repo.js';
 import { CreateOrganica3, UpdateOrganica3, DynamicQuery } from './organica3.schemas.js';
 import { logAudit, extractUserInfo, extractRequestInfo } from '../../utils/audit.js';
 
@@ -97,4 +97,8 @@ export async function deleteOrganica3Record(claveOrganica0: string, claveOrganic
 
 export async function queryOrganica3Dynamic(query: DynamicQuery) {
   return await dynamicQueryOrganica3(query);
+}
+
+export async function getOrganica3ByUserToken(claveOrganica0?: string, claveOrganica1?: string, claveOrganica2?: string) {
+  return await findOrganica3ByUserAndParam(claveOrganica0, claveOrganica1, claveOrganica2);
 }

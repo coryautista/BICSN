@@ -221,14 +221,28 @@ export async function deleteEventoCalendario(id: number, tx?: sqlType.Transactio
   }
 
   const req = tx ? new sqlType.Request(tx) : (await getPool()).request();
-  const r = await req
+
+  // First, check if event exists
+  const checkReq = tx ? new sqlType.Request(tx) : (await getPool()).request();
+  const checkResult = await checkReq
+    .input('id', sql.Int, id)
+    .query(`SELECT id FROM dbo.EventoCalendario WHERE id = @id`);
+
+  if (!checkResult.recordset[0]) {
+    throw new Error('EVENTO_CALENDARIO_NOT_FOUND');
+  }
+
+  const userId = checkResult.recordset[0].id;
+
+  // Delete without OUTPUT clause (triggers conflict)
+  await req
     .input('id', sql.Int, id)
     .query(`
       DELETE FROM dbo.EventoCalendario
-      OUTPUT DELETED.id
       WHERE id = @id
     `);
-  return r.recordset[0]?.id;
+
+  return userId;
 }
 
 export async function findEventoCalendariosByDateRange(fechaInicio: string, fechaFin: string, tipo?: string) {

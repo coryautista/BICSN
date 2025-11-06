@@ -1,7 +1,7 @@
 import { FastifyInstance } from 'fastify';
 import { requireAuth } from '../auth/auth.middleware.js';
 import { CreateOrganica3Schema, UpdateOrganica3Schema, DynamicQuerySchema } from './organica3.schemas.js';
-import { getOrganica3ById, getAllOrganica3, createOrganica3Record, updateOrganica3Record, deleteOrganica3Record, queryOrganica3Dynamic } from './organica3.service.js';
+import { getOrganica3ById, getAllOrganica3, createOrganica3Record, updateOrganica3Record, deleteOrganica3Record, queryOrganica3Dynamic, getOrganica3ByUserToken } from './organica3.service.js';
 import { ok, fail, validationError, conflict, badRequest, internalError } from '../../utils/http.js';
 
 // [FIREBIRD] Routes for ORGANICA_3 CRUD operations
@@ -553,6 +553,98 @@ export default async function organica3Routes(app: FastifyInstance) {
     } catch (error: any) {
       console.error('Error querying organica3:', error);
       return reply.code(500).send(fail('ORGANICA3_QUERY_FAILED'));
+    }
+  });
+
+  // GET /organica3/my/:claveOrganica2 - Get organica3 filtered by user token (organica0, organica1) and claveOrganica2 param
+  app.get('/organica3/my/:claveOrganica2', {
+    preHandler: [requireAuth],
+    schema: {
+      description: '[FIREBIRD] Get ORGANICA_3 records filtered by authenticated user token (organica0, organica1) and claveOrganica2 parameter',
+      tags: ['organica3', 'firebird', 'user'],
+      security: [{ bearerAuth: [] }],
+      params: {
+        type: 'object',
+        properties: {
+          claveOrganica2: { type: 'string', pattern: '^[0-9]{2}$' }
+        },
+        required: ['claveOrganica2']
+      },
+      response: {
+        200: {
+          type: 'object',
+          properties: {
+            ok: { type: 'boolean' },
+            data: {
+              type: 'array',
+              items: {
+                type: 'object',
+                properties: {
+                  claveOrganica0: { type: 'string' },
+                  claveOrganica1: { type: 'string' },
+                  claveOrganica2: { type: 'string' },
+                  claveOrganica3: { type: 'string' },
+                  descripcion: { type: 'string' },
+                  titular: { type: 'number' },
+                  calleNum: { type: 'string' },
+                  fraccionamiento: { type: 'string' },
+                  codigoPostal: { type: 'string' },
+                  telefono: { type: 'string' },
+                  fax: { type: 'string' },
+                  localidad: { type: 'string' },
+                  municipio: { type: 'number' },
+                  estado: { type: 'number' },
+                  fechaRegistro3: { type: 'string', format: 'date-time' },
+                  fechaFin3: { type: 'string', format: 'date-time' },
+                  usuario: { type: 'string' },
+                  estatus: { type: 'string' }
+                }
+              }
+            }
+          }
+        },
+        401: {
+          type: 'object',
+          properties: {
+            ok: { type: 'boolean' },
+            error: {
+              type: 'object',
+              properties: {
+                code: { type: 'string' },
+                message: { type: 'string' }
+              }
+            }
+          }
+        },
+        500: {
+          type: 'object',
+          properties: {
+            ok: { type: 'boolean' },
+            error: {
+              type: 'object',
+              properties: {
+                code: { type: 'string' },
+                message: { type: 'string' }
+              }
+            }
+          }
+        }
+      }
+    }
+  }, async (req, reply) => {
+    try {
+      const user = (req as any).user;
+      const { claveOrganica2 } = req.params as { claveOrganica2: string };
+
+      // Extract organica0 and organica1 from JWT token
+      const claveOrganica0 = user?.idOrganica0?.toString().padStart(2, '0');
+      const claveOrganica1 = user?.idOrganica1?.toString().padStart(2, '0');
+
+      const records = await getOrganica3ByUserToken(claveOrganica0, claveOrganica1, claveOrganica2);
+      return reply.send(ok(records));
+    } catch (error: any) {
+      console.error('Error getting organica3 by user token:', error);
+      return reply.code(500).send(fail('ORGANICA3_USER_QUERY_FAILED'));
     }
   });
 }

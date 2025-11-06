@@ -13,10 +13,10 @@ import {
   getBitacoraAfectacionFiltered,
   getTableroAfectacionesFiltered,
   getUltimaAfectacionFiltered,
-  calculateQuincenaFromDate
+  calculateQuincenaFromDate,
+  getQuincenaAltaAfectacionService
 } from './afectacionOrg.service.js';
 import { ok, validationError, internalError } from '../../utils/http.js';
-import { ExpedienteCurpParamSchema } from '../expediente/expediente.schemas.js';
 
 export default async function afectacionOrgRoutes(app: FastifyInstance) {
   // Register affectation
@@ -723,6 +723,50 @@ export default async function afectacionOrgRoutes(app: FastifyInstance) {
     } catch (error: any) {
       console.error('Error calculating quincena:', error);
       return reply.code(500).send(internalError('Failed to calculate quincena'));
+    }
+  });
+
+  // GET /afectacion-org/quincena-alta-afectacion - Get current pay period for alta afectacion
+  app.get('/afectacion-org/quincena-alta-afectacion', {
+    preHandler: [requireAuth],
+    schema: {
+      description: 'Obtener la quincena actual siguiendo la regla de alta afectación',
+      tags: ['afectacion-org'],
+      security: [{ bearerAuth: [] }],
+      response: {
+        200: {
+          type: 'object',
+          properties: {
+            ok: { type: 'boolean' },
+            data: {
+              type: 'object',
+              properties: {
+                anio: { type: 'number' },
+                mes: { type: 'number' },
+                quincena: { type: 'number' },
+                fechaActual: { type: 'string' },
+                descripcion: { type: 'string' },
+                esNueva: { type: 'boolean' }
+              }
+            }
+          }
+        }
+      }
+    }
+  }, async (req, reply) => {
+    try {
+      // Get organica information from JWT token
+      const entidad = 'AFECTACION_ORG'; // Fixed entity for affectation operations
+      const org0 = req.user?.idOrganica0;
+      const org1 = req.user?.idOrganica1;
+      const org2 = req.user?.idOrganica2;
+      const org3 = req.user?.idOrganica3;
+
+      const result = await getQuincenaAltaAfectacionService({ entidad, org0, org1, org2, org3 });
+      return reply.send(ok(result));
+    } catch (error: any) {
+      console.error('Error getting quincena alta afectacion:', error);
+      return reply.code(500).send(internalError('Failed to get quincena alta afectacion'));
     }
   });
 

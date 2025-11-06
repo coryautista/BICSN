@@ -539,3 +539,122 @@ export async function getUltimaAfectacion(filters: {
     mensaje: row.Mensaje
   }));
 }
+
+// Get current pay period following alta afectacion rule
+export async function getQuincenaAltaAfectacion(filters?: {
+  entidad?: string;
+  org0?: string;
+  org1?: string;
+  org2?: string;
+  org3?: string;
+}) {
+  const p = await getPool();
+  
+  // Build query to get the last affected quincena for the specific organica
+  let query = `
+    SELECT TOP 1
+      Anio,
+      QuincenaActual,
+      UltimaFecha
+    FROM afec.EstadoAfectacionOrg
+    WHERE 1=1
+  `;
+  const params: any[] = [];
+
+  if (filters?.entidad) {
+    query += ' AND Entidad = @entidad';
+    params.push({ name: 'entidad', type: sql.NVarChar(128), value: filters.entidad });
+  }
+  if (filters?.org0) {
+    query += ' AND Org0 = @org0';
+    params.push({ name: 'org0', type: sql.Char(2), value: filters.org0 });
+  }
+  if (filters?.org1) {
+    query += ' AND Org1 = @org1';
+    params.push({ name: 'org1', type: sql.Char(2), value: filters.org1 });
+  }
+  if (filters?.org2) {
+    query += ' AND Org2 = @org2';
+    params.push({ name: 'org2', type: sql.Char(2), value: filters.org2 });
+  }
+  if (filters?.org3) {
+    query += ' AND Org3 = @org3';
+    params.push({ name: 'org3', type: sql.Char(2), value: filters.org3 });
+  }
+
+  query += ' ORDER BY Anio DESC, QuincenaActual DESC';
+  
+  const req = p.request();
+  params.forEach(param => req.input(param.name, param.type, param.value));
+  const result = await req.query(query);
+  
+  if (result.recordset.length === 0) {
+    // No previous affectations for this organica, start from quincena 1 of current year
+    const now = new Date();
+    const year = now.getFullYear();
+    
+    return {
+      anio: year,
+      mes: 1, // January
+      quincena: 1, // First quincena of the year
+      fechaActual: now.toISOString(),
+      descripcion: `Quincena 1 de 01/${year} (primera afectación para esta orgánica)`,
+      esNueva: true
+    };
+  }
+  
+  const lastAfectacion = result.recordset[0];
+  const lastYear = lastAfectacion.Anio;
+  const lastQuincena = lastAfectacion.QuincenaActual;
+  
+  // Calculate current quincena based on current date
+  const now = new Date();
+  const currentYear = now.getFullYear();
+  const currentMonth = now.getMonth() + 1;
+  const currentDay = now.getDate();
+  const currentQuincenaMonth = currentDay <= 15 ? 1 : 2;
+  const currentQuincenaYear = (currentMonth - 1) * 2 + currentQuincenaMonth;
+  
+  // Check if the last affected quincena is still active
+  // A quincena is considered active if it's the current quincena of the current year
+  const isActive = (lastYear === currentYear && lastQuincena === currentQuincenaYear);
+  
+  if (isActive) {
+    // Return the active quincena
+    return {
+      anio: lastYear,
+      mes: currentMonth,
+      quincena: lastQuincena,
+      fechaActual: now.toISOString(),
+      descripcion: `Quincena ${lastQuincena} de ${currentMonth.toString().padStart(2, '0')}/${lastYear} (activa)`,
+      esNueva: false
+    };
+  } else {
+    // Calculate next quincena
+    let nextYear = lastYear;
+    let nextQuincena = lastQuincena + 1;
+    
+    if (nextQuincena > 24) {
+      nextQuincena = 1;
+      nextYear = lastYear + 1;
+    }
+    
+    // If next quincena is still in the past, keep advancing until we reach current or future
+    while (nextYear < currentYear || (nextYear === currentYear && nextQuincena < currentQuincenaYear)) {
+      nextQuincena++;
+      if (nextQuincena > 24) {
+        nextQuincena = 1;
+        nextYear++;
+      }
+    }
+    
+    return {
+      anio: nextYear,
+      mes: currentMonth,
+      quincena: nextQuincena,
+      fechaActual: now.toISOString(),
+      descripcion: `Quincena ${nextQuincena} de ${currentMonth.toString().padStart(2, '0')}/${nextYear} (siguiente)`,
+      esNueva: false
+    };
+  }
+}

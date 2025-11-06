@@ -65,23 +65,41 @@ export async function createMenu(nombre: string, orden: number, componente?: str
     throw new Error('Invalid parentId: must be a positive number or undefined');
   }
   const req = tx ? new sqlType.Request(tx) : (await getPool()).request();
-  const r = await req
+  
+  // Get the next ID from the sequence or max+1
+  const maxIdReq = tx ? new sqlType.Request(tx) : (await getPool()).request();
+  const maxIdResult = await maxIdReq.query(`SELECT ISNULL(MAX(id), 0) + 1 as nextId FROM dbo.Menu`);
+  const nextId = maxIdResult.recordset[0].nextId;
+  
+  // Insert with explicit ID (table doesn't have IDENTITY)
+  await req
+    .input('id', sql.Int, nextId)
     .input('nombre', sql.NVarChar(255), nombre)
     .input('componente', sql.NVarChar(255), componente ?? null)
     .input('parentId', sql.Int, parentId ?? null)
     .input('icono', sql.NVarChar(255), icono ?? null)
     .input('orden', sql.Int, orden)
     .query(`
-      INSERT INTO dbo.Menu (nombre, componente, parentId, icono, orden)
-      OUTPUT
-        INSERTED.id,
-        INSERTED.nombre,
-        INSERTED.componente,
-        INSERTED.parentId,
-        INSERTED.icono,
-        INSERTED.orden
-      VALUES (@nombre, @componente, @parentId, @icono, @orden)
+      INSERT INTO dbo.Menu (id, nombre, componente, parentId, icono, orden)
+      VALUES (@id, @nombre, @componente, @parentId, @icono, @orden)
     `);
+  
+  // Retrieve the inserted record
+  const selectReq = tx ? new sqlType.Request(tx) : (await getPool()).request();
+  const r = await selectReq
+    .input('id', sql.Int, nextId)
+    .query(`
+      SELECT
+        id,
+        nombre,
+        componente,
+        parentId,
+        icono,
+        orden
+      FROM dbo.Menu
+      WHERE id = @id
+    `);
+  
   const row = r.recordset[0];
   return {
     id: row.id,
@@ -107,7 +125,9 @@ export async function updateMenu(id: number, nombre: string, componente?: string
     throw new Error('Invalid parentId: must be a positive number or undefined');
   }
   const req = tx ? new sqlType.Request(tx) : (await getPool()).request();
-  const r = await req
+  
+  // Update without OUTPUT because table has triggers
+  await req
     .input('id', sql.Int, id)
     .input('nombre', sql.NVarChar(255), nombre)
     .input('componente', sql.NVarChar(255), componente ?? null)
@@ -120,16 +140,26 @@ export async function updateMenu(id: number, nombre: string, componente?: string
           componente = @componente,
           parentId = @parentId,
           icono = @icono,
-          orden = @orden
-      OUTPUT
-        INSERTED.id,
-        INSERTED.nombre,
-        INSERTED.componente,
-        INSERTED.parentId,
-        INSERTED.icono,
-        INSERTED.orden
+          orden = COALESCE(@orden, orden)
       WHERE id = @id
     `);
+  
+  // Retrieve the updated record
+  const selectReq = tx ? new sqlType.Request(tx) : (await getPool()).request();
+  const r = await selectReq
+    .input('id', sql.Int, id)
+    .query(`
+      SELECT
+        id,
+        nombre,
+        componente,
+        parentId,
+        icono,
+        orden
+      FROM dbo.Menu
+      WHERE id = @id
+    `);
+  
   const row = r.recordset[0];
   if (!row) return undefined;
   return {
@@ -147,12 +177,14 @@ export async function deleteMenu(id: number, tx?: sqlType.Transaction) {
     throw new Error('Invalid menu id: must be a positive number');
   }
   const req = tx ? new sqlType.Request(tx) : (await getPool()).request();
-  const r = await req
+  
+  // Delete without OUTPUT because table has triggers
+  await req
     .input('id', sql.Int, id)
     .query(`
       DELETE FROM dbo.Menu
-      OUTPUT DELETED.id
       WHERE id = @id
     `);
-  return r.recordset[0]?.id;
+  
+  return id;
 }

@@ -75,6 +75,51 @@ export const CreateAfiliadoAfiliadoOrgMovimientoSchema = z.object({
   creadoPor: z.number().int().nullable().optional()
 });
 
+// Schema específico para cambio de sueldo (interno es obligatorio, expediente opcional)
+export const CreateCambioSueldoSchema = CreateAfiliadoAfiliadoOrgMovimientoSchema.extend({
+  interno: z.number().int().min(1, 'Interno es obligatorio para cambio de sueldo'),
+  expediente: z.string().max(50).nullable().optional()
+}).transform((data) => ({
+  ...data,
+  expediente: data.expediente || data.curp || null
+}));
+
+// Schema específico para baja permanente (interno es obligatorio, expediente opcional)
+export const CreateBajaPermanenteSchema = CreateAfiliadoAfiliadoOrgMovimientoSchema.extend({
+  interno: z.number().int().min(1, 'Interno es obligatorio para baja permanente'),
+  expediente: z.string().max(50).nullable().optional()
+}).transform((data) => ({
+  ...data,
+  expediente: data.expediente || data.curp || null
+}));
+
+// Schema específico para baja suspensión de afiliación (interno es obligatorio, expediente opcional)
+export const CreateBajaSuspensionSchema = CreateAfiliadoAfiliadoOrgMovimientoSchema.extend({
+  interno: z.number().int().min(1, 'Interno es obligatorio para baja suspensión de afiliación'),
+  expediente: z.string().max(50).nullable().optional()
+}).transform((data) => ({
+  ...data,
+  expediente: data.expediente || data.curp || null
+}));
+
+// Schema específico para baja termina suspensión de afiliación (interno es obligatorio, expediente opcional)
+export const CreateBajaTerminaSuspensionSchema = CreateAfiliadoAfiliadoOrgMovimientoSchema.extend({
+  interno: z.number().int().min(1, 'Interno es obligatorio para baja termina suspensión de afiliación'),
+  expediente: z.string().max(50).nullable().optional()
+}).transform((data) => ({
+  ...data,
+  expediente: data.expediente || data.curp || null
+}));
+
+// Schema específico para baja termina suspensión de afiliación y baja (interno es obligatorio, expediente opcional)
+export const CreateBajaTerminaSuspensionYBajaSchema = CreateAfiliadoAfiliadoOrgMovimientoSchema.extend({
+  interno: z.number().int().min(1, 'Interno es obligatorio para baja termina suspensión de afiliación y baja'),
+  expediente: z.string().max(50).nullable().optional()
+}).transform((data) => ({
+  ...data,
+  expediente: data.expediente || data.curp || null
+}));
+
 export const AfiliadoSchema = z.object({
   id: z.number().int(),
   folio: z.number().int().nullable(),

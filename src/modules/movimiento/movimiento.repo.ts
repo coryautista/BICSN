@@ -10,6 +10,7 @@ export type Movimiento = {
   folio: string | null;
   estatus: string | null;
   creadoPor: number | null;
+  creadoPorUid: string | null;
   createdAt: string;
 };
 
@@ -19,7 +20,7 @@ export async function getAllMovimientos(): Promise<Movimiento[]> {
     .query(`
       SELECT
         id, quincenaId, tipoMovimientoId, afiliadoId, fecha,
-        observaciones, folio, estatus, creadoPor, createdAt
+        observaciones, folio, estatus, creadoPor, creadoPorUid, createdAt
       FROM afi.Movimiento
       ORDER BY id
     `);
@@ -33,6 +34,7 @@ export async function getAllMovimientos(): Promise<Movimiento[]> {
     folio: row.folio,
     estatus: row.estatus,
     creadoPor: row.creadoPor,
+    creadoPorUid: row.creadoPorUid,
     createdAt: row.createdAt?.toISOString() || new Date().toISOString()
   }));
 }
@@ -44,7 +46,7 @@ export async function getMovimientoById(id: number): Promise<Movimiento | undefi
     .query(`
       SELECT
         id, quincenaId, tipoMovimientoId, afiliadoId, fecha,
-        observaciones, folio, estatus, creadoPor, createdAt
+        observaciones, folio, estatus, creadoPor, creadoPorUid, createdAt
       FROM afi.Movimiento
       WHERE id = @id
     `);
@@ -60,6 +62,7 @@ export async function getMovimientoById(id: number): Promise<Movimiento | undefi
     folio: row.folio,
     estatus: row.estatus,
     creadoPor: row.creadoPor,
+    creadoPorUid: row.creadoPorUid,
     createdAt: row.createdAt?.toISOString() || new Date().toISOString()
   };
 }
@@ -71,7 +74,7 @@ export async function getMovimientosByAfiliadoId(afiliadoId: number): Promise<Mo
     .query(`
       SELECT
         id, quincenaId, tipoMovimientoId, afiliadoId, fecha,
-        observaciones, folio, estatus, creadoPor, createdAt
+        observaciones, folio, estatus, creadoPor, creadoPorUid, createdAt
       FROM afi.Movimiento
       WHERE afiliadoId = @afiliadoId
       ORDER BY id
@@ -86,6 +89,7 @@ export async function getMovimientosByAfiliadoId(afiliadoId: number): Promise<Mo
     folio: row.folio,
     estatus: row.estatus,
     creadoPor: row.creadoPor,
+    creadoPorUid: row.creadoPorUid,
     createdAt: row.createdAt?.toISOString() || new Date().toISOString()
   }));
 }
@@ -97,7 +101,7 @@ export async function getMovimientosByTipoMovimientoId(tipoMovimientoId: number)
     .query(`
       SELECT
         id, quincenaId, tipoMovimientoId, afiliadoId, fecha,
-        observaciones, folio, estatus, creadoPor, createdAt
+        observaciones, folio, estatus, creadoPor, creadoPorUid, createdAt
       FROM afi.Movimiento
       WHERE tipoMovimientoId = @tipoMovimientoId
       ORDER BY id
@@ -112,6 +116,7 @@ export async function getMovimientosByTipoMovimientoId(tipoMovimientoId: number)
     folio: row.folio,
     estatus: row.estatus,
     creadoPor: row.creadoPor,
+    creadoPorUid: row.creadoPorUid,
     createdAt: row.createdAt?.toISOString() || new Date().toISOString()
   }));
 }
@@ -127,15 +132,16 @@ export async function createMovimiento(data: Omit<Movimiento, 'id' | 'createdAt'
     .input('folio', sql.VarChar(100), data.folio)
     .input('estatus', sql.VarChar(30), data.estatus)
     .input('creadoPor', sql.Int, data.creadoPor)
+    .input('creadoPorUid', sql.UniqueIdentifier, data.creadoPorUid)
     .query(`
       INSERT INTO afi.Movimiento (
         quincenaId, tipoMovimientoId, afiliadoId, fecha,
-        observaciones, folio, estatus, creadoPor
+        observaciones, folio, estatus, creadoPor, creadoPorUid
       )
       OUTPUT INSERTED.*
       VALUES (
         @quincenaId, @tipoMovimientoId, @afiliadoId, @fecha,
-        @observaciones, @folio, @estatus, @creadoPor
+        @observaciones, @folio, @estatus, @creadoPor, @creadoPorUid
       )
     `);
   const row = r.recordset[0];
@@ -149,6 +155,7 @@ export async function createMovimiento(data: Omit<Movimiento, 'id' | 'createdAt'
     folio: row.folio,
     estatus: row.estatus,
     creadoPor: row.creadoPor,
+    creadoPorUid: row.creadoPorUid,
     createdAt: row.createdAt?.toISOString() || new Date().toISOString()
   };
 }
@@ -190,6 +197,10 @@ export async function updateMovimiento(id: number, data: Partial<Omit<Movimiento
     updates.push('creadoPor = @creadoPor');
     request.input('creadoPor', sql.Int, data.creadoPor);
   }
+  if (data.creadoPorUid !== undefined) {
+    updates.push('creadoPorUid = @creadoPorUid');
+    request.input('creadoPorUid', sql.UniqueIdentifier, data.creadoPorUid);
+  }
 
   const updateQuery = `
     UPDATE afi.Movimiento
@@ -211,6 +222,7 @@ export async function updateMovimiento(id: number, data: Partial<Omit<Movimiento
     folio: row.folio,
     estatus: row.estatus,
     creadoPor: row.creadoPor,
+    creadoPorUid: row.creadoPorUid,
     createdAt: row.createdAt?.toISOString() || new Date().toISOString()
   };
 }

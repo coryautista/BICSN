@@ -1,6 +1,7 @@
-import { findUsuarioById, findUsuarioByEmail, findUsuarioByUsername, listUsuarios, createUsuario, updateUsuario, deleteUsuario } from './usuarios.repo.js';
+import { findUsuarioById, findUsuarioByEmail, listUsuarios, createUsuario, updateUsuario, deleteUsuario } from './usuarios.repo.js';
 import { hashPassword, verifyPassword } from '../auth/auth.crypto.js';
 import { createUserRoleItem } from '../userRole/userRole.service.js';
+import crypto from 'crypto';
 
 export async function getAllUsuarios() {
   return await listUsuarios();
@@ -15,7 +16,7 @@ export async function getUsuarioById(usuarioId: string) {
 }
 
 export async function createUsuarioItem(
-  usuarioId: string, 
+  usuarioId: string | undefined, 
   nombre: string, 
   email: string, 
   password: string, 
@@ -30,23 +31,30 @@ export async function createUsuarioItem(
   tx?: any
 ) {
   try {
-    // Check if username (nombre) already exists
-    const existingByUsername = await findUsuarioByUsername(nombre);
-    if (existingByUsername) {
-      throw new Error('USERNAME_EXISTS');
+    // Generate UUID if not provided
+    const finalUsuarioId = usuarioId || crypto.randomUUID();
+    console.log('Creating user with ID:', finalUsuarioId, 'roleId:', roleId);
+
+    // Check if usuarioId already exists
+    const existingById = await findUsuarioById(finalUsuarioId);
+    if (existingById) {
+      console.log('User ID already exists:', finalUsuarioId);
+      throw new Error('USUARIO_EXISTS');
     }
 
     // Check if email already exists
     const existingUsuario = await findUsuarioByEmail(email);
     if (existingUsuario) {
+      console.log('Email already exists:', email);
       throw new Error('EMAIL_EXISTS');
     }
 
     // Hash password using argon2 (same as auth.crypto.ts)
     const { hash, algo } = await hashPassword(password);
+    console.log('Password hashed successfully');
 
     const usuario = await createUsuario(
-      usuarioId, 
+      finalUsuarioId, 
       nombre, 
       email, 
       hash, 
@@ -61,12 +69,15 @@ export async function createUsuarioItem(
       userId, 
       tx
     );
+    console.log('User created in auth.user:', finalUsuarioId);
 
     // Create user role
-    await createUserRoleItem(usuarioId, roleId, true, userId, tx);
+    await createUserRoleItem(finalUsuarioId, roleId, true, userId, tx);
+    console.log('User role created:', finalUsuarioId, roleId);
 
     return usuario;
   } catch (error: any) {
+    console.error('Error in createUsuarioItem:', error);
     if (error.message.includes('Violation of PRIMARY KEY constraint')) {
       throw new Error('USUARIO_EXISTS');
     }

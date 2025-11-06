@@ -1,6 +1,7 @@
 import {
   getAllOrgPersonal,
   getOrgPersonalById,
+  getOrgPersonalBySearch,
   createOrgPersonal,
   updateOrgPersonal,
   deleteOrgPersonal,
@@ -17,6 +18,19 @@ export async function getOrgPersonalByIdService(interno: number): Promise<OrgPer
     throw new Error('ORG_PERSONAL_NOT_FOUND');
   }
   return record;
+}
+
+export async function getOrgPersonalBySearchService(searchTerm: string): Promise<OrgPersonal> {
+  try {
+    const record = await getOrgPersonalBySearch(searchTerm);
+    if (!record) {
+      throw new Error('ORG_PERSONAL_NOT_FOUND');
+    }
+    return record;
+  } catch (error) {
+    console.error('Error in getOrgPersonalBySearchService:', error);
+    throw error;
+  }
 }
 
 export async function createOrgPersonalService(data: Omit<OrgPersonal, 'orgs1' | 'orgs2' | 'orgs3' | 'orgs'>): Promise<OrgPersonal> {

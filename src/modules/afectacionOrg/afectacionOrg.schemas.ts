@@ -63,3 +63,13 @@ export const CalculateQuincenaSchema = z.object({
     message: 'Fecha must be a valid date string'
   })
 });
+
+// Response schema for quincena alta afectacion
+export const QuincenaAltaAfectacionResponseSchema = z.object({
+  anio: z.number(),
+  mes: z.number(),
+  quincena: z.number(),
+  fechaActual: z.string(),
+  descripcion: z.string(),
+  esNueva: z.boolean()
+});

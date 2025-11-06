@@ -17,7 +17,7 @@ export const OrgPersonalSchema = z.object({
   orgs: z.string().nullable(),
   dsueldo: z.number().nullable(),
   dotras_prestaciones: z.number().nullable(),
-  daquinquenios: z.number().nullable(),
+  dquinquenios: z.number().nullable(),
   aplicar: z.string().max(1).nullable(),
   bc: z.string().max(1).nullable(),
   porcentaje: z.number().int().nullable()
@@ -36,7 +36,7 @@ export const CreateOrgPersonalSchema = z.object({
   fecha_mov_alt: z.string().datetime().nullable().optional(),
   dsueldo: z.number().nullable().optional(),
   dotras_prestaciones: z.number().nullable().optional(),
-  daquinquenios: z.number().nullable().optional(),
+  dquinquenios: z.number().nullable().optional(),
   aplicar: z.string().max(1).nullable().optional(),
   bc: z.string().max(1).nullable().optional(),
   porcentaje: z.number().int().nullable().optional()
@@ -54,7 +54,7 @@ export const UpdateOrgPersonalSchema = z.object({
   fecha_mov_alt: z.string().datetime().nullable().optional(),
   dsueldo: z.number().nullable().optional(),
   dotras_prestaciones: z.number().nullable().optional(),
-  daquinquenios: z.number().nullable().optional(),
+  dquinquenios: z.number().nullable().optional(),
   aplicar: z.string().max(1).nullable().optional(),
   bc: z.string().max(1).nullable().optional(),
   porcentaje: z.number().int().nullable().optional()

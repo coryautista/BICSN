@@ -56,15 +56,22 @@ async function buildApp() {
   // plugins
   await app.register(requestLoggerPlugin);
   await app.register(loggerPlugin);
-  await app.register(helmet);
+  await app.register(helmet, {
+    contentSecurityPolicy: false,  // Deshabilitado para permitir Swagger UI
+    global: true
+  });
   await app.register(cors, {
     credentials: true,
     origin: [
       'http://localhost:5173',          // Vite dev
       'http://localhost:3000',          // Next dev
-      'https://tu-front-dev.example'    // front en https si aplica
+      'https://tu-front-dev.example',   // front en https si aplica
+      'http://187.233.245.230:4000',    // IP externa para docs
+      'http://187.233.245.230:3000',    // IP externa para frontend
+      /^http:\/\/187\.233\.245\.230:\d+$/, // Regex para cualquier puerto en esa IP
+      /^http:\/\/localhost:\d+$/        // localhost con cualquier puerto
     ],
-    allowedHeaders: ['Content-Type', 'Authorization'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS']
   });
   await app.register(cookie);
@@ -82,6 +89,10 @@ async function buildApp() {
         {
           url: 'http://localhost:4000/v1',
           description: 'Development server'
+        },
+        {
+          url: 'http://187.233.245.230:4000/v1',
+          description: 'Production server'
         }
       ],
       components: {
@@ -101,8 +112,9 @@ async function buildApp() {
       docExpansion: 'full',
       deepLinking: false
     },
-    staticCSP: true,
-    transformStaticCSP: (header) => header
+    staticCSP: false,
+    transformStaticCSP: (header) => header,
+    baseDir: undefined
   });
 
   app.config = {

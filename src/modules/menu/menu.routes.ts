@@ -217,6 +217,7 @@ export default async function menuRoutes(app: FastifyInstance) {
       if (!parsed.success) return reply.code(400).send(fail(parsed.error.message));
 
       try {
+        console.log('Creating menu with data:', parsed.data);
         const menu = await createMenuItem(
           parsed.data.nombre,
           parsed.data.orden,
@@ -225,10 +226,13 @@ export default async function menuRoutes(app: FastifyInstance) {
           parsed.data.icono,
           tx
         );
+        console.log('Menu created successfully:', menu);
         return reply.code(201).send({ data: menu });
       } catch (e: any) {
+        console.error('Error creating menu:', e.message);
+        console.error('Full error:', e);
         if (e.message === 'PARENT_MENU_NOT_FOUND') return reply.code(404).send(fail(e.message));
-        return reply.code(500).send(fail('MENU_CREATE_FAILED'));
+        return reply.code(500).send(fail(e.message || 'MENU_CREATE_FAILED'));
       }
     });
   });

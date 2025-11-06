@@ -235,3 +235,48 @@ export async function dynamicQueryOrganica2(query: DynamicQuery): Promise<Organi
     });
   });
 }
+
+export async function findOrganica2ByUser(claveOrganica0?: string, claveOrganica1?: string): Promise<Organica2[]> {
+  const db = getFirebirdDb();
+  
+  let sql = 'SELECT CLAVE_ORGANICA_0, CLAVE_ORGANICA_1, CLAVE_ORGANICA_2, DESCRIPCION, TITULAR, FECHA_REGISTRO_2, FECHA_FIN_2, USUARIO, ESTATUS FROM ORGANICA_2';
+  const params: any[] = [];
+  const conditions: string[] = [];
+
+  if (claveOrganica0) {
+    conditions.push('CLAVE_ORGANICA_0 = ?');
+    params.push(claveOrganica0);
+  }
+
+  if (claveOrganica1) {
+    conditions.push('CLAVE_ORGANICA_1 = ?');
+    params.push(claveOrganica1);
+  }
+
+  if (conditions.length > 0) {
+    sql += ' WHERE ' + conditions.join(' AND ');
+  }
+
+  sql += ' ORDER BY CLAVE_ORGANICA_0, CLAVE_ORGANICA_1, CLAVE_ORGANICA_2';
+
+  return new Promise((resolve, reject) => {
+    db.query(sql, params, (err: any, result: any) => {
+      if (err) {
+        reject(err);
+        return;
+      }
+      const records = result.map((row: any) => ({
+        claveOrganica0: row.CLAVE_ORGANICA_0,
+        claveOrganica1: row.CLAVE_ORGANICA_1,
+        claveOrganica2: row.CLAVE_ORGANICA_2,
+        descripcion: row.DESCRIPCION,
+        titular: row.TITULAR,
+        fechaRegistro2: new Date(row.FECHA_REGISTRO_2),
+        fechaFin2: row.FECHA_FIN_2 ? new Date(row.FECHA_FIN_2) : undefined,
+        usuario: row.USUARIO,
+        estatus: row.ESTATUS
+      }));
+      resolve(records);
+    });
+  });
+}

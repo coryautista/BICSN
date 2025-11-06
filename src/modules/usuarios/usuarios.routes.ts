@@ -271,15 +271,15 @@ export default async function usuariosRoutes(app: FastifyInstance) {
   });
 
   // Crear usuario (requiere admin)
-  app.post('/usuarios', {
-    preHandler: [requireAuth, requireRole('admin')],
+   app.post('/usuarios', {
+     preHandler: [requireAuth, requireRole('admin')],
     schema: {
       description: 'Create a new user',
       tags: ['usuarios'],
       security: [{ bearerAuth: [] }],
       body: {
         type: 'object',
-        required: ['usuarioId', 'nombre', 'email', 'password', 'roleId', 'phoneNumber', 'idOrganica0', 'idOrganica1'],
+        required: ['nombre', 'email', 'password', 'roleId'],
         properties: {
           usuarioId: { type: 'string', format: 'uuid' },
           nombre: { type: 'string', minLength: 1, maxLength: 100 },
@@ -361,12 +361,15 @@ export default async function usuariosRoutes(app: FastifyInstance) {
       }
     }
   }, async (req, reply) => {
+    console.log('Create user request body:', req.body);
     return withDbContext(req, async (tx) => {
       const parsed = CreateUsuarioSchema.safeParse(req.body);
       if (!parsed.success) {
+        console.log('Create user validation error:', parsed.error.issues);
         return reply.code(400).send(validationError(parsed.error.issues));
       }
 
+      console.log('Creating user:', parsed.data.usuarioId || 'auto-generated');
       try {
         const userId = req.user?.sub;
         const usuario = await createUsuarioItem(
@@ -384,8 +387,11 @@ export default async function usuariosRoutes(app: FastifyInstance) {
           userId,
           tx
         );
+        console.log('User created successfully:', usuario.usuarioId);
         return reply.code(201).send(ok(usuario));
       } catch (error: any) {
+        console.log('Create user error:', error.message);
+        console.error('Full error:', error);
         if (error.message === 'USUARIO_EXISTS' || error.message === 'EMAIL_EXISTS' || error.message === 'USERNAME_EXISTS') {
           return reply.code(409).send({ ok: false, error: { code: 'CONFLICT', message: 'Usuario, email or username already exists' } });
         }
