@@ -1,8 +1,13 @@
 import { FastifyInstance } from 'fastify';
 import { requireAuth, requireRole } from '../auth/auth.middleware.js';
 import { CreateInfoSchema, UpdateInfoSchema } from './info.schemas.js';
-import { getAllInfos, getInfoById, createInfoItem, updateInfoItem, deleteInfoItem } from './info.service.js';
-import { fail } from '../../utils/http.js';
+import { ok, fail } from '../../utils/http.js';
+import { handleInfoError } from './infrastructure/errorHandler.js';
+import type { GetAllInfosQuery } from './application/queries/GetAllInfosQuery.js';
+import type { GetInfoByIdQuery } from './application/queries/GetInfoByIdQuery.js';
+import type { CreateInfoCommand } from './application/commands/CreateInfoCommand.js';
+import type { UpdateInfoCommand } from './application/commands/UpdateInfoCommand.js';
+import type { DeleteInfoCommand } from './application/commands/DeleteInfoCommand.js';
 
 export default async function infoRoutes(app: FastifyInstance) {
 
@@ -30,19 +35,38 @@ export default async function infoRoutes(app: FastifyInstance) {
                   colorEncabezados: { type: ['string', 'null'] },
                   colorLetra: { type: ['string', 'null'] },
                   createdAt: { type: 'string', format: 'date-time' },
-                  updatedAt: { type: 'string', format: 'date-time' },
+                  updatedAt: { type: ['string', 'null'], format: 'date-time' },
                   createdBy: { type: ['string', 'null'] },
                   updatedBy: { type: ['string', 'null'] }
                 }
               }
             }
           }
+        },
+        500: {
+          type: 'object',
+          properties: {
+            ok: { type: 'boolean' },
+            error: {
+              type: 'object',
+              properties: {
+                code: { type: 'string' },
+                message: { type: 'string' }
+              }
+            }
+          }
         }
       }
     }
-  }, async (_req, reply) => {
-    const infos = await getAllInfos();
-    return reply.send({ data: infos });
+  }, async (req, reply) => {
+    try {
+      const getAllInfosQuery = req.diScope.resolve<GetAllInfosQuery>('getAllInfosQuery');
+      const userId = req.user?.sub;
+      const infos = await getAllInfosQuery.execute(userId);
+      return reply.send(ok(infos));
+    } catch (error: any) {
+      return handleInfoError(error, reply);
+    }
   });
 
   // Obtener info por ID (requiere auth)
@@ -125,17 +149,13 @@ export default async function infoRoutes(app: FastifyInstance) {
   }, async (req, reply) => {
     const { id } = req.params as { id: number };
 
-    // Validate ID parameter
-    if (!id || id <= 0) {
-      return reply.code(400).send(fail('INFO_INVALID_ID'));
-    }
-
     try {
-      const info = await getInfoById(id);
-      return reply.send({ data: info });
-    } catch (e: any) {
-      if (e.message === 'INFO_NOT_FOUND') return reply.code(404).send(fail(e.message));
-      return reply.code(500).send(fail('INFO_FETCH_FAILED'));
+      const getInfoByIdQuery = req.diScope.resolve<GetInfoByIdQuery>('getInfoByIdQuery');
+      const userId = req.user?.sub;
+      const info = await getInfoByIdQuery.execute({ id }, userId);
+      return reply.send(ok(info));
+    } catch (error: any) {
+      return handleInfoError(error, reply);
     }
   });
 
@@ -217,22 +237,23 @@ export default async function infoRoutes(app: FastifyInstance) {
     if (!parsed.success) return reply.code(400).send(fail(parsed.error.message));
 
     try {
-      const info = await createInfoItem(
-        req,
-        parsed.data.nombre,
-        parsed.data.createdAt,
-        parsed.data.updatedAt,
-        parsed.data.icono,
-        parsed.data.color,
-        parsed.data.colorBotones,
-        parsed.data.colorEncabezados,
-        parsed.data.colorLetra,
-        parsed.data.createdBy,
-        parsed.data.updatedBy
-      );
-      return reply.code(201).send({ data: info });
-    } catch (e: any) {
-      return reply.code(500).send(fail('INFO_CREATE_FAILED'));
+      const createInfoCommand = req.diScope.resolve<CreateInfoCommand>('createInfoCommand');
+      const userId = req.user?.sub;
+      const info = await createInfoCommand.execute({
+        nombre: parsed.data.nombre,
+        icono: parsed.data.icono,
+        color: parsed.data.color,
+        colorBotones: parsed.data.colorBotones,
+        colorEncabezados: parsed.data.colorEncabezados,
+        colorLetra: parsed.data.colorLetra,
+        createdAt: parsed.data.createdAt,
+        updatedAt: parsed.data.updatedAt,
+        createdBy: parsed.data.createdBy,
+        updatedBy: parsed.data.updatedBy
+      }, userId);
+      return reply.code(201).send(ok(info));
+    } catch (error: any) {
+      return handleInfoError(error, reply);
     }
   });
 
@@ -328,33 +349,26 @@ export default async function infoRoutes(app: FastifyInstance) {
     }
   }, async (req, reply) => {
     const { id } = req.params as { id: number };
-
-    // Validate ID parameter
-    if (!id || id <= 0) {
-      return reply.code(400).send(fail('INFO_INVALID_ID'));
-    }
-
     const parsed = UpdateInfoSchema.safeParse(req.body);
     if (!parsed.success) return reply.code(400).send(fail(parsed.error.message));
 
     try {
-      const info = await updateInfoItem(
-        req,
+      const updateInfoCommand = req.diScope.resolve<UpdateInfoCommand>('updateInfoCommand');
+      const userId = req.user?.sub;
+      const info = await updateInfoCommand.execute({
         id,
-        parsed.data.updatedAt,
-        parsed.data.nombre,
-        parsed.data.icono,
-        parsed.data.color,
-        parsed.data.colorBotones,
-        parsed.data.colorEncabezados,
-        parsed.data.colorLetra,
-        parsed.data.updatedBy
-      );
-      if (!info) return reply.code(404).send(fail('INFO_NOT_FOUND'));
-      return reply.send({ data: info });
-    } catch (e: any) {
-      if (e.message === 'INFO_NOT_FOUND') return reply.code(404).send(fail(e.message));
-      return reply.code(500).send(fail('INFO_UPDATE_FAILED'));
+        nombre: parsed.data.nombre,
+        icono: parsed.data.icono,
+        color: parsed.data.color,
+        colorBotones: parsed.data.colorBotones,
+        colorEncabezados: parsed.data.colorEncabezados,
+        colorLetra: parsed.data.colorLetra,
+        updatedAt: parsed.data.updatedAt,
+        updatedBy: parsed.data.updatedBy
+      }, userId);
+      return reply.send(ok(info));
+    } catch (error: any) {
+      return handleInfoError(error, reply);
     }
   });
 
@@ -428,18 +442,13 @@ export default async function infoRoutes(app: FastifyInstance) {
   }, async (req, reply) => {
     const { id } = req.params as { id: number };
 
-    // Validate ID parameter
-    if (!id || id <= 0) {
-      return reply.code(400).send(fail('INFO_INVALID_ID'));
-    }
-
     try {
-      const deletedId = await deleteInfoItem(req, id);
-      if (!deletedId) return reply.code(404).send(fail('INFO_NOT_FOUND'));
-      return reply.send({ data: { id: deletedId } });
-    } catch (e: any) {
-      if (e.message === 'INFO_NOT_FOUND') return reply.code(404).send(fail(e.message));
-      return reply.code(500).send(fail('INFO_DELETE_FAILED'));
+      const deleteInfoCommand = req.diScope.resolve<DeleteInfoCommand>('deleteInfoCommand');
+      const userId = req.user?.sub;
+      await deleteInfoCommand.execute({ id }, userId);
+      return reply.send(ok({ id }));
+    } catch (error: any) {
+      return handleInfoError(error, reply);
     }
   });
 }

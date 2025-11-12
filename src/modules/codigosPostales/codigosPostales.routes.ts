@@ -1,9 +1,13 @@
 import { FastifyInstance } from 'fastify';
 import { requireAuth, requireRole } from '../auth/auth.middleware.js';
 import { CreateCodigoPostalSchema, UpdateCodigoPostalSchema, CodigoPostalIdParamSchema } from './codigosPostales.schemas.js';
-import { getAllCodigosPostales, getCodigoPostalById, getCodigoPostalByCode, createCodigoPostalItem, updateCodigoPostalItem, deleteCodigoPostalItem } from './codigosPostales.service.js';
 import { ok, validationError, notFound, internalError } from '../../utils/http.js';
-import { withDbContext } from '../../db/context.js';
+import type { GetAllCodigosPostalesQuery } from './application/queries/GetAllCodigosPostalesQuery.js';
+import type { GetCodigoPostalByIdQuery } from './application/queries/GetCodigoPostalByIdQuery.js';
+import type { GetCodigoPostalByCodeQuery } from './application/queries/GetCodigoPostalByCodeQuery.js';
+import type { CreateCodigoPostalCommand } from './application/commands/CreateCodigoPostalCommand.js';
+import type { UpdateCodigoPostalCommand } from './application/commands/UpdateCodigoPostalCommand.js';
+import type { DeleteCodigoPostalCommand } from './application/commands/DeleteCodigoPostalCommand.js';
 
 export default async function codigosPostalesRoutes(app: FastifyInstance) {
 
@@ -46,9 +50,10 @@ export default async function codigosPostalesRoutes(app: FastifyInstance) {
         }
       }
     }
-  }, async (_req, reply) => {
+  }, async (req, reply) => {
     try {
-      const codigosPostales = await getAllCodigosPostales();
+      const getAllCodigosPostalesQuery = req.diScope.resolve<GetAllCodigosPostalesQuery>('getAllCodigosPostalesQuery');
+      const codigosPostales = await getAllCodigosPostalesQuery.execute();
       return reply.send(ok(codigosPostales));
     } catch (error: any) {
       console.error('Error listing codigos postales:', error);
@@ -135,7 +140,8 @@ export default async function codigosPostalesRoutes(app: FastifyInstance) {
     }
 
     try {
-      const codigoPostal = await getCodigoPostalById(paramValidation.data.codigoPostalId);
+      const getCodigoPostalByIdQuery = req.diScope.resolve<GetCodigoPostalByIdQuery>('getCodigoPostalByIdQuery');
+      const codigoPostal = await getCodigoPostalByIdQuery.execute(paramValidation.data.codigoPostalId);
       return reply.send(ok(codigoPostal));
     } catch (error: any) {
       if (error.message === 'CODIGO_POSTAL_NOT_FOUND') {
@@ -206,7 +212,8 @@ export default async function codigosPostalesRoutes(app: FastifyInstance) {
     const { codigoPostal } = req.params as { codigoPostal: string };
 
     try {
-      const cp = await getCodigoPostalByCode(codigoPostal);
+      const getCodigoPostalByCodeQuery = req.diScope.resolve<GetCodigoPostalByCodeQuery>('getCodigoPostalByCodeQuery');
+      const cp = await getCodigoPostalByCodeQuery.execute(codigoPostal);
       return reply.send(ok(cp));
     } catch (error: any) {
       if (error.message === 'CODIGO_POSTAL_NOT_FOUND') {
@@ -288,29 +295,27 @@ export default async function codigosPostalesRoutes(app: FastifyInstance) {
       }
     }
   }, async (req, reply) => {
-    return withDbContext(req, async (tx) => {
-      const parsed = CreateCodigoPostalSchema.safeParse(req.body);
-      if (!parsed.success) {
-        return reply.code(400).send(validationError(parsed.error.issues));
-      }
+    const parsed = CreateCodigoPostalSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return reply.code(400).send(validationError(parsed.error.issues));
+    }
 
-      try {
-        const userId = req.user?.sub;
-        const codigoPostal = await createCodigoPostalItem(
-          parsed.data.codigoPostal,
-          parsed.data.esValido ?? false,
-          userId,
-          tx
-        );
-        return reply.code(201).send(ok(codigoPostal));
-      } catch (error: any) {
-        if (error.message === 'CODIGO_POSTAL_EXISTS') {
-          return reply.code(409).send({ ok: false, error: { code: 'CONFLICT', message: 'Codigo postal already exists' } });
-        }
-        console.error('Error creating codigo postal:', error);
-        return reply.code(500).send(internalError('Failed to create codigo postal'));
+    try {
+      const userId = req.user?.sub;
+      const createCodigoPostalCommand = req.diScope.resolve<CreateCodigoPostalCommand>('createCodigoPostalCommand');
+      const codigoPostal = await createCodigoPostalCommand.execute({
+        codigoPostal: parsed.data.codigoPostal,
+        esValido: parsed.data.esValido ?? false,
+        userId
+      });
+      return reply.code(201).send(ok(codigoPostal));
+    } catch (error: any) {
+      if (error.message === 'CODIGO_POSTAL_EXISTS') {
+        return reply.code(409).send({ ok: false, error: { code: 'CONFLICT', message: 'Codigo postal already exists' } });
       }
-    });
+      console.error('Error creating codigo postal:', error);
+      return reply.code(500).send(internalError('Failed to create codigo postal'));
+    }
   });
 
   // Actualizar código postal (requiere admin)
@@ -389,37 +394,35 @@ export default async function codigosPostalesRoutes(app: FastifyInstance) {
       }
     }
   }, async (req, reply) => {
-    return withDbContext(req, async (tx) => {
-      const { codigoPostalId } = req.params as { codigoPostalId: string };
+    const { codigoPostalId } = req.params as { codigoPostalId: string };
 
-      // Validate parameter
-      const paramValidation = CodigoPostalIdParamSchema.safeParse({ codigoPostalId });
-      if (!paramValidation.success) {
-        return reply.code(400).send(validationError(paramValidation.error.issues));
-      }
+    // Validate parameter
+    const paramValidation = CodigoPostalIdParamSchema.safeParse({ codigoPostalId });
+    if (!paramValidation.success) {
+      return reply.code(400).send(validationError(paramValidation.error.issues));
+    }
 
-      const parsed = UpdateCodigoPostalSchema.safeParse(req.body);
-      if (!parsed.success) {
-        return reply.code(400).send(validationError(parsed.error.issues));
-      }
+    const parsed = UpdateCodigoPostalSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return reply.code(400).send(validationError(parsed.error.issues));
+    }
 
-      try {
-        const userId = req.user?.sub;
-        const codigoPostal = await updateCodigoPostalItem(
-          paramValidation.data.codigoPostalId,
-          parsed.data.esValido,
-          userId,
-          tx
-        );
-        return reply.send(ok(codigoPostal));
-      } catch (error: any) {
-        if (error.message === 'CODIGO_POSTAL_NOT_FOUND') {
-          return reply.code(404).send(notFound('CodigoPostal', codigoPostalId));
-        }
-        console.error('Error updating codigo postal:', error);
-        return reply.code(500).send(internalError('Failed to update codigo postal'));
+    try {
+      const userId = req.user?.sub;
+      const updateCodigoPostalCommand = req.diScope.resolve<UpdateCodigoPostalCommand>('updateCodigoPostalCommand');
+      const codigoPostal = await updateCodigoPostalCommand.execute({
+        codigoPostalId: paramValidation.data.codigoPostalId,
+        esValido: parsed.data.esValido,
+        userId
+      });
+      return reply.send(ok(codigoPostal));
+    } catch (error: any) {
+      if (error.message === 'CODIGO_POSTAL_NOT_FOUND') {
+        return reply.code(404).send(notFound('CodigoPostal', codigoPostalId));
       }
-    });
+      console.error('Error updating codigo postal:', error);
+      return reply.code(500).send(internalError('Failed to update codigo postal'));
+    }
   });
 
   // Eliminar código postal (requiere admin)
@@ -490,25 +493,24 @@ export default async function codigosPostalesRoutes(app: FastifyInstance) {
       }
     }
   }, async (req, reply) => {
-    return withDbContext(req, async (tx) => {
-      const { codigoPostalId } = req.params as { codigoPostalId: string };
+    const { codigoPostalId } = req.params as { codigoPostalId: string };
 
-      // Validate parameter
-      const paramValidation = CodigoPostalIdParamSchema.safeParse({ codigoPostalId });
-      if (!paramValidation.success) {
-        return reply.code(400).send(validationError(paramValidation.error.issues));
-      }
+    // Validate parameter
+    const paramValidation = CodigoPostalIdParamSchema.safeParse({ codigoPostalId });
+    if (!paramValidation.success) {
+      return reply.code(400).send(validationError(paramValidation.error.issues));
+    }
 
-      try {
-        const deletedId = await deleteCodigoPostalItem(paramValidation.data.codigoPostalId, tx);
-        return reply.send(ok({ codigoPostalId: deletedId }));
-      } catch (error: any) {
-        if (error.message === 'CODIGO_POSTAL_NOT_FOUND') {
-          return reply.code(404).send(notFound('CodigoPostal', codigoPostalId));
-        }
-        console.error('Error deleting codigo postal:', error);
-        return reply.code(500).send(internalError('Failed to delete codigo postal'));
+    try {
+      const deleteCodigoPostalCommand = req.diScope.resolve<DeleteCodigoPostalCommand>('deleteCodigoPostalCommand');
+      const deletedId = await deleteCodigoPostalCommand.execute({ codigoPostalId: paramValidation.data.codigoPostalId });
+      return reply.send(ok({ codigoPostalId: deletedId }));
+    } catch (error: any) {
+      if (error.message === 'CODIGO_POSTAL_NOT_FOUND') {
+        return reply.code(404).send(notFound('CodigoPostal', codigoPostalId));
       }
-    });
+      console.error('Error deleting codigo postal:', error);
+      return reply.code(500).send(internalError('Failed to delete codigo postal'));
+    }
   });
 }

@@ -1,6 +1,9 @@
 import { FastifyInstance } from 'fastify';
 import { requireAuth } from '../auth/auth.middleware.js';
-import * as service from './organicaCascade.service.js';
+import { GetOrganica1ChildrenQuery } from './application/queries/GetOrganica1ChildrenQuery.js';
+import { GetOrganica2ChildrenQuery } from './application/queries/GetOrganica2ChildrenQuery.js';
+import { GetOrganica3ChildrenQuery } from './application/queries/GetOrganica3ChildrenQuery.js';
+import { handleOrganicaCascadeError } from './infrastructure/errorHandler.js';
 
 export default async function organicaCascadeRoutes(app: FastifyInstance) {
   // GET /v1/organica-cascade/org1?claveOrganica0={clave}
@@ -37,9 +40,14 @@ export default async function organicaCascadeRoutes(app: FastifyInstance) {
       },
     },
     async (request, reply) => {
-      const { claveOrganica0 } = request.query as { claveOrganica0: string };
-      const result = await service.getOrganica1Children(claveOrganica0);
-      return reply.send(result);
+      try {
+        const { claveOrganica0 } = request.query as { claveOrganica0: string };
+        const getOrganica1ChildrenQuery = request.diScope.resolve<GetOrganica1ChildrenQuery>('getOrganica1ChildrenQuery');
+        const result = await getOrganica1ChildrenQuery.execute(claveOrganica0, request.user?.sub?.toString());
+        return reply.send(result);
+      } catch (error: any) {
+        return handleOrganicaCascadeError(error, reply);
+      }
     }
   );
 
@@ -79,12 +87,17 @@ export default async function organicaCascadeRoutes(app: FastifyInstance) {
       },
     },
     async (request, reply) => {
-      const { claveOrganica0, claveOrganica1 } = request.query as {
-        claveOrganica0: string;
-        claveOrganica1: string;
-      };
-      const result = await service.getOrganica2Children(claveOrganica0, claveOrganica1);
-      return reply.send(result);
+      try {
+        const { claveOrganica0, claveOrganica1 } = request.query as {
+          claveOrganica0: string;
+          claveOrganica1: string;
+        };
+        const getOrganica2ChildrenQuery = request.diScope.resolve<GetOrganica2ChildrenQuery>('getOrganica2ChildrenQuery');
+        const result = await getOrganica2ChildrenQuery.execute(claveOrganica0, claveOrganica1, request.user?.sub?.toString());
+        return reply.send(result);
+      } catch (error: any) {
+        return handleOrganicaCascadeError(error, reply);
+      }
     }
   );
 
@@ -126,13 +139,18 @@ export default async function organicaCascadeRoutes(app: FastifyInstance) {
       },
     },
     async (request, reply) => {
-      const { claveOrganica0, claveOrganica1, claveOrganica2 } = request.query as {
-        claveOrganica0: string;
-        claveOrganica1: string;
-        claveOrganica2: string;
-      };
-      const result = await service.getOrganica3Children(claveOrganica0, claveOrganica1, claveOrganica2);
-      return reply.send(result);
+      try {
+        const { claveOrganica0, claveOrganica1, claveOrganica2 } = request.query as {
+          claveOrganica0: string;
+          claveOrganica1: string;
+          claveOrganica2: string;
+        };
+        const getOrganica3ChildrenQuery = request.diScope.resolve<GetOrganica3ChildrenQuery>('getOrganica3ChildrenQuery');
+        const result = await getOrganica3ChildrenQuery.execute(claveOrganica0, claveOrganica1, claveOrganica2, request.user?.sub?.toString());
+        return reply.send(result);
+      } catch (error: any) {
+        return handleOrganicaCascadeError(error, reply);
+      }
     }
   );
 }

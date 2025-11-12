@@ -1,8 +1,13 @@
 import { FastifyInstance } from 'fastify';
 import { requireAuth } from '../auth/auth.middleware.js';
 import { CreateOrganica0Schema, UpdateOrganica0Schema } from './organica0.schemas.js';
-import { getOrganica0ById, getAllOrganica0, createOrganica0Record, updateOrganica0Record, deleteOrganica0Record } from './organica0.service.js';
 import { ok, fail } from '../../utils/http.js';
+import { handleOrganica0Error } from './infrastructure/errorHandler.js';
+import type { GetAllOrganica0Query } from './application/queries/GetAllOrganica0Query.js';
+import type { GetOrganica0ByIdQuery } from './application/queries/GetOrganica0ByIdQuery.js';
+import type { CreateOrganica0Command } from './application/commands/CreateOrganica0Command.js';
+import type { UpdateOrganica0Command } from './application/commands/UpdateOrganica0Command.js';
+import type { DeleteOrganica0Command } from './application/commands/DeleteOrganica0Command.js';
 
 // [FIREBIRD] Routes for ORGANICA_0 CRUD operations
 export default async function organica0Routes(app: FastifyInstance) {
@@ -50,13 +55,14 @@ export default async function organica0Routes(app: FastifyInstance) {
         }
       }
     }
-  }, async (_req, reply) => {
+  }, async (req, reply) => {
     try {
-      const records = await getAllOrganica0();     
+      console.log('User making request:', req.user?.sub, 'Roles:', req.user?.roles);
+      const getAllOrganica0Query: GetAllOrganica0Query = req.diScope.resolve('getAllOrganica0Query');
+      const records = await getAllOrganica0Query.execute(req.user?.sub);
       return reply.send(ok(records));
-    } catch (error: any) {
-      console.error('Error listing organica0:', error);
-      return reply.code(500).send(fail('ORGANICA0_LIST_FAILED'));
+    } catch (error) {
+      return handleOrganica0Error(error, reply);
     }
   });
 
@@ -123,14 +129,11 @@ export default async function organica0Routes(app: FastifyInstance) {
   }, async (req, reply) => {
     try {
       const { claveOrganica } = req.params as { claveOrganica: string };
-      const record = await getOrganica0ById(claveOrganica);
+      const getOrganica0ByIdQuery: GetOrganica0ByIdQuery = req.diScope.resolve('getOrganica0ByIdQuery');
+      const record = await getOrganica0ByIdQuery.execute(claveOrganica, req.user?.sub);
       return reply.send(ok(record));
-    } catch (error: any) {
-      if (error.message === 'ORGANICA0_NOT_FOUND') {
-        return reply.code(404).send(fail('ORGANICA0_NOT_FOUND'));
-      }
-      console.error('Error getting organica0:', error);
-      return reply.code(500).send(fail('ORGANICA0_GET_FAILED'));
+    } catch (error) {
+      return handleOrganica0Error(error, reply);
     }
   });
 
@@ -208,14 +211,11 @@ export default async function organica0Routes(app: FastifyInstance) {
     }
 
     try {
-      const record = await createOrganica0Record(parsed.data);
+      const createOrganica0Command: CreateOrganica0Command = req.diScope.resolve('createOrganica0Command');
+      const record = await createOrganica0Command.execute(parsed.data, req.user?.sub);
       return reply.code(201).send(ok(record));
-    } catch (error: any) {
-      if (error.message === 'ORGANICA0_EXISTS') {
-        return reply.code(409).send(fail('ORGANICA0_EXISTS'));
-      }
-      console.error('Error creating organica0:', error);
-      return reply.code(500).send(fail('ORGANICA0_CREATE_FAILED'));
+    } catch (error) {
+      return handleOrganica0Error(error, reply);
     }
   });
 
@@ -299,14 +299,11 @@ export default async function organica0Routes(app: FastifyInstance) {
     }
 
     try {
-      const record = await updateOrganica0Record(claveOrganica, parsed.data);
+      const updateOrganica0Command: UpdateOrganica0Command = req.diScope.resolve('updateOrganica0Command');
+      const record = await updateOrganica0Command.execute(claveOrganica, parsed.data, req.user?.sub);
       return reply.send(ok(record));
-    } catch (error: any) {
-      if (error.message === 'ORGANICA0_NOT_FOUND') {
-        return reply.code(404).send(fail('ORGANICA0_NOT_FOUND'));
-      }
-      console.error('Error updating organica0:', error);
-      return reply.code(500).send(fail('ORGANICA0_UPDATE_FAILED'));
+    } catch (error) {
+      return handleOrganica0Error(error, reply);
     }
   });
 
@@ -363,14 +360,11 @@ export default async function organica0Routes(app: FastifyInstance) {
   }, async (req, reply) => {
     try {
       const { claveOrganica } = req.params as { claveOrganica: string };
-      const result = await deleteOrganica0Record(claveOrganica);
+      const deleteOrganica0Command: DeleteOrganica0Command = req.diScope.resolve('deleteOrganica0Command');
+      const result = await deleteOrganica0Command.execute(claveOrganica, req.user?.sub);
       return reply.send(ok(result));
-    } catch (error: any) {
-      if (error.message === 'ORGANICA0_NOT_FOUND') {
-        return reply.code(404).send(fail('ORGANICA0_NOT_FOUND'));
-      }
-      console.error('Error deleting organica0:', error);
-      return reply.code(500).send(fail('ORGANICA0_DELETE_FAILED'));
+    } catch (error) {
+      return handleOrganica0Error(error, reply);
     }
   });
 }

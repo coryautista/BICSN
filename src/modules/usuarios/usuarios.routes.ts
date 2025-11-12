@@ -1,114 +1,14 @@
 import { FastifyInstance } from 'fastify';
 import { requireAuth, requireRole } from '../auth/auth.middleware.js';
-import { CreateUsuarioSchema, UpdateUsuarioSchema, UsuarioIdParamSchema, LoginSchema } from './usuarios.schemas.js';
-import { getAllUsuarios, getUsuarioById, createUsuarioItem, updateUsuarioItem, deleteUsuarioItem, authenticateUsuario } from './usuarios.service.js';
-import { ok, validationError, notFound, internalError } from '../../utils/http.js';
-import { withDbContext } from '../../db/context.js';
+import { CreateUsuarioSchema, UpdateUsuarioSchema } from './usuarios.schemas.js';
+import type { GetAllUsuariosQuery } from './application/queries/GetAllUsuariosQuery.js';
+import type { GetUsuarioByIdQuery } from './application/queries/GetUsuarioByIdQuery.js';
+import type { CreateUsuarioCommand } from './application/commands/CreateUsuarioCommand.js';
+import type { UpdateUsuarioCommand } from './application/commands/UpdateUsuarioCommand.js';
+import type { DeleteUsuarioCommand } from './application/commands/DeleteUsuarioCommand.js';
+import { handleUsuarioError } from './infrastructure/errorHandler.js';
 
 export default async function usuariosRoutes(app: FastifyInstance) {
-
-  // Login endpoint (no auth required)
-  app.post('/usuarios/login', {
-    schema: {
-      description: 'Authenticate user',
-      tags: ['usuarios'],
-      body: {
-        type: 'object',
-        required: ['email', 'password'],
-        properties: {
-          email: { type: 'string', format: 'email' },
-          password: { type: 'string', minLength: 1 }
-        }
-      },
-      response: {
-        200: {
-          type: 'object',
-          properties: {
-            data: {
-              type: 'object',
-              properties: {
-                usuarioId: { type: 'string' },
-                nombre: { type: 'string' },
-                email: { type: 'string' },
-                username: { type: 'string' },
-                phoneNumber: { type: ['string', 'null'] },
-                isLockedOut: { type: 'boolean' },
-                lastLoginAt: { type: ['string', 'null'], format: 'date-time' },
-                createdAt: { type: 'string', format: 'date-time' },
-                updatedAt: { type: 'string', format: 'date-time' },
-                photoPath: { type: ['string', 'null'] },
-                idOrganica0: { type: ['string', 'null'] },
-                idOrganica1: { type: ['string', 'null'] },
-                idOrganica2: { type: ['string', 'null'] },
-                idOrganica3: { type: ['string', 'null'] }
-              }
-            }
-          }
-        },
-        400: {
-          type: 'object',
-          properties: {
-            ok: { type: 'boolean' },
-            error: {
-              type: 'object',
-              properties: {
-                code: { type: 'string' },
-                message: { type: 'string' }
-              }
-            }
-          }
-        },
-        401: {
-          type: 'object',
-          properties: {
-            ok: { type: 'boolean' },
-            error: {
-              type: 'object',
-              properties: {
-                code: { type: 'string' },
-                message: { type: 'string' }
-              }
-            }
-          }
-        },
-        500: {
-          type: 'object',
-          properties: {
-            ok: { type: 'boolean' },
-            error: {
-              type: 'object',
-              properties: {
-                code: { type: 'string' },
-                message: { type: 'string' }
-              }
-            }
-          }
-        }
-      }
-    }
-  }, async (req, reply) => {
-    console.log('Login request body:', req.body);
-    const parsed = LoginSchema.safeParse(req.body);
-    if (!parsed.success) {
-      console.log('Login validation error:', parsed.error.issues);
-      return reply.code(400).send(validationError(parsed.error.issues));
-    }
-
-    console.log('Login attempt for:', parsed.data.email);
-    try {
-      const usuario = await authenticateUsuario(parsed.data.email, parsed.data.password);
-      console.log('Login successful for user:', usuario.usuarioId);
-      return reply.send(ok(usuario));
-    } catch (error: any) {
-      console.log('Login error:', error.message);
-      if (error.message === 'INVALID_CREDENTIALS') {
-        return reply.code(401).send({ ok: false, error: { code: 'UNAUTHORIZED', message: 'Invalid credentials' } });
-      }
-      console.error('Error authenticating user:', error);
-      return reply.code(500).send(internalError('Authentication failed'));
-    }
-  });
-
   // Listar todos los usuarios (requiere admin)
    app.get('/usuarios', {
      // preHandler: [requireAuth, requireRole('admin')],
@@ -125,20 +25,20 @@ export default async function usuariosRoutes(app: FastifyInstance) {
               items: {
                 type: 'object',
                 properties: {
-                  usuarioId: { type: 'string' },
-                  nombre: { type: 'string' },
-                  email: { type: 'string' },
+                  id: { type: 'string' },
                   username: { type: 'string' },
-                  phoneNumber: { type: ['string', 'null'] },
-                  isLockedOut: { type: 'boolean' },
-                  lastLoginAt: { type: ['string', 'null'], format: 'date-time' },
-                  createdAt: { type: 'string', format: 'date-time' },
-                  updatedAt: { type: 'string', format: 'date-time' },
+                  email: { type: ['string', 'null'] },
+                  displayName: { type: ['string', 'null'] },
                   photoPath: { type: ['string', 'null'] },
+                  isLockedOut: { type: 'boolean' },
+                  lockoutEndAt: { type: ['string', 'null'], format: 'date-time' },
+                  accessFailedCount: { type: 'number' },
                   idOrganica0: { type: ['string', 'null'] },
                   idOrganica1: { type: ['string', 'null'] },
                   idOrganica2: { type: ['string', 'null'] },
-                  idOrganica3: { type: ['string', 'null'] }
+                  idOrganica3: { type: ['string', 'null'] },
+                  createdAt: { type: 'string', format: 'date-time' },
+                  updatedAt: { type: ['string', 'null'], format: 'date-time' }
                 }
               }
             }
@@ -159,13 +59,13 @@ export default async function usuariosRoutes(app: FastifyInstance) {
         }
       }
     }
-  }, async (_req, reply) => {
+  }, async (req, reply) => {
     try {
-      const usuarios = await getAllUsuarios();
-      return reply.send(ok(usuarios));
+      const getAllUsuariosQuery = req.diScope.resolve<GetAllUsuariosQuery>('getAllUsuariosQuery');
+      const usuarios = await getAllUsuariosQuery.execute(req.user?.sub || 'anonymous');
+      return reply.send({ data: usuarios });
     } catch (error: any) {
-      console.error('Error listing usuarios:', error);
-      return reply.code(500).send(internalError('Failed to retrieve usuarios'));
+      return handleUsuarioError(error, reply);
     }
   });
 
@@ -190,20 +90,20 @@ export default async function usuariosRoutes(app: FastifyInstance) {
             data: {
               type: 'object',
               properties: {
-                usuarioId: { type: 'string' },
-                nombre: { type: 'string' },
-                email: { type: 'string' },
+                id: { type: 'string' },
                 username: { type: 'string' },
-                phoneNumber: { type: ['string', 'null'] },
-                isLockedOut: { type: 'boolean' },
-                lastLoginAt: { type: ['string', 'null'], format: 'date-time' },
-                createdAt: { type: 'string', format: 'date-time' },
-                updatedAt: { type: 'string', format: 'date-time' },
+                email: { type: ['string', 'null'] },
+                displayName: { type: ['string', 'null'] },
                 photoPath: { type: ['string', 'null'] },
+                isLockedOut: { type: 'boolean' },
+                lockoutEndAt: { type: ['string', 'null'], format: 'date-time' },
+                accessFailedCount: { type: 'number' },
                 idOrganica0: { type: ['string', 'null'] },
                 idOrganica1: { type: ['string', 'null'] },
                 idOrganica2: { type: ['string', 'null'] },
-                idOrganica3: { type: ['string', 'null'] }
+                idOrganica3: { type: ['string', 'null'] },
+                createdAt: { type: 'string', format: 'date-time' },
+                updatedAt: { type: ['string', 'null'], format: 'date-time' }
               }
             }
           }
@@ -252,21 +152,12 @@ export default async function usuariosRoutes(app: FastifyInstance) {
   }, async (req, reply) => {
     const { usuarioId } = req.params as { usuarioId: string };
 
-    // Validate parameter
-    const paramValidation = UsuarioIdParamSchema.safeParse({ usuarioId });
-    if (!paramValidation.success) {
-      return reply.code(400).send(validationError(paramValidation.error.issues));
-    }
-
     try {
-      const usuario = await getUsuarioById(usuarioId);
-      return reply.send(ok(usuario));
+      const getUsuarioByIdQuery = req.diScope.resolve<GetUsuarioByIdQuery>('getUsuarioByIdQuery');
+      const usuario = await getUsuarioByIdQuery.execute(usuarioId, req.user?.sub || 'anonymous');
+      return reply.send({ data: usuario });
     } catch (error: any) {
-      if (error.message === 'USUARIO_NOT_FOUND') {
-        return reply.code(404).send(notFound('Usuario', usuarioId));
-      }
-      console.error('Error getting usuario:', error);
-      return reply.code(500).send(internalError('Failed to retrieve usuario'));
+      return handleUsuarioError(error, reply);
     }
   });
 
@@ -279,7 +170,7 @@ export default async function usuariosRoutes(app: FastifyInstance) {
       security: [{ bearerAuth: [] }],
       body: {
         type: 'object',
-        required: ['nombre', 'email', 'password', 'roleId'],
+        required: ['nombre', 'email', 'password', 'roleId', 'phoneNumber', 'idOrganica0', 'idOrganica1'],
         properties: {
           usuarioId: { type: 'string', format: 'uuid' },
           nombre: { type: 'string', minLength: 1, maxLength: 100 },
@@ -361,44 +252,29 @@ export default async function usuariosRoutes(app: FastifyInstance) {
       }
     }
   }, async (req, reply) => {
-    console.log('Create user request body:', req.body);
-    return withDbContext(req, async (tx) => {
-      const parsed = CreateUsuarioSchema.safeParse(req.body);
-      if (!parsed.success) {
-        console.log('Create user validation error:', parsed.error.issues);
-        return reply.code(400).send(validationError(parsed.error.issues));
-      }
+    const parsed = CreateUsuarioSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return reply.code(400).send({ ok: false, error: { code: 'VALIDATION_ERROR', message: 'Datos de entrada inválidos', details: parsed.error.issues } });
+    }
 
-      console.log('Creating user:', parsed.data.usuarioId || 'auto-generated');
-      try {
-        const userId = req.user?.sub;
-        const usuario = await createUsuarioItem(
-          parsed.data.usuarioId,
-          parsed.data.nombre,
-          parsed.data.email,
-          parsed.data.password,
-          parsed.data.roleId,
-          parsed.data.esActivo ?? true,
-          parsed.data.phoneNumber,
-          parsed.data.idOrganica0,
-          parsed.data.idOrganica1,
-          parsed.data.idOrganica2,
-          parsed.data.idOrganica3,
-          userId,
-          tx
-        );
-        console.log('User created successfully:', usuario.usuarioId);
-        return reply.code(201).send(ok(usuario));
-      } catch (error: any) {
-        console.log('Create user error:', error.message);
-        console.error('Full error:', error);
-        if (error.message === 'USUARIO_EXISTS' || error.message === 'EMAIL_EXISTS' || error.message === 'USERNAME_EXISTS') {
-          return reply.code(409).send({ ok: false, error: { code: 'CONFLICT', message: 'Usuario, email or username already exists' } });
-        }
-        console.error('Error creating usuario:', error);
-        return reply.code(500).send(internalError('Failed to create usuario'));
-      }
-    });
+    try {
+      const createUsuarioCommand = req.diScope.resolve<CreateUsuarioCommand>('createUsuarioCommand');
+      const usuario = await createUsuarioCommand.execute({
+        username: parsed.data.nombre,
+        email: parsed.data.email,
+        password: parsed.data.password,
+        displayName: parsed.data.nombre,
+        photoPath: undefined,
+        idOrganica0: parsed.data.idOrganica0 ? Number(parsed.data.idOrganica0) : undefined,
+        idOrganica1: parsed.data.idOrganica1 ? Number(parsed.data.idOrganica1) : undefined,
+        idOrganica2: parsed.data.idOrganica2 ? Number(parsed.data.idOrganica2) : undefined,
+        idOrganica3: parsed.data.idOrganica3 ? Number(parsed.data.idOrganica3) : undefined,
+        roleId: parsed.data.roleId
+      }, req.user?.sub || 'anonymous');
+      return reply.code(201).send({ data: usuario });
+    } catch (error: any) {
+      return handleUsuarioError(error, reply);
+    }
   });
 
   // Actualizar usuario (requiere admin)
@@ -504,43 +380,24 @@ export default async function usuariosRoutes(app: FastifyInstance) {
       }
     }
   }, async (req, reply) => {
-    return withDbContext(req, async (tx) => {
-      const { usuarioId } = req.params as { usuarioId: string };
+    const { usuarioId } = req.params as { usuarioId: string };
 
-      // Validate parameter
-      const paramValidation = UsuarioIdParamSchema.safeParse({ usuarioId });
-      if (!paramValidation.success) {
-        return reply.code(400).send(validationError(paramValidation.error.issues));
-      }
+    const parsed = UpdateUsuarioSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return reply.code(400).send({ ok: false, error: { code: 'VALIDATION_ERROR', message: 'Datos de entrada inválidos', details: parsed.error.issues } });
+    }
 
-      const parsed = UpdateUsuarioSchema.safeParse(req.body);
-      if (!parsed.success) {
-        return reply.code(400).send(validationError(parsed.error.issues));
-      }
-
-      try {
-        const userId = req.user?.sub;
-        const usuario = await updateUsuarioItem(
-          usuarioId,
-          parsed.data.nombre,
-          parsed.data.email,
-          parsed.data.roleId,
-          parsed.data.esActivo,
-          userId,
-          tx
-        );
-        return reply.send(ok(usuario));
-      } catch (error: any) {
-        if (error.message === 'USUARIO_NOT_FOUND') {
-          return reply.code(404).send(notFound('Usuario', usuarioId));
-        }
-        if (error.message === 'EMAIL_EXISTS') {
-          return reply.code(409).send({ ok: false, error: { code: 'CONFLICT', message: 'Email already exists' } });
-        }
-        console.error('Error updating usuario:', error);
-        return reply.code(500).send(internalError('Failed to update usuario'));
-      }
-    });
+    try {
+      const updateUsuarioCommand = req.diScope.resolve<UpdateUsuarioCommand>('updateUsuarioCommand');
+      const usuario = await updateUsuarioCommand.execute({
+        userId: usuarioId,
+        email: parsed.data.email,
+        displayName: parsed.data.nombre
+      }, req.user?.sub || 'anonymous');
+      return reply.send({ data: usuario });
+    } catch (error: any) {
+      return handleUsuarioError(error, reply);
+    }
   });
 
   // Eliminar usuario (requiere admin)
@@ -611,25 +468,14 @@ export default async function usuariosRoutes(app: FastifyInstance) {
       }
     }
   }, async (req, reply) => {
-    return withDbContext(req, async (tx) => {
-      const { usuarioId } = req.params as { usuarioId: string };
+    const { usuarioId } = req.params as { usuarioId: string };
 
-      // Validate parameter
-      const paramValidation = UsuarioIdParamSchema.safeParse({ usuarioId });
-      if (!paramValidation.success) {
-        return reply.code(400).send(validationError(paramValidation.error.issues));
-      }
-
-      try {
-        const deletedId = await deleteUsuarioItem(usuarioId, tx);
-        return reply.send(ok({ usuarioId: deletedId }));
-      } catch (error: any) {
-        if (error.message === 'USUARIO_NOT_FOUND') {
-          return reply.code(404).send(notFound('Usuario', usuarioId));
-        }
-        console.error('Error deleting usuario:', error);
-        return reply.code(500).send(internalError('Failed to delete usuario'));
-      }
-    });
+    try {
+      const deleteUsuarioCommand = req.diScope.resolve<DeleteUsuarioCommand>('deleteUsuarioCommand');
+      const deleted = await deleteUsuarioCommand.execute({ userId: usuarioId }, req.user?.sub || 'anonymous');
+      return reply.send({ data: { deleted, usuarioId } });
+    } catch (error: any) {
+      return handleUsuarioError(error, reply);
+    }
   });
 }

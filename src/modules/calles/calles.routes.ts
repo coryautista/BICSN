@@ -1,9 +1,14 @@
 import { FastifyInstance } from 'fastify';
 import { requireAuth, requireRole } from '../auth/auth.middleware.js';
 import { CreateCalleSchema, UpdateCalleSchema, CalleIdParamSchema, ColoniaIdParamSchema, CalleQuerySchema } from './calles.schemas.js';
-import { getCalleById, getCallesByColonia, searchCallesService, createCalleItem, updateCalleItem, deleteCalleItem } from './calles.service.js';
 import { ok, validationError, notFound, internalError } from '../../utils/http.js';
-import { withDbContext } from '../../db/context.js';
+import type { GetCalleByIdQuery } from './application/queries/GetCalleByIdQuery.js';
+import type { GetCallesByColoniaQuery } from './application/queries/GetCallesByColoniaQuery.js';
+import type { SearchCallesQuery } from './application/queries/SearchCallesQuery.js';
+import type { CreateCalleCommand } from './application/commands/CreateCalleCommand.js';
+import type { UpdateCalleCommand } from './application/commands/UpdateCalleCommand.js';
+import type { DeleteCalleCommand } from './application/commands/DeleteCalleCommand.js';
+import { handleCalleError } from './infrastructure/errorHandler.js';
 
 export default async function callesRoutes(app: FastifyInstance) {
 
@@ -109,11 +114,11 @@ export default async function callesRoutes(app: FastifyInstance) {
     }
 
     try {
-      const calles = await searchCallesService(queryValidation.data);
+      const searchCallesQuery = req.diScope.resolve<SearchCallesQuery>('searchCallesQuery');
+      const calles = await searchCallesQuery.execute(queryValidation.data);
       return reply.send(ok(calles));
-    } catch (error: any) {
-      console.error('Error searching calles:', error);
-      return reply.code(500).send(internalError('Failed to search calles'));
+    } catch (error) {
+      return handleCalleError(error, reply);
     }
   });
 
@@ -187,11 +192,11 @@ export default async function callesRoutes(app: FastifyInstance) {
     }
 
     try {
-      const calles = await getCallesByColonia(paramValidation.data.coloniaId);
+      const getCallesByColoniaQuery = req.diScope.resolve<GetCallesByColoniaQuery>('getCallesByColoniaQuery');
+      const calles = await getCallesByColoniaQuery.execute(paramValidation.data.coloniaId);
       return reply.send(ok(calles));
-    } catch (error: any) {
-      console.error('Error listing calles by colonia:', error);
-      return reply.code(500).send(internalError('Failed to retrieve calles'));
+    } catch (error) {
+      return handleCalleError(error, reply);
     }
   });
 
@@ -304,14 +309,11 @@ export default async function callesRoutes(app: FastifyInstance) {
     }
 
     try {
-      const calle = await getCalleById(paramValidation.data.calleId);
+      const getCalleByIdQuery = req.diScope.resolve<GetCalleByIdQuery>('getCalleByIdQuery');
+      const calle = await getCalleByIdQuery.execute(paramValidation.data.calleId);
       return reply.send(ok(calle));
-    } catch (error: any) {
-      if (error.message === 'CALLE_NOT_FOUND') {
-        return reply.code(404).send(notFound('Calle', calleId));
-      }
-      console.error('Error getting calle:', error);
-      return reply.code(500).send(internalError('Failed to retrieve calle'));
+    } catch (error) {
+      return handleCalleError(error, reply);
     }
   });
 
@@ -388,33 +390,24 @@ export default async function callesRoutes(app: FastifyInstance) {
       }
     }
   }, async (req, reply) => {
-    return withDbContext(req, async (tx) => {
-      const parsed = CreateCalleSchema.safeParse(req.body);
-      if (!parsed.success) {
-        return reply.code(400).send(validationError(parsed.error.issues));
-      }
+    const parsed = CreateCalleSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return reply.code(400).send(validationError(parsed.error.issues));
+    }
 
-      try {
-        const userId = req.user?.sub;
-        const calle = await createCalleItem(
-          parsed.data.coloniaId,
-          parsed.data.nombreCalle,
-          parsed.data.esValido ?? false,
-          userId,
-          tx
-        );
-        return reply.code(201).send(ok(calle));
-      } catch (error: any) {
-        if (error.message === 'CALLE_EXISTS') {
-          return reply.code(409).send({ ok: false, error: { code: 'CONFLICT', message: 'Calle already exists' } });
-        }
-        if (error.message === 'COLONIA_NOT_FOUND') {
-          return reply.code(400).send({ ok: false, error: { code: 'BAD_REQUEST', message: 'Colonia not found' } });
-        }
-        console.error('Error creating calle:', error);
-        return reply.code(500).send(internalError('Failed to create calle'));
-      }
-    });
+    try {
+      const userId = req.user?.sub;
+      const createCalleCommand = req.diScope.resolve<CreateCalleCommand>('createCalleCommand');
+      const calle = await createCalleCommand.execute({
+        coloniaId: parsed.data.coloniaId,
+        nombreCalle: parsed.data.nombreCalle,
+        esValido: parsed.data.esValido ?? false,
+        userId
+      });
+      return reply.code(201).send(ok(calle));
+    } catch (error) {
+      return handleCalleError(error, reply);
+    }
   });
 
   // Actualizar calle (requiere admin)
@@ -495,38 +488,32 @@ export default async function callesRoutes(app: FastifyInstance) {
       }
     }
   }, async (req, reply) => {
-    return withDbContext(req, async (tx) => {
-      const { calleId } = req.params as { calleId: string };
+    const { calleId } = req.params as { calleId: string };
 
-      // Validate parameter
-      const paramValidation = CalleIdParamSchema.safeParse({ calleId });
-      if (!paramValidation.success) {
-        return reply.code(400).send(validationError(paramValidation.error.issues));
-      }
+    // Validate parameter
+    const paramValidation = CalleIdParamSchema.safeParse({ calleId });
+    if (!paramValidation.success) {
+      return reply.code(400).send(validationError(paramValidation.error.issues));
+    }
 
-      const parsed = UpdateCalleSchema.safeParse(req.body);
-      if (!parsed.success) {
-        return reply.code(400).send(validationError(parsed.error.issues));
-      }
+    const parsed = UpdateCalleSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return reply.code(400).send(validationError(parsed.error.issues));
+    }
 
-      try {
-        const userId = req.user?.sub;
-        const calle = await updateCalleItem(
-          paramValidation.data.calleId,
-          parsed.data.nombreCalle,
-          parsed.data.esValido,
-          userId,
-          tx
-        );
-        return reply.send(ok(calle));
-      } catch (error: any) {
-        if (error.message === 'CALLE_NOT_FOUND') {
-          return reply.code(404).send(notFound('Calle', calleId));
-        }
-        console.error('Error updating calle:', error);
-        return reply.code(500).send(internalError('Failed to update calle'));
-      }
-    });
+    try {
+      const userId = req.user?.sub;
+      const updateCalleCommand = req.diScope.resolve<UpdateCalleCommand>('updateCalleCommand');
+      const calle = await updateCalleCommand.execute({
+        calleId: paramValidation.data.calleId,
+        nombreCalle: parsed.data.nombreCalle,
+        esValido: parsed.data.esValido,
+        userId
+      });
+      return reply.send(ok(calle));
+    } catch (error) {
+      return handleCalleError(error, reply);
+    }
   });
 
   // Eliminar calle (requiere admin)
@@ -597,25 +584,20 @@ export default async function callesRoutes(app: FastifyInstance) {
       }
     }
   }, async (req, reply) => {
-    return withDbContext(req, async (tx) => {
-      const { calleId } = req.params as { calleId: string };
+    const { calleId } = req.params as { calleId: string };
 
-      // Validate parameter
-      const paramValidation = CalleIdParamSchema.safeParse({ calleId });
-      if (!paramValidation.success) {
-        return reply.code(400).send(validationError(paramValidation.error.issues));
-      }
+    // Validate parameter
+    const paramValidation = CalleIdParamSchema.safeParse({ calleId });
+    if (!paramValidation.success) {
+      return reply.code(400).send(validationError(paramValidation.error.issues));
+    }
 
-      try {
-        const deletedId = await deleteCalleItem(paramValidation.data.calleId, tx);
-        return reply.send(ok({ calleId: deletedId }));
-      } catch (error: any) {
-        if (error.message === 'CALLE_NOT_FOUND') {
-          return reply.code(404).send(notFound('Calle', calleId));
-        }
-        console.error('Error deleting calle:', error);
-        return reply.code(500).send(internalError('Failed to delete calle'));
-      }
-    });
+    try {
+      const deleteCalleCommand = req.diScope.resolve<DeleteCalleCommand>('deleteCalleCommand');
+      const deletedId = await deleteCalleCommand.execute({ calleId: paramValidation.data.calleId });
+      return reply.send(ok({ calleId: deletedId }));
+    } catch (error) {
+      return handleCalleError(error, reply);
+    }
   });
 }

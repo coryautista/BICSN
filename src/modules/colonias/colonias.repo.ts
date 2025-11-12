@@ -162,6 +162,12 @@ export async function searchColonias(filters: {
   offset?: number;
 }) {
   const p = await getPool();
+  // Normalize input
+  if (filters.nombreColonia && typeof filters.nombreColonia === 'string') {
+    filters.nombreColonia = filters.nombreColonia.trim();
+  }
+  
+  // BÚSQUEDA LIBRE: Sin JOINs, busca directamente en los campos de geo.Colonias
   let query = `
     SELECT
       c.ColoniaID,
@@ -173,62 +179,14 @@ export async function searchColonias(filters: {
       c.createdAt,
       c.updatedAt,
       c.createdBy,
-      c.updatedBy,
-      m.NombreMunicipio,
-      cp.CodigoPostal,
-      e.EstadoID,
-      e.NombreEstado
+      c.updatedBy
     FROM geo.Colonias c
-    INNER JOIN geo.Municipios m ON c.MunicipioID = m.MunicipioID
-    INNER JOIN geo.CodigosPostales cp ON c.CodigoPostalID = cp.CodigoPostalID
-    INNER JOIN geo.Estados e ON m.EstadoID = e.EstadoID
-    WHERE 1=1
+    WHERE c.NombreColonia LIKE @nombreColonia
+    ORDER BY c.NombreColonia ASC
   `;
 
-  const params: any[] = [];
-
-  if (filters.estadoId) {
-    query += ` AND e.EstadoID = @estadoId`;
-    params.push({ name: 'estadoId', type: sql.Char(2), value: filters.estadoId });
-  }
-
-  if (filters.municipioId) {
-    query += ` AND c.MunicipioID = @municipioId`;
-    params.push({ name: 'municipioId', type: sql.Int, value: filters.municipioId });
-  }
-
-  if (filters.codigoPostal) {
-    query += ` AND cp.CodigoPostal = @codigoPostal`;
-    params.push({ name: 'codigoPostal', type: sql.Char(5), value: filters.codigoPostal });
-  }
-
-  if (filters.nombreColonia) {
-    query += ` AND c.NombreColonia LIKE @nombreColonia`;
-    params.push({ name: 'nombreColonia', type: sql.VarChar(102), value: `%${filters.nombreColonia}%` });
-  }
-
-  if (filters.tipoAsentamiento) {
-    query += ` AND c.TipoAsentamiento LIKE @tipoAsentamiento`;
-    params.push({ name: 'tipoAsentamiento', type: sql.VarChar(52), value: `%${filters.tipoAsentamiento}%` });
-  }
-
-  if (filters.esValido !== undefined) {
-    query += ` AND c.EsValido = @esValido`;
-    params.push({ name: 'esValido', type: sql.Bit, value: filters.esValido });
-  }
-
-  query += ` ORDER BY e.EstadoID ASC, m.NombreMunicipio ASC, c.NombreColonia ASC`;
-
-  if (filters.limit) {
-    query += ` OFFSET @offset ROWS FETCH NEXT @limit ROWS ONLY`;
-    params.push({ name: 'offset', type: sql.Int, value: filters.offset || 0 });
-    params.push({ name: 'limit', type: sql.Int, value: filters.limit });
-  }
-
   const req = p.request();
-  params.forEach(param => {
-    req.input(param.name, param.type, param.value);
-  });
+  req.input('nombreColonia', sql.VarChar(102), `%${filters.nombreColonia}%`);
 
   const r = await req.query(query);
   return r.recordset.map((row: any) => ({
@@ -241,19 +199,8 @@ export async function searchColonias(filters: {
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
     createdBy: row.createdBy,
-    updatedBy: row.updatedBy,
-    municipio: {
-      municipioId: row.MunicipioID,
-      nombreMunicipio: row.NombreMunicipio
-    },
-    codigoPostal: {
-      codigoPostalId: row.CodigoPostalID,
-      codigoPostal: row.CodigoPostal
-    },
-    estado: {
-      estadoId: row.EstadoID,
-      nombreEstado: row.NombreEstado
-    }
+    updatedBy: row.updatedBy
+    // Sin incluir municipio, codigoPostal, estado ya que no hacemos JOIN
   }));
 }
 

@@ -1,0 +1,124 @@
+export interface Afiliado {
+  id: number;
+  folio: number | null;
+  apellidoPaterno: string | null;
+  apellidoMaterno: string | null;
+  nombre: string | null;
+  curp: string | null;
+  rfc: string | null;
+  numeroSeguroSocial: string | null;
+  fechaNacimiento: string | null;
+  entidadFederativaNacId: number | null;
+  domicilioCalle: string | null;
+  domicilioNumeroExterior: string | null;
+  domicilioNumeroInterior: string | null;
+  domicilioEntreCalle1: string | null;
+  domicilioEntreCalle2: string | null;
+  domicilioColonia: string | null;
+  domicilioCodigoPostal: number | null;
+  telefono: string | null;
+  estadoCivilId: number | null;
+  sexo: string | null;
+  correoElectronico: string | null;
+  estatus: boolean;
+  interno: number | null;
+  noEmpleado: string | null;
+  localidad: string | null;
+  municipio: string | null;
+  estado: string | null;
+  pais: string | null;
+  dependientes: number | null;
+  poseeInmuebles: boolean | null;
+  fechaCarta: string | null;
+  nacionalidad: string | null;
+  fechaAlta: string | null;
+  celular: string | null;
+  expediente: string | null;
+  quincenaAplicacion: number | null;
+  anioAplicacion: number | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreateAfiliadoData {
+  folio: number | null;
+  apellidoPaterno: string | null;
+  apellidoMaterno: string | null;
+  nombre: string | null;
+  curp: string | null;
+  rfc: string | null;
+  numeroSeguroSocial: string | null;
+  fechaNacimiento: string | null;
+  entidadFederativaNacId: number | null;
+  domicilioCalle: string | null;
+  domicilioNumeroExterior: string | null;
+  domicilioNumeroInterior: string | null;
+  domicilioEntreCalle1: string | null;
+  domicilioEntreCalle2: string | null;
+  domicilioColonia: string | null;
+  domicilioCodigoPostal: number | null;
+  telefono: string | null;
+  estadoCivilId: number | null;
+  sexo: string | null;
+  correoElectronico: string | null;
+  estatus: boolean;
+  interno: number | null;
+  noEmpleado: string | null;
+  localidad: string | null;
+  municipio: string | null;
+  estado: string | null;
+  pais: string | null;
+  dependientes: number | null;
+  poseeInmuebles: boolean | null;
+  fechaCarta: string | null;
+  nacionalidad: string | null;
+  fechaAlta: string | null;
+  celular: string | null;
+  expediente: string | null;
+  quincenaAplicacion: number | null;
+  anioAplicacion: number | null;
+}
+
+export interface UpdateAfiliadoData {
+  id: number;
+  folio?: number | null;
+  apellidoPaterno?: string | null;
+  apellidoMaterno?: string | null;
+  nombre?: string | null;
+  curp?: string | null;
+  rfc?: string | null;
+  numeroSeguroSocial?: string | null;
+  fechaNacimiento?: string | null;
+  entidadFederativaNacId?: number | null;
+  domicilioCalle?: string | null;
+  domicilioNumeroExterior?: string | null;
+  domicilioNumeroInterior?: string | null;
+  domicilioEntreCalle1?: string | null;
+  domicilioEntreCalle2?: string | null;
+  domicilioColonia?: string | null;
+  domicilioCodigoPostal?: number | null;
+  telefono?: string | null;
+  estadoCivilId?: number | null;
+  sexo?: string | null;
+  correoElectronico?: string | null;
+  estatus?: boolean;
+  interno?: number | null;
+  noEmpleado?: string | null;
+  localidad?: string | null;
+  municipio?: string | null;
+  estado?: string | null;
+  pais?: string | null;
+  dependientes?: number | null;
+  poseeInmuebles?: boolean | null;
+  fechaCarta?: string | null;
+  nacionalidad?: string | null;
+  fechaAlta?: string | null;
+  celular?: string | null;
+  expediente?: string | null;
+  quincenaAplicacion?: number | null;
+  anioAplicacion?: number | null;
+}
+
+export interface DeleteAfiliadoData {
+  id: number;
+}

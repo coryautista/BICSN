@@ -2,19 +2,29 @@ import { FastifyInstance } from 'fastify';
 import { requireAuth } from '../auth/auth.middleware.js';
 import { CreateAfiliadoSchema, UpdateAfiliadoSchema, CreateAfiliadoAfiliadoOrgMovimientoSchema, CreateCambioSueldoSchema, CreateBajaPermanenteSchema, CreateBajaSuspensionSchema, CreateBajaTerminaSuspensionSchema, CreateBajaTerminaSuspensionYBajaSchema } from './afiliado.schemas.js';
 import {
-  getAllAfiliadosService,
-  getAfiliadoByIdService,
-  createAfiliadoService,
-  updateAfiliadoService,
-  deleteAfiliadoService,
-  createAfiliadoAfiliadoOrgMovimientoService,
-  validateInternoInFirebird,
-  getMovimientosQuincenalesService
+  createAfiliadoAfiliadoOrgMovimientoService
 } from './afiliado.service.js';
 import { ok, fail } from '../../utils/http.js';
+import { GetAllAfiliadosQuery } from './application/queries/GetAllAfiliadosQuery.js';
+import { GetAfiliadoByIdQuery } from './application/queries/GetAfiliadoByIdQuery.js';
+import { ValidateInternoInFirebirdQuery } from './application/queries/ValidateInternoInFirebirdQuery.js';
+import { GetMovimientosQuincenalesQuery } from './application/queries/GetMovimientosQuincenalesQuery.js';
+import { CreateAfiliadoCommand } from './application/commands/CreateAfiliadoCommand.js';
+import { UpdateAfiliadoCommand } from './application/commands/UpdateAfiliadoCommand.js';
+import { DeleteAfiliadoCommand } from './application/commands/DeleteAfiliadoCommand.js';
+import { CreateCompleteAfiliadoCommand } from './application/commands/CreateCompleteAfiliadoCommand.js';
+import { handleAfiliadoError } from './infrastructure/errorHandler.js';
 
 // Routes for Afiliado CRUD operations
 export default async function afiliadoRoutes(app: FastifyInstance) {
+  const getAllAfiliadosQuery = app.diContainer.resolve<GetAllAfiliadosQuery>('getAllAfiliadosQuery');
+  const getAfiliadoByIdQuery = app.diContainer.resolve<GetAfiliadoByIdQuery>('getAfiliadoByIdQuery');
+  const validateInternoInFirebirdQuery = app.diContainer.resolve<ValidateInternoInFirebirdQuery>('validateInternoInFirebirdQuery');
+  const getMovimientosQuincenalesQuery = app.diContainer.resolve<GetMovimientosQuincenalesQuery>('getMovimientosQuincenalesQuery');
+  const createAfiliadoCommand = app.diContainer.resolve<CreateAfiliadoCommand>('createAfiliadoCommand');
+  const updateAfiliadoCommand = app.diContainer.resolve<UpdateAfiliadoCommand>('updateAfiliadoCommand');
+  const deleteAfiliadoCommand = app.diContainer.resolve<DeleteAfiliadoCommand>('deleteAfiliadoCommand');
+  const createCompleteAfiliadoCommand = app.diContainer.resolve<CreateCompleteAfiliadoCommand>('createCompleteAfiliadoCommand');
 
   // GET /afiliado - List all records
   app.get('/afiliado', {
@@ -90,13 +100,12 @@ export default async function afiliadoRoutes(app: FastifyInstance) {
         }
       }
     }
-  }, async (_req, reply) => {
+  }, async (req, reply) => {
     try {
-      const records = await getAllAfiliadosService();
+      const records = await getAllAfiliadosQuery.execute();
       return reply.send(ok(records));
     } catch (error: any) {
-      console.error('Error listing afiliado:', error);
-      return reply.code(500).send(fail('AFILIADO_LIST_FAILED'));
+      return handleAfiliadoError(error, reply, { operation: 'getAllAfiliados', user: req.user?.sub });
     }
   });
 
@@ -163,6 +172,19 @@ export default async function afiliadoRoutes(app: FastifyInstance) {
             }
           }
         },
+        400: {
+          type: 'object',
+          properties: {
+            ok: { type: 'boolean' },
+            error: {
+              type: 'object',
+              properties: {
+                code: { type: 'string' },
+                message: { type: 'string' }
+              }
+            }
+          }
+        },
         404: {
           type: 'object',
           properties: {
@@ -194,14 +216,22 @@ export default async function afiliadoRoutes(app: FastifyInstance) {
   }, async (req, reply) => {
     try {
       const { id } = req.params as { id: number };
-      const record = await getAfiliadoByIdService(id);
+
+      // Validar parámetro ID
+      if (!id || id <= 0) {
+        return reply.code(400).send({
+          ok: false,
+          error: {
+            code: 'VALIDATION_ERROR',
+            message: 'El ID del afiliado debe ser un número positivo'
+          }
+        });
+      }
+
+      const record = await getAfiliadoByIdQuery.execute(id);
       return reply.send(ok(record));
     } catch (error: any) {
-      if (error.message === 'AFILIADO_NOT_FOUND') {
-        return reply.code(404).send(fail('AFILIADO_NOT_FOUND'));
-      }
-      console.error('Error getting afiliado:', error);
-      return reply.code(500).send(fail('AFILIADO_GET_FAILED'));
+      return handleAfiliadoError(error, reply, { operation: 'getAfiliadoById', user: req.user?.sub, afiliadoId: (req.params as any)?.id });
     }
   });
 
@@ -295,7 +325,7 @@ export default async function afiliadoRoutes(app: FastifyInstance) {
     }
 
     try {
-      const record = await createAfiliadoService({
+      const record = await createAfiliadoCommand.execute({
         folio: parsed.data.folio,
         apellidoPaterno: parsed.data.apellidoPaterno ?? null,
         apellidoMaterno: parsed.data.apellidoMaterno ?? null,
@@ -335,8 +365,7 @@ export default async function afiliadoRoutes(app: FastifyInstance) {
       });
       return reply.code(201).send(ok(record));
     } catch (error: any) {
-      console.error('Error creating afiliado:', error);
-      return reply.code(500).send(fail('AFILIADO_CREATE_FAILED'));
+      return handleAfiliadoError(error, reply, { operation: 'createAfiliado', user: req.user?.sub });
     }
   });
 
@@ -426,19 +455,6 @@ export default async function afiliadoRoutes(app: FastifyInstance) {
             }
           }
         },
-        400: {
-          type: 'object',
-          properties: {
-            ok: { type: 'boolean' },
-            error: {
-              type: 'object',
-              properties: {
-                code: { type: 'string' },
-                message: { type: 'string' }
-              }
-            }
-          }
-        },
         500: {
           type: 'object',
           properties: {
@@ -462,14 +478,10 @@ export default async function afiliadoRoutes(app: FastifyInstance) {
     }
 
     try {
-      const record = await updateAfiliadoService(id, parsed.data);
+      const record = await updateAfiliadoCommand.execute({ id, ...parsed.data });
       return reply.send(ok(record));
     } catch (error: any) {
-      if (error.message === 'AFILIADO_NOT_FOUND') {
-        return reply.code(404).send(fail('AFILIADO_NOT_FOUND'));
-      }
-      console.error('Error updating afiliado:', error);
-      return reply.code(500).send(fail('AFILIADO_UPDATE_FAILED'));
+      return handleAfiliadoError(error, reply, { operation: 'updateAfiliado', user: req.user?.sub, afiliadoId: id });
     }
   });
 
@@ -529,8 +541,139 @@ export default async function afiliadoRoutes(app: FastifyInstance) {
           // Movimiento fields
           observaciones: { type: 'string', maxLength: 1024, nullable: true }
         }
+      },
+      response: {
+        201: {
+          type: 'object',
+          properties: {
+            ok: { type: 'boolean' },
+            data: {
+              type: 'object',
+              properties: {
+                afiliado: {
+                  type: 'object',
+                  properties: {
+                    id: { type: 'number' },
+                    folio: { type: 'number' },
+                    apellidoPaterno: { type: 'string', nullable: true },
+                    apellidoMaterno: { type: 'string', nullable: true },
+                    nombre: { type: 'string', nullable: true },
+                    curp: { type: 'string', nullable: true },
+                    rfc: { type: 'string', nullable: true },
+                    numeroSeguroSocial: { type: 'string', nullable: true },
+                    fechaNacimiento: { type: 'string', nullable: true },
+                    entidadFederativaNacId: { type: 'number', nullable: true },
+                    domicilioCalle: { type: 'string', nullable: true },
+                    domicilioNumeroExterior: { type: 'string', nullable: true },
+                    domicilioNumeroInterior: { type: 'string', nullable: true },
+                    domicilioEntreCalle1: { type: 'string', nullable: true },
+                    domicilioEntreCalle2: { type: 'string', nullable: true },
+                    domicilioColonia: { type: 'string', nullable: true },
+                    domicilioCodigoPostal: { type: 'number', nullable: true },
+                    telefono: { type: 'string', nullable: true },
+                    estadoCivilId: { type: 'number', nullable: true },
+                    sexo: { type: 'string', nullable: true },
+                    correoElectronico: { type: 'string', nullable: true },
+                    estatus: { type: 'boolean' },
+                    interno: { type: 'number', nullable: true },
+                    noEmpleado: { type: 'string', nullable: true },
+                    localidad: { type: 'string', nullable: true },
+                    municipio: { type: 'string', nullable: true },
+                    estado: { type: 'string', nullable: true },
+                    pais: { type: 'string', nullable: true },
+                    dependientes: { type: 'number', nullable: true },
+                    poseeInmuebles: { type: 'boolean', nullable: true },
+                    fechaCarta: { type: 'string', nullable: true },
+                    nacionalidad: { type: 'string', nullable: true },
+                    fechaAlta: { type: 'string', nullable: true },
+                    celular: { type: 'string', nullable: true },
+                    expediente: { type: 'string', nullable: true },
+                    quincenaAplicacion: { type: 'number', nullable: true },
+                    anioAplicacion: { type: 'number', nullable: true },
+                    createdAt: { type: 'string' },
+                    updatedAt: { type: 'string' }
+                  }
+                },
+                afiliadoOrg: {
+                  type: 'object',
+                  properties: {
+                    id: { type: 'number' },
+                    afiliadoId: { type: 'number' },
+                    nivel0Id: { type: 'number', nullable: true },
+                    nivel1Id: { type: 'number', nullable: true },
+                    nivel2Id: { type: 'number', nullable: true },
+                    nivel3Id: { type: 'number', nullable: true },
+                    claveOrganica0: { type: 'string', nullable: true },
+                    claveOrganica1: { type: 'string', nullable: true },
+                    claveOrganica2: { type: 'string', nullable: true },
+                    claveOrganica3: { type: 'string', nullable: true },
+                    interno: { type: 'number', nullable: true },
+                    sueldo: { type: 'number', nullable: true },
+                    otrasPrestaciones: { type: 'number', nullable: true },
+                    quinquenios: { type: 'number', nullable: true },
+                    activo: { type: 'boolean', nullable: true },
+                    fechaMovAlt: { type: 'string', nullable: true },
+                    orgs1: { type: 'string', nullable: true },
+                    orgs2: { type: 'string', nullable: true },
+                    orgs3: { type: 'string', nullable: true },
+                    orgs4: { type: 'string', nullable: true },
+                    dSueldo: { type: 'string', nullable: true },
+                    dOtrasPrestaciones: { type: 'string', nullable: true },
+                    dQuinquenios: { type: 'string', nullable: true },
+                    aplicar: { type: 'boolean', nullable: true },
+                    bc: { type: 'string', nullable: true },
+                    porcentaje: { type: 'number', nullable: true },
+                    createdAt: { type: 'string' },
+                    updatedAt: { type: 'string' }
+                  }
+                },
+                movimiento: {
+                  type: 'object',
+                  properties: {
+                    id: { type: 'number' },
+                    quincenaId: { type: 'string' },
+                    tipoMovimientoId: { type: 'number' },
+                    afiliadoId: { type: 'number' },
+                    fecha: { type: 'string', nullable: true },
+                    observaciones: { type: 'string', nullable: true },
+                    folio: { type: 'string', nullable: true },
+                    estatus: { type: 'string' },
+                    creadoPor: { type: 'number', nullable: true },
+                    creadoPorUid: { type: 'string', nullable: true },
+                    createdAt: { type: 'string' }
+                  }
+                }
+              }
+            }
+          }
+        },
+        400: {
+          type: 'object',
+          properties: {
+            ok: { type: 'boolean' },
+            error: {
+              type: 'object',
+              properties: {
+                code: { type: 'string' },
+                message: { type: 'string' }
+              }
+            }
+          }
+        },
+        500: {
+          type: 'object',
+          properties: {
+            ok: { type: 'boolean' },
+            error: {
+              type: 'object',
+              properties: {
+                code: { type: 'string' },
+                message: { type: 'string' }
+              }
+            }
+          }
+        }
       }
-      // Response schema removed to allow full object serialization
     }
   }, async (req, reply) => {
     const parsed = CreateAfiliadoAfiliadoOrgMovimientoSchema.safeParse(req.body);
@@ -549,45 +692,85 @@ export default async function afiliadoRoutes(app: FastifyInstance) {
       const claveOrganica2 = req.user?.idOrganica2 ?? null;
       const claveOrganica3 = req.user?.idOrganica3 ?? null;
 
-      const result = await createAfiliadoAfiliadoOrgMovimientoService({
-        ...parsed.data,
-        // Valores por defecto que pueden ser sobrescritos
-        estatus: parsed.data.estatus ?? true,
-        interno: parsed.data.interno ?? 0,
-        creadoPor: userId ?? 1,
-        tipoMovimientoId: 1,
-        // Valores opcionales vacíos
-        domicilioNumeroInterior: parsed.data.domicilioNumeroInterior ?? '',
-        bc: parsed.data.bc ?? '',
-        // Campos automáticos que no están en el swagger
-        activo: true,
-        aplicar: true,
-        poseeInmuebles: false,
-        dependientes: 0,
-        estatusMov: 'A',
-        folioMov: '',
-        // Asignar claveOrganica del usuario autenticado (sobrescribe los valores del body)
-        claveOrganica0,
-        claveOrganica1,
-        claveOrganica2,
-        claveOrganica3,
-        // nivel0Id a nivel3Id no se registran (siempre null)
-        nivel0Id: null,
-        nivel1Id: null,
-        nivel2Id: null,
-        nivel3Id: null,
-        // Construir orgs1 a orgs4 concatenando claveOrganica
-        orgs1: [claveOrganica0, claveOrganica1].filter(Boolean).join(''),
-        orgs2: [claveOrganica0, claveOrganica1, claveOrganica2].filter(Boolean).join(''),
-        orgs3: [claveOrganica0, claveOrganica1, claveOrganica2, claveOrganica3].filter(Boolean).join(''),
-        orgs4: [claveOrganica0, claveOrganica1, claveOrganica2, claveOrganica3].filter(Boolean).join(''),
-        // Agregar creadoPorUid del usuario autenticado
-        creadoPorUid: userUid
+      const result = await createCompleteAfiliadoCommand.execute({
+        afiliado: {
+          folio: undefined, // Se auto-genera
+          apellidoPaterno: parsed.data.apellidoPaterno ?? null,
+          apellidoMaterno: parsed.data.apellidoMaterno ?? null,
+          nombre: parsed.data.nombre ?? null,
+          curp: parsed.data.curp ?? null,
+          rfc: parsed.data.rfc ?? null,
+          numeroSeguroSocial: parsed.data.numeroSeguroSocial ?? null,
+          fechaNacimiento: parsed.data.fechaNacimiento ?? null,
+          entidadFederativaNacId: parsed.data.entidadFederativaNacId ?? null,
+          domicilioCalle: parsed.data.domicilioCalle ?? null,
+          domicilioNumeroExterior: parsed.data.domicilioNumeroExterior ?? null,
+          domicilioNumeroInterior: parsed.data.domicilioNumeroInterior ?? null,
+          domicilioEntreCalle1: parsed.data.domicilioEntreCalle1 ?? null,
+          domicilioEntreCalle2: parsed.data.domicilioEntreCalle2 ?? null,
+          domicilioColonia: parsed.data.domicilioColonia ?? null,
+          domicilioCodigoPostal: parsed.data.domicilioCodigoPostal ?? null,
+          telefono: parsed.data.telefono ?? null,
+          estadoCivilId: parsed.data.estadoCivilId ?? null,
+          sexo: parsed.data.sexo ?? null,
+          correoElectronico: parsed.data.correoElectronico ?? null,
+          estatus: parsed.data.estatus ?? true,
+          interno: parsed.data.interno ?? 0,
+          noEmpleado: parsed.data.noEmpleado ?? null,
+          localidad: parsed.data.localidad ?? null,
+          municipio: parsed.data.municipio ?? null,
+          estado: parsed.data.estado ?? null,
+          pais: parsed.data.pais ?? null,
+          dependientes: 0,
+          poseeInmuebles: false,
+          fechaCarta: parsed.data.fechaCarta ?? null,
+          nacionalidad: parsed.data.nacionalidad ?? null,
+          fechaAlta: parsed.data.fechaAlta ?? null,
+          celular: parsed.data.celular ?? null,
+          expediente: parsed.data.expediente ?? null,
+          quincenaAplicacion: undefined, // Se calcula automáticamente
+          anioAplicacion: undefined // Se calcula automáticamente
+        },
+        afiliadoOrg: {
+          nivel0Id: null,
+          nivel1Id: null,
+          nivel2Id: null,
+          nivel3Id: null,
+          claveOrganica0,
+          claveOrganica1,
+          claveOrganica2,
+          claveOrganica3,
+          interno: parsed.data.internoOrg ?? null,
+          sueldo: parsed.data.sueldo ?? null,
+          otrasPrestaciones: parsed.data.otrasPrestaciones ?? null,
+          quinquenios: parsed.data.quinquenios ?? null,
+          activo: true,
+          fechaMovAlt: null,
+          orgs1: [claveOrganica0, claveOrganica1].filter(Boolean).join(''),
+          orgs2: [claveOrganica0, claveOrganica1, claveOrganica2].filter(Boolean).join(''),
+          orgs3: [claveOrganica0, claveOrganica1, claveOrganica2, claveOrganica3].filter(Boolean).join(''),
+          orgs4: [claveOrganica0, claveOrganica1, claveOrganica2, claveOrganica3].filter(Boolean).join(''),
+          dSueldo: parsed.data.dSueldo ?? null,
+          dOtrasPrestaciones: parsed.data.dOtrasPrestaciones ?? null,
+          dQuinquenios: parsed.data.dQuinquenios ?? null,
+          aplicar: true,
+          bc: parsed.data.bc ?? null,
+          porcentaje: parsed.data.porcentaje ?? null
+        },
+        movimiento: {
+          quincenaId: undefined, // Se calcula automáticamente
+          tipoMovimientoId: 1,
+          fecha: null,
+          observaciones: parsed.data.observaciones ?? null,
+          folio: '',
+          estatus: 'A',
+          creadoPor: userId ?? 1,
+          creadoPorUid: userUid
+        }
       });
       return reply.code(201).send(ok(result));
     } catch (error: any) {
-      console.error('Error creating complete afiliado:', error);
-      return reply.code(500).send(fail(`AFILIADO_CREATE_FAILED: ${error.message || error}`));
+      return handleAfiliadoError(error, reply, { operation: 'createCompleteAfiliado', user: req.user?.sub });
     }
   });
 
@@ -647,6 +830,151 @@ export default async function afiliadoRoutes(app: FastifyInstance) {
           // Movimiento fields
           observaciones: { type: 'string', maxLength: 1024, nullable: true }
         }
+      },
+      response: {
+        201: {
+          type: 'object',
+          properties: {
+            ok: { type: 'boolean' },
+            data: {
+              type: 'object',
+              properties: {
+                afiliado: {
+                  type: 'object',
+                  properties: {
+                    id: { type: 'number' },
+                    folio: { type: 'number' },
+                    apellidoPaterno: { type: 'string', nullable: true },
+                    apellidoMaterno: { type: 'string', nullable: true },
+                    nombre: { type: 'string', nullable: true },
+                    curp: { type: 'string', nullable: true },
+                    rfc: { type: 'string', nullable: true },
+                    numeroSeguroSocial: { type: 'string', nullable: true },
+                    fechaNacimiento: { type: 'string', nullable: true },
+                    entidadFederativaNacId: { type: 'number', nullable: true },
+                    domicilioCalle: { type: 'string', nullable: true },
+                    domicilioNumeroExterior: { type: 'string', nullable: true },
+                    domicilioNumeroInterior: { type: 'string', nullable: true },
+                    domicilioEntreCalle1: { type: 'string', nullable: true },
+                    domicilioEntreCalle2: { type: 'string', nullable: true },
+                    domicilioColonia: { type: 'string', nullable: true },
+                    domicilioCodigoPostal: { type: 'number', nullable: true },
+                    telefono: { type: 'string', nullable: true },
+                    estadoCivilId: { type: 'number', nullable: true },
+                    sexo: { type: 'string', nullable: true },
+                    correoElectronico: { type: 'string', nullable: true },
+                    estatus: { type: 'boolean' },
+                    interno: { type: 'number', nullable: true },
+                    noEmpleado: { type: 'string', nullable: true },
+                    localidad: { type: 'string', nullable: true },
+                    municipio: { type: 'string', nullable: true },
+                    estado: { type: 'string', nullable: true },
+                    pais: { type: 'string', nullable: true },
+                    dependientes: { type: 'number', nullable: true },
+                    poseeInmuebles: { type: 'boolean', nullable: true },
+                    fechaCarta: { type: 'string', nullable: true },
+                    nacionalidad: { type: 'string', nullable: true },
+                    fechaAlta: { type: 'string', nullable: true },
+                    celular: { type: 'string', nullable: true },
+                    expediente: { type: 'string', nullable: true },
+                    quincenaAplicacion: { type: 'number', nullable: true },
+                    anioAplicacion: { type: 'number', nullable: true },
+                    createdAt: { type: 'string' },
+                    updatedAt: { type: 'string' }
+                  }
+                },
+                afiliadoOrg: {
+                  type: 'object',
+                  properties: {
+                    id: { type: 'number' },
+                    afiliadoId: { type: 'number' },
+                    nivel0Id: { type: 'number', nullable: true },
+                    nivel1Id: { type: 'number', nullable: true },
+                    nivel2Id: { type: 'number', nullable: true },
+                    nivel3Id: { type: 'number', nullable: true },
+                    claveOrganica0: { type: 'string', nullable: true },
+                    claveOrganica1: { type: 'string', nullable: true },
+                    claveOrganica2: { type: 'string', nullable: true },
+                    claveOrganica3: { type: 'string', nullable: true },
+                    interno: { type: 'number', nullable: true },
+                    sueldo: { type: 'number', nullable: true },
+                    otrasPrestaciones: { type: 'number', nullable: true },
+                    quinquenios: { type: 'number', nullable: true },
+                    activo: { type: 'boolean', nullable: true },
+                    fechaMovAlt: { type: 'string', nullable: true },
+                    orgs1: { type: 'string', nullable: true },
+                    orgs2: { type: 'string', nullable: true },
+                    orgs3: { type: 'string', nullable: true },
+                    orgs4: { type: 'string', nullable: true },
+                    dSueldo: { type: 'string', nullable: true },
+                    dOtrasPrestaciones: { type: 'string', nullable: true },
+                    dQuinquenios: { type: 'string', nullable: true },
+                    aplicar: { type: 'boolean', nullable: true },
+                    bc: { type: 'string', nullable: true },
+                    porcentaje: { type: 'number', nullable: true },
+                    createdAt: { type: 'string' },
+                    updatedAt: { type: 'string' }
+                  }
+                },
+                movimiento: {
+                  type: 'object',
+                  properties: {
+                    id: { type: 'number' },
+                    quincenaId: { type: 'string' },
+                    tipoMovimientoId: { type: 'number' },
+                    afiliadoId: { type: 'number' },
+                    fecha: { type: 'string', nullable: true },
+                    observaciones: { type: 'string', nullable: true },
+                    folio: { type: 'string', nullable: true },
+                    estatus: { type: 'string' },
+                    creadoPor: { type: 'number', nullable: true },
+                    creadoPorUid: { type: 'string', nullable: true },
+                    createdAt: { type: 'string' }
+                  }
+                }
+              }
+            }
+          }
+        },
+        400: {
+          type: 'object',
+          properties: {
+            ok: { type: 'boolean' },
+            error: {
+              type: 'object',
+              properties: {
+                code: { type: 'string' },
+                message: { type: 'string' }
+              }
+            }
+          }
+        },
+        404: {
+          type: 'object',
+          properties: {
+            ok: { type: 'boolean' },
+            error: {
+              type: 'object',
+              properties: {
+                code: { type: 'string' },
+                message: { type: 'string' }
+              }
+            }
+          }
+        },
+        500: {
+          type: 'object',
+          properties: {
+            ok: { type: 'boolean' },
+            error: {
+              type: 'object',
+              properties: {
+                code: { type: 'string' },
+                message: { type: 'string' }
+              }
+            }
+          }
+        }
       }
     }
   }, async (req, reply) => {
@@ -657,7 +985,7 @@ export default async function afiliadoRoutes(app: FastifyInstance) {
 
     try {
       // Validar que el interno exista en Firebird
-      const internoExists = await validateInternoInFirebird(parsed.data.interno!);
+      const internoExists = await validateInternoInFirebirdQuery.execute(parsed.data.interno!);
       if (!internoExists) {
         return reply.code(404).send(fail('INTERNO_NOT_FOUND_IN_FIREBIRD: El número de interno no existe en las tablas PERSONAL y ORG_PERSONAL'));
       }
@@ -700,8 +1028,7 @@ export default async function afiliadoRoutes(app: FastifyInstance) {
       });
       return reply.code(201).send(ok(result));
     } catch (error: any) {
-      console.error('Error creating salary change:', error);
-      return reply.code(500).send(fail(`SALARY_CHANGE_CREATE_FAILED: ${error.message || error}`));
+      return handleAfiliadoError(error, reply, { operation: 'createCambioSueldo', user: req.user?.sub });
     }
   });
 
@@ -761,6 +1088,151 @@ export default async function afiliadoRoutes(app: FastifyInstance) {
           // Movimiento fields
           observaciones: { type: 'string', maxLength: 1024, nullable: true }
         }
+      },
+      response: {
+        201: {
+          type: 'object',
+          properties: {
+            ok: { type: 'boolean' },
+            data: {
+              type: 'object',
+              properties: {
+                afiliado: {
+                  type: 'object',
+                  properties: {
+                    id: { type: 'number' },
+                    folio: { type: 'number' },
+                    apellidoPaterno: { type: 'string', nullable: true },
+                    apellidoMaterno: { type: 'string', nullable: true },
+                    nombre: { type: 'string', nullable: true },
+                    curp: { type: 'string', nullable: true },
+                    rfc: { type: 'string', nullable: true },
+                    numeroSeguroSocial: { type: 'string', nullable: true },
+                    fechaNacimiento: { type: 'string', nullable: true },
+                    entidadFederativaNacId: { type: 'number', nullable: true },
+                    domicilioCalle: { type: 'string', nullable: true },
+                    domicilioNumeroExterior: { type: 'string', nullable: true },
+                    domicilioNumeroInterior: { type: 'string', nullable: true },
+                    domicilioEntreCalle1: { type: 'string', nullable: true },
+                    domicilioEntreCalle2: { type: 'string', nullable: true },
+                    domicilioColonia: { type: 'string', nullable: true },
+                    domicilioCodigoPostal: { type: 'number', nullable: true },
+                    telefono: { type: 'string', nullable: true },
+                    estadoCivilId: { type: 'number', nullable: true },
+                    sexo: { type: 'string', nullable: true },
+                    correoElectronico: { type: 'string', nullable: true },
+                    estatus: { type: 'boolean' },
+                    interno: { type: 'number', nullable: true },
+                    noEmpleado: { type: 'string', nullable: true },
+                    localidad: { type: 'string', nullable: true },
+                    municipio: { type: 'string', nullable: true },
+                    estado: { type: 'string', nullable: true },
+                    pais: { type: 'string', nullable: true },
+                    dependientes: { type: 'number', nullable: true },
+                    poseeInmuebles: { type: 'boolean', nullable: true },
+                    fechaCarta: { type: 'string', nullable: true },
+                    nacionalidad: { type: 'string', nullable: true },
+                    fechaAlta: { type: 'string', nullable: true },
+                    celular: { type: 'string', nullable: true },
+                    expediente: { type: 'string', nullable: true },
+                    quincenaAplicacion: { type: 'number', nullable: true },
+                    anioAplicacion: { type: 'number', nullable: true },
+                    createdAt: { type: 'string' },
+                    updatedAt: { type: 'string' }
+                  }
+                },
+                afiliadoOrg: {
+                  type: 'object',
+                  properties: {
+                    id: { type: 'number' },
+                    afiliadoId: { type: 'number' },
+                    nivel0Id: { type: 'number', nullable: true },
+                    nivel1Id: { type: 'number', nullable: true },
+                    nivel2Id: { type: 'number', nullable: true },
+                    nivel3Id: { type: 'number', nullable: true },
+                    claveOrganica0: { type: 'string', nullable: true },
+                    claveOrganica1: { type: 'string', nullable: true },
+                    claveOrganica2: { type: 'string', nullable: true },
+                    claveOrganica3: { type: 'string', nullable: true },
+                    interno: { type: 'number', nullable: true },
+                    sueldo: { type: 'number', nullable: true },
+                    otrasPrestaciones: { type: 'number', nullable: true },
+                    quinquenios: { type: 'number', nullable: true },
+                    activo: { type: 'boolean', nullable: true },
+                    fechaMovAlt: { type: 'string', nullable: true },
+                    orgs1: { type: 'string', nullable: true },
+                    orgs2: { type: 'string', nullable: true },
+                    orgs3: { type: 'string', nullable: true },
+                    orgs4: { type: 'string', nullable: true },
+                    dSueldo: { type: 'string', nullable: true },
+                    dOtrasPrestaciones: { type: 'string', nullable: true },
+                    dQuinquenios: { type: 'string', nullable: true },
+                    aplicar: { type: 'boolean', nullable: true },
+                    bc: { type: 'string', nullable: true },
+                    porcentaje: { type: 'number', nullable: true },
+                    createdAt: { type: 'string' },
+                    updatedAt: { type: 'string' }
+                  }
+                },
+                movimiento: {
+                  type: 'object',
+                  properties: {
+                    id: { type: 'number' },
+                    quincenaId: { type: 'string' },
+                    tipoMovimientoId: { type: 'number' },
+                    afiliadoId: { type: 'number' },
+                    fecha: { type: 'string', nullable: true },
+                    observaciones: { type: 'string', nullable: true },
+                    folio: { type: 'string', nullable: true },
+                    estatus: { type: 'string' },
+                    creadoPor: { type: 'number', nullable: true },
+                    creadoPorUid: { type: 'string', nullable: true },
+                    createdAt: { type: 'string' }
+                  }
+                }
+              }
+            }
+          }
+        },
+        400: {
+          type: 'object',
+          properties: {
+            ok: { type: 'boolean' },
+            error: {
+              type: 'object',
+              properties: {
+                code: { type: 'string' },
+                message: { type: 'string' }
+              }
+            }
+          }
+        },
+        404: {
+          type: 'object',
+          properties: {
+            ok: { type: 'boolean' },
+            error: {
+              type: 'object',
+              properties: {
+                code: { type: 'string' },
+                message: { type: 'string' }
+              }
+            }
+          }
+        },
+        500: {
+          type: 'object',
+          properties: {
+            ok: { type: 'boolean' },
+            error: {
+              type: 'object',
+              properties: {
+                code: { type: 'string' },
+                message: { type: 'string' }
+              }
+            }
+          }
+        }
       }
     }
   }, async (req, reply) => {
@@ -771,7 +1243,7 @@ export default async function afiliadoRoutes(app: FastifyInstance) {
 
     try {
       // Validar que el interno exista en Firebird
-      const internoExists = await validateInternoInFirebird(parsed.data.interno!);
+      const internoExists = await validateInternoInFirebirdQuery.execute(parsed.data.interno!);
       if (!internoExists) {
         return reply.code(404).send(fail('INTERNO_NOT_FOUND_IN_FIREBIRD: El número de interno no existe en las tablas PERSONAL y ORG_PERSONAL'));
       }
@@ -814,8 +1286,7 @@ export default async function afiliadoRoutes(app: FastifyInstance) {
       });
       return reply.code(201).send(ok(result));
     } catch (error: any) {
-      console.error('Error creating permanent discharge:', error);
-      return reply.code(500).send(fail(`PERMANENT_DISCHARGE_CREATE_FAILED: ${error.message || error}`));
+      return handleAfiliadoError(error, reply, { operation: 'createBajaPermanente', user: req.user?.sub });
     }
   });
 
@@ -875,6 +1346,151 @@ export default async function afiliadoRoutes(app: FastifyInstance) {
           // Movimiento fields
           observaciones: { type: 'string', maxLength: 1024, nullable: true }
         }
+      },
+      response: {
+        201: {
+          type: 'object',
+          properties: {
+            ok: { type: 'boolean' },
+            data: {
+              type: 'object',
+              properties: {
+                afiliado: {
+                  type: 'object',
+                  properties: {
+                    id: { type: 'number' },
+                    folio: { type: 'number' },
+                    apellidoPaterno: { type: 'string', nullable: true },
+                    apellidoMaterno: { type: 'string', nullable: true },
+                    nombre: { type: 'string', nullable: true },
+                    curp: { type: 'string', nullable: true },
+                    rfc: { type: 'string', nullable: true },
+                    numeroSeguroSocial: { type: 'string', nullable: true },
+                    fechaNacimiento: { type: 'string', nullable: true },
+                    entidadFederativaNacId: { type: 'number', nullable: true },
+                    domicilioCalle: { type: 'string', nullable: true },
+                    domicilioNumeroExterior: { type: 'string', nullable: true },
+                    domicilioNumeroInterior: { type: 'string', nullable: true },
+                    domicilioEntreCalle1: { type: 'string', nullable: true },
+                    domicilioEntreCalle2: { type: 'string', nullable: true },
+                    domicilioColonia: { type: 'string', nullable: true },
+                    domicilioCodigoPostal: { type: 'number', nullable: true },
+                    telefono: { type: 'string', nullable: true },
+                    estadoCivilId: { type: 'number', nullable: true },
+                    sexo: { type: 'string', nullable: true },
+                    correoElectronico: { type: 'string', nullable: true },
+                    estatus: { type: 'boolean' },
+                    interno: { type: 'number', nullable: true },
+                    noEmpleado: { type: 'string', nullable: true },
+                    localidad: { type: 'string', nullable: true },
+                    municipio: { type: 'string', nullable: true },
+                    estado: { type: 'string', nullable: true },
+                    pais: { type: 'string', nullable: true },
+                    dependientes: { type: 'number', nullable: true },
+                    poseeInmuebles: { type: 'boolean', nullable: true },
+                    fechaCarta: { type: 'string', nullable: true },
+                    nacionalidad: { type: 'string', nullable: true },
+                    fechaAlta: { type: 'string', nullable: true },
+                    celular: { type: 'string', nullable: true },
+                    expediente: { type: 'string', nullable: true },
+                    quincenaAplicacion: { type: 'number', nullable: true },
+                    anioAplicacion: { type: 'number', nullable: true },
+                    createdAt: { type: 'string' },
+                    updatedAt: { type: 'string' }
+                  }
+                },
+                afiliadoOrg: {
+                  type: 'object',
+                  properties: {
+                    id: { type: 'number' },
+                    afiliadoId: { type: 'number' },
+                    nivel0Id: { type: 'number', nullable: true },
+                    nivel1Id: { type: 'number', nullable: true },
+                    nivel2Id: { type: 'number', nullable: true },
+                    nivel3Id: { type: 'number', nullable: true },
+                    claveOrganica0: { type: 'string', nullable: true },
+                    claveOrganica1: { type: 'string', nullable: true },
+                    claveOrganica2: { type: 'string', nullable: true },
+                    claveOrganica3: { type: 'string', nullable: true },
+                    interno: { type: 'number', nullable: true },
+                    sueldo: { type: 'number', nullable: true },
+                    otrasPrestaciones: { type: 'number', nullable: true },
+                    quinquenios: { type: 'number', nullable: true },
+                    activo: { type: 'boolean', nullable: true },
+                    fechaMovAlt: { type: 'string', nullable: true },
+                    orgs1: { type: 'string', nullable: true },
+                    orgs2: { type: 'string', nullable: true },
+                    orgs3: { type: 'string', nullable: true },
+                    orgs4: { type: 'string', nullable: true },
+                    dSueldo: { type: 'string', nullable: true },
+                    dOtrasPrestaciones: { type: 'string', nullable: true },
+                    dQuinquenios: { type: 'string', nullable: true },
+                    aplicar: { type: 'boolean', nullable: true },
+                    bc: { type: 'string', nullable: true },
+                    porcentaje: { type: 'number', nullable: true },
+                    createdAt: { type: 'string' },
+                    updatedAt: { type: 'string' }
+                  }
+                },
+                movimiento: {
+                  type: 'object',
+                  properties: {
+                    id: { type: 'number' },
+                    quincenaId: { type: 'string' },
+                    tipoMovimientoId: { type: 'number' },
+                    afiliadoId: { type: 'number' },
+                    fecha: { type: 'string', nullable: true },
+                    observaciones: { type: 'string', nullable: true },
+                    folio: { type: 'string', nullable: true },
+                    estatus: { type: 'string' },
+                    creadoPor: { type: 'number', nullable: true },
+                    creadoPorUid: { type: 'string', nullable: true },
+                    createdAt: { type: 'string' }
+                  }
+                }
+              }
+            }
+          }
+        },
+        400: {
+          type: 'object',
+          properties: {
+            ok: { type: 'boolean' },
+            error: {
+              type: 'object',
+              properties: {
+                code: { type: 'string' },
+                message: { type: 'string' }
+              }
+            }
+          }
+        },
+        404: {
+          type: 'object',
+          properties: {
+            ok: { type: 'boolean' },
+            error: {
+              type: 'object',
+              properties: {
+                code: { type: 'string' },
+                message: { type: 'string' }
+              }
+            }
+          }
+        },
+        500: {
+          type: 'object',
+          properties: {
+            ok: { type: 'boolean' },
+            error: {
+              type: 'object',
+              properties: {
+                code: { type: 'string' },
+                message: { type: 'string' }
+              }
+            }
+          }
+        }
       }
     }
   }, async (req, reply) => {
@@ -885,7 +1501,7 @@ export default async function afiliadoRoutes(app: FastifyInstance) {
 
     try {
       // Validar que el interno exista en Firebird
-      const internoExists = await validateInternoInFirebird(parsed.data.interno!);
+      const internoExists = await validateInternoInFirebirdQuery.execute(parsed.data.interno!);
       if (!internoExists) {
         return reply.code(404).send(fail('INTERNO_NOT_FOUND_IN_FIREBIRD: El número de interno no existe en las tablas PERSONAL y ORG_PERSONAL'));
       }
@@ -928,8 +1544,7 @@ export default async function afiliadoRoutes(app: FastifyInstance) {
       });
       return reply.code(201).send(ok(result));
     } catch (error: any) {
-      console.error('Error creating affiliation suspension:', error);
-      return reply.code(500).send(fail(`AFFILIATION_SUSPENSION_CREATE_FAILED: ${error.message || error}`));
+      return handleAfiliadoError(error, reply, { operation: 'createBajaSuspension', user: req.user?.sub });
     }
   });
 
@@ -995,7 +1610,7 @@ export default async function afiliadoRoutes(app: FastifyInstance) {
     }
 
     try {
-      const internoExists = await validateInternoInFirebird(parsed.data.interno!);
+      const internoExists = await validateInternoInFirebirdQuery.execute(parsed.data.interno!);
       if (!internoExists) {
         return reply.code(404).send(fail('INTERNO_NOT_FOUND_IN_FIREBIRD: El número de interno no existe en las tablas PERSONAL y ORG_PERSONAL'));
       }
@@ -1035,8 +1650,7 @@ export default async function afiliadoRoutes(app: FastifyInstance) {
       });
       return reply.code(201).send(ok(result));
     } catch (error: any) {
-      console.error('Error creating affiliation suspension termination:', error);
-      return reply.code(500).send(fail(`AFFILIATION_SUSPENSION_TERMINATION_CREATE_FAILED: ${error.message || error}`));
+      return handleAfiliadoError(error, reply, { operation: 'createTerminarSuspension', user: req.user?.sub });
     }
   });
 
@@ -1102,7 +1716,7 @@ export default async function afiliadoRoutes(app: FastifyInstance) {
     }
 
     try {
-      const internoExists = await validateInternoInFirebird(parsed.data.interno!);
+      const internoExists = await validateInternoInFirebirdQuery.execute(parsed.data.interno!);
       if (!internoExists) {
         return reply.code(404).send(fail('INTERNO_NOT_FOUND_IN_FIREBIRD: El número de interno no existe en las tablas PERSONAL y ORG_PERSONAL'));
       }
@@ -1142,8 +1756,7 @@ export default async function afiliadoRoutes(app: FastifyInstance) {
       });
       return reply.code(201).send(ok(result));
     } catch (error: any) {
-      console.error('Error creating affiliation suspension termination and discharge:', error);
-      return reply.code(500).send(fail(`AFFILIATION_SUSPENSION_TERMINATION_AND_DISCHARGE_CREATE_FAILED: ${error.message || error}`));
+      return handleAfiliadoError(error, reply, { operation: 'createTerminarSuspensionYBaja', user: req.user?.sub });
     }
   });
 
@@ -1203,7 +1816,9 @@ export default async function afiliadoRoutes(app: FastifyInstance) {
                       celular: { type: 'string', nullable: true },
                       expediente: { type: 'string', nullable: true },
                       quincenaAplicacion: { type: 'number', nullable: true },
-                      anioAplicacion: { type: 'number', nullable: true }
+                      anioAplicacion: { type: 'number', nullable: true },
+                      createdAt: { type: 'string' },
+                      updatedAt: { type: 'string' }
                     }
                   },
                   afiliadoOrg: {
@@ -1234,7 +1849,9 @@ export default async function afiliadoRoutes(app: FastifyInstance) {
                       dQuinquenios: { type: 'string', nullable: true },
                       aplicar: { type: 'boolean', nullable: true },
                       bc: { type: 'string', nullable: true },
-                      porcentaje: { type: 'number', nullable: true }
+                      porcentaje: { type: 'number', nullable: true },
+                      createdAt: { type: 'string' },
+                      updatedAt: { type: 'string' }
                     }
                   },
                   movimiento: {
@@ -1249,10 +1866,24 @@ export default async function afiliadoRoutes(app: FastifyInstance) {
                       folio: { type: 'string', nullable: true },
                       estatus: { type: 'string' },
                       creadoPor: { type: 'number', nullable: true },
-                      creadoPorUid: { type: 'string', nullable: true }
+                      creadoPorUid: { type: 'string', nullable: true },
+                      createdAt: { type: 'string' }
                     }
                   }
                 }
+              }
+            }
+          }
+        },
+        400: {
+          type: 'object',
+          properties: {
+            ok: { type: 'boolean' },
+            error: {
+              type: 'object',
+              properties: {
+                code: { type: 'string' },
+                message: { type: 'string' }
               }
             }
           }
@@ -1278,15 +1909,16 @@ export default async function afiliadoRoutes(app: FastifyInstance) {
       const userOrg0 = req.user?.idOrganica0 ?? '';
       const userOrg1 = req.user?.idOrganica1 ?? '';
 
+      console.log('User org data:', { userOrg0, userOrg1, user: req.user });
+
       if (!userOrg0 || !userOrg1) {
         return reply.code(400).send(fail('USER_ORGANICA_NOT_FOUND: Usuario no tiene orgánica configurada'));
       }
 
-      const movimientos = await getMovimientosQuincenalesService(userOrg0, userOrg1);
+      const movimientos = await getMovimientosQuincenalesQuery.execute(userOrg0, userOrg1);
       return reply.send(ok(movimientos));
     } catch (error: any) {
-      console.error('Error getting movimientos quincenales:', error);
-      return reply.code(500).send(fail('MOVIMIENTOS_QUINCENALES_GET_FAILED'));
+      return handleAfiliadoError(error, reply, { operation: 'getMovimientosQuincenales', user: req.user?.sub });
     }
   });
 
@@ -1343,14 +1975,10 @@ export default async function afiliadoRoutes(app: FastifyInstance) {
   }, async (req, reply) => {
     try {
       const { id } = req.params as { id: number };
-      await deleteAfiliadoService(id);
+      await deleteAfiliadoCommand.execute(id);
       return reply.send(ok({}));
     } catch (error: any) {
-      if (error.message === 'AFILIADO_NOT_FOUND') {
-        return reply.code(404).send(fail('AFILIADO_NOT_FOUND'));
-      }
-      console.error('Error deleting afiliado:', error);
-      return reply.code(500).send(fail('AFILIADO_DELETE_FAILED'));
+      return handleAfiliadoError(error, reply, { operation: 'deleteAfiliado', user: req.user?.sub, afiliadoId: (req.params as any)?.id });
     }
   });
 }

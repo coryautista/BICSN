@@ -1,6 +1,6 @@
 import { FastifyInstance } from 'fastify';
 import { requireAuth, requireRole } from '../../auth/auth.middleware.js';
-import { CreateDimensionSchema, UpdateDimensionSchema, DimensionIdParamSchema, TipoDimensionParamSchema } from './dimension.schemas.js';
+import { CreateDimensionSchema, UpdateDimensionSchema, DimensionIdParamSchema } from './dimension.schemas.js';
 import { getAllDimensiones, getDimensionesByTipo, getDimensionById, createDimensionItem, updateDimensionItem, deleteDimensionItem } from './dimension.service.js';
 import { ok, validationError, notFound, internalError } from '../../../utils/http.js';
 import { withDbContext } from '../../../db/context.js';

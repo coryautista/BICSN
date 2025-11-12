@@ -1,13 +1,11 @@
 import jwt from 'jsonwebtoken';
 import { v4 as uuidv4 } from 'uuid';
 import { env } from '../../config/env.js';
-import { hashPassword, verifyPassword, newRefreshTokenOpaque, sha256 } from './auth.crypto.js';
-import {
-  findUserByUsernameOrEmail, createUser, getUserRoles,
-  registerFailedLogin, registerSuccessfulLogin,
-  issueRefreshToken, rotateRefreshToken, revokeAllRefreshTokensForUser,
-  denylistJwt, isJtiDenylisted
-} from './auth.repo.js';
+import { getPool } from '../../db/mssql.js';
+import { AuthRepository } from './infrastructure/persistence/AuthRepository.js';
+import { DenylistJwtCommand } from './application/commands/DenylistJwtCommand.js';
+import { IsJtiDenylistedQuery } from './application/queries/IsJtiDenylistedQuery.js';
+import { InvalidTokenError, AuthSystemError } from './domain/errors.js';
 
 type AccessClaims = {
   sub: string;
@@ -18,99 +16,128 @@ type AccessClaims = {
   aud: string;
 };
 
-export async function register(
-  username: string,
-  email: string | undefined,
-  password: string,
-  displayName?: string,
-  photoPath?: string,
-  idOrganica0?: number,
-  idOrganica1?: number,
-  idOrganica2?: number,
-  idOrganica3?: number
-) {
-  const { hash, algo } = await hashPassword(password);
-  const u = await createUser(
-    username,
-    email ?? null,
-    hash,
-    algo,
-    displayName,
-    photoPath,
-    idOrganica0,
-    idOrganica1,
-    idOrganica2,
-    idOrganica3
-  );
-  return u;
-}
+// Logger básico para utilidades
+const logger = {
+  info: (message: string, data?: any) => console.log(`[INFO] ${message}`, data ? JSON.stringify(data) : ''),
+  warn: (message: string, data?: any) => console.warn(`[WARN] ${message}`, data ? JSON.stringify(data) : ''),
+  error: (message: string, data?: any) => console.error(`[ERROR] ${message}`, data ? JSON.stringify(data) : ''),
+  debug: (message: string, data?: any) => console.debug(`[DEBUG] ${message}`, data ? JSON.stringify(data) : '')
+};
 
-export async function login(usernameOrEmail: string, password: string, ip?: string, ua?: string) {
-  console.log('Login service called for:', usernameOrEmail);
-  const u = await findUserByUsernameOrEmail(usernameOrEmail);
-  console.log('User found:', u ? 'YES' : 'NO');
-  if (!u) throw new Error('INVALID_CREDENTIALS');
+// Utility functions that don't depend on DI container
 
-  if (u.isLockedOut && u.lockoutEndAt && new Date(u.lockoutEndAt) > new Date()) {
-    throw new Error('LOCKED_OUT');
-  }
-
-  const ok = await verifyPassword(u.passwordHash, password, u.passwordAlgo);
-  console.log('Password verification:', ok ? 'SUCCESS' : 'FAILED');
-  if (!ok) {
-    await registerFailedLogin(u.id);
-    throw new Error('INVALID_CREDENTIALS');
-  }
-
-  await registerSuccessfulLogin(u.id);
-
-  const rolesData = await getUserRoles(u.id);
-  console.log('User roles:', rolesData);
-  const roles = rolesData.map(r => r.name);
-  const entidades = rolesData.map(r => r.isEntidad);
-  const access = signAccessToken(u.id, roles, entidades);
-  const refreshPlain = newRefreshTokenOpaque();
-
-  const refreshHash = sha256(refreshPlain);
-
-  await issueRefreshToken(u.id, refreshHash, env.cookie.refreshTtlMin, ip, ua);
-
-  return { userId: u.id, username: u.username, accessToken: access.token, accessExp: access.exp, refreshToken: refreshPlain };
-}
-export async function rotateRefresh(currentRefreshPlain: string, ip?: string, ua?: string) {
-  const currentHash = sha256(currentRefreshPlain);
-  const newPlain = newRefreshTokenOpaque();
-  const newHash = sha256(newPlain);
-
-  await rotateRefreshToken(currentHash, newHash, env.cookie.refreshTtlMin, ip, ua);
-  return newPlain;
-}
-
-export async function logoutAll(userId: string) {
-  await revokeAllRefreshTokensForUser(userId);
-}
-
+// Sign access token - utility function
 export function signAccessToken(userId: string, roles: string[], entidades: boolean[]) {
-  const jti = uuidv4();
-  const payload: AccessClaims = { sub: userId, roles, entidades, jti, iss: env.jwt.iss, aud: env.jwt.aud };
-  const token = (jwt.sign as any)(payload, env.jwt.accessSecret, {
-    expiresIn: env.jwt.accessTtl
-  });
-  const decoded = jwt.decode(token) as AccessClaims & { iat: number, exp: number };
-  const { exp } = decoded;
-  return { token, jti, exp };
+  try {
+    logger.debug('Generando token de acceso', { userId, rolesCount: roles.length });
+
+    const jti = uuidv4();
+    const payload: AccessClaims = { sub: userId, roles, entidades, jti, iss: env.jwt.iss, aud: env.jwt.aud };
+    const token = (jwt.sign as any)(payload, env.jwt.accessSecret, {
+      expiresIn: env.jwt.accessTtl
+    });
+    const decoded = jwt.decode(token) as AccessClaims & { iat: number, exp: number };
+    const { exp } = decoded;
+
+    logger.debug('Token de acceso generado exitosamente', { userId, jti, exp });
+
+    return { token, jti, exp };
+  } catch (error) {
+    logger.error('Error al generar token de acceso', {
+      error: error instanceof Error ? error.message : 'Error desconocido',
+      userId,
+      stack: error instanceof Error ? error.stack : undefined
+    });
+    throw new AuthSystemError('Error al generar token de acceso');
+  }
 }
 
+// Denylist JWT - utility function using DI manually
 export async function denylistAccessToken(jti: string, userId: string | null, exp: number) {
-  const expiresAtIso = new Date(exp * 1000).toISOString();
-  await denylistJwt(jti, userId, expiresAtIso, 'logout');
+  try {
+    logger.info('Invalidando token de acceso', { jti, userId });
+
+    const expiresAt = new Date(exp * 1000);
+    const pool = await getPool();
+    const authRepo = new AuthRepository(pool);
+    const denylistCommand = new DenylistJwtCommand(authRepo);
+
+    await denylistCommand.execute({
+      jti,
+      userId,
+      expiresAt,
+      reason: 'logout'
+    });
+
+    logger.info('Token de acceso invalidado exitosamente', { jti, userId });
+
+  } catch (error) {
+    logger.error('Error al invalidar token de acceso', {
+      error: error instanceof Error ? error.message : 'Error desconocido',
+      jti,
+      userId,
+      stack: error instanceof Error ? error.stack : undefined
+    });
+    throw new AuthSystemError('Error al invalidar token de acceso');
+  }
 }
 
+// Check if JWT is denylisted - utility function using DI manually
 export async function isAccessDenylisted(jti: string) {
-  return isJtiDenylisted(jti);
+  try {
+    logger.debug('Verificando si token está en lista negra', { jti });
+
+    const pool = await getPool();
+    const authRepo = new AuthRepository(pool);
+    const isJtiDenylistedQuery = new IsJtiDenylistedQuery(authRepo);
+
+    const isDenylisted = await isJtiDenylistedQuery.execute(jti);
+
+    logger.debug('Verificación de token completada', { jti, isDenylisted });
+
+    return isDenylisted;
+
+  } catch (error) {
+    logger.error('Error al verificar token en lista negra', {
+      error: error instanceof Error ? error.message : 'Error desconocido',
+      jti,
+      stack: error instanceof Error ? error.stack : undefined
+    });
+    throw new AuthSystemError('Error al verificar estado del token');
+  }
 }
 
+// Verify access token - keeping as utility
 export function verifyAccess(token: string) {
-  return jwt.verify(token, env.jwt.accessSecret, { issuer: env.jwt.iss, audience: env.jwt.aud }) as AccessClaims & { iat: number, exp: number };
+  try {
+    logger.debug('Verificando token de acceso');
+
+    if (!token || token.trim().length === 0) {
+      throw new InvalidTokenError('access_token', { reason: 'token_missing' });
+    }
+
+    const decoded = jwt.verify(token, env.jwt.accessSecret, { issuer: env.jwt.iss, audience: env.jwt.aud }) as AccessClaims & { iat: number, exp: number };
+
+    logger.debug('Token de acceso verificado exitosamente', { sub: decoded.sub, jti: decoded.jti });
+
+    return decoded;
+
+  } catch (error) {
+    if (error instanceof jwt.TokenExpiredError) {
+      logger.warn('Token de acceso expirado', { expiredAt: error.expiredAt });
+      throw new InvalidTokenError('access_token', { reason: 'expired', expiredAt: error.expiredAt });
+    } else if (error instanceof jwt.JsonWebTokenError) {
+      logger.warn('Token de acceso inválido', { message: error.message });
+      throw new InvalidTokenError('access_token', { reason: 'malformed', details: error.message });
+    } else if (error instanceof InvalidTokenError) {
+      throw error;
+    } else {
+      logger.error('Error desconocido al verificar token', {
+        error: error instanceof Error ? error.message : 'Error desconocido',
+        stack: error instanceof Error ? error.stack : undefined
+      });
+      throw new AuthSystemError('Error al verificar token de acceso');
+    }
+  }
 }
 // Auth service

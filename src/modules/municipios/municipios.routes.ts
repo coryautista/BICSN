@@ -1,9 +1,14 @@
 import { FastifyInstance } from 'fastify';
 import { requireAuth, requireRole } from '../auth/auth.middleware.js';
 import { CreateMunicipioSchema, UpdateMunicipioSchema, MunicipioIdParamSchema, EstadoIdParamSchema } from './municipios.schemas.js';
-import { getAllMunicipios, getMunicipiosByEstado, getMunicipioById, createMunicipioItem, updateMunicipioItem, deleteMunicipioItem } from './municipios.service.js';
-import { ok, validationError, notFound, internalError } from '../../utils/http.js';
-import { withDbContext } from '../../db/context.js';
+import { ok, validationError } from '../../utils/http.js';
+import { GetAllMunicipiosQuery } from './application/queries/GetAllMunicipiosQuery.js';
+import { GetMunicipiosByEstadoQuery } from './application/queries/GetMunicipiosByEstadoQuery.js';
+import { GetMunicipioByIdQuery } from './application/queries/GetMunicipioByIdQuery.js';
+import { CreateMunicipioCommand } from './application/commands/CreateMunicipioCommand.js';
+import { UpdateMunicipioCommand } from './application/commands/UpdateMunicipioCommand.js';
+import { DeleteMunicipioCommand } from './application/commands/DeleteMunicipioCommand.js';
+import { handleMunicipioError } from './infrastructure/errorHandler.js';
 
 export default async function municipiosRoutes(app: FastifyInstance) {
 
@@ -48,13 +53,14 @@ export default async function municipiosRoutes(app: FastifyInstance) {
         }
       }
     }
-  }, async (_req, reply) => {
+  }, async (req, reply) => {
     try {
-      const municipios = await getAllMunicipios();
+      const query = req.diScope.resolve<GetAllMunicipiosQuery>('getAllMunicipiosQuery');
+      const userId = req.user?.sub;
+      const municipios = await query.execute(userId);
       return reply.send(ok(municipios));
     } catch (error: any) {
-      console.error('Error listing municipios:', error);
-      return reply.code(500).send(internalError('Failed to retrieve municipios'));
+      return handleMunicipioError(error, reply);
     }
   });
 
@@ -129,11 +135,12 @@ export default async function municipiosRoutes(app: FastifyInstance) {
     }
 
     try {
-      const municipios = await getMunicipiosByEstado(estadoId);
+      const query = req.diScope.resolve<GetMunicipiosByEstadoQuery>('getMunicipiosByEstadoQuery');
+      const userId = req.user?.sub;
+      const municipios = await query.execute({ estadoId }, userId);
       return reply.send(ok(municipios));
     } catch (error: any) {
-      console.error('Error listing municipios by estado:', error);
-      return reply.code(500).send(internalError('Failed to retrieve municipios'));
+      return handleMunicipioError(error, reply);
     }
   });
 
@@ -218,14 +225,12 @@ export default async function municipiosRoutes(app: FastifyInstance) {
     }
 
     try {
-      const municipio = await getMunicipioById(paramValidation.data.municipioId);
+      const query = req.diScope.resolve<GetMunicipioByIdQuery>('getMunicipioByIdQuery');
+      const userId = req.user?.sub;
+      const municipio = await query.execute({ municipioId: paramValidation.data.municipioId }, userId);
       return reply.send(ok(municipio));
     } catch (error: any) {
-      if (error.message === 'MUNICIPIO_NOT_FOUND') {
-        return reply.code(404).send(notFound('Municipio', municipioId));
-      }
-      console.error('Error getting municipio:', error);
-      return reply.code(500).send(internalError('Failed to retrieve municipio'));
+      return handleMunicipioError(error, reply);
     }
   });
 
@@ -304,34 +309,27 @@ export default async function municipiosRoutes(app: FastifyInstance) {
       }
     }
   }, async (req, reply) => {
-    return withDbContext(req, async (tx) => {
-      const parsed = CreateMunicipioSchema.safeParse(req.body);
-      if (!parsed.success) {
-        return reply.code(400).send(validationError(parsed.error.issues));
-      }
+    const parsed = CreateMunicipioSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return reply.code(400).send(validationError(parsed.error.issues));
+    }
 
-      try {
-        const userId = req.user?.sub;
-        const municipio = await createMunicipioItem(
-          parsed.data.estadoId,
-          parsed.data.claveMunicipio,
-          parsed.data.nombreMunicipio,
-          parsed.data.esValido ?? false,
-          userId,
-          tx
-        );
-        return reply.code(201).send(ok(municipio));
-      } catch (error: any) {
-        if (error.message === 'MUNICIPIO_EXISTS') {
-          return reply.code(409).send({ ok: false, error: { code: 'CONFLICT', message: 'Municipio already exists' } });
-        }
-        if (error.message === 'ESTADO_NOT_FOUND') {
-          return reply.code(400).send({ ok: false, error: { code: 'BAD_REQUEST', message: 'Estado not found' } });
-        }
-        console.error('Error creating municipio:', error);
-        return reply.code(500).send(internalError('Failed to create municipio'));
-      }
-    });
+    try {
+      const command = req.diScope.resolve<CreateMunicipioCommand>('createMunicipioCommand');
+      const userId = req.user?.sub;
+      
+      const municipio = await command.execute({
+        estadoId: parsed.data.estadoId,
+        claveMunicipio: parsed.data.claveMunicipio,
+        nombreMunicipio: parsed.data.nombreMunicipio,
+        esValido: parsed.data.esValido ?? false,
+        userId
+      });
+
+      return reply.code(201).send(ok(municipio));
+    } catch (error: any) {
+      return handleMunicipioError(error, reply);
+    }
   });
 
   // Actualizar municipio (requiere admin)
@@ -413,38 +411,34 @@ export default async function municipiosRoutes(app: FastifyInstance) {
       }
     }
   }, async (req, reply) => {
-    return withDbContext(req, async (tx) => {
-      const { municipioId } = req.params as { municipioId: string };
+    const { municipioId } = req.params as { municipioId: string };
 
-      // Validate parameter
-      const paramValidation = MunicipioIdParamSchema.safeParse({ municipioId });
-      if (!paramValidation.success) {
-        return reply.code(400).send(validationError(paramValidation.error.issues));
-      }
+    // Validate parameter
+    const paramValidation = MunicipioIdParamSchema.safeParse({ municipioId });
+    if (!paramValidation.success) {
+      return reply.code(400).send(validationError(paramValidation.error.issues));
+    }
 
-      const parsed = UpdateMunicipioSchema.safeParse(req.body);
-      if (!parsed.success) {
-        return reply.code(400).send(validationError(parsed.error.issues));
-      }
+    const parsed = UpdateMunicipioSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return reply.code(400).send(validationError(parsed.error.issues));
+    }
 
-      try {
-        const userId = req.user?.sub;
-        const municipio = await updateMunicipioItem(
-          paramValidation.data.municipioId,
-          parsed.data.nombreMunicipio,
-          parsed.data.esValido,
-          userId,
-          tx
-        );
-        return reply.send(ok(municipio));
-      } catch (error: any) {
-        if (error.message === 'MUNICIPIO_NOT_FOUND') {
-          return reply.code(404).send(notFound('Municipio', municipioId));
-        }
-        console.error('Error updating municipio:', error);
-        return reply.code(500).send(internalError('Failed to update municipio'));
-      }
-    });
+    try {
+      const command = req.diScope.resolve<UpdateMunicipioCommand>('updateMunicipioCommand');
+      const userId = req.user?.sub;
+      
+      const municipio = await command.execute({
+        municipioId: paramValidation.data.municipioId,
+        nombreMunicipio: parsed.data.nombreMunicipio,
+        esValido: parsed.data.esValido,
+        userId
+      });
+
+      return reply.send(ok(municipio));
+    } catch (error: any) {
+      return handleMunicipioError(error, reply);
+    }
   });
 
   // Eliminar municipio (requiere admin)
@@ -515,25 +509,21 @@ export default async function municipiosRoutes(app: FastifyInstance) {
       }
     }
   }, async (req, reply) => {
-    return withDbContext(req, async (tx) => {
-      const { municipioId } = req.params as { municipioId: string };
+    const { municipioId } = req.params as { municipioId: string };
 
-      // Validate parameter
-      const paramValidation = MunicipioIdParamSchema.safeParse({ municipioId });
-      if (!paramValidation.success) {
-        return reply.code(400).send(validationError(paramValidation.error.issues));
-      }
+    // Validate parameter
+    const paramValidation = MunicipioIdParamSchema.safeParse({ municipioId });
+    if (!paramValidation.success) {
+      return reply.code(400).send(validationError(paramValidation.error.issues));
+    }
 
-      try {
-        const deletedId = await deleteMunicipioItem(paramValidation.data.municipioId, tx);
-        return reply.send(ok({ municipioId: deletedId }));
-      } catch (error: any) {
-        if (error.message === 'MUNICIPIO_NOT_FOUND') {
-          return reply.code(404).send(notFound('Municipio', municipioId));
-        }
-        console.error('Error deleting municipio:', error);
-        return reply.code(500).send(internalError('Failed to delete municipio'));
-      }
-    });
+    try {
+      const command = req.diScope.resolve<DeleteMunicipioCommand>('deleteMunicipioCommand');
+      const userId = req.user?.sub;
+      await command.execute({ municipioId: paramValidation.data.municipioId }, userId);
+      return reply.send(ok({ municipioId: paramValidation.data.municipioId }));
+    } catch (error: any) {
+      return handleMunicipioError(error, reply);
+    }
   });
 }

@@ -247,7 +247,7 @@ export async function listExpedientes() {
 }
 
 
-export async function createExpediente(curp: string, afiliadoId: number | null, interno: number | null, estado: string, notas: string | null, userId?: string, tx?: sqlType.Transaction) {
+export async function createExpediente(curp: string, afiliadoId: number | null, interno: number | null, estado: string, notas: string | null, _userId?: string, tx?: sqlType.Transaction) {
   const req = tx ? new sqlType.Request(tx) : (await getPool()).request();
   const r = await req
     .input('curp', sql.Char(18), curp)
@@ -279,7 +279,7 @@ export async function createExpediente(curp: string, afiliadoId: number | null, 
   };
 }
 
-export async function updateExpediente(curp: string, afiliadoId?: number | null, interno?: number | null, estado?: string, notas?: string | null, userId?: string, tx?: sqlType.Transaction) {
+export async function updateExpediente(curp: string, afiliadoId?: number | null, interno?: number | null, estado?: string, notas?: string | null, _userId?: string, tx?: sqlType.Transaction) {
   const req = tx ? new sqlType.Request(tx) : (await getPool()).request();
   const r = await req
     .input('curp', sql.Char(18), curp)
@@ -520,7 +520,7 @@ export async function createExpedienteArchivo(curp: string, tipoCodigo: string |
   };
 }
 
-export async function updateExpedienteArchivo(archivoId: number, tipoCodigo?: string | null, titulo?: string, fileName?: string, mimeType?: string, byteSize?: number, sha256Hex?: string, storageProvider?: string, storagePath?: string, observaciones?: string | null, documentTypeId?: number | null, userId?: string, tx?: sqlType.Transaction) {
+export async function updateExpedienteArchivo(archivoId: number, tipoCodigo?: string | null, titulo?: string, fileName?: string, mimeType?: string, byteSize?: number, sha256Hex?: string, storageProvider?: string, storagePath?: string, observaciones?: string | null, documentTypeId?: number | null, _userId?: string, tx?: sqlType.Transaction) {
   const req = tx ? new sqlType.Request(tx) : (await getPool()).request();
   const r = await req
     .input('archivoId', sql.BigInt, archivoId)

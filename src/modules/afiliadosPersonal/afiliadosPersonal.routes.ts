@@ -1,9 +1,17 @@
 import { FastifyInstance } from 'fastify';
 import { requireAuth } from '../auth/auth.middleware.js';
-import { getObtenerPlantilla, getBusquedaHistorico } from './afiliadosPersonal.service.js';
-import { ok, fail } from '../../utils/http.js';
+import { ok } from '../../utils/http.js';
+import { GetPlantillaQuery } from './application/queries/GetPlantillaQuery.js';
+import { BusquedaHistoricoQuery } from './application/queries/BusquedaHistoricoQuery.js';
+import { handleAfiliadosPersonalError } from './infrastructure/errorHandler.js';
+import { AfiliadosPersonalAccessDeniedError } from './domain/errors.js';
 
 export default async function afiliadosPersonalRoutes(app: FastifyInstance) {
+
+  // Resolve dependencies from DI container
+  const getPlantillaQuery = app.diContainer.resolve<GetPlantillaQuery>('getPlantillaQuery');
+  const busquedaHistoricoQuery = app.diContainer.resolve<BusquedaHistoricoQuery>('busquedaHistoricoQuery');
+
   // GET /obtenerPlantilla - Obtener plantilla de personal
   app.get('/obtenerPlantilla', {
     preHandler: [requireAuth],
@@ -21,7 +29,7 @@ export default async function afiliadosPersonalRoutes(app: FastifyInstance) {
               items: {
                 type: 'object',
                 properties: {
-                  INTERNO: { type: 'string' },
+                  INTERNO: { type: 'number' },
                   CURP: { type: 'string', nullable: true },
                   RFC: { type: 'string', nullable: true },
                   NOEMPLEADO: { type: 'string', nullable: true },
@@ -29,15 +37,13 @@ export default async function afiliadosPersonalRoutes(app: FastifyInstance) {
                   APELLIDO_PATERNO: { type: 'string', nullable: true },
                   APELLIDO_MATERNO: { type: 'string', nullable: true },
                   FECHA_NACIMIENTO: { type: 'string', nullable: true },
-                  SEXO: { type: 'string', nullable: true },
-                  ESTADO_CIVIL: { type: 'string', nullable: true },
-                  NACIONALIDAD: { type: 'string', nullable: true },
-                  FECHA_ALTA: { type: 'string', nullable: true },
-                  CELULAR: { type: 'string', nullable: true },
-                  EMAIL: { type: 'string', nullable: true },
+                  SEGURIDAD_SOCIAL: { type: 'string', nullable: true },
                   CALLE_NUMERO: { type: 'string', nullable: true },
                   FRACCIONAMIENTO: { type: 'string', nullable: true },
                   CODIGO_POSTAL: { type: 'string', nullable: true },
+                  TELEFONO: { type: 'string', nullable: true },
+                  SEXO: { type: 'string', nullable: true },
+                  ESTADO_CIVIL: { type: 'string', nullable: true },
                   LOCALIDAD: { type: 'string', nullable: true },
                   MUNICIPIO: { type: 'string', nullable: true },
                   ESTADO: { type: 'string', nullable: true },
@@ -46,7 +52,10 @@ export default async function afiliadosPersonalRoutes(app: FastifyInstance) {
                   POSEE_INMUEBLES: { type: 'string', nullable: true },
                   FULLNAME: { type: 'string', nullable: true },
                   FECHA_CARTA: { type: 'string', nullable: true },
-                  TELEFONO: { type: 'string', nullable: true },
+                  EMAIL: { type: 'string', nullable: true },
+                  NACIONALIDAD: { type: 'string', nullable: true },
+                  FECHA_ALTA: { type: 'string', nullable: true },
+                  CELULAR: { type: 'string', nullable: true },
                   EXPEDIENTE: { type: 'string', nullable: true },
                   F_EXPEDIENTE: { type: 'string', nullable: true },
                   CLAVE_ORGANICA_0: { type: 'string', nullable: true },
@@ -62,9 +71,9 @@ export default async function afiliadosPersonalRoutes(app: FastifyInstance) {
                   ORGS2: { type: 'string', nullable: true },
                   ORGS3: { type: 'string', nullable: true },
                   ORGS: { type: 'string', nullable: true },
-                  DSUELDO: { type: 'number', nullable: true },
-                  DOTRAS_PRESTACIONES: { type: 'number', nullable: true },
-                  DQUINQUENIOS: { type: 'number', nullable: true },
+                  DSUELDO: { type: 'string', nullable: true },
+                  DOTRAS_PRESTACIONES: { type: 'string', nullable: true },
+                  DQUINQUENIOS: { type: 'string', nullable: true },
                   APLICAR: { type: 'string', nullable: true },
                   BC: { type: 'string', nullable: true },
                   PORCENTAJE: { type: 'number', nullable: true }
@@ -106,17 +115,16 @@ export default async function afiliadosPersonalRoutes(app: FastifyInstance) {
       // Obtener las claves orgánicas del usuario desde el token JWT
       const user = req.user;
       if (!user || !user.idOrganica0 || !user.idOrganica1) {
-        return reply.code(403).send(fail('Usuario no tiene permisos para acceder a esta información'));
+        throw new AfiliadosPersonalAccessDeniedError('Usuario no tiene permisos para acceder a esta información', { userId: user?.id });
       }
 
       const claveOrganica0 = user.idOrganica0.toString();
       const claveOrganica1 = user.idOrganica1.toString();
 
-      const records = await getObtenerPlantilla(claveOrganica0, claveOrganica1);
+      const records = await getPlantillaQuery.execute(claveOrganica0, claveOrganica1);
       return reply.send(ok(records));
     } catch (error: any) {
-      console.error('Error obteniendo plantilla:', error);
-      return reply.code(500).send(fail('OBTENER_PLANTILLA_FAILED'));
+      return handleAfiliadosPersonalError(error, reply);
     }
   });
 
@@ -146,53 +154,13 @@ export default async function afiliadosPersonalRoutes(app: FastifyInstance) {
               items: {
                 type: 'object',
                 properties: {
-                  INTERNO: { type: 'string' },
-                  CURP: { type: 'string', nullable: true },
-                  RFC: { type: 'string', nullable: true },
-                  NOEMPLEADO: { type: 'string', nullable: true },
+                  INTERNO: { type: 'number' },
                   NOMBRE: { type: 'string', nullable: true },
                   APELLIDO_PATERNO: { type: 'string', nullable: true },
                   APELLIDO_MATERNO: { type: 'string', nullable: true },
-                  FECHA_NACIMIENTO: { type: 'string', nullable: true },
-                  SEXO: { type: 'string', nullable: true },
-                  ESTADO_CIVIL: { type: 'string', nullable: true },
-                  NACIONALIDAD: { type: 'string', nullable: true },
-                  FECHA_ALTA: { type: 'string', nullable: true },
-                  CELULAR: { type: 'string', nullable: true },
-                  EMAIL: { type: 'string', nullable: true },
-                  CALLE_NUMERO: { type: 'string', nullable: true },
-                  FRACCIONAMIENTO: { type: 'string', nullable: true },
-                  CODIGO_POSTAL: { type: 'string', nullable: true },
-                  LOCALIDAD: { type: 'string', nullable: true },
-                  MUNICIPIO: { type: 'string', nullable: true },
-                  ESTADO: { type: 'string', nullable: true },
-                  PAIS: { type: 'string', nullable: true },
-                  DEPENDIENTES: { type: 'number', nullable: true },
-                  POSEE_INMUEBLES: { type: 'string', nullable: true },
-                  FULLNAME: { type: 'string', nullable: true },
-                  FECHA_CARTA: { type: 'string', nullable: true },
-                  TELEFONO: { type: 'string', nullable: true },
-                  EXPEDIENTE: { type: 'string', nullable: true },
-                  F_EXPEDIENTE: { type: 'string', nullable: true },
-                  CLAVE_ORGANICA_0: { type: 'string', nullable: true },
-                  CLAVE_ORGANICA_1: { type: 'string', nullable: true },
-                  CLAVE_ORGANICA_2: { type: 'string', nullable: true },
-                  CLAVE_ORGANICA_3: { type: 'string', nullable: true },
-                  SUELDO: { type: 'number', nullable: true },
-                  OTRAS_PRESTACIONES: { type: 'number', nullable: true },
-                  QUINQUENIOS: { type: 'number', nullable: true },
-                  ACTIVO: { type: 'string', nullable: true },
-                  FECHA_MOV_ALT: { type: 'string', nullable: true },
-                  ORGS1: { type: 'string', nullable: true },
-                  ORGS2: { type: 'string', nullable: true },
-                  ORGS3: { type: 'string', nullable: true },
-                  ORGS: { type: 'string', nullable: true },
-                  DSUELDO: { type: 'number', nullable: true },
-                  DOTRAS_PRESTACIONES: { type: 'number', nullable: true },
-                  DQUINQUENIOS: { type: 'number', nullable: true },
-                  APLICAR: { type: 'string', nullable: true },
-                  BC: { type: 'string', nullable: true },
-                  PORCENTAJE: { type: 'number', nullable: true }
+                  CURP: { type: 'string', nullable: true },
+                  RFC: { type: 'string', nullable: true },
+                  ACTIVO: { type: 'string', nullable: true }
                 }
               }
             }
@@ -216,11 +184,10 @@ export default async function afiliadosPersonalRoutes(app: FastifyInstance) {
   }, async (req: any, reply) => {
     try {
       const { search } = req.query as { search?: string };
-      const records = await getBusquedaHistorico(search);
+      const records = await busquedaHistoricoQuery.execute(search);
       return reply.send(ok(records));
     } catch (error: any) {
-      console.error('Error en búsqueda histórica:', error);
-      return reply.code(500).send(fail('BUSQUEDA_HISTORICA_FAILED'));
+      return handleAfiliadosPersonalError(error, reply);
     }
   });
 }

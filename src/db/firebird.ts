@@ -9,7 +9,8 @@ const firebirdConfig: Firebird.Options = {
   password: config.firebird.password,
   lowercase_keys: false,
   role: undefined,
-  pageSize: 4096
+  pageSize: 4096,
+  retryConnectionInterval: 1000
 };
 
 let database: Firebird.Database | null = null;
@@ -18,6 +19,14 @@ export const connectFirebirdDatabase = async (): Promise<Firebird.Database> => {
   if (database) {
     return database;
   }
+
+  console.log('Attempting to connect to Firebird database with config:', {
+    host: firebirdConfig.host,
+    port: firebirdConfig.port,
+    database: firebirdConfig.database,
+    user: firebirdConfig.user,
+    // password: firebirdConfig.password, // Don't log password
+  });
 
   return new Promise((resolve, reject) => {
     Firebird.attach(firebirdConfig, (err, db) => {
@@ -46,6 +55,18 @@ export const getFirebirdDb = (): Firebird.Database => {
     throw new Error('Firebird database not initialized. Call connectFirebirdDatabase() first.');
   }
   return database;
+};
+
+export const testFirebirdConnection = async (): Promise<boolean> => {
+  try {
+    if (!database) {
+      await connectFirebirdDatabase();
+    }
+    return database !== null;
+  } catch (error) {
+    console.error('Firebird connection test failed:', error);
+    return false;
+  }
 };
 
 export const pingFirebird = async (): Promise<boolean> => {

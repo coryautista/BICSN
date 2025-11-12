@@ -1,9 +1,14 @@
 import { FastifyInstance } from 'fastify';
 import { requireAuth, requireRole } from '../auth/auth.middleware.js';
 import { CreateEventoCalendarioSchema, UpdateEventoCalendarioSchema, QueryEventoCalendarioByDateRangeSchema } from './eventoCalendario.schemas.js';
-import { getAllEventoCalendarios, getEventoCalendarioById, createEventoCalendarioItem, updateEventoCalendarioItem, deleteEventoCalendarioItem, getEventoCalendariosByDateRange } from './eventoCalendario.service.js';
-import { fail } from '../../utils/http.js';
-import { withDbContext } from '../../db/context.js';
+import { ok, badRequest, validationError } from '../../utils/http.js';
+import { handleEventoCalendarioError } from './infrastructure/errorHandler.js';
+import type { GetAllEventoCalendariosQuery } from './application/queries/GetAllEventoCalendariosQuery.js';
+import type { GetEventoCalendarioByIdQuery } from './application/queries/GetEventoCalendarioByIdQuery.js';
+import type { GetEventoCalendariosByDateRangeQuery } from './application/queries/GetEventoCalendariosByDateRangeQuery.js';
+import type { CreateEventoCalendarioCommand } from './application/commands/CreateEventoCalendarioCommand.js';
+import type { UpdateEventoCalendarioCommand } from './application/commands/UpdateEventoCalendarioCommand.js';
+import type { DeleteEventoCalendarioCommand } from './application/commands/DeleteEventoCalendarioCommand.js';
 
 export default async function eventoCalendarioRoutes(app: FastifyInstance) {
 
@@ -25,19 +30,37 @@ export default async function eventoCalendarioRoutes(app: FastifyInstance) {
                 properties: {
                   id: { type: 'integer' },
                   fecha: { type: 'string', format: 'date' },
-                  tipo: { type: 'string', enum: ['ARCHIVO_APLICACION', 'ASUETO', 'ALTA_BAJA_CAMBIO', 'PAGO', 'HIPOTECARIO'] },
+                  tipo: { type: 'string', enum: ['FERIADO', 'VACACIONES', 'EVENTO_ESPECIAL', 'DIA_NO_LABORABLE'] },
                   anio: { type: 'integer' },
                   createdAt: { type: 'string', format: 'date-time' }
                 }
               }
             }
           }
+        },
+        500: {
+          type: 'object',
+          properties: {
+            ok: { type: 'boolean' },
+            error: {
+              type: 'object',
+              properties: {
+                code: { type: 'string' },
+                message: { type: 'string' }
+              }
+            }
+          }
         }
       }
     }
-  }, async (_req, reply) => {
-    const eventos = await getAllEventoCalendarios();
-    return reply.send({ data: eventos });
+  }, async (req, reply) => {
+    try {
+      const getAllEventoCalendariosQuery = req.diScope.resolve<GetAllEventoCalendariosQuery>('getAllEventoCalendariosQuery');
+      const eventos = await getAllEventoCalendariosQuery.execute();
+      return reply.send(ok(eventos));
+    } catch (error: any) {
+      return handleEventoCalendarioError(error, reply);
+    }
   });
 
   // Consultar eventos de calendario por rango de fechas y tipo (requiere auth)
@@ -55,7 +78,7 @@ export default async function eventoCalendarioRoutes(app: FastifyInstance) {
           fechaFin: { type: 'string', format: 'date', description: 'Fecha de fin del rango (YYYY-MM-DD)' },
           tipo: {
             type: 'string',
-            enum: ['ARCHIVO_APLICACION', 'ASUETO', 'ALTA_BAJA_CAMBIO', 'PAGO', 'HIPOTECARIO'],
+            enum: ['FERIADO', 'VACACIONES', 'EVENTO_ESPECIAL', 'DIA_NO_LABORABLE'],
             description: 'Tipo de evento (opcional)'
           }
         }
@@ -73,7 +96,7 @@ export default async function eventoCalendarioRoutes(app: FastifyInstance) {
                   fecha: { type: 'string', format: 'date', description: 'Fecha del evento' },
                   tipo: {
                     type: 'string',
-                    enum: ['ARCHIVO_APLICACION', 'ASUETO', 'ALTA_BAJA_CAMBIO', 'PAGO', 'HIPOTECARIO'],
+                    enum: ['FERIADO', 'VACACIONES', 'EVENTO_ESPECIAL', 'DIA_NO_LABORABLE'],
                     description: 'Tipo de evento'
                   },
                   anio: { type: 'integer', description: 'Año del evento' },
@@ -116,17 +139,17 @@ export default async function eventoCalendarioRoutes(app: FastifyInstance) {
     }
   }, async (req, reply) => {
     const parsed = QueryEventoCalendarioByDateRangeSchema.safeParse(req.query);
-    if (!parsed.success) return reply.code(400).send(fail(parsed.error.message));
+    if (!parsed.success) {
+      return reply.code(400).send(validationError(parsed.error.issues));
+    }
 
     const { fechaInicio, fechaFin, tipo } = parsed.data;
     try {
-      const eventos = await getEventoCalendariosByDateRange(fechaInicio, fechaFin, tipo);
-      return reply.send({ data: eventos });
-    } catch (e: any) {
-      if (e.message.includes('INVALID') || e.message.includes('MISSING')) {
-        return reply.code(400).send(fail(e.message));
-      }
-      return reply.code(500).send(fail('EVENTO_CALENDARIO_QUERY_FAILED'));
+      const getEventoCalendariosByDateRangeQuery = req.diScope.resolve<GetEventoCalendariosByDateRangeQuery>('getEventoCalendariosByDateRangeQuery');
+      const eventos = await getEventoCalendariosByDateRangeQuery.execute(fechaInicio, fechaFin, tipo);
+      return reply.send(ok(eventos));
+    } catch (error: any) {
+      return handleEventoCalendarioError(error, reply);
     }
   });
 
@@ -153,9 +176,22 @@ export default async function eventoCalendarioRoutes(app: FastifyInstance) {
               properties: {
                 id: { type: 'integer' },
                 fecha: { type: 'string', format: 'date' },
-                tipo: { type: 'string', enum: ['ARCHIVO_APLICACION', 'ASUETO', 'ALTA_BAJA_CAMBIO', 'PAGO', 'HIPOTECARIO'] },
+                tipo: { type: 'string', enum: ['FERIADO', 'VACACIONES', 'EVENTO_ESPECIAL', 'DIA_NO_LABORABLE', 'HIPOTECARIO'] },
                 anio: { type: 'integer' },
                 createdAt: { type: 'string', format: 'date-time' }
+              }
+            }
+          }
+        },
+        400: {
+          type: 'object',
+          properties: {
+            ok: { type: 'boolean' },
+            error: {
+              type: 'object',
+              properties: {
+                code: { type: 'string' },
+                message: { type: 'string' }
               }
             }
           }
@@ -189,13 +225,19 @@ export default async function eventoCalendarioRoutes(app: FastifyInstance) {
       }
     }
   }, async (req, reply) => {
-    const { id } = req.params as { id: number };
+    const id = parseInt((req.params as { id: string }).id);
+
+    // Validate parameter
+    if (isNaN(id) || id <= 0) {
+      return reply.code(400).send(badRequest('ID must be a positive integer'));
+    }
+
     try {
-      const evento = await getEventoCalendarioById(id);
-      return reply.send({ data: evento });
-    } catch (e: any) {
-      if (e.message === 'EVENTO_CALENDARIO_NOT_FOUND') return reply.code(404).send(fail(e.message));
-      return reply.code(500).send(fail('EVENTO_CALENDARIO_FETCH_FAILED'));
+      const getEventoCalendarioByIdQuery = req.diScope.resolve<GetEventoCalendarioByIdQuery>('getEventoCalendarioByIdQuery');
+      const evento = await getEventoCalendarioByIdQuery.execute(id);
+      return reply.send(ok(evento));
+    } catch (error: any) {
+      return handleEventoCalendarioError(error, reply);
     }
   });
 
@@ -211,7 +253,7 @@ export default async function eventoCalendarioRoutes(app: FastifyInstance) {
         required: ['fecha', 'tipo', 'anio'],
         properties: {
           fecha: { type: 'string', format: 'date' },
-          tipo: { type: 'string', enum: ['ARCHIVO_APLICACION', 'ASUETO', 'ALTA_BAJA_CAMBIO', 'PAGO', 'HIPOTECARIO'] },
+          tipo: { type: 'string', enum: ['FERIADO', 'VACACIONES', 'EVENTO_ESPECIAL', 'DIA_NO_LABORABLE', 'HIPOTECARIO'] },
           anio: { type: 'integer' },
           createdAt: { type: 'string', format: 'date-time' }
         }
@@ -225,7 +267,7 @@ export default async function eventoCalendarioRoutes(app: FastifyInstance) {
               properties: {
                 id: { type: 'integer' },
                 fecha: { type: 'string', format: 'date' },
-                tipo: { type: 'string', enum: ['ARCHIVO_APLICACION', 'ASUETO', 'ALTA_BAJA_CAMBIO', 'PAGO', 'HIPOTECARIO'] },
+                tipo: { type: 'string', enum: ['FERIADO', 'VACACIONES', 'EVENTO_ESPECIAL', 'DIA_NO_LABORABLE', 'HIPOTECARIO'] },
                 anio: { type: 'integer' },
                 createdAt: { type: 'string', format: 'date-time' }
               }
@@ -274,26 +316,18 @@ export default async function eventoCalendarioRoutes(app: FastifyInstance) {
       }
     }
   }, async (req, reply) => {
-    return withDbContext(req, async (tx) => {
-      const parsed = CreateEventoCalendarioSchema.safeParse(req.body);
-      if (!parsed.success) return reply.code(400).send(fail(parsed.error.message));
+    const parsed = CreateEventoCalendarioSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return reply.code(400).send(validationError(parsed.error.issues));
+    }
 
-      try {
-        const evento = await createEventoCalendarioItem(
-          parsed.data.fecha,
-          parsed.data.tipo,
-          parsed.data.anio,
-          parsed.data.createdAt,
-          tx
-        );
-        return reply.code(201).send({ data: evento });
-      } catch (e: any) {
-        if (e.message === 'EVENTO_CALENDARIO_ALREADY_EXISTS') {
-          return reply.code(409).send(fail('EVENTO_CALENDARIO_ALREADY_EXISTS'));
-        }
-        return reply.code(500).send(fail('EVENTO_CALENDARIO_CREATE_FAILED'));
-      }
-    });
+    try {
+      const createEventoCalendarioCommand = req.diScope.resolve<CreateEventoCalendarioCommand>('createEventoCalendarioCommand');
+      const evento = await createEventoCalendarioCommand.execute(parsed.data);
+      return reply.code(201).send(ok(evento));
+    } catch (error: any) {
+      return handleEventoCalendarioError(error, reply);
+    }
   });
 
   // Actualizar evento de calendario (requiere admin)
@@ -314,7 +348,7 @@ export default async function eventoCalendarioRoutes(app: FastifyInstance) {
         type: 'object',
         properties: {
           fecha: { type: 'string', format: 'date' },
-          tipo: { type: 'string', enum: ['ARCHIVO_APLICACION', 'ASUETO', 'ALTA_BAJA_CAMBIO', 'PAGO', 'HIPOTECARIO'] },
+          tipo: { type: 'string', enum: ['FERIADO', 'VACACIONES', 'EVENTO_ESPECIAL', 'DIA_NO_LABORABLE', 'HIPOTECARIO'] },
           anio: { type: 'integer' },
           createdAt: { type: 'string', format: 'date-time' }
         }
@@ -328,7 +362,7 @@ export default async function eventoCalendarioRoutes(app: FastifyInstance) {
               properties: {
                 id: { type: 'integer' },
                 fecha: { type: 'string', format: 'date' },
-                tipo: { type: 'string', enum: ['ARCHIVO_APLICACION', 'ASUETO', 'ALTA_BAJA_CAMBIO', 'PAGO', 'HIPOTECARIO'] },
+                tipo: { type: 'string', enum: ['FERIADO', 'VACACIONES', 'EVENTO_ESPECIAL', 'DIA_NO_LABORABLE', 'HIPOTECARIO'] },
                 anio: { type: 'integer' },
                 createdAt: { type: 'string', format: 'date-time' }
               }
@@ -377,27 +411,25 @@ export default async function eventoCalendarioRoutes(app: FastifyInstance) {
       }
     }
   }, async (req, reply) => {
-    return withDbContext(req, async (tx) => {
-      const { id } = req.params as { id: number };
-      const parsed = UpdateEventoCalendarioSchema.safeParse(req.body);
-      if (!parsed.success) return reply.code(400).send(fail(parsed.error.message));
+    const id = parseInt((req.params as { id: string }).id);
 
-      try {
-        const evento = await updateEventoCalendarioItem(
-          id,
-          parsed.data.fecha,
-          parsed.data.tipo,
-          parsed.data.anio,
-          parsed.data.createdAt,
-          tx
-        );
-        if (!evento) return reply.code(404).send(fail('EVENTO_CALENDARIO_NOT_FOUND'));
-        return reply.send({ data: evento });
-      } catch (e: any) {
-        if (e.message === 'EVENTO_CALENDARIO_NOT_FOUND') return reply.code(404).send(fail(e.message));
-        return reply.code(500).send(fail('EVENTO_CALENDARIO_UPDATE_FAILED'));
-      }
-    });
+    // Validate parameter
+    if (isNaN(id) || id <= 0) {
+      return reply.code(400).send(badRequest('ID must be a positive integer'));
+    }
+
+    const parsed = UpdateEventoCalendarioSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return reply.code(400).send(validationError(parsed.error.issues));
+    }
+
+    try {
+      const updateEventoCalendarioCommand = req.diScope.resolve<UpdateEventoCalendarioCommand>('updateEventoCalendarioCommand');
+      const evento = await updateEventoCalendarioCommand.execute({ id, ...parsed.data });
+      return reply.send(ok(evento));
+    } catch (error: any) {
+      return handleEventoCalendarioError(error, reply);
+    }
   });
 
   // Eliminar evento de calendario (requiere admin)
@@ -422,6 +454,19 @@ export default async function eventoCalendarioRoutes(app: FastifyInstance) {
               type: 'object',
               properties: {
                 id: { type: 'integer' }
+              }
+            }
+          }
+        },
+        400: {
+          type: 'object',
+          properties: {
+            ok: { type: 'boolean' },
+            error: {
+              type: 'object',
+              properties: {
+                code: { type: 'string' },
+                message: { type: 'string' }
               }
             }
           }
@@ -455,16 +500,19 @@ export default async function eventoCalendarioRoutes(app: FastifyInstance) {
       }
     }
   }, async (req, reply) => {
-    return withDbContext(req, async (tx) => {
-      const { id } = req.params as { id: number };
-      try {
-        const deletedId = await deleteEventoCalendarioItem(id, tx);
-        if (!deletedId) return reply.code(404).send(fail('EVENTO_CALENDARIO_NOT_FOUND'));
-        return reply.send({ data: { id: deletedId } });
-      } catch (e: any) {
-        if (e.message === 'EVENTO_CALENDARIO_NOT_FOUND') return reply.code(404).send(fail(e.message));
-        return reply.code(500).send(fail('EVENTO_CALENDARIO_DELETE_FAILED'));
-      }
-    });
+    const id = parseInt((req.params as { id: string }).id);
+
+    // Validate parameter
+    if (isNaN(id) || id <= 0) {
+      return reply.code(400).send(badRequest('ID must be a positive integer'));
+    }
+
+    try {
+      const deleteEventoCalendarioCommand = req.diScope.resolve<DeleteEventoCalendarioCommand>('deleteEventoCalendarioCommand');
+      const deletedId = await deleteEventoCalendarioCommand.execute({ id });
+      return reply.send(ok({ id: deletedId }));
+    } catch (error: any) {
+      return handleEventoCalendarioError(error, reply);
+    }
   });
 }

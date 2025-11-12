@@ -12,31 +12,54 @@ import {
   ExpedienteArchivoIdParamSchema
 } from './expediente.schemas.js';
 import {
-  getAllDocumentTypes,
-  getDocumentTypeById,
-  createDocumentTypeItem,
-  updateDocumentTypeItem,
-  deleteDocumentTypeItem,
-  getAllExpedientes,
-  getExpedienteByCurp,
-  createExpedienteItem,
-  updateExpedienteItem,
-  deleteExpedienteItem,
-  getExpedienteArchivoById,
-  getExpedienteArchivosByCurp,
-  createExpedienteArchivoItem,
-  updateExpedienteArchivoItem,
-  deleteExpedienteArchivoItem,
   uploadExpedienteFile,
   downloadExpedienteFile,
   uploadDocumentToExpediente
 } from './expediente.service.js';
 import { ok, validationError, notFound, internalError } from '../../utils/http.js';
+import { handleExpedienteError } from './infrastructure/errorHandler.js';
 import { withDbContext } from '../../db/context.js';
 import fs from 'fs';
 import path from 'path';
 
+// Queries
+import { GetAllDocumentTypesQuery } from './application/queries/GetAllDocumentTypesQuery.js';
+import { GetDocumentTypeByIdQuery } from './application/queries/GetDocumentTypeByIdQuery.js';
+import { GetAllExpedientesQuery } from './application/queries/GetAllExpedientesQuery.js';
+import { GetExpedienteByCurpQuery } from './application/queries/GetExpedienteByCurpQuery.js';
+import { GetExpedienteArchivoByIdQuery } from './application/queries/GetExpedienteArchivoByIdQuery.js';
+import { GetExpedienteArchivosByCurpQuery } from './application/queries/GetExpedienteArchivosByCurpQuery.js';
+
+// Commands
+import { CreateDocumentTypeCommand } from './application/commands/CreateDocumentTypeCommand.js';
+import { UpdateDocumentTypeCommand } from './application/commands/UpdateDocumentTypeCommand.js';
+import { DeleteDocumentTypeCommand } from './application/commands/DeleteDocumentTypeCommand.js';
+import { CreateExpedienteCommand } from './application/commands/CreateExpedienteCommand.js';
+import { UpdateExpedienteCommand } from './application/commands/UpdateExpedienteCommand.js';
+import { DeleteExpedienteCommand } from './application/commands/DeleteExpedienteCommand.js';
+import { CreateExpedienteArchivoCommand } from './application/commands/CreateExpedienteArchivoCommand.js';
+import { UpdateExpedienteArchivoCommand } from './application/commands/UpdateExpedienteArchivoCommand.js';
+import { DeleteExpedienteArchivoCommand } from './application/commands/DeleteExpedienteArchivoCommand.js';
+
 export default async function expedienteRoutes(app: FastifyInstance) {
+
+  // Resolve dependencies from DI container
+  const getAllDocumentTypesQuery = app.diContainer.resolve<GetAllDocumentTypesQuery>('getAllDocumentTypesQuery');
+  const getDocumentTypeByIdQuery = app.diContainer.resolve<GetDocumentTypeByIdQuery>('getDocumentTypeByIdQuery');
+  const getAllExpedientesQuery = app.diContainer.resolve<GetAllExpedientesQuery>('getAllExpedientesQuery');
+  const getExpedienteByCurpQuery = app.diContainer.resolve<GetExpedienteByCurpQuery>('getExpedienteByCurpQuery');
+  const getExpedienteArchivoByIdQuery = app.diContainer.resolve<GetExpedienteArchivoByIdQuery>('getExpedienteArchivoByIdQuery');
+  const getExpedienteArchivosByCurpQuery = app.diContainer.resolve<GetExpedienteArchivosByCurpQuery>('getExpedienteArchivosByCurpQuery');
+
+  const createDocumentTypeCommand = app.diContainer.resolve<CreateDocumentTypeCommand>('createDocumentTypeCommand');
+  const updateDocumentTypeCommand = app.diContainer.resolve<UpdateDocumentTypeCommand>('updateDocumentTypeCommand');
+  const deleteDocumentTypeCommand = app.diContainer.resolve<DeleteDocumentTypeCommand>('deleteDocumentTypeCommand');
+  const createExpedienteCommand = app.diContainer.resolve<CreateExpedienteCommand>('createExpedienteCommand');
+  const updateExpedienteCommand = app.diContainer.resolve<UpdateExpedienteCommand>('updateExpedienteCommand');
+  const deleteExpedienteCommand = app.diContainer.resolve<DeleteExpedienteCommand>('deleteExpedienteCommand');
+  const createExpedienteArchivoCommand = app.diContainer.resolve<CreateExpedienteArchivoCommand>('createExpedienteArchivoCommand');
+  const updateExpedienteArchivoCommand = app.diContainer.resolve<UpdateExpedienteArchivoCommand>('updateExpedienteArchivoCommand');
+  const deleteExpedienteArchivoCommand = app.diContainer.resolve<DeleteExpedienteArchivoCommand>('deleteExpedienteArchivoCommand');
 
   // Register multipart support for file uploads
   await app.register(import('@fastify/multipart'), {
@@ -58,11 +81,10 @@ export default async function expedienteRoutes(app: FastifyInstance) {
     }
   }, async (_req, reply) => {
     try {
-      const documentTypes = await getAllDocumentTypes();
+      const documentTypes = await getAllDocumentTypesQuery.execute();
       return reply.send(ok(documentTypes));
     } catch (error: any) {
-      console.error('Error listing document types:', error);
-      return reply.code(500).send(internalError('Error al recuperar tipos de documento'));
+      return handleExpedienteError(error, reply);
     }
   });
 
@@ -91,14 +113,10 @@ export default async function expedienteRoutes(app: FastifyInstance) {
     }
 
     try {
-      const documentType = await getDocumentTypeById(parseInt(documentTypeId));
+      const documentType = await getDocumentTypeByIdQuery.execute(parseInt(documentTypeId));
       return reply.send(ok(documentType));
     } catch (error: any) {
-      if (error.message === 'DOCUMENT_TYPE_NOT_FOUND') {
-        return reply.code(404).send(notFound('DocumentType', documentTypeId));
-      }
-      console.error('Error getting document type:', error);
-      return reply.code(500).send(internalError('Error al recuperar tipo de documento'));
+      return handleExpedienteError(error, reply);
     }
   });
 
@@ -122,32 +140,24 @@ export default async function expedienteRoutes(app: FastifyInstance) {
       }
     }
   }, async (req, reply) => {
-    return withDbContext(req, async (tx) => {
-      const parsed = CreateDocumentTypeSchema.safeParse(req.body);
-      if (!parsed.success) {
-        return reply.code(400).send(validationError(parsed.error.issues));
-      }
+    const parsed = CreateDocumentTypeSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return reply.code(400).send(validationError(parsed.error.issues));
+    }
 
-      try {
-        const userId = req.user?.sub;
-        const documentType = await createDocumentTypeItem(
-          parsed.data.code,
-          parsed.data.name,
-          parsed.data.required ?? false,
-          parsed.data.validityDays ?? null,
-          parsed.data.active ?? true,
-          userId,
-          tx
-        );
-        return reply.code(201).send(ok(documentType));
-      } catch (error: any) {
-        if (error.message === 'DOCUMENT_TYPE_CODE_EXISTS') {
-          return reply.code(409).send({ ok: false, error: { code: 'CONFLICT', message: 'El código del tipo de documento ya existe' } });
-        }
-        console.error('Error creating document type:', error);
-        return reply.code(500).send(internalError('Error al crear tipo de documento'));
-      }
-    });
+    try {
+      const userId = req.user?.sub;
+      const documentType = await createDocumentTypeCommand.execute({
+        code: parsed.data.code,
+        name: parsed.data.name,
+        required: parsed.data.required ?? false,
+        validityDays: parsed.data.validityDays ?? null,
+        active: parsed.data.active ?? true
+      }, userId);
+      return reply.code(201).send(ok(documentType));
+    } catch (error: any) {
+      return handleExpedienteError(error, reply);
+    }
   });
 
   // Actualizar tipo de documento (requiere admin)
@@ -176,41 +186,33 @@ export default async function expedienteRoutes(app: FastifyInstance) {
       },
     }
   }, async (req, reply) => {
-    return withDbContext(req, async (tx) => {
-      const { documentTypeId } = req.params as { documentTypeId: string };
+    const { documentTypeId } = req.params as { documentTypeId: string };
 
-      // Validate parameter
-      const paramValidation = DocumentTypeIdParamSchema.safeParse({ documentTypeId });
-      if (!paramValidation.success) {
-        return reply.code(400).send(validationError(paramValidation.error.issues));
-      }
+    // Validate parameter
+    const paramValidation = DocumentTypeIdParamSchema.safeParse({ documentTypeId });
+    if (!paramValidation.success) {
+      return reply.code(400).send(validationError(paramValidation.error.issues));
+    }
 
-      const parsed = UpdateDocumentTypeSchema.safeParse(req.body);
-      if (!parsed.success) {
-        return reply.code(400).send(validationError(parsed.error.issues));
-      }
+    const parsed = UpdateDocumentTypeSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return reply.code(400).send(validationError(parsed.error.issues));
+    }
 
-      try {
-        const userId = req.user?.sub;
-        const documentType = await updateDocumentTypeItem(
-          parseInt(documentTypeId),
-          parsed.data.code,
-          parsed.data.name,
-          parsed.data.required,
-          parsed.data.validityDays,
-          parsed.data.active,
-          userId,
-          tx
-        );
-        return reply.send(ok(documentType));
-      } catch (error: any) {
-        if (error.message === 'DOCUMENT_TYPE_NOT_FOUND') {
-          return reply.code(404).send(notFound('DocumentType', documentTypeId));
-        }
-        console.error('Error updating document type:', error);
-        return reply.code(500).send(internalError('Error al actualizar tipo de documento'));
-      }
-    });
+    try {
+      const userId = req.user?.sub;
+      const documentType = await updateDocumentTypeCommand.execute({
+        documentTypeId: parseInt(documentTypeId),
+        code: parsed.data.code,
+        name: parsed.data.name,
+        required: parsed.data.required,
+        validityDays: parsed.data.validityDays,
+        active: parsed.data.active
+      }, userId);
+      return reply.send(ok(documentType));
+    } catch (error: any) {
+      return handleExpedienteError(error, reply);
+    }
   });
 
   // Eliminar tipo de documento (requiere admin)
@@ -229,26 +231,20 @@ export default async function expedienteRoutes(app: FastifyInstance) {
       },
     }
   }, async (req, reply) => {
-    return withDbContext(req, async (tx) => {
-      const { documentTypeId } = req.params as { documentTypeId: string };
+    const { documentTypeId } = req.params as { documentTypeId: string };
 
-      // Validate parameter
-      const paramValidation = DocumentTypeIdParamSchema.safeParse({ documentTypeId });
-      if (!paramValidation.success) {
-        return reply.code(400).send(validationError(paramValidation.error.issues));
-      }
+    // Validate parameter
+    const paramValidation = DocumentTypeIdParamSchema.safeParse({ documentTypeId });
+    if (!paramValidation.success) {
+      return reply.code(400).send(validationError(paramValidation.error.issues));
+    }
 
-      try {
-        const deletedId = await deleteDocumentTypeItem(parseInt(documentTypeId), tx);
-        return reply.send(ok({ documentTypeId: deletedId }));
-      } catch (error: any) {
-        if (error.message === 'DOCUMENT_TYPE_NOT_FOUND') {
-          return reply.code(404).send(notFound('DocumentType', documentTypeId));
-        }
-        console.error('Error deleting document type:', error);
-        return reply.code(500).send(internalError('Error al eliminar tipo de documento'));
-      }
-    });
+    try {
+      await deleteDocumentTypeCommand.execute(parseInt(documentTypeId));
+      return reply.send(ok({ documentTypeId: parseInt(documentTypeId) }));
+    } catch (error: any) {
+      return handleExpedienteError(error, reply);
+    }
   });
 
   // Expediente routes
@@ -263,11 +259,10 @@ export default async function expedienteRoutes(app: FastifyInstance) {
     }
   }, async (_req, reply) => {
     try {
-      const expedientes = await getAllExpedientes();
+      const expedientes = await getAllExpedientesQuery.execute();
       return reply.send(ok(expedientes));
     } catch (error: any) {
-      console.error('Error listing expedientes:', error);
-      return reply.code(500).send(internalError('Error al recuperar expedientes'));
+      return handleExpedienteError(error, reply);
     }
   });
 
@@ -296,14 +291,10 @@ export default async function expedienteRoutes(app: FastifyInstance) {
     }
 
     try {
-      const expediente = await getExpedienteByCurp(curp);
+      const expediente = await getExpedienteByCurpQuery.execute(curp);
       return reply.send(ok(expediente));
     } catch (error: any) {
-      if (error.message === 'EXPEDIENTE_NOT_FOUND') {
-        return reply.code(404).send(notFound('Expediente', curp));
-      }
-      console.error('Error getting expediente:', error);
-      return reply.code(500).send(internalError('Error al recuperar expediente'));
+      return handleExpedienteError(error, reply);
     }
   });
 
@@ -384,31 +375,24 @@ export default async function expedienteRoutes(app: FastifyInstance) {
       }
     }
   }, async (req, reply) => {
-    return withDbContext(req, async (tx) => {
-      const parsed = CreateExpedienteSchema.safeParse(req.body);
-      if (!parsed.success) {
-        return reply.code(400).send(validationError(parsed.error.issues));
-      }
+    const parsed = CreateExpedienteSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return reply.code(400).send(validationError(parsed.error.issues));
+    }
 
-      try {
-        const expediente = await createExpedienteItem(
-          parsed.data.curp,
-          parsed.data.afiliadoId ?? null,
-          parsed.data.interno ?? null,
-          parsed.data.estado ?? 'ABIERTO',
-          parsed.data.notas ?? null,
-          req.user?.sub,
-          tx
-        );
-        return reply.code(201).send(ok(expediente));
-      } catch (error: any) {
-        if (error.message === 'EXPEDIENTE_EXISTS') {
-          return reply.code(409).send({ ok: false, error: { code: 'CONFLICT', message: 'El expediente ya existe' } });
-        }
-        console.error('Error creating expediente:', error);
-        return reply.code(500).send(internalError('Error al crear expediente'));
-      }
-    });
+    try {
+      const userId = req.user?.sub;
+      const expediente = await createExpedienteCommand.execute({
+        curp: parsed.data.curp,
+        afiliadoId: parsed.data.afiliadoId ?? null,
+        interno: parsed.data.interno ?? null,
+        estado: parsed.data.estado ?? 'ABIERTO',
+        notas: parsed.data.notas ?? null
+      }, userId);
+      return reply.code(201).send(ok(expediente));
+    } catch (error: any) {
+      return handleExpedienteError(error, reply);
+    }
   });
 
   // Actualizar expediente (requiere auth)
@@ -436,39 +420,32 @@ export default async function expedienteRoutes(app: FastifyInstance) {
       },
     }
   }, async (req, reply) => {
-    return withDbContext(req, async (tx) => {
-      const { curp } = req.params as { curp: string };
+    const { curp } = req.params as { curp: string };
 
-      // Validate parameter
-      const paramValidation = ExpedienteCurpParamSchema.safeParse({ curp });
-      if (!paramValidation.success) {
-        return reply.code(400).send(validationError(paramValidation.error.issues));
-      }
+    // Validate parameter
+    const paramValidation = ExpedienteCurpParamSchema.safeParse({ curp });
+    if (!paramValidation.success) {
+      return reply.code(400).send(validationError(paramValidation.error.issues));
+    }
 
-      const parsed = UpdateExpedienteSchema.safeParse(req.body);
-      if (!parsed.success) {
-        return reply.code(400).send(validationError(parsed.error.issues));
-      }
+    const parsed = UpdateExpedienteSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return reply.code(400).send(validationError(parsed.error.issues));
+    }
 
-      try {
-        const expediente = await updateExpedienteItem(
-          curp,
-          parsed.data.afiliadoId,
-          parsed.data.interno,
-          parsed.data.estado,
-          parsed.data.notas,
-          req.user?.sub,
-          tx
-        );
-        return reply.send(ok(expediente));
-      } catch (error: any) {
-        if (error.message === 'EXPEDIENTE_NOT_FOUND') {
-          return reply.code(404).send(notFound('Expediente', curp));
-        }
-        console.error('Error updating expediente:', error);
-        return reply.code(500).send(internalError('Error al actualizar expediente'));
-      }
-    });
+    try {
+      const userId = req.user?.sub;
+      const expediente = await updateExpedienteCommand.execute({
+        curp,
+        afiliadoId: parsed.data.afiliadoId,
+        interno: parsed.data.interno,
+        estado: parsed.data.estado,
+        notas: parsed.data.notas
+      }, userId);
+      return reply.send(ok(expediente));
+    } catch (error: any) {
+      return handleExpedienteError(error, reply);
+    }
   });
 
   // Eliminar expediente (requiere admin)
@@ -487,26 +464,20 @@ export default async function expedienteRoutes(app: FastifyInstance) {
       },
     }
   }, async (req, reply) => {
-    return withDbContext(req, async (tx) => {
-      const { curp } = req.params as { curp: string };
+    const { curp } = req.params as { curp: string };
 
-      // Validate parameter
-      const paramValidation = ExpedienteCurpParamSchema.safeParse({ curp });
-      if (!paramValidation.success) {
-        return reply.code(400).send(validationError(paramValidation.error.issues));
-      }
+    // Validate parameter
+    const paramValidation = ExpedienteCurpParamSchema.safeParse({ curp });
+    if (!paramValidation.success) {
+      return reply.code(400).send(validationError(paramValidation.error.issues));
+    }
 
-      try {
-        const deletedCurp = await deleteExpedienteItem(curp, tx);
-        return reply.send(ok({ curp: deletedCurp }));
-      } catch (error: any) {
-        if (error.message === 'EXPEDIENTE_NOT_FOUND') {
-          return reply.code(404).send(notFound('Expediente', curp));
-        }
-        console.error('Error deleting expediente:', error);
-        return reply.code(500).send(internalError('Error al eliminar expediente'));
-      }
-    });
+    try {
+      await deleteExpedienteCommand.execute(curp);
+      return reply.send(ok({ curp }));
+    } catch (error: any) {
+      return handleExpedienteError(error, reply);
+    }
   });
 
   // ExpedienteArchivo routes
@@ -536,14 +507,10 @@ export default async function expedienteRoutes(app: FastifyInstance) {
     }
 
     try {
-      const archivos = await getExpedienteArchivosByCurp(curp);
+      const archivos = await getExpedienteArchivosByCurpQuery.execute(curp);
       return reply.send(ok(archivos));
     } catch (error: any) {
-      if (error.message === 'EXPEDIENTE_NOT_FOUND') {
-        return reply.code(404).send(notFound('Expediente', curp));
-      }
-      console.error('Error listing expediente archivos:', error);
-      return reply.code(500).send(internalError('Error al recuperar archivos del expediente'));
+      return handleExpedienteError(error, reply);
     }
   });
 
@@ -572,14 +539,10 @@ export default async function expedienteRoutes(app: FastifyInstance) {
     }
 
     try {
-      const archivo = await getExpedienteArchivoById(parseInt(archivoId));
+      const archivo = await getExpedienteArchivoByIdQuery.execute(parseInt(archivoId));
       return reply.send(ok(archivo));
     } catch (error: any) {
-      if (error.message === 'EXPEDIENTE_ARCHIVO_NOT_FOUND') {
-        return reply.code(404).send(notFound('ExpedienteArchivo', archivoId));
-      }
-      console.error('Error getting expediente archivo:', error);
-      return reply.code(500).send(internalError('Error al recuperar archivo del expediente'));
+      return handleExpedienteError(error, reply);
     }
   });
 
@@ -750,46 +713,31 @@ export default async function expedienteRoutes(app: FastifyInstance) {
       }
     }
   }, async (req, reply) => {
-    return withDbContext(req, async (tx) => {
-      const parsed = CreateExpedienteArchivoSchema.safeParse(req.body);
-      if (!parsed.success) {
-        return reply.code(400).send(validationError(parsed.error.issues));
-      }
+    const parsed = CreateExpedienteArchivoSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return reply.code(400).send(validationError(parsed.error.issues));
+    }
 
-      try {
-        const archivo = await createExpedienteArchivoItem(
-          parsed.data.curp,
-          parsed.data.tipoCodigo ?? null,
-          parsed.data.titulo,
-          parsed.data.fileName,
-          parsed.data.mimeType,
-          parsed.data.byteSize,
-          parsed.data.sha256Hex,
-          parsed.data.storageProvider,
-          parsed.data.storagePath,
-          parsed.data.observaciones ?? null,
-          parsed.data.documentTypeId ?? null,
-          req.user?.sub,
-          tx
-        );
-        return reply.code(201).send(ok(archivo));
-      } catch (error: any) {
-        if (error.message === 'EXPEDIENTE_NOT_FOUND') {
-          return reply.code(404).send(notFound('Expediente', parsed.data.curp));
-        }
-        if (error.message === 'DOCUMENT_TYPE_NOT_FOUND') {
-          return reply.code(404).send(notFound('DocumentType', parsed.data.documentTypeId?.toString() || ''));
-        }
-        if (error.message === 'EXPEDIENTE_ARCHIVO_HASH_EXISTS') {
-          return reply.code(409 as any).send({ ok: false, error: { code: 'CONFLICT', message: 'Ya existe un archivo con este hash' } });
-        }
-        console.error('Error creating expediente archivo:', error);
-        return reply.code(500).send(internalError('Failed to create expediente archivo'));
-      }
-    });
-  });
-
-  // Upload archivo de expediente (requiere auth)
+    try {
+      const userId = req.user?.sub;
+      const archivo = await createExpedienteArchivoCommand.execute({
+        curp: parsed.data.curp,
+        tipoCodigo: parsed.data.tipoCodigo ?? null,
+        titulo: parsed.data.titulo,
+        fileName: parsed.data.fileName,
+        mimeType: parsed.data.mimeType,
+        byteSize: parsed.data.byteSize,
+        sha256Hex: parsed.data.sha256Hex,
+        storageProvider: parsed.data.storageProvider,
+        storagePath: parsed.data.storagePath,
+        observaciones: parsed.data.observaciones ?? null,
+        documentTypeId: parsed.data.documentTypeId ?? null
+      }, userId);
+      return reply.code(201).send(ok(archivo));
+    } catch (error: any) {
+      return handleExpedienteError(error, reply);
+    }
+  });  // Upload archivo de expediente (requiere auth)
   app.post('/expedientes/:curp/upload', {
     preHandler: [requireAuth],
     schema: {
@@ -1058,48 +1006,38 @@ export default async function expedienteRoutes(app: FastifyInstance) {
       }
     }
   }, async (req, reply) => {
-    return withDbContext(req, async (tx) => {
-      const { archivoId } = req.params as { archivoId: string };
+    const { archivoId } = req.params as { archivoId: string };
 
-      // Validate parameter
-      const paramValidation = ExpedienteArchivoIdParamSchema.safeParse({ archivoId });
-      if (!paramValidation.success) {
-        return reply.code(400).send(validationError(paramValidation.error.issues));
-      }
+    // Validate parameter
+    const paramValidation = ExpedienteArchivoIdParamSchema.safeParse({ archivoId });
+    if (!paramValidation.success) {
+      return reply.code(400).send(validationError(paramValidation.error.issues));
+    }
 
-      const parsed = UpdateExpedienteArchivoSchema.safeParse(req.body);
-      if (!parsed.success) {
-        return reply.code(400).send(validationError(parsed.error.issues));
-      }
+    const parsed = UpdateExpedienteArchivoSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return reply.code(400).send(validationError(parsed.error.issues));
+    }
 
-      try {
-        const archivo = await updateExpedienteArchivoItem(
-          parseInt(archivoId),
-          parsed.data.tipoCodigo,
-          parsed.data.titulo,
-          parsed.data.fileName,
-          parsed.data.mimeType,
-          parsed.data.byteSize,
-          parsed.data.sha256Hex,
-          parsed.data.storageProvider,
-          parsed.data.storagePath,
-          parsed.data.observaciones,
-          parsed.data.documentTypeId,
-          req.user?.sub,
-          tx
-        );
-        return reply.send(ok(archivo));
-      } catch (error: any) {
-        if (error.message === 'EXPEDIENTE_ARCHIVO_NOT_FOUND') {
-          return reply.code(404).send(notFound('ExpedienteArchivo', archivoId));
-        }
-        if (error.message === 'DOCUMENT_TYPE_NOT_FOUND') {
-          return reply.code(404).send(notFound('DocumentType', parsed.data.documentTypeId?.toString() || ''));
-        }
-        console.error('Error updating expediente archivo:', error);
-        return reply.code(500).send(internalError('Error al actualizar archivo del expediente'));
-      }
-    });
+    try {
+      const userId = req.user?.sub;
+      const archivo = await updateExpedienteArchivoCommand.execute({
+        archivoId: parseInt(archivoId),
+        tipoCodigo: parsed.data.tipoCodigo,
+        titulo: parsed.data.titulo,
+        fileName: parsed.data.fileName,
+        mimeType: parsed.data.mimeType,
+        byteSize: parsed.data.byteSize,
+        sha256Hex: parsed.data.sha256Hex,
+        storageProvider: parsed.data.storageProvider,
+        storagePath: parsed.data.storagePath,
+        observaciones: parsed.data.observaciones,
+        documentTypeId: parsed.data.documentTypeId
+      }, userId);
+      return reply.send(ok(archivo));
+    } catch (error: any) {
+      return handleExpedienteError(error, reply);
+    }
   });
 
   // Eliminar archivo de expediente (requiere auth)
@@ -1171,26 +1109,20 @@ export default async function expedienteRoutes(app: FastifyInstance) {
       }
     }
   }, async (req, reply) => {
-    return withDbContext(req, async (tx) => {
-      const { archivoId } = req.params as { archivoId: string };
+    const { archivoId } = req.params as { archivoId: string };
 
-      // Validate parameter
-      const paramValidation = ExpedienteArchivoIdParamSchema.safeParse({ archivoId });
-      if (!paramValidation.success) {
-        return reply.code(400).send(validationError(paramValidation.error.issues));
-      }
+    // Validate parameter
+    const paramValidation = ExpedienteArchivoIdParamSchema.safeParse({ archivoId });
+    if (!paramValidation.success) {
+      return reply.code(400).send(validationError(paramValidation.error.issues));
+    }
 
-      try {
-        const deletedId = await deleteExpedienteArchivoItem(parseInt(archivoId), tx);
-        return reply.send(ok({ archivoId: deletedId }));
-      } catch (error: any) {
-        if (error.message === 'EXPEDIENTE_ARCHIVO_NOT_FOUND') {
-          return reply.code(404).send(notFound('ExpedienteArchivo', archivoId));
-        }
-        console.error('Error deleting expediente archivo:', error);
-        return reply.code(500).send(internalError('Error al eliminar archivo del expediente'));
-      }
-    });
+    try {
+      await deleteExpedienteArchivoCommand.execute(parseInt(archivoId));
+      return reply.send(ok({ archivoId: parseInt(archivoId) }));
+    } catch (error: any) {
+      return handleExpedienteError(error, reply);
+    }
   });
 
   // Upload document to expediente (simple upload)

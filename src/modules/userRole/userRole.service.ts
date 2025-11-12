@@ -34,17 +34,10 @@ export async function createUserRoleItem(usuarioId: string, roleId: string, esAc
 }
 
 export async function updateUserRoleItem(usuarioId: string, roleId: string, esActivo?: boolean, userId?: string, tx?: any) {
-  const userRole = await updateUserRole(usuarioId, roleId, esActivo, userId, tx);
-  if (!userRole) {
-    throw new Error('USER_ROLE_NOT_FOUND');
-  }
-  return userRole;
+  // updateUserRole throws an error if not supported
+  return await updateUserRole(usuarioId, roleId, esActivo, userId, tx);
 }
 
 export async function deleteUserRoleItem(usuarioId: string, roleId: string, tx?: any) {
-  const deletedIds = await deleteUserRole(usuarioId, roleId, tx);
-  if (!deletedIds) {
-    throw new Error('USER_ROLE_NOT_FOUND');
-  }
-  return deletedIds;
+  return await deleteUserRole(usuarioId, roleId, tx);
 }

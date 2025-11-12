@@ -1,14 +1,13 @@
 import { FastifyInstance } from 'fastify';
 import { requireAuth } from '../auth/auth.middleware.js';
 import { CreatePersonalSchema, UpdatePersonalSchema } from './personal.schemas.js';
-import {
-  getAllPersonalService,
-  getPersonalByIdService,
-  createPersonalService,
-  updatePersonalService,
-  deletePersonalService
-} from './personal.service.js';
-import { ok, fail } from '../../utils/http.js';
+import { ok } from '../../utils/http.js';
+import { handlePersonalError } from './infrastructure/errorHandler.js';
+import { GetAllPersonalQuery } from './application/queries/GetAllPersonalQuery.js';
+import { GetPersonalByIdQuery } from './application/queries/GetPersonalByIdQuery.js';
+import { CreatePersonalCommand } from './application/commands/CreatePersonalCommand.js';
+import { UpdatePersonalCommand } from './application/commands/UpdatePersonalCommand.js';
+import { DeletePersonalCommand } from './application/commands/DeletePersonalCommand.js';
 
 // Routes for Personal CRUD operations
 export default async function personalRoutes(app: FastifyInstance) {
@@ -89,11 +88,12 @@ export default async function personalRoutes(app: FastifyInstance) {
   }, async (req, reply) => {
     try {
       const { claveOrganica0, claveOrganica1 } = req.query as { claveOrganica0?: string; claveOrganica1?: string };
-      const records = await getAllPersonalService(claveOrganica0, claveOrganica1);
+      const userId = req.user?.sub || 'unknown';
+      const getAllPersonalQuery = req.diScope.resolve<GetAllPersonalQuery>('getAllPersonalQuery');
+      const records = await getAllPersonalQuery.execute(claveOrganica0, claveOrganica1, userId);
       return reply.send(ok(records));
-    } catch (error: any) {
-      console.error('Error listing personal:', error);
-      return reply.code(500).send(fail('PERSONAL_LIST_FAILED'));
+    } catch (error) {
+      return handlePersonalError(error, reply, req.user?.sub);
     }
   });
 
@@ -183,14 +183,12 @@ export default async function personalRoutes(app: FastifyInstance) {
   }, async (req, reply) => {
     try {
       const { interno } = req.params as { interno: number };
-      const record = await getPersonalByIdService(interno);
+      const userId = req.user?.sub || 'unknown';
+      const getPersonalByIdQuery = req.diScope.resolve<GetPersonalByIdQuery>('getPersonalByIdQuery');
+      const record = await getPersonalByIdQuery.execute(interno, userId);
       return reply.send(ok(record));
-    } catch (error: any) {
-      if (error.message === 'PERSONAL_NOT_FOUND') {
-        return reply.code(404).send(fail('PERSONAL_NOT_FOUND'));
-      }
-      console.error('Error getting personal:', error);
-      return reply.code(500).send(fail('PERSONAL_GET_FAILED'));
+    } catch (error) {
+      return handlePersonalError(error, reply, req.user?.sub);
     }
   });
 
@@ -272,13 +270,18 @@ export default async function personalRoutes(app: FastifyInstance) {
       }
     }
   }, async (req, reply) => {
-    const parsed = CreatePersonalSchema.safeParse(req.body);
-    if (!parsed.success) {
-      return reply.code(400).send(fail(parsed.error.message));
-    }
-
     try {
-      const record = await createPersonalService({
+      const parsed = CreatePersonalSchema.safeParse(req.body);
+      if (!parsed.success) {
+        // Los errores de validación serán manejados por las validaciones en el comando
+        // pero podemos proporcionar un mensaje más específico
+        const errorMessage = parsed.error.issues.map(issue => `${issue.path.join('.')}: ${issue.message}`).join(', ');
+        throw new Error(`Datos de personal inválidos: ${errorMessage}`);
+      }
+
+      const userId = req.user?.sub || 'unknown';
+      const createPersonalCommand = req.diScope.resolve<CreatePersonalCommand>('createPersonalCommand');
+      const record = await createPersonalCommand.execute({
         interno: parsed.data.interno,
         curp: parsed.data.curp ?? null,
         rfc: parsed.data.rfc ?? null,
@@ -307,11 +310,10 @@ export default async function personalRoutes(app: FastifyInstance) {
         celular: parsed.data.celular ?? null,
         expediente: parsed.data.expediente ?? null,
         f_expediente: parsed.data.f_expediente ?? null
-      });
+      }, userId);
       return reply.code(201).send(ok(record));
-    } catch (error: any) {
-      console.error('Error creating personal:', error);
-      return reply.code(500).send(fail('PERSONAL_CREATE_FAILED'));
+    } catch (error) {
+      return handlePersonalError(error, reply, req.user?.sub);
     }
   });
 
@@ -411,21 +413,21 @@ export default async function personalRoutes(app: FastifyInstance) {
       }
     }
   }, async (req, reply) => {
-    const { interno } = req.params as { interno: number };
-    const parsed = UpdatePersonalSchema.safeParse(req.body);
-    if (!parsed.success) {
-      return reply.code(400).send(fail(parsed.error.message));
-    }
-
     try {
-      const record = await updatePersonalService(interno, parsed.data);
-      return reply.send(ok(record));
-    } catch (error: any) {
-      if (error.message === 'PERSONAL_NOT_FOUND') {
-        return reply.code(404).send(fail('PERSONAL_NOT_FOUND'));
+      const { interno } = req.params as { interno: number };
+      const parsed = UpdatePersonalSchema.safeParse(req.body);
+      if (!parsed.success) {
+        // Los errores de validación serán manejados por las validaciones en el comando
+        const errorMessage = parsed.error.issues.map(issue => `${issue.path.join('.')}: ${issue.message}`).join(', ');
+        throw new Error(`Datos de actualización de personal inválidos: ${errorMessage}`);
       }
-      console.error('Error updating personal:', error);
-      return reply.code(500).send(fail('PERSONAL_UPDATE_FAILED'));
+
+      const userId = req.user?.sub || 'unknown';
+      const updatePersonalCommand = req.diScope.resolve<UpdatePersonalCommand>('updatePersonalCommand');
+      const record = await updatePersonalCommand.execute(interno, parsed.data, userId);
+      return reply.send(ok(record));
+    } catch (error) {
+      return handlePersonalError(error, reply, req.user?.sub);
     }
   });
 
@@ -482,14 +484,12 @@ export default async function personalRoutes(app: FastifyInstance) {
   }, async (req, reply) => {
     try {
       const { interno } = req.params as { interno: number };
-      await deletePersonalService(interno);
-      return reply.send(ok({}));
-    } catch (error: any) {
-      if (error.message === 'PERSONAL_NOT_FOUND') {
-        return reply.code(404).send(fail('PERSONAL_NOT_FOUND'));
-      }
-      console.error('Error deleting personal:', error);
-      return reply.code(500).send(fail('PERSONAL_DELETE_FAILED'));
+      const userId = req.user?.sub || 'unknown';
+      const deletePersonalCommand = req.diScope.resolve<DeletePersonalCommand>('deletePersonalCommand');
+      const result = await deletePersonalCommand.execute(interno, userId);
+      return reply.send(ok(result));
+    } catch (error) {
+      return handlePersonalError(error, reply, req.user?.sub);
     }
   });
 }

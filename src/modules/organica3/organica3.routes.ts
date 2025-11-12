@@ -1,8 +1,14 @@
 import { FastifyInstance } from 'fastify';
 import { requireAuth } from '../auth/auth.middleware.js';
 import { CreateOrganica3Schema, UpdateOrganica3Schema, DynamicQuerySchema } from './organica3.schemas.js';
-import { getOrganica3ById, getAllOrganica3, createOrganica3Record, updateOrganica3Record, deleteOrganica3Record, queryOrganica3Dynamic, getOrganica3ByUserToken } from './organica3.service.js';
-import { ok, fail, validationError, conflict, badRequest, internalError } from '../../utils/http.js';
+import { getOrganica3ByUserToken, queryOrganica3Dynamic } from './organica3.service.js';
+import { ok, validationError } from '../../utils/http.js';
+import { GetAllOrganica3Query } from './application/queries/GetAllOrganica3Query.js';
+import { GetOrganica3ByIdQuery } from './application/queries/GetOrganica3ByIdQuery.js';
+import { CreateOrganica3Command } from './application/commands/CreateOrganica3Command.js';
+import { UpdateOrganica3Command } from './application/commands/UpdateOrganica3Command.js';
+import { DeleteOrganica3Command } from './application/commands/DeleteOrganica3Command.js';
+import { handleOrganica3Error } from './infrastructure/errorHandler.js';
 
 // [FIREBIRD] Routes for ORGANICA_3 CRUD operations
 export default async function organica3Routes(app: FastifyInstance) {
@@ -62,13 +68,14 @@ export default async function organica3Routes(app: FastifyInstance) {
         }
       }
     }
-  }, async (_req, reply) => {
+  }, async (req, reply) => {
     try {
-      const records = await getAllOrganica3();
+      const user = (req as any).user;
+      const getAllOrganica3Query = req.diScope.resolve<GetAllOrganica3Query>('getAllOrganica3Query');
+      const records = await getAllOrganica3Query.execute(user?.id?.toString());
       return reply.send(ok(records));
     } catch (error: any) {
-      console.error('Error listing organica3:', error);
-      return reply.code(500).send(fail('ORGANICA3_LIST_FAILED'));
+      return handleOrganica3Error(error, reply);
     }
   });
 
@@ -163,14 +170,12 @@ export default async function organica3Routes(app: FastifyInstance) {
   }, async (req, reply) => {
     try {
       const { claveOrganica0, claveOrganica1, claveOrganica2, claveOrganica3 } = req.params as { claveOrganica0: string; claveOrganica1: string; claveOrganica2: string; claveOrganica3: string };
-      const record = await getOrganica3ById(claveOrganica0, claveOrganica1, claveOrganica2, claveOrganica3);
+      const user = (req as any).user;
+      const getOrganica3ByIdQuery = req.diScope.resolve<GetOrganica3ByIdQuery>('getOrganica3ByIdQuery');
+      const record = await getOrganica3ByIdQuery.execute(claveOrganica0, claveOrganica1, claveOrganica2, claveOrganica3, user?.id?.toString());
       return reply.send(ok(record));
     } catch (error: any) {
-      if (error.message === 'ORGANICA3_NOT_FOUND') {
-        return reply.code(404).send(fail('ORGANICA3_NOT_FOUND'));
-      }
-      console.error('Error getting organica3:', error);
-      return reply.code(500).send(fail('ORGANICA3_GET_FAILED'));
+      return handleOrganica3Error(error, reply);
     }
   });
 
@@ -260,20 +265,12 @@ export default async function organica3Routes(app: FastifyInstance) {
     }
 
     try {
-      const record = await createOrganica3Record(parsed.data, req);
+      const user = (req as any).user;
+      const createOrganica3Command = req.diScope.resolve<CreateOrganica3Command>('createOrganica3Command');
+      const record = await createOrganica3Command.execute(parsed.data, user?.id?.toString());
       return reply.code(201).send(ok(record));
     } catch (error: any) {
-      if (error.message === 'ORGANICA3_EXISTS') {
-        return reply.code(409).send(conflict('ORGANICA3 record', 'Record with this composite key already exists'));
-      }
-      if (error.code === 'ER_DUP_ENTRY') {
-        return reply.code(409).send(conflict('ORGANICA3 record', 'Duplicate entry detected'));
-      }
-      if (error.code === 'ER_NO_REFERENCED_ROW') {
-        return reply.code(400).send(badRequest('Invalid reference: related ORGANICA2 record not found'));
-      }
-      console.error('Error creating organica3:', error);
-      return reply.code(500).send(internalError('Failed to create ORGANICA3 record'));
+      return handleOrganica3Error(error, reply);
     }
   });
 
@@ -369,14 +366,11 @@ export default async function organica3Routes(app: FastifyInstance) {
     }
 
     try {
-      const record = await updateOrganica3Record(claveOrganica0, claveOrganica1, claveOrganica2, claveOrganica3, parsed.data, req);
+      const updateOrganica3Command = req.diScope.resolve<UpdateOrganica3Command>('updateOrganica3Command');
+      const record = await updateOrganica3Command.execute(claveOrganica0, claveOrganica1, claveOrganica2, claveOrganica3, parsed.data, req.user?.sub?.toString());
       return reply.send(ok(record));
     } catch (error: any) {
-      if (error.message === 'ORGANICA3_NOT_FOUND') {
-        return reply.code(404).send(fail('ORGANICA3_NOT_FOUND'));
-      }
-      console.error('Error updating organica3:', error);
-      return reply.code(500).send(fail('ORGANICA3_UPDATE_FAILED'));
+      return handleOrganica3Error(error, reply);
     }
   });
 
@@ -449,14 +443,11 @@ export default async function organica3Routes(app: FastifyInstance) {
   }, async (req, reply) => {
     try {
       const { claveOrganica0, claveOrganica1, claveOrganica2, claveOrganica3 } = req.params as { claveOrganica0: string; claveOrganica1: string; claveOrganica2: string; claveOrganica3: string };
-      const result = await deleteOrganica3Record(claveOrganica0, claveOrganica1, claveOrganica2, claveOrganica3, req);
+      const deleteOrganica3Command = req.diScope.resolve<DeleteOrganica3Command>('deleteOrganica3Command');
+      const result = await deleteOrganica3Command.execute(claveOrganica0, claveOrganica1, claveOrganica2, claveOrganica3, req.user?.sub?.toString());
       return reply.send(ok(result));
     } catch (error: any) {
-      if (error.message === 'ORGANICA3_NOT_FOUND') {
-        return reply.code(404).send(fail('ORGANICA3_NOT_FOUND'));
-      }
-      console.error('Error deleting organica3:', error);
-      return reply.code(500).send(fail('ORGANICA3_DELETE_FAILED'));
+      return handleOrganica3Error(error, reply);
     }
   });
 
@@ -551,8 +542,7 @@ export default async function organica3Routes(app: FastifyInstance) {
       const records = await queryOrganica3Dynamic(parsed.data);
       return reply.send(ok(records));
     } catch (error: any) {
-      console.error('Error querying organica3:', error);
-      return reply.code(500).send(fail('ORGANICA3_QUERY_FAILED'));
+      return handleOrganica3Error(error, reply);
     }
   });
 
@@ -643,8 +633,7 @@ export default async function organica3Routes(app: FastifyInstance) {
       const records = await getOrganica3ByUserToken(claveOrganica0, claveOrganica1, claveOrganica2);
       return reply.send(ok(records));
     } catch (error: any) {
-      console.error('Error getting organica3 by user token:', error);
-      return reply.code(500).send(fail('ORGANICA3_USER_QUERY_FAILED'));
+      return handleOrganica3Error(error, reply);
     }
   });
 }

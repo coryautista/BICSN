@@ -1,9 +1,14 @@
 import { FastifyInstance } from 'fastify';
 import { requireAuth, requireRole } from '../auth/auth.middleware.js';
 import { CreateMenuSchema, UpdateMenuSchema } from './menu.schemas.js';
-import { getAllMenus, getMenuById, createMenuItem, updateMenuItem, deleteMenuItem, getMenuHierarchy } from './menu.service.js';
 import { fail } from '../../utils/http.js';
-import { withDbContext } from '../../db/context.js';
+import { handleMenuError } from './infrastructure/errorHandler.js';
+import type { GetAllMenusQuery } from './application/queries/GetAllMenusQuery.js';
+import type { GetMenuByIdQuery } from './application/queries/GetMenuByIdQuery.js';
+import type { GetMenuHierarchyQuery } from './application/queries/GetMenuHierarchyQuery.js';
+import type { CreateMenuCommand } from './application/commands/CreateMenuCommand.js';
+import type { UpdateMenuCommand } from './application/commands/UpdateMenuCommand.js';
+import type { DeleteMenuCommand } from './application/commands/DeleteMenuCommand.js';
 
 export default async function menuRoutes(app: FastifyInstance) {
 
@@ -36,9 +41,15 @@ export default async function menuRoutes(app: FastifyInstance) {
         }
       }
     }
-  }, async (_req, reply) => {
-    const menus = await getAllMenus();
-    return reply.send({ data: menus });
+  }, async (req, reply) => {
+    try {
+      // Resolve GetAllMenusQuery from DI container
+      const getAllMenusQuery = req.diScope.resolve<GetAllMenusQuery>('getAllMenusQuery');
+      const menus = await getAllMenusQuery.execute();
+      return reply.send({ data: menus });
+    } catch (error: any) {
+      return handleMenuError(error, reply);
+    }
   });
 
   // Obtener menú por ID (requiere auth)
@@ -103,11 +114,12 @@ export default async function menuRoutes(app: FastifyInstance) {
   }, async (req, reply) => {
     const { id } = req.params as { id: number };
     try {
-      const menu = await getMenuById(id);
+      // Resolve GetMenuByIdQuery from DI container
+      const getMenuByIdQuery = req.diScope.resolve<GetMenuByIdQuery>('getMenuByIdQuery');
+      const menu = await getMenuByIdQuery.execute(id);
       return reply.send({ data: menu });
-    } catch (e: any) {
-      if (e.message === 'MENU_NOT_FOUND') return reply.code(404).send(fail(e.message));
-      return reply.code(500).send(fail('MENU_FETCH_FAILED'));
+    } catch (error: any) {
+      return handleMenuError(error, reply);
     }
   });
 
@@ -130,9 +142,15 @@ export default async function menuRoutes(app: FastifyInstance) {
         }
       }
     }
-  }, async (_req, reply) => {
-    const hierarchy = await getMenuHierarchy();
-    return reply.send({ data: hierarchy });
+  }, async (req, reply) => {
+    try {
+      // Resolve GetMenuHierarchyQuery from DI container
+      const getMenuHierarchyQuery = req.diScope.resolve<GetMenuHierarchyQuery>('getMenuHierarchyQuery');
+      const hierarchy = await getMenuHierarchyQuery.execute();
+      return reply.send({ data: hierarchy });
+    } catch (error: any) {
+      return handleMenuError(error, reply);
+    }
   });
 
   // Crear menú (requiere admin)
@@ -212,29 +230,24 @@ export default async function menuRoutes(app: FastifyInstance) {
       }
     }
   }, async (req, reply) => {
-    return withDbContext(req, async (tx) => {
-      const parsed = CreateMenuSchema.safeParse(req.body);
-      if (!parsed.success) return reply.code(400).send(fail(parsed.error.message));
+    const parsed = CreateMenuSchema.safeParse(req.body);
+    if (!parsed.success) return reply.code(400).send(fail(parsed.error.message));
 
-      try {
-        console.log('Creating menu with data:', parsed.data);
-        const menu = await createMenuItem(
-          parsed.data.nombre,
-          parsed.data.orden,
-          parsed.data.componente,
-          parsed.data.parentId,
-          parsed.data.icono,
-          tx
-        );
-        console.log('Menu created successfully:', menu);
-        return reply.code(201).send({ data: menu });
-      } catch (e: any) {
-        console.error('Error creating menu:', e.message);
-        console.error('Full error:', e);
-        if (e.message === 'PARENT_MENU_NOT_FOUND') return reply.code(404).send(fail(e.message));
-        return reply.code(500).send(fail(e.message || 'MENU_CREATE_FAILED'));
-      }
-    });
+    try {
+      // Resolve CreateMenuCommand from DI container
+      const createMenuCommand = req.diScope.resolve<CreateMenuCommand>('createMenuCommand');
+      const menu = await createMenuCommand.execute({
+        nombre: parsed.data.nombre,
+        orden: parsed.data.orden,
+        componente: parsed.data.componente,
+        parentId: parsed.data.parentId,
+        icono: parsed.data.icono
+      });
+
+      return reply.code(201).send({ data: menu });
+    } catch (error: any) {
+      return handleMenuError(error, reply);
+    }
   });
 
   // Actualizar menú (requiere admin)
@@ -321,30 +334,25 @@ export default async function menuRoutes(app: FastifyInstance) {
       }
     }
   }, async (req, reply) => {
-    return withDbContext(req, async (tx) => {
-      const { id } = req.params as { id: number };
-      const parsed = UpdateMenuSchema.safeParse(req.body);
-      if (!parsed.success) return reply.code(400).send(fail(parsed.error.message));
+    const { id } = req.params as { id: number };
+    const parsed = UpdateMenuSchema.safeParse(req.body);
+    if (!parsed.success) return reply.code(400).send(fail(parsed.error.message));
 
-      try {
-        const menu = await updateMenuItem(
-          id,
-          parsed.data.nombre,
-          parsed.data.componente,
-          parsed.data.parentId,
-          parsed.data.icono,
-          parsed.data.orden,
-          tx
-        );
-        if (!menu) return reply.code(404).send(fail('MENU_NOT_FOUND'));
-        return reply.send({ data: menu });
-      } catch (e: any) {
-        if (e.message === 'MENU_NOT_FOUND') return reply.code(404).send(fail(e.message));
-        if (e.message === 'PARENT_MENU_NOT_FOUND') return reply.code(404).send(fail(e.message));
-        if (e.message === 'MENU_CANNOT_BE_PARENT_OF_ITSELF') return reply.code(400).send(fail(e.message));
-        return reply.code(500).send(fail('MENU_UPDATE_FAILED'));
-      }
-    });
+    try {
+      // Resolve UpdateMenuCommand from DI container
+      const updateMenuCommand = req.diScope.resolve<UpdateMenuCommand>('updateMenuCommand');
+      const menu = await updateMenuCommand.execute({
+        id,
+        nombre: parsed.data.nombre,
+        componente: parsed.data.componente,
+        parentId: parsed.data.parentId,
+        icono: parsed.data.icono,
+        orden: parsed.data.orden
+      });
+      return reply.send({ data: menu });
+    } catch (error: any) {
+      return handleMenuError(error, reply);
+    }
   });
 
   // Eliminar menú (requiere admin)
@@ -415,17 +423,14 @@ export default async function menuRoutes(app: FastifyInstance) {
       }
     }
   }, async (req, reply) => {
-    return withDbContext(req, async (tx) => {
-      const { id } = req.params as { id: number };
-      try {
-        const deletedId = await deleteMenuItem(id, tx);
-        if (!deletedId) return reply.code(404).send(fail('MENU_NOT_FOUND'));
-        return reply.send({ data: { id: deletedId } });
-      } catch (e: any) {
-        if (e.message === 'MENU_NOT_FOUND') return reply.code(404).send(fail(e.message));
-        if (e.message === 'CANNOT_DELETE_MENU_WITH_CHILDREN') return reply.code(400).send(fail(e.message));
-        return reply.code(500).send(fail('MENU_DELETE_FAILED'));
-      }
-    });
+    const { id } = req.params as { id: number };
+    try {
+      // Resolve DeleteMenuCommand from DI container
+      const deleteMenuCommand = req.diScope.resolve<DeleteMenuCommand>('deleteMenuCommand');
+      await deleteMenuCommand.execute({ id });
+      return reply.send({ data: { id } });
+    } catch (error: any) {
+      return handleMenuError(error, reply);
+    }
   });
 }

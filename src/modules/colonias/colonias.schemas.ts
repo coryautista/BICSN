@@ -29,12 +29,5 @@ export const CodigoPostalIdParamSchema = z.object({
 });
 
 export const ColoniaQuerySchema = z.object({
-  estadoId: z.string().length(2, 'EstadoID must be exactly 2 characters').optional(),
-  municipioId: z.string().regex(/^\d+$/, 'MunicipioID must be a number').transform(val => parseInt(val)).optional(),
-  codigoPostal: z.string().length(5, 'CodigoPostal must be exactly 5 characters').optional(),
-  nombreColonia: z.string().min(1, 'NombreColonia must be at least 1 character').optional(),
-  tipoAsentamiento: z.string().min(1, 'TipoAsentamiento must be at least 1 character').optional(),
-  esValido: z.string().regex(/^(true|false)$/, 'EsValido must be true or false').transform(val => val === 'true').optional(),
-  limit: z.string().regex(/^\d+$/, 'Limit must be a number').transform(val => parseInt(val)).optional(),
-  offset: z.string().regex(/^\d+$/, 'Offset must be a number').transform(val => parseInt(val)).optional()
+  nombreColonia: z.string().min(1, 'NombreColonia must be at least 1 character')
 });

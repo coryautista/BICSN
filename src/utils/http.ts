@@ -24,6 +24,10 @@ export function conflict(resource: string, reason?: string) {
   return fail(message, 'CONFLICT');
 }
 
+export function conflictError(message: string) {
+  return fail(message, 'CONFLICT');
+}
+
 export function unauthorized(message: string = 'Unauthorized access') {
   return fail(message, 'UNAUTHORIZED');
 }

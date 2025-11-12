@@ -1,20 +1,13 @@
 import { FastifyInstance } from 'fastify';
 import { requireAuth, requireRole } from '../auth/auth.middleware.js';
-import {
-  GetLogStatsSchema,
-  GetLogContentSchema,
-  SearchLogsSchema,
-  CleanupLogsSchema,
-  ArchiveLogsSchema
-} from './log.schemas.js';
-import {
-  getLogStats,
-  getLogContent,
-  searchLogs,
-  cleanupLogs,
-  archiveLogs
-} from './log.service.js';
+import { SearchLogsSchema, CleanupLogsSchema, ArchiveLogsSchema } from './log.schemas.js';
 import { ok, fail } from '../../utils/http.js';
+import { handleLogError } from './infrastructure/errorHandler.js';
+import type { GetLogStatsQuery } from './application/queries/GetLogStatsQuery.js';
+import type { GetLogContentQuery } from './application/queries/GetLogContentQuery.js';
+import type { SearchLogsQuery } from './application/queries/SearchLogsQuery.js';
+import type { CleanupLogsCommand } from './application/commands/CleanupLogsCommand.js';
+import type { ArchiveLogsCommand } from './application/commands/ArchiveLogsCommand.js';
 
 // [ADMIN] Routes for log management operations
 export default async function logRoutes(app: FastifyInstance) {
@@ -69,13 +62,14 @@ export default async function logRoutes(app: FastifyInstance) {
         }
       }
     }
-  }, async (_req, reply) => {
+  }, async (req, reply) => {
     try {
-      const stats = await getLogStats();
+      const getLogStatsQuery = req.diScope.resolve<GetLogStatsQuery>('getLogStatsQuery');
+      const userId = req.user?.sub;
+      const stats = await getLogStatsQuery.execute(userId);
       return reply.send(ok(stats));
     } catch (error: any) {
-      console.error('Error getting log stats:', error);
-      return reply.code(500).send(fail('LOG_STATS_FAILED'));
+      return handleLogError(error, reply);
     }
   });
 
@@ -114,6 +108,19 @@ export default async function logRoutes(app: FastifyInstance) {
             }
           }
         },
+        400: {
+          type: 'object',
+          properties: {
+            ok: { type: 'boolean' },
+            error: {
+              type: 'object',
+              properties: {
+                code: { type: 'string' },
+                message: { type: 'string' }
+              }
+            }
+          }
+        },
         404: {
           type: 'object',
           properties: {
@@ -147,14 +154,12 @@ export default async function logRoutes(app: FastifyInstance) {
     const { lines = 100 } = req.query as { lines?: number };
 
     try {
-      const content = await getLogContent(fileName, lines);
-      if (!content.content && content.totalLines === 0) {
-        return reply.code(404).send(fail('LOG_FILE_NOT_FOUND'));
-      }
+      const getLogContentQuery = req.diScope.resolve<GetLogContentQuery>('getLogContentQuery');
+      const userId = req.user?.sub;
+      const content = await getLogContentQuery.execute({ fileName, lines }, userId);
       return reply.send(ok(content));
     } catch (error: any) {
-      console.error('Error getting log content:', error);
-      return reply.code(500).send(fail('LOG_CONTENT_FAILED'));
+      return handleLogError(error, reply);
     }
   });
 
@@ -227,11 +232,15 @@ export default async function logRoutes(app: FastifyInstance) {
     }
 
     try {
-      const results = await searchLogs(parsed.data.searchTerm, parsed.data.maxResults);
+      const searchLogsQuery = req.diScope.resolve<SearchLogsQuery>('searchLogsQuery');
+      const userId = req.user?.sub;
+      const results = await searchLogsQuery.execute({
+        searchTerm: parsed.data.searchTerm,
+        maxResults: parsed.data.maxResults
+      }, userId);
       return reply.send(ok(results));
     } catch (error: any) {
-      console.error('Error searching logs:', error);
-      return reply.code(500).send(fail('LOG_SEARCH_FAILED'));
+      return handleLogError(error, reply);
     }
   });
 
@@ -301,11 +310,14 @@ export default async function logRoutes(app: FastifyInstance) {
     }
 
     try {
-      const result = await cleanupLogs(parsed.data.maxAgeDays, parsed.data.maxFiles);
+      const cleanupLogsCommand = req.diScope.resolve<CleanupLogsCommand>('cleanupLogsCommand');
+      const result = await cleanupLogsCommand.execute({
+        maxAgeDays: parsed.data.maxAgeDays,
+        maxFiles: parsed.data.maxFiles
+      });
       return reply.send(ok(result));
     } catch (error: any) {
-      console.error('Error cleaning up logs:', error);
-      return reply.code(500).send(fail('LOG_CLEANUP_FAILED'));
+      return handleLogError(error, reply);
     }
   });
 
@@ -374,11 +386,13 @@ export default async function logRoutes(app: FastifyInstance) {
     }
 
     try {
-      const result = await archiveLogs(parsed.data.archiveDir);
+      const archiveLogsCommand = req.diScope.resolve<ArchiveLogsCommand>('archiveLogsCommand');
+      const result = await archiveLogsCommand.execute({
+        archiveDir: parsed.data.archiveDir
+      });
       return reply.send(ok(result));
     } catch (error: any) {
-      console.error('Error archiving logs:', error);
-      return reply.code(500).send(fail('LOG_ARCHIVE_FAILED'));
+      return handleLogError(error, reply);
     }
   });
 }

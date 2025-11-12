@@ -1,14 +1,12 @@
 import { FastifyInstance } from 'fastify';
 import { requireAuth } from '../auth/auth.middleware.js';
 import { CreateTipoMovimientoSchema, UpdateTipoMovimientoSchema } from './tipoMovimiento.schemas.js';
-import {
-  getAllTipoMovimientoService,
-  getTipoMovimientoByIdService,
-  createTipoMovimientoService,
-  updateTipoMovimientoService,
-  deleteTipoMovimientoService
-} from './tipoMovimiento.service.js';
-import { ok, fail } from '../../utils/http.js';
+import { GetAllTipoMovimientosQuery } from './application/queries/GetAllTipoMovimientosQuery.js';
+import { GetTipoMovimientoByIdQuery } from './application/queries/GetTipoMovimientoByIdQuery.js';
+import { CreateTipoMovimientoCommand } from './application/commands/CreateTipoMovimientoCommand.js';
+import { UpdateTipoMovimientoCommand } from './application/commands/UpdateTipoMovimientoCommand.js';
+import { DeleteTipoMovimientoCommand } from './application/commands/DeleteTipoMovimientoCommand.js';
+import { handleTipoMovimientoError } from './infrastructure/errorHandler.js';
 
 // Routes for TipoMovimiento CRUD operations
 export default async function tipoMovimientoRoutes(app: FastifyInstance) {
@@ -53,13 +51,13 @@ export default async function tipoMovimientoRoutes(app: FastifyInstance) {
         }
       }
     }
-  }, async (_req, reply) => {
+  }, async (req, reply) => {
     try {
-      const records = await getAllTipoMovimientoService();
-      return reply.send(ok(records));
+      const getAllTipoMovimientosQuery = req.diScope.resolve<GetAllTipoMovimientosQuery>('getAllTipoMovimientosQuery');
+      const records = await getAllTipoMovimientosQuery.execute(req.user?.sub || 'anonymous');
+      return reply.send({ data: records });
     } catch (error: any) {
-      console.error('Error listing tipoMovimiento:', error);
-      return reply.code(500).send(fail('TIPO_MOVIMIENTO_LIST_FAILED'));
+      return handleTipoMovimientoError(error, reply);
     }
   });
 
@@ -123,14 +121,11 @@ export default async function tipoMovimientoRoutes(app: FastifyInstance) {
   }, async (req, reply) => {
     try {
       const { id } = req.params as { id: number };
-      const record = await getTipoMovimientoByIdService(id);
-      return reply.send(ok(record));
+      const getTipoMovimientoByIdQuery = req.diScope.resolve<GetTipoMovimientoByIdQuery>('getTipoMovimientoByIdQuery');
+      const record = await getTipoMovimientoByIdQuery.execute({ id }, req.user?.sub || 'anonymous');
+      return reply.send({ data: record });
     } catch (error: any) {
-      if (error.message === 'TIPO_MOVIMIENTO_NOT_FOUND') {
-        return reply.code(404).send(fail('TIPO_MOVIMIENTO_NOT_FOUND'));
-      }
-      console.error('Error getting tipoMovimiento:', error);
-      return reply.code(500).send(fail('TIPO_MOVIMIENTO_GET_FAILED'));
+      return handleTipoMovimientoError(error, reply);
     }
   });
 
@@ -202,22 +197,19 @@ export default async function tipoMovimientoRoutes(app: FastifyInstance) {
   }, async (req, reply) => {
     const parsed = CreateTipoMovimientoSchema.safeParse(req.body);
     if (!parsed.success) {
-      return reply.code(400).send(fail(parsed.error.message));
+      return reply.code(400).send({ ok: false, error: { code: 'VALIDATION_ERROR', message: 'Datos de entrada inválidos', details: parsed.error.issues } });
     }
 
     try {
-      const record = await createTipoMovimientoService({
+      const createTipoMovimientoCommand = req.diScope.resolve<CreateTipoMovimientoCommand>('createTipoMovimientoCommand');
+      const record = await createTipoMovimientoCommand.execute({
         id: parsed.data.id,
-        abreviatura: parsed.data.abreviatura ?? null,
+        abreviatura: parsed.data.abreviatura ?? undefined,
         nombre: parsed.data.nombre
-      });
-      return reply.code(201).send(ok(record));
+      }, req.user?.sub || 'anonymous');
+      return reply.code(201).send({ data: record });
     } catch (error: any) {
-      if (error.message === 'TIPO_MOVIMIENTO_EXISTS') {
-        return reply.code(409).send(fail('TIPO_MOVIMIENTO_EXISTS'));
-      }
-      console.error('Error creating tipoMovimiento:', error);
-      return reply.code(500).send(fail('TIPO_MOVIMIENTO_CREATE_FAILED'));
+      return handleTipoMovimientoError(error, reply);
     }
   });
 
@@ -295,18 +287,19 @@ export default async function tipoMovimientoRoutes(app: FastifyInstance) {
     const { id } = req.params as { id: number };
     const parsed = UpdateTipoMovimientoSchema.safeParse(req.body);
     if (!parsed.success) {
-      return reply.code(400).send(fail(parsed.error.message));
+      return reply.code(400).send({ ok: false, error: { code: 'VALIDATION_ERROR', message: 'Datos de entrada inválidos', details: parsed.error.issues } });
     }
 
     try {
-      const record = await updateTipoMovimientoService(id, parsed.data);
-      return reply.send(ok(record));
+      const updateTipoMovimientoCommand = req.diScope.resolve<UpdateTipoMovimientoCommand>('updateTipoMovimientoCommand');
+      const record = await updateTipoMovimientoCommand.execute({
+        id,
+        abreviatura: parsed.data.abreviatura ?? undefined,
+        nombre: parsed.data.nombre
+      }, req.user?.sub || 'anonymous');
+      return reply.send({ data: record });
     } catch (error: any) {
-      if (error.message === 'TIPO_MOVIMIENTO_NOT_FOUND') {
-        return reply.code(404).send(fail('TIPO_MOVIMIENTO_NOT_FOUND'));
-      }
-      console.error('Error updating tipoMovimiento:', error);
-      return reply.code(500).send(fail('TIPO_MOVIMIENTO_UPDATE_FAILED'));
+      return handleTipoMovimientoError(error, reply);
     }
   });
 
@@ -363,14 +356,11 @@ export default async function tipoMovimientoRoutes(app: FastifyInstance) {
   }, async (req, reply) => {
     try {
       const { id } = req.params as { id: number };
-      await deleteTipoMovimientoService(id);
-      return reply.send(ok({}));
+      const deleteTipoMovimientoCommand = req.diScope.resolve<DeleteTipoMovimientoCommand>('deleteTipoMovimientoCommand');
+      const result = await deleteTipoMovimientoCommand.execute({ id }, req.user?.sub || 'anonymous');
+      return reply.send({ data: result });
     } catch (error: any) {
-      if (error.message === 'TIPO_MOVIMIENTO_NOT_FOUND') {
-        return reply.code(404).send(fail('TIPO_MOVIMIENTO_NOT_FOUND'));
-      }
-      console.error('Error deleting tipoMovimiento:', error);
-      return reply.code(500).send(fail('TIPO_MOVIMIENTO_DELETE_FAILED'));
+      return handleTipoMovimientoError(error, reply);
     }
   });
 }

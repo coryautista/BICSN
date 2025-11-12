@@ -1,9 +1,15 @@
 import { FastifyInstance } from 'fastify';
 import { requireAuth, requireRole } from '../auth/auth.middleware.js';
 import { CreateColoniaSchema, UpdateColoniaSchema, ColoniaIdParamSchema, MunicipioIdParamSchema, CodigoPostalIdParamSchema, ColoniaQuerySchema } from './colonias.schemas.js';
-import { getColoniaById, getColoniasByMunicipio, getColoniasByCodigoPostal, searchColoniasService, createColoniaItem, updateColoniaItem, deleteColoniaItem } from './colonias.service.js';
-import { ok, validationError, notFound, internalError } from '../../utils/http.js';
-import { withDbContext } from '../../db/context.js';
+import { ok, validationError } from '../../utils/http.js';
+import { handleColoniasError } from './infrastructure/errorHandler.js';
+import type { GetColoniaByIdQuery } from './application/queries/GetColoniaByIdQuery.js';
+import type { GetColoniasByMunicipioQuery } from './application/queries/GetColoniasByMunicipioQuery.js';
+import type { GetColoniasByCodigoPostalQuery } from './application/queries/GetColoniasByCodigoPostalQuery.js';
+import type { SearchColoniasQuery } from './application/queries/SearchColoniasQuery.js';
+import type { CreateColoniaCommand } from './application/commands/CreateColoniaCommand.js';
+import type { UpdateColoniaCommand } from './application/commands/UpdateColoniaCommand.js';
+import type { DeleteColoniaCommand } from './application/commands/DeleteColoniaCommand.js';
 
 export default async function coloniasRoutes(app: FastifyInstance) {
 
@@ -16,15 +22,9 @@ export default async function coloniasRoutes(app: FastifyInstance) {
       security: [{ bearerAuth: [] }],
       querystring: {
         type: 'object',
+        required: ['nombreColonia'],
         properties: {
-          estadoId: { type: 'string', minLength: 2, maxLength: 2 },
-          municipioId: { type: 'string', pattern: '^[0-9]+$' },
-          codigoPostal: { type: 'string', minLength: 5, maxLength: 5 },
-          nombreColonia: { type: 'string', minLength: 1 },
-          tipoAsentamiento: { type: 'string', minLength: 1 },
-          esValido: { type: 'string', enum: ['true', 'false'] },
-          limit: { type: 'string', pattern: '^[0-9]+$' },
-          offset: { type: 'string', pattern: '^[0-9]+$' }
+          nombreColonia: { type: 'string', minLength: 1 }
         }
       },
       response: {
@@ -103,11 +103,11 @@ export default async function coloniasRoutes(app: FastifyInstance) {
     }
 
     try {
-      const colonias = await searchColoniasService(queryValidation.data);
+      const searchColoniasQuery = req.diScope.resolve<SearchColoniasQuery>('searchColoniasQuery');
+      const colonias = await searchColoniasQuery.execute(queryValidation.data);
       return reply.send(ok(colonias));
     } catch (error: any) {
-      console.error('Error searching colonias:', error);
-      return reply.code(500).send(internalError('Failed to search colonias'));
+      return handleColoniasError(error, reply);
     }
   });
 
@@ -190,11 +190,11 @@ export default async function coloniasRoutes(app: FastifyInstance) {
     }
 
     try {
-      const colonias = await getColoniasByMunicipio(paramValidation.data.municipioId);
+      const getColoniasByMunicipioQuery = req.diScope.resolve<GetColoniasByMunicipioQuery>('getColoniasByMunicipioQuery');
+      const colonias = await getColoniasByMunicipioQuery.execute(paramValidation.data.municipioId);
       return reply.send(ok(colonias));
     } catch (error: any) {
-      console.error('Error listing colonias by municipio:', error);
-      return reply.code(500).send(internalError('Failed to retrieve colonias'));
+      return handleColoniasError(error, reply);
     }
   });
 
@@ -284,11 +284,11 @@ export default async function coloniasRoutes(app: FastifyInstance) {
     }
 
     try {
-      const colonias = await getColoniasByCodigoPostal(paramValidation.data.codigoPostalId);
+      const getColoniasByCodigoPostalQuery = req.diScope.resolve<GetColoniasByCodigoPostalQuery>('getColoniasByCodigoPostalQuery');
+      const colonias = await getColoniasByCodigoPostalQuery.execute(paramValidation.data.codigoPostalId);
       return reply.send(ok(colonias));
     } catch (error: any) {
-      console.error('Error listing colonias by codigo postal:', error);
-      return reply.code(500).send(internalError('Failed to retrieve colonias'));
+      return handleColoniasError(error, reply);
     }
   });
 
@@ -395,14 +395,11 @@ export default async function coloniasRoutes(app: FastifyInstance) {
     }
 
     try {
-      const colonia = await getColoniaById(paramValidation.data.coloniaId);
+      const getColoniaByIdQuery = req.diScope.resolve<GetColoniaByIdQuery>('getColoniaByIdQuery');
+      const colonia = await getColoniaByIdQuery.execute(paramValidation.data.coloniaId);
       return reply.send(ok(colonia));
     } catch (error: any) {
-      if (error.message === 'COLONIA_NOT_FOUND') {
-        return reply.code(404).send(notFound('Colonia', coloniaId));
-      }
-      console.error('Error getting colonia:', error);
-      return reply.code(500).send(internalError('Failed to retrieve colonia'));
+      return handleColoniasError(error, reply);
     }
   });
 
@@ -483,38 +480,26 @@ export default async function coloniasRoutes(app: FastifyInstance) {
       }
     }
   }, async (req, reply) => {
-    return withDbContext(req, async (tx) => {
-      const parsed = CreateColoniaSchema.safeParse(req.body);
-      if (!parsed.success) {
-        return reply.code(400).send(validationError(parsed.error.issues));
-      }
+    const parsed = CreateColoniaSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return reply.code(400).send(validationError(parsed.error.issues));
+    }
 
-      try {
-        const userId = req.user?.sub;
-        const colonia = await createColoniaItem(
-          parsed.data.municipioId,
-          parsed.data.codigoPostalId,
-          parsed.data.nombreColonia,
-          parsed.data.tipoAsentamiento,
-          parsed.data.esValido ?? false,
-          userId,
-          tx
-        );
-        return reply.code(201).send(ok(colonia));
-      } catch (error: any) {
-        if (error.message === 'COLONIA_EXISTS') {
-          return reply.code(409).send({ ok: false, error: { code: 'CONFLICT', message: 'Colonia already exists' } });
-        }
-        if (error.message === 'MUNICIPIO_NOT_FOUND') {
-          return reply.code(400).send({ ok: false, error: { code: 'BAD_REQUEST', message: 'Municipio not found' } });
-        }
-        if (error.message === 'CODIGO_POSTAL_NOT_FOUND') {
-          return reply.code(400).send({ ok: false, error: { code: 'BAD_REQUEST', message: 'Codigo postal not found' } });
-        }
-        console.error('Error creating colonia:', error);
-        return reply.code(500).send(internalError('Failed to create colonia'));
-      }
-    });
+    try {
+      const userId = req.user?.sub;
+      const createColoniaCommand = req.diScope.resolve<CreateColoniaCommand>('createColoniaCommand');
+      const colonia = await createColoniaCommand.execute({
+        municipioId: parsed.data.municipioId,
+        codigoPostalId: parsed.data.codigoPostalId,
+        nombreColonia: parsed.data.nombreColonia,
+        tipoAsentamiento: parsed.data.tipoAsentamiento,
+        esValido: parsed.data.esValido ?? false,
+        userId
+      });
+      return reply.code(201).send(ok(colonia));
+    } catch (error: any) {
+      return handleColoniasError(error, reply);
+    }
   });
 
   // Actualizar colonia (requiere admin)
@@ -598,39 +583,33 @@ export default async function coloniasRoutes(app: FastifyInstance) {
       }
     }
   }, async (req, reply) => {
-    return withDbContext(req, async (tx) => {
-      const { coloniaId } = req.params as { coloniaId: string };
+    const { coloniaId } = req.params as { coloniaId: string };
 
-      // Validate parameter
-      const paramValidation = ColoniaIdParamSchema.safeParse({ coloniaId });
-      if (!paramValidation.success) {
-        return reply.code(400).send(validationError(paramValidation.error.issues));
-      }
+    // Validate parameter
+    const paramValidation = ColoniaIdParamSchema.safeParse({ coloniaId });
+    if (!paramValidation.success) {
+      return reply.code(400).send(validationError(paramValidation.error.issues));
+    }
 
-      const parsed = UpdateColoniaSchema.safeParse(req.body);
-      if (!parsed.success) {
-        return reply.code(400).send(validationError(parsed.error.issues));
-      }
+    const parsed = UpdateColoniaSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return reply.code(400).send(validationError(parsed.error.issues));
+    }
 
-      try {
-        const userId = req.user?.sub;
-        const colonia = await updateColoniaItem(
-          paramValidation.data.coloniaId,
-          parsed.data.nombreColonia,
-          parsed.data.tipoAsentamiento,
-          parsed.data.esValido,
-          userId,
-          tx
-        );
-        return reply.send(ok(colonia));
-      } catch (error: any) {
-        if (error.message === 'COLONIA_NOT_FOUND') {
-          return reply.code(404).send(notFound('Colonia', coloniaId));
-        }
-        console.error('Error updating colonia:', error);
-        return reply.code(500).send(internalError('Failed to update colonia'));
-      }
-    });
+    try {
+      const userId = req.user?.sub;
+      const updateColoniaCommand = req.diScope.resolve<UpdateColoniaCommand>('updateColoniaCommand');
+      const colonia = await updateColoniaCommand.execute({
+        coloniaId: paramValidation.data.coloniaId,
+        nombreColonia: parsed.data.nombreColonia,
+        tipoAsentamiento: parsed.data.tipoAsentamiento,
+        esValido: parsed.data.esValido,
+        userId
+      });
+      return reply.send(ok(colonia));
+    } catch (error: any) {
+      return handleColoniasError(error, reply);
+    }
   });
 
   // Eliminar colonia (requiere admin)
@@ -701,25 +680,20 @@ export default async function coloniasRoutes(app: FastifyInstance) {
       }
     }
   }, async (req, reply) => {
-    return withDbContext(req, async (tx) => {
-      const { coloniaId } = req.params as { coloniaId: string };
+    const { coloniaId } = req.params as { coloniaId: string };
 
-      // Validate parameter
-      const paramValidation = ColoniaIdParamSchema.safeParse({ coloniaId });
-      if (!paramValidation.success) {
-        return reply.code(400).send(validationError(paramValidation.error.issues));
-      }
+    // Validate parameter
+    const paramValidation = ColoniaIdParamSchema.safeParse({ coloniaId });
+    if (!paramValidation.success) {
+      return reply.code(400).send(validationError(paramValidation.error.issues));
+    }
 
-      try {
-        const deletedId = await deleteColoniaItem(paramValidation.data.coloniaId, tx);
-        return reply.send(ok({ coloniaId: deletedId }));
-      } catch (error: any) {
-        if (error.message === 'COLONIA_NOT_FOUND') {
-          return reply.code(404).send(notFound('Colonia', coloniaId));
-        }
-        console.error('Error deleting colonia:', error);
-        return reply.code(500).send(internalError('Failed to delete colonia'));
-      }
-    });
+    try {
+      const deleteColoniaCommand = req.diScope.resolve<DeleteColoniaCommand>('deleteColoniaCommand');
+      const deletedId = await deleteColoniaCommand.execute({ coloniaId: paramValidation.data.coloniaId });
+      return reply.send(ok({ coloniaId: deletedId }));
+    } catch (error: any) {
+      return handleColoniasError(error, reply);
+    }
   });
 }

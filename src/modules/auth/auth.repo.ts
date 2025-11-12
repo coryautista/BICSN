@@ -2,7 +2,7 @@ import { getPool, sql } from '../../db/mssql.js';
 
 export async function findUserByUsernameOrEmail(usernameOrEmail: string) {
   const p = await getPool();
-  const r = await p.request()
+  const result = await p.request()
     .input('val', sql.NVarChar(320), usernameOrEmail)
     .query(`
       SELECT TOP 1
@@ -24,7 +24,7 @@ export async function findUserByUsernameOrEmail(usernameOrEmail: string) {
       WHERE u.normalizedUsername = UPPER(@val)
          OR (u.email IS NOT NULL AND u.normalizedEmail = UPPER(@val))
     `);
-  const row = r.recordset[0];
+  const row = result.recordset[0];
   if (!row) return undefined;
   return {
     id: row.id,
@@ -57,7 +57,7 @@ export async function createUser(
   idOrganica3?: number | null
 ) {
   const p = await getPool();
-  const r = await p.request()
+  await p.request()
     .input('username', sql.NVarChar(100), username)
     .input('email', sql.NVarChar(320), email)
     .input('pwd', sql.NVarChar(255), passwordHash)

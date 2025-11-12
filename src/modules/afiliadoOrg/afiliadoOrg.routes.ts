@@ -1,18 +1,24 @@
 import { FastifyInstance } from 'fastify';
 import { requireAuth } from '../auth/auth.middleware.js';
 import { CreateAfiliadoOrgSchema, UpdateAfiliadoOrgSchema } from './afiliadoOrg.schemas.js';
-import {
-  getAllAfiliadoOrgService,
-  getAfiliadoOrgByIdService,
-  getAfiliadoOrgByAfiliadoIdService,
-  createAfiliadoOrgService,
-  updateAfiliadoOrgService,
-  deleteAfiliadoOrgService
-} from './afiliadoOrg.service.js';
 import { ok, fail } from '../../utils/http.js';
+import { GetAllAfiliadoOrgQuery } from './application/queries/GetAllAfiliadoOrgQuery.js';
+import { GetAfiliadoOrgByIdQuery } from './application/queries/GetAfiliadoOrgByIdQuery.js';
+import { GetAfiliadoOrgByAfiliadoIdQuery } from './application/queries/GetAfiliadoOrgByAfiliadoIdQuery.js';
+import { CreateAfiliadoOrgCommand } from './application/commands/CreateAfiliadoOrgCommand.js';
+import { UpdateAfiliadoOrgCommand } from './application/commands/UpdateAfiliadoOrgCommand.js';
+import { DeleteAfiliadoOrgCommand } from './application/commands/DeleteAfiliadoOrgCommand.js';
+import { handleAfiliadoOrgError } from './infrastructure/errorHandler.js';
 
 // Routes for AfiliadoOrg CRUD operations
 export default async function afiliadoOrgRoutes(app: FastifyInstance) {
+  // Resolve dependencies from DI container
+  const getAllAfiliadoOrgQuery = app.diContainer.resolve<GetAllAfiliadoOrgQuery>('getAllAfiliadoOrgQuery');
+  const getAfiliadoOrgByIdQuery = app.diContainer.resolve<GetAfiliadoOrgByIdQuery>('getAfiliadoOrgByIdQuery');
+  const getAfiliadoOrgByAfiliadoIdQuery = app.diContainer.resolve<GetAfiliadoOrgByAfiliadoIdQuery>('getAfiliadoOrgByAfiliadoIdQuery');
+  const createAfiliadoOrgCommand = app.diContainer.resolve<CreateAfiliadoOrgCommand>('createAfiliadoOrgCommand');
+  const updateAfiliadoOrgCommand = app.diContainer.resolve<UpdateAfiliadoOrgCommand>('updateAfiliadoOrgCommand');
+  const deleteAfiliadoOrgCommand = app.diContainer.resolve<DeleteAfiliadoOrgCommand>('deleteAfiliadoOrgCommand');
 
   // GET /afiliadoOrg - List all records
   app.get('/afiliadoOrg', {
@@ -81,11 +87,10 @@ export default async function afiliadoOrgRoutes(app: FastifyInstance) {
     }
   }, async (_req, reply) => {
     try {
-      const records = await getAllAfiliadoOrgService();
+      const records = await getAllAfiliadoOrgQuery.execute();
       return reply.send(ok(records));
     } catch (error: any) {
-      console.error('Error listing afiliadoOrg:', error);
-      return reply.code(500).send(fail('AFILIADO_ORG_LIST_FAILED'));
+      return handleAfiliadoOrgError(error, reply);
     }
   });
 
@@ -174,14 +179,10 @@ export default async function afiliadoOrgRoutes(app: FastifyInstance) {
   }, async (req, reply) => {
     try {
       const { id } = req.params as { id: number };
-      const record = await getAfiliadoOrgByIdService(id);
+      const record = await getAfiliadoOrgByIdQuery.execute(id);
       return reply.send(ok(record));
     } catch (error: any) {
-      if (error.message === 'AFILIADO_ORG_NOT_FOUND') {
-        return reply.code(404).send(fail('AFILIADO_ORG_NOT_FOUND'));
-      }
-      console.error('Error getting afiliadoOrg:', error);
-      return reply.code(500).send(fail('AFILIADO_ORG_GET_FAILED'));
+      return handleAfiliadoOrgError(error, reply);
     }
   });
 
@@ -260,11 +261,10 @@ export default async function afiliadoOrgRoutes(app: FastifyInstance) {
   }, async (req, reply) => {
     try {
       const { afiliadoId } = req.params as { afiliadoId: number };
-      const records = await getAfiliadoOrgByAfiliadoIdService(afiliadoId);
+      const records = await getAfiliadoOrgByAfiliadoIdQuery.execute(afiliadoId);
       return reply.send(ok(records));
     } catch (error: any) {
-      console.error('Error getting afiliadoOrg by afiliadoId:', error);
-      return reply.code(500).send(fail('AFILIADO_ORG_GET_BY_AFILIADO_FAILED'));
+      return handleAfiliadoOrgError(error, reply);
     }
   });
 
@@ -349,7 +349,7 @@ export default async function afiliadoOrgRoutes(app: FastifyInstance) {
     }
 
     try {
-      const record = await createAfiliadoOrgService({
+      const record = await createAfiliadoOrgCommand.execute({
         afiliadoId: parsed.data.afiliadoId,
         nivel0Id: parsed.data.nivel0Id ?? null,
         nivel1Id: parsed.data.nivel1Id ?? null,
@@ -378,8 +378,7 @@ export default async function afiliadoOrgRoutes(app: FastifyInstance) {
       });
       return reply.code(201).send(ok(record));
     } catch (error: any) {
-      console.error('Error creating afiliadoOrg:', error);
-      return reply.code(500).send(fail('AFILIADO_ORG_CREATE_FAILED'));
+      return handleAfiliadoOrgError(error, reply);
     }
   });
 
@@ -483,14 +482,10 @@ export default async function afiliadoOrgRoutes(app: FastifyInstance) {
     }
 
     try {
-      const record = await updateAfiliadoOrgService(id, parsed.data);
+      const record = await updateAfiliadoOrgCommand.execute({ id, ...parsed.data });
       return reply.send(ok(record));
     } catch (error: any) {
-      if (error.message === 'AFILIADO_ORG_NOT_FOUND') {
-        return reply.code(404).send(fail('AFILIADO_ORG_NOT_FOUND'));
-      }
-      console.error('Error updating afiliadoOrg:', error);
-      return reply.code(500).send(fail('AFILIADO_ORG_UPDATE_FAILED'));
+      return handleAfiliadoOrgError(error, reply);
     }
   });
 
@@ -547,14 +542,10 @@ export default async function afiliadoOrgRoutes(app: FastifyInstance) {
   }, async (req, reply) => {
     try {
       const { id } = req.params as { id: number };
-      await deleteAfiliadoOrgService(id);
+      await deleteAfiliadoOrgCommand.execute(id);
       return reply.send(ok({}));
     } catch (error: any) {
-      if (error.message === 'AFILIADO_ORG_NOT_FOUND') {
-        return reply.code(404).send(fail('AFILIADO_ORG_NOT_FOUND'));
-      }
-      console.error('Error deleting afiliadoOrg:', error);
-      return reply.code(500).send(fail('AFILIADO_ORG_DELETE_FAILED'));
+      return handleAfiliadoOrgError(error, reply);
     }
   });
 }

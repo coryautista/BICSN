@@ -1,8 +1,10 @@
 import { FastifyInstance } from 'fastify';
 import { requireAuth, requireRole } from '../auth/auth.middleware.js';
 import { GetAuditLogsSchema } from './auditLog.schemas.js';
-import { getAuditLogs } from './auditLog.service.js';
-import { fail } from '../../utils/http.js';
+import { ok, validationError } from '../../utils/http.js';
+import type { GetAuditLogsByDateRangeQuery } from './application/queries/GetAuditLogsByDateRangeQuery.js';
+import { handleAuditLogError } from './infrastructure/errorHandler.js';
+import { AuditLogAccessDeniedError } from './domain/errors.js';
 
 export default async function auditLogRoutes(app: FastifyInstance) {
 
@@ -77,14 +79,26 @@ export default async function auditLogRoutes(app: FastifyInstance) {
       }
     }
   }, async (req, reply) => {
-    const parsed = GetAuditLogsSchema.safeParse(req.query);
-    if (!parsed.success) return reply.code(400).send(fail(parsed.error.message));
-
     try {
-      const logs = await getAuditLogs(parsed.data.fechaInicio, parsed.data.fechaFin);
-      return reply.send({ data: logs });
-    } catch (e: any) {
-      return reply.code(500).send(fail('AUDIT_LOG_FETCH_FAILED'));
+      // Validar permisos de administrador
+      const user = req.user;
+      if (!user || !user.roles || !user.roles.includes('admin')) {
+        throw new AuditLogAccessDeniedError('Acceso denegado a logs de auditoría', { userId: user?.sub, userRoles: user?.roles });
+      }
+
+      const parsed = GetAuditLogsSchema.safeParse(req.query);
+      if (!parsed.success) {
+        return reply.code(400).send(validationError(parsed.error.issues));
+      }
+
+      const getAuditLogsByDateRangeQuery = req.diScope.resolve<GetAuditLogsByDateRangeQuery>('getAuditLogsByDateRangeQuery');
+      const logs = await getAuditLogsByDateRangeQuery.execute({
+        fechaInicio: parsed.data.fechaInicio,
+        fechaFin: parsed.data.fechaFin
+      });
+      return reply.send(ok(logs));
+    } catch (error: any) {
+      return handleAuditLogError(error, reply);
     }
   });
 }

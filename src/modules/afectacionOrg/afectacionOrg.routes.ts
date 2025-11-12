@@ -6,17 +6,22 @@ import {
   AfectacionOrgParamsSchema,
   CalculateQuincenaSchema
 } from './afectacionOrg.schemas.js';
-import {
-  registerAfectacionOrgItem,
-  getEstadosAfectacionFiltered,
-  getProgresoUsuarioFiltered,
-  getBitacoraAfectacionFiltered,
-  getTableroAfectacionesFiltered,
-  getUltimaAfectacionFiltered,
-  calculateQuincenaFromDate,
-  getQuincenaAltaAfectacionService
-} from './afectacionOrg.service.js';
-import { ok, validationError, internalError } from '../../utils/http.js';
+import { calculateQuincenaFromDate } from './afectacionOrg.service.js';
+import { ok, validationError } from '../../utils/http.js';
+import { GetBitacoraAfectacionQuery } from './application/queries/GetBitacoraAfectacionQuery.js';
+import { GetEstadosAfectacionQuery } from './application/queries/GetEstadosAfectacionQuery.js';
+import { GetProgresoUsuarioQuery } from './application/queries/GetProgresoUsuarioQuery.js';
+import { GetTableroAfectacionQuery } from './application/queries/GetTableroAfectacionQuery.js';
+import { GetUltimaAfectacionQuery } from './application/queries/GetUltimaAfectacionQuery.js';
+import { GetQuincenaAltaAfectacionQuery } from './application/queries/GetQuincenaAltaAfectacionQuery.js';
+import { RegistrarAfectacionCommand } from './application/commands/RegistrarAfectacionCommand.js';
+import { handleAfectacionError } from './infrastructure/errorHandler.js';
+import pino from 'pino';
+
+const logger = pino({ 
+  name: 'afectacionOrg-routes',
+  level: process.env.LOG_LEVEL || 'info'
+});
 
 export default async function afectacionOrgRoutes(app: FastifyInstance) {
   // Register affectation
@@ -87,17 +92,20 @@ export default async function afectacionOrgRoutes(app: FastifyInstance) {
       }
     }
   }, async (req, reply) => {
+    const registrarAfectacionCommand = app.diContainer.resolve<RegistrarAfectacionCommand>('registrarAfectacionCommand');
+    
     const parsed = RegisterAfectacionOrgSchema.safeParse(req.body);
     if (!parsed.success) {
+      logger.warn({ errors: parsed.error.issues }, 'Error de validación en registro de afectación');
       return reply.code(400).send(validationError(parsed.error.issues));
     }
 
     try {
-      const result = await registerAfectacionOrgItem(parsed.data);
+      logger.info({ data: parsed.data }, 'Registrando afectación');
+      const result = await registrarAfectacionCommand.execute(parsed.data);
       return reply.send(ok(result));
     } catch (error: any) {
-      console.error('Error registering affectation:', error);
-      return reply.code(500).send(internalError('Failed to register affectation'));
+      return handleAfectacionError(error, reply, { operation: 'register', body: parsed.data });
     }
   });
 
@@ -173,18 +181,20 @@ export default async function afectacionOrgRoutes(app: FastifyInstance) {
       }
     }
   }, async (req, reply) => {
+    const getEstadosAfectacionQuery = app.diContainer.resolve<GetEstadosAfectacionQuery>('getEstadosAfectacionQuery');
+    
     const query = req.query as any;
     const parsed = AfectacionOrgQuerySchema.safeParse(query);
     if (!parsed.success) {
+      logger.warn({ errors: parsed.error.issues }, 'Error de validación en obtener estados');
       return reply.code(400).send(validationError(parsed.error.issues));
     }
 
     try {
-      const estados = await getEstadosAfectacionFiltered(parsed.data);
+      const estados = await getEstadosAfectacionQuery.execute(parsed.data);
       return reply.send(ok(estados));
     } catch (error: any) {
-      console.error('Error getting affectation states:', error);
-      return reply.code(500).send(internalError('Failed to retrieve affectation states'));
+      return handleAfectacionError(error, reply, { operation: 'getEstados', query: parsed.data });
     }
   });
 
@@ -261,18 +271,20 @@ export default async function afectacionOrgRoutes(app: FastifyInstance) {
       }
     }
   }, async (req, reply) => {
+    const getProgresoUsuarioQuery = app.diContainer.resolve<GetProgresoUsuarioQuery>('getProgresoUsuarioQuery');
+    
     const query = req.query as any;
     const parsed = AfectacionOrgQuerySchema.safeParse(query);
     if (!parsed.success) {
+      logger.warn({ errors: parsed.error.issues }, 'Error de validación en obtener progreso');
       return reply.code(400).send(validationError(parsed.error.issues));
     }
 
     try {
-      const progreso = await getProgresoUsuarioFiltered(parsed.data);
+      const progreso = await getProgresoUsuarioQuery.execute(parsed.data);
       return reply.send(ok(progreso));
     } catch (error: any) {
-      console.error('Error getting user progress:', error);
-      return reply.code(500).send(internalError('Failed to retrieve user progress'));
+      return handleAfectacionError(error, reply, { operation: 'getProgreso', query: parsed.data });
     }
   });
 
@@ -364,18 +376,20 @@ export default async function afectacionOrgRoutes(app: FastifyInstance) {
       }
     }
   }, async (req, reply) => {
+    const getBitacoraAfectacionQuery = app.diContainer.resolve<GetBitacoraAfectacionQuery>('getBitacoraAfectacionQuery');
+    
     const query = req.query as any;
     const parsed = AfectacionOrgQuerySchema.safeParse(query);
     if (!parsed.success) {
+      logger.warn({ errors: parsed.error.issues }, 'Error de validación en obtener bitácora');
       return reply.code(400).send(validationError(parsed.error.issues));
     }
 
     try {
-      const logs = await getBitacoraAfectacionFiltered(parsed.data);
+      const logs = await getBitacoraAfectacionQuery.execute(parsed.data);
       return reply.send(ok(logs));
     } catch (error: any) {
-      console.error('Error getting affectation logs:', error);
-      return reply.code(500).send(internalError('Failed to retrieve affectation logs'));
+      return handleAfectacionError(error, reply, { operation: 'getBitacora', query: parsed.data });
     }
   });
 
@@ -454,18 +468,20 @@ export default async function afectacionOrgRoutes(app: FastifyInstance) {
       }
     }
   }, async (req, reply) => {
+    const getTableroAfectacionQuery = app.diContainer.resolve<GetTableroAfectacionQuery>('getTableroAfectacionQuery');
+    
     const query = req.query as any;
     const parsed = AfectacionOrgQuerySchema.safeParse(query);
     if (!parsed.success) {
+      logger.warn({ errors: parsed.error.issues }, 'Error de validación en obtener tablero');
       return reply.code(400).send(validationError(parsed.error.issues));
     }
 
     try {
-      const dashboard = await getTableroAfectacionesFiltered(parsed.data);
+      const dashboard = await getTableroAfectacionQuery.execute(parsed.data);
       return reply.send(ok(dashboard));
     } catch (error: any) {
-      console.error('Error getting dashboard data:', error);
-      return reply.code(500).send(internalError('Failed to retrieve dashboard data'));
+      return handleAfectacionError(error, reply, { operation: 'getTablero', query: parsed.data });
     }
   });
 
@@ -545,18 +561,20 @@ export default async function afectacionOrgRoutes(app: FastifyInstance) {
       }
     }
   }, async (req, reply) => {
+    const getUltimaAfectacionQuery = app.diContainer.resolve<GetUltimaAfectacionQuery>('getUltimaAfectacionQuery');
+    
     const query = req.query as any;
     const parsed = AfectacionOrgQuerySchema.safeParse(query);
     if (!parsed.success) {
+      logger.warn({ errors: parsed.error.issues }, 'Error de validación en obtener última afectación');
       return reply.code(400).send(validationError(parsed.error.issues));
     }
 
     try {
-      const last = await getUltimaAfectacionFiltered(parsed.data);
+      const last = await getUltimaAfectacionQuery.execute(parsed.data);
       return reply.send(ok(last));
     } catch (error: any) {
-      console.error('Error getting last affectations:', error);
-      return reply.code(500).send(internalError('Failed to retrieve last affectations'));
+      return handleAfectacionError(error, reply, { operation: 'getUltima', query: parsed.data });
     }
   });
 
@@ -633,20 +651,22 @@ export default async function afectacionOrgRoutes(app: FastifyInstance) {
       }
     }
   }, async (req, reply) => {
+    const getEstadosAfectacionQuery = app.diContainer.resolve<GetEstadosAfectacionQuery>('getEstadosAfectacionQuery');
+    
     const params = req.params as any;
 
     // Validate parameters
     const paramValidation = AfectacionOrgParamsSchema.safeParse(params);
     if (!paramValidation.success) {
+      logger.warn({ errors: paramValidation.error.issues }, 'Error de validación en obtener estados por parámetros');
       return reply.code(400).send(validationError(paramValidation.error.issues));
     }
 
     try {
-      const estados = await getEstadosAfectacionFiltered(paramValidation.data);
+      const estados = await getEstadosAfectacionQuery.execute(paramValidation.data);
       return reply.send(ok(estados));
     } catch (error: any) {
-      console.error('Error getting affectation states by params:', error);
-      return reply.code(500).send(internalError('Failed to retrieve affectation states'));
+      return handleAfectacionError(error, reply, { operation: 'getEstadosByParams', params: paramValidation.data });
     }
   });
 
@@ -714,6 +734,7 @@ export default async function afectacionOrgRoutes(app: FastifyInstance) {
     const query = req.query as any;
     const parsed = CalculateQuincenaSchema.safeParse(query);
     if (!parsed.success) {
+      logger.warn({ errors: parsed.error.issues }, 'Error de validación en calcular quincena');
       return reply.code(400).send(validationError(parsed.error.issues));
     }
 
@@ -721,8 +742,7 @@ export default async function afectacionOrgRoutes(app: FastifyInstance) {
       const result = await calculateQuincenaFromDate(parsed.data.fecha);
       return reply.send(ok(result));
     } catch (error: any) {
-      console.error('Error calculating quincena:', error);
-      return reply.code(500).send(internalError('Failed to calculate quincena'));
+      return handleAfectacionError(error, reply, { operation: 'calculateQuincena', fecha: parsed.data.fecha });
     }
   });
 
@@ -750,10 +770,25 @@ export default async function afectacionOrgRoutes(app: FastifyInstance) {
               }
             }
           }
+        },
+        500: {
+          type: 'object',
+          properties: {
+            ok: { type: 'boolean' },
+            error: {
+              type: 'object',
+              properties: {
+                code: { type: 'string' },
+                message: { type: 'string' }
+              }
+            }
+          }
         }
       }
     }
   }, async (req, reply) => {
+    const getQuincenaAltaAfectacionQuery = app.diContainer.resolve<GetQuincenaAltaAfectacionQuery>('getQuincenaAltaAfectacionQuery');
+    
     try {
       // Get organica information from JWT token
       const entidad = 'AFECTACION_ORG'; // Fixed entity for affectation operations
@@ -762,11 +797,10 @@ export default async function afectacionOrgRoutes(app: FastifyInstance) {
       const org2 = req.user?.idOrganica2;
       const org3 = req.user?.idOrganica3;
 
-      const result = await getQuincenaAltaAfectacionService({ entidad, org0, org1, org2, org3 });
+      const result = await getQuincenaAltaAfectacionQuery.execute({ entidad, org0, org1, org2, org3 });
       return reply.send(ok(result));
     } catch (error: any) {
-      console.error('Error getting quincena alta afectacion:', error);
-      return reply.code(500).send(internalError('Failed to get quincena alta afectacion'));
+      return handleAfectacionError(error, reply, { operation: 'getQuincenaAlta', user: req.user?.sub });
     }
   });
 

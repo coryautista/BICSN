@@ -20,7 +20,6 @@ import {
 import { ftpService } from '../../utils/ftp.js';
 import fs from 'fs';
 import path from 'path';
-import crypto from 'crypto';
 import * as mime from 'mime-types';
 
 // DocumentType services
@@ -236,18 +235,6 @@ export async function downloadExpedienteFile(archivoId: number, localDownloadPat
 
   await ftpService.downloadFile(archivo.storagePath, localDownloadPath);
   return archivo;
-}
-
-// Calculate SHA256 hash of file
-async function calculateSha256(filePath: string): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const hash = crypto.createHash('sha256');
-    const stream = fs.createReadStream(filePath);
-
-    stream.on('data', (data) => hash.update(data));
-    stream.on('end', () => resolve(hash.digest('hex')));
-    stream.on('error', reject);
-  });
 }
 
 // Upload document to expediente (only document upload, no affectation)

@@ -1,9 +1,13 @@
 import { FastifyInstance } from 'fastify';
 import { requireAuth, requireRole } from '../auth/auth.middleware.js';
 import { CreateModuloSchema, UpdateModuloSchema } from './modulo.schemas.js';
-import { getAllModulos, getModuloById, createModuloItem, updateModuloItem, deleteModuloItem } from './modulo.service.js';
-import { ok, validationError, notFound, badRequest, internalError } from '../../utils/http.js';
-import { withDbContext } from '../../db/context.js';
+import { fail } from '../../utils/http.js';
+import { handleModuloError } from './infrastructure/errorHandler.js';
+import type { GetAllModulosQuery } from './application/queries/GetAllModulosQuery.js';
+import type { GetModuloByIdQuery } from './application/queries/GetModuloByIdQuery.js';
+import type { CreateModuloCommand } from './application/commands/CreateModuloCommand.js';
+import type { UpdateModuloCommand } from './application/commands/UpdateModuloCommand.js';
+import type { DeleteModuloCommand } from './application/commands/DeleteModuloCommand.js';
 
 export default async function moduloRoutes(app: FastifyInstance) {
 
@@ -48,13 +52,13 @@ export default async function moduloRoutes(app: FastifyInstance) {
         }
       }
     }
-  }, async (_req, reply) => {
+  }, async (req, reply) => {
     try {
-      const modulos = await getAllModulos();
-      return reply.send(ok(modulos));
+      const getAllModulosQuery = req.diScope.resolve<GetAllModulosQuery>('getAllModulosQuery');
+      const modulos = await getAllModulosQuery.execute();
+      return reply.send({ data: modulos });
     } catch (error: any) {
-      console.error('Error listing modulos:', error);
-      return reply.code(500).send(internalError('Failed to retrieve modulos'));
+      return handleModuloError(error, reply);
     }
   });
 
@@ -130,22 +134,13 @@ export default async function moduloRoutes(app: FastifyInstance) {
       }
     }
   }, async (req, reply) => {
-    const id = parseInt((req.params as { id: string }).id);
-
-    // Validate parameter
-    if (isNaN(id) || id <= 0) {
-      return reply.code(400).send(badRequest('ID must be a positive integer'));
-    }
-
+    const { id } = req.params as { id: number };
     try {
-      const modulo = await getModuloById(id);
-      return reply.send(ok(modulo));
+      const getModuloByIdQuery = req.diScope.resolve<GetModuloByIdQuery>('getModuloByIdQuery');
+      const modulo = await getModuloByIdQuery.execute(id);
+      return reply.send({ data: modulo });
     } catch (error: any) {
-      if (error.message === 'MODULO_NOT_FOUND') {
-        return reply.code(404).send(notFound('Modulo', id.toString()));
-      }
-      console.error('Error getting modulo:', error);
-      return reply.code(500).send(internalError('Failed to retrieve modulo'));
+      return handleModuloError(error, reply);
     }
   });
 
@@ -211,26 +206,18 @@ export default async function moduloRoutes(app: FastifyInstance) {
       }
     }
   }, async (req, reply) => {
-    return withDbContext(req, async (tx) => {
-      const parsed = CreateModuloSchema.safeParse(req.body);
-      if (!parsed.success) {
-        return reply.code(400).send(validationError(parsed.error.issues));
-      }
+    const parsed = CreateModuloSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return reply.code(400).send(fail(parsed.error.message));
+    }
 
-      try {
-        const modulo = await createModuloItem(
-          parsed.data.nombre,
-          parsed.data.tipo,
-          parsed.data.icono,
-          parsed.data.orden,
-          tx
-        );
-        return reply.code(201).send(ok(modulo));
-      } catch (error: any) {
-        console.error('Error creating modulo:', error);
-        return reply.code(500).send(internalError('Failed to create modulo'));
-      }
-    });
+    try {
+      const createModuloCommand = req.diScope.resolve<CreateModuloCommand>('createModuloCommand');
+      const modulo = await createModuloCommand.execute(parsed.data);
+      return reply.code(201).send({ data: modulo });
+    } catch (error: any) {
+      return handleModuloError(error, reply);
+    }
   });
 
   // Actualizar módulo (requiere admin)
@@ -315,40 +302,25 @@ export default async function moduloRoutes(app: FastifyInstance) {
       }
     }
   }, async (req, reply) => {
-    return withDbContext(req, async (tx) => {
-      const id = parseInt((req.params as { id: string }).id);
+    const { id } = req.params as { id: number };
+    const parsed = UpdateModuloSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return reply.code(400).send(fail(parsed.error.message));
+    }
 
-      // Validate parameter
-      if (isNaN(id) || id <= 0) {
-        return reply.code(400).send(badRequest('ID must be a positive integer'));
-      }
-
-      const parsed = UpdateModuloSchema.safeParse(req.body);
-      if (!parsed.success) {
-        return reply.code(400).send(validationError(parsed.error.issues));
-      }
-
-      try {
-        const modulo = await updateModuloItem(
-          id,
-          parsed.data.nombre,
-          parsed.data.tipo,
-          parsed.data.icono,
-          parsed.data.orden,
-          tx
-        );
-        if (!modulo) {
-          return reply.code(404).send(notFound('Modulo', id.toString()));
-        }
-        return reply.send(ok(modulo));
-      } catch (error: any) {
-        if (error.message === 'MODULO_NOT_FOUND') {
-          return reply.code(404).send(notFound('Modulo', id.toString()));
-        }
-        console.error('Error updating modulo:', error);
-        return reply.code(500).send(internalError('Failed to update modulo'));
-      }
-    });
+    try {
+      const updateModuloCommand = req.diScope.resolve<UpdateModuloCommand>('updateModuloCommand');
+      const modulo = await updateModuloCommand.execute({
+        id,
+        nombre: parsed.data.nombre,
+        tipo: parsed.data.tipo,
+        icono: parsed.data.icono,
+        orden: parsed.data.orden
+      });
+      return reply.send({ data: modulo });
+    } catch (error: any) {
+      return handleModuloError(error, reply);
+    }
   });
 
   // Eliminar módulo (requiere admin)
@@ -419,27 +391,13 @@ export default async function moduloRoutes(app: FastifyInstance) {
       }
     }
   }, async (req, reply) => {
-    return withDbContext(req, async (tx) => {
-      const id = parseInt((req.params as { id: string }).id);
-
-      // Validate parameter
-      if (isNaN(id) || id <= 0) {
-        return reply.code(400).send(badRequest('ID must be a positive integer'));
-      }
-
-      try {
-        const deletedId = await deleteModuloItem(id, tx);
-        if (!deletedId) {
-          return reply.code(404).send(notFound('Modulo', id.toString()));
-        }
-        return reply.send(ok({ id: deletedId }));
-      } catch (error: any) {
-        if (error.message === 'MODULO_NOT_FOUND') {
-          return reply.code(404).send(notFound('Modulo', id.toString()));
-        }
-        console.error('Error deleting modulo:', error);
-        return reply.code(500).send(internalError('Failed to delete modulo'));
-      }
-    });
+    const { id } = req.params as { id: number };
+    try {
+      const deleteModuloCommand = req.diScope.resolve<DeleteModuloCommand>('deleteModuloCommand');
+      await deleteModuloCommand.execute({ id });
+      return reply.send({ data: { id } });
+    } catch (error: any) {
+      return handleModuloError(error, reply);
+    }
   });
 }

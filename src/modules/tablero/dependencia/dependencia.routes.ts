@@ -1,6 +1,6 @@
 import { FastifyInstance } from 'fastify';
 import { requireAuth, requireRole } from '../../auth/auth.middleware.js';
-import { CreateDependenciaSchema, UpdateDependenciaSchema, DependenciaIdParamSchema, TipoDependenciaParamSchema } from './dependencia.schemas.js';
+import { CreateDependenciaSchema, UpdateDependenciaSchema, DependenciaIdParamSchema } from './dependencia.schemas.js';
 import { getAllDependencias, getDependenciasByTipo, getDependenciasHijas, getDependenciaById, getDependenciaWithHijas, createDependenciaItem, updateDependenciaItem, deleteDependenciaItem } from './dependencia.service.js';
 import { ok, validationError, notFound, internalError } from '../../../utils/http.js';
 import { withDbContext } from '../../../db/context.js';

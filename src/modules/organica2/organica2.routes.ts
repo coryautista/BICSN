@@ -1,8 +1,14 @@
 import { FastifyInstance } from 'fastify';
 import { requireAuth } from '../auth/auth.middleware.js';
 import { CreateOrganica2Schema, UpdateOrganica2Schema, DynamicQuerySchema } from './organica2.schemas.js';
-import { getOrganica2ById, getAllOrganica2, createOrganica2Record, updateOrganica2Record, deleteOrganica2Record, queryOrganica2Dynamic, getOrganica2ByUserToken } from './organica2.service.js';
-import { ok, fail, validationError, notFound, conflict, badRequest, internalError } from '../../utils/http.js';
+import { getOrganica2ByUserToken, queryOrganica2Dynamic } from './organica2.service.js';
+import { ok, fail, validationError, badRequest, internalError } from '../../utils/http.js';
+import { GetAllOrganica2Query } from './application/queries/GetAllOrganica2Query.js';
+import { GetOrganica2ByIdQuery } from './application/queries/GetOrganica2ByIdQuery.js';
+import { CreateOrganica2Command } from './application/commands/CreateOrganica2Command.js';
+import { UpdateOrganica2Command } from './application/commands/UpdateOrganica2Command.js';
+import { DeleteOrganica2Command } from './application/commands/DeleteOrganica2Command.js';
+import { handleOrganica2Error } from './infrastructure/errorHandler.js';
 
 // [FIREBIRD] Routes for ORGANICA_2 CRUD operations
 export default async function organica2Routes(app: FastifyInstance) {
@@ -113,13 +119,14 @@ export default async function organica2Routes(app: FastifyInstance) {
         }
       }
     }
-  }, async (_req, reply) => {
+  }, async (req, reply) => {
     try {
-      const records = await getAllOrganica2();
+      const user = (req as any).user;
+      const getAllOrganica2Query = req.diScope.resolve<GetAllOrganica2Query>('getAllOrganica2Query');
+      const records = await getAllOrganica2Query.execute(user?.id?.toString());
       return reply.send(ok(records));
     } catch (error: any) {
-      console.error('Error listing organica2:', error);
-      return reply.code(500).send(fail('ORGANICA2_LIST_FAILED'));
+      return handleOrganica2Error(error, reply);
     }
   });
 
@@ -204,27 +211,13 @@ export default async function organica2Routes(app: FastifyInstance) {
   }, async (req, reply) => {
     try {
       const { claveOrganica0, claveOrganica1, claveOrganica2 } = req.params as { claveOrganica0: string; claveOrganica1: string; claveOrganica2: string };
+      const user = (req as any).user;
 
-      // Validate parameter format
-      if (!claveOrganica0 || claveOrganica0.length < 1 || claveOrganica0.length > 2) {
-        return reply.code(400).send(badRequest('claveOrganica0 must be 1-2 characters'));
-      }
-      if (!claveOrganica1 || claveOrganica1.length < 1 || claveOrganica1.length > 2) {
-        return reply.code(400).send(badRequest('claveOrganica1 must be 1-2 characters'));
-      }
-      if (!claveOrganica2 || claveOrganica2.length < 1 || claveOrganica2.length > 2) {
-        return reply.code(400).send(badRequest('claveOrganica2 must be 1-2 characters'));
-      }
-
-      const record = await getOrganica2ById(claveOrganica0, claveOrganica1, claveOrganica2);
+      const getOrganica2ByIdQuery = req.diScope.resolve<GetOrganica2ByIdQuery>('getOrganica2ByIdQuery');
+      const record = await getOrganica2ByIdQuery.execute(claveOrganica0, claveOrganica1, claveOrganica2, user?.id?.toString());
       return reply.send(ok(record));
     } catch (error: any) {
-      if (error.message === 'ORGANICA2_NOT_FOUND') {
-        const params = req.params as { claveOrganica0: string; claveOrganica1: string; claveOrganica2: string };
-        return reply.code(404).send(notFound('ORGANICA2 record', `${params.claveOrganica0}-${params.claveOrganica1}-${params.claveOrganica2}`));
-      }
-      console.error('Error getting organica2:', error);
-      return reply.code(500).send(internalError('Failed to retrieve ORGANICA2 record'));
+      return handleOrganica2Error(error, reply);
     }
   });
 
@@ -306,20 +299,12 @@ export default async function organica2Routes(app: FastifyInstance) {
     }
 
     try {
-      const record = await createOrganica2Record(parsed.data, req);
+      const user = (req as any).user;
+      const createOrganica2Command = req.diScope.resolve<CreateOrganica2Command>('createOrganica2Command');
+      const record = await createOrganica2Command.execute(parsed.data, user?.id?.toString());
       return reply.code(201).send(ok(record));
     } catch (error: any) {
-      console.error('Error creating organica2:', error);
-      if (error.message === 'ORGANICA2_EXISTS') {
-        return reply.code(409).send(conflict('ORGANICA2 record', 'Record with this composite key already exists'));
-      }
-      if (error.code === 'ER_DUP_ENTRY') {
-        return reply.code(409).send(conflict('ORGANICA2 record', 'Duplicate entry detected'));
-      }
-      if (error.code === 'ER_NO_REFERENCED_ROW') {
-        return reply.code(400).send(badRequest('Invalid reference: related ORGANICA1 record not found'));
-      }
-      return reply.code(500).send(internalError('Failed to create ORGANICA2 record'));
+      return handleOrganica2Error(error, reply);
     }
   });
 
@@ -406,17 +391,12 @@ export default async function organica2Routes(app: FastifyInstance) {
     }
 
     try {
-      const record = await updateOrganica2Record(claveOrganica0, claveOrganica1, claveOrganica2, parsed.data, req);
+      const user = (req as any).user;
+      const updateOrganica2Command = req.diScope.resolve<UpdateOrganica2Command>('updateOrganica2Command');
+      const record = await updateOrganica2Command.execute(claveOrganica0, claveOrganica1, claveOrganica2, parsed.data, user?.id?.toString());
       return reply.send(ok(record));
     } catch (error: any) {
-      if (error.message === 'ORGANICA2_NOT_FOUND') {
-        return reply.code(404).send(notFound('ORGANICA2 record', `${claveOrganica0}-${claveOrganica1}-${claveOrganica2}`));
-      }
-      if (error.code === 'ER_NO_REFERENCED_ROW') {
-        return reply.code(400).send(badRequest('Invalid reference: related ORGANICA1 record not found'));
-      }
-      console.error('Error updating organica2:', error);
-      return reply.code(500).send(internalError('Failed to update ORGANICA2 record'));
+      return handleOrganica2Error(error, reply);
     }
   });
 
@@ -488,18 +468,12 @@ export default async function organica2Routes(app: FastifyInstance) {
   }, async (req, reply) => {
     try {
       const { claveOrganica0, claveOrganica1, claveOrganica2 } = req.params as { claveOrganica0: string; claveOrganica1: string; claveOrganica2: string };
-      const result = await deleteOrganica2Record(claveOrganica0, claveOrganica1, claveOrganica2, req);
+      const user = (req as any).user;
+      const deleteOrganica2Command = req.diScope.resolve<DeleteOrganica2Command>('deleteOrganica2Command');
+      const result = await deleteOrganica2Command.execute(claveOrganica0, claveOrganica1, claveOrganica2, user?.id?.toString());
       return reply.send(ok(result));
     } catch (error: any) {
-      if (error.message === 'ORGANICA2_NOT_FOUND') {
-        const params = req.params as { claveOrganica0: string; claveOrganica1: string; claveOrganica2: string };
-        return reply.code(404).send(notFound('ORGANICA2 record', `${params.claveOrganica0}-${params.claveOrganica1}-${params.claveOrganica2}`));
-      }
-      if (error.code === 'ER_ROW_IS_REFERENCED') {
-        return reply.code(409).send(conflict('ORGANICA2 record', 'Cannot delete: record is referenced by other tables'));
-      }
-      console.error('Error deleting organica2:', error);
-      return reply.code(500).send(internalError('Failed to delete ORGANICA2 record'));
+      return handleOrganica2Error(error, reply);
     }
   });
 

@@ -100,12 +100,17 @@ export async function deleteUserRole(usuarioId: string, roleId: string, tx?: sql
     throw new Error('Invalid roleId: must be a non-empty string');
   }
   const req = tx ? new sqlType.Request(tx) : (await getPool()).request();
-  await req
+  const result = await req
     .input('usuarioId', sql.UniqueIdentifier, usuarioId)
     .input('roleId', sql.UniqueIdentifier, roleId)
     .query(`
       DELETE FROM auth.userRole
       WHERE userId = @usuarioId AND roleId = @roleId
     `);
+  
+  if (result.rowsAffected[0] === 0) {
+    throw new Error('USER_ROLE_NOT_FOUND');
+  }
+  
   return { usuarioId, roleId };
 }

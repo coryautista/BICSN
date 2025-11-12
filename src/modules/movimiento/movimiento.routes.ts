@@ -1,19 +1,26 @@
 import { FastifyInstance } from 'fastify';
 import { requireAuth } from '../auth/auth.middleware.js';
 import { CreateMovimientoSchema, UpdateMovimientoSchema } from './movimiento.schemas.js';
-import {
-  getAllMovimientosService,
-  getMovimientoByIdService,
-  getMovimientosByAfiliadoIdService,
-  getMovimientosByTipoMovimientoIdService,
-  createMovimientoService,
-  updateMovimientoService,
-  deleteMovimientoService
-} from './movimiento.service.js';
 import { ok, fail } from '../../utils/http.js';
+import { GetAllMovimientosQuery } from './application/queries/GetAllMovimientosQuery.js';
+import { GetMovimientoByIdQuery } from './application/queries/GetMovimientoByIdQuery.js';
+import { GetMovimientosByAfiliadoIdQuery } from './application/queries/GetMovimientosByAfiliadoIdQuery.js';
+import { GetMovimientosByTipoMovimientoIdQuery } from './application/queries/GetMovimientosByTipoMovimientoIdQuery.js';
+import { CreateMovimientoCommand } from './application/commands/CreateMovimientoCommand.js';
+import { UpdateMovimientoCommand } from './application/commands/UpdateMovimientoCommand.js';
+import { DeleteMovimientoCommand } from './application/commands/DeleteMovimientoCommand.js';
+import { handleMovimientoError } from './infrastructure/errorHandler.js';
 
 // Routes for Movimiento CRUD operations
 export default async function movimientoRoutes(app: FastifyInstance) {
+  // Resolve dependencies from DI container
+  const getAllMovimientosQuery = app.diContainer.resolve<GetAllMovimientosQuery>('getAllMovimientosQuery');
+  const getMovimientoByIdQuery = app.diContainer.resolve<GetMovimientoByIdQuery>('getMovimientoByIdQuery');
+  const getMovimientosByAfiliadoIdQuery = app.diContainer.resolve<GetMovimientosByAfiliadoIdQuery>('getMovimientosByAfiliadoIdQuery');
+  const getMovimientosByTipoMovimientoIdQuery = app.diContainer.resolve<GetMovimientosByTipoMovimientoIdQuery>('getMovimientosByTipoMovimientoIdQuery');
+  const createMovimientoCommand = app.diContainer.resolve<CreateMovimientoCommand>('createMovimientoCommand');
+  const updateMovimientoCommand = app.diContainer.resolve<UpdateMovimientoCommand>('updateMovimientoCommand');
+  const deleteMovimientoCommand = app.diContainer.resolve<DeleteMovimientoCommand>('deleteMovimientoCommand');
 
   // GET /movimiento - List all records
   app.get('/movimiento', {
@@ -62,13 +69,13 @@ export default async function movimientoRoutes(app: FastifyInstance) {
         }
       }
     }
-  }, async (_req, reply) => {
+  }, async (req, reply) => {
     try {
-      const records = await getAllMovimientosService();
+      const userId = req.user?.sub;
+      const records = await getAllMovimientosQuery.execute(userId);
       return reply.send(ok(records));
     } catch (error: any) {
-      console.error('Error listing movimiento:', error);
-      return reply.code(500).send(fail('MOVIMIENTO_LIST_FAILED'));
+      return handleMovimientoError(error, reply);
     }
   });
 
@@ -139,14 +146,11 @@ export default async function movimientoRoutes(app: FastifyInstance) {
   }, async (req, reply) => {
     try {
       const { id } = req.params as { id: number };
-      const record = await getMovimientoByIdService(id);
+      const userId = req.user?.sub;
+      const record = await getMovimientoByIdQuery.execute(id, userId);
       return reply.send(ok(record));
     } catch (error: any) {
-      if (error.message === 'MOVIMIENTO_NOT_FOUND') {
-        return reply.code(404).send(fail('MOVIMIENTO_NOT_FOUND'));
-      }
-      console.error('Error getting movimiento:', error);
-      return reply.code(500).send(fail('MOVIMIENTO_GET_FAILED'));
+      return handleMovimientoError(error, reply);
     }
   });
 
@@ -207,11 +211,11 @@ export default async function movimientoRoutes(app: FastifyInstance) {
   }, async (req, reply) => {
     try {
       const { afiliadoId } = req.params as { afiliadoId: number };
-      const records = await getMovimientosByAfiliadoIdService(afiliadoId);
+      const userId = req.user?.sub;
+      const records = await getMovimientosByAfiliadoIdQuery.execute(afiliadoId, userId);
       return reply.send(ok(records));
     } catch (error: any) {
-      console.error('Error getting movimiento by afiliadoId:', error);
-      return reply.code(500).send(fail('MOVIMIENTO_GET_BY_AFILIADO_FAILED'));
+      return handleMovimientoError(error, reply);
     }
   });
 
@@ -272,11 +276,11 @@ export default async function movimientoRoutes(app: FastifyInstance) {
   }, async (req, reply) => {
     try {
       const { tipoMovimientoId } = req.params as { tipoMovimientoId: number };
-      const records = await getMovimientosByTipoMovimientoIdService(tipoMovimientoId);
+      const userId = req.user?.sub;
+      const records = await getMovimientosByTipoMovimientoIdQuery.execute(tipoMovimientoId, userId);
       return reply.send(ok(records));
     } catch (error: any) {
-      console.error('Error getting movimiento by tipoMovimientoId:', error);
-      return reply.code(500).send(fail('MOVIMIENTO_GET_BY_TIPO_FAILED'));
+      return handleMovimientoError(error, reply);
     }
   });
 
@@ -344,7 +348,8 @@ export default async function movimientoRoutes(app: FastifyInstance) {
     }
 
     try {
-      const record = await createMovimientoService({
+      const userId = req.user?.sub;
+      const record = await createMovimientoCommand.execute({
         quincenaId: parsed.data.quincenaId ?? null,
         tipoMovimientoId: parsed.data.tipoMovimientoId,
         afiliadoId: parsed.data.afiliadoId,
@@ -352,12 +357,12 @@ export default async function movimientoRoutes(app: FastifyInstance) {
         observaciones: parsed.data.observaciones ?? null,
         folio: parsed.data.folio ?? null,
         estatus: parsed.data.estatus ?? null,
-        creadoPor: parsed.data.creadoPor ?? null
-      });
+        creadoPor: parsed.data.creadoPor ?? null,
+        creadoPorUid: parsed.data.creadoPorUid ?? null
+      }, userId);
       return reply.code(201).send(ok(record));
     } catch (error: any) {
-      console.error('Error creating movimiento:', error);
-      return reply.code(500).send(fail('MOVIMIENTO_CREATE_FAILED'));
+      return handleMovimientoError(error, reply);
     }
   });
 
@@ -445,14 +450,11 @@ export default async function movimientoRoutes(app: FastifyInstance) {
     }
 
     try {
-      const record = await updateMovimientoService(id, parsed.data);
+      const userId = req.user?.sub;
+      const record = await updateMovimientoCommand.execute({ id, ...parsed.data }, userId);
       return reply.send(ok(record));
     } catch (error: any) {
-      if (error.message === 'MOVIMIENTO_NOT_FOUND') {
-        return reply.code(404).send(fail('MOVIMIENTO_NOT_FOUND'));
-      }
-      console.error('Error updating movimiento:', error);
-      return reply.code(500).send(fail('MOVIMIENTO_UPDATE_FAILED'));
+      return handleMovimientoError(error, reply);
     }
   });
 
@@ -509,14 +511,11 @@ export default async function movimientoRoutes(app: FastifyInstance) {
   }, async (req, reply) => {
     try {
       const { id } = req.params as { id: number };
-      await deleteMovimientoService(id);
+      const userId = req.user?.sub;
+      await deleteMovimientoCommand.execute(id, userId);
       return reply.send(ok({}));
     } catch (error: any) {
-      if (error.message === 'MOVIMIENTO_NOT_FOUND') {
-        return reply.code(404).send(fail('MOVIMIENTO_NOT_FOUND'));
-      }
-      console.error('Error deleting movimiento:', error);
-      return reply.code(500).send(fail('MOVIMIENTO_DELETE_FAILED'));
+      return handleMovimientoError(error, reply);
     }
   });
 }

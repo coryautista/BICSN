@@ -1,6 +1,6 @@
 import { FastifyInstance } from 'fastify';
 import { requireAuth, requireRole } from '../../auth/auth.middleware.js';
-import { CreateUnidadMedidaSchema, UpdateUnidadMedidaSchema, UnidadMedidaIdParamSchema, CategoriaParamSchema } from './unidad-medida.schemas.js';
+import { CreateUnidadMedidaSchema, UpdateUnidadMedidaSchema, UnidadMedidaIdParamSchema } from './unidad-medida.schemas.js';
 import { getAllUnidadesMedida, getUnidadesMedidaByCategoria, getUnidadMedidaById, createUnidadMedidaItem, updateUnidadMedidaItem, deleteUnidadMedidaItem } from './unidad-medida.service.js';
 import { ok, validationError, notFound, internalError } from '../../../utils/http.js';
 import { withDbContext } from '../../../db/context.js';

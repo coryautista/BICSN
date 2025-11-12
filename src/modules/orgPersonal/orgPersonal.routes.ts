@@ -1,15 +1,14 @@
 import { FastifyInstance } from 'fastify';
 import { requireAuth } from '../auth/auth.middleware.js';
 import { CreateOrgPersonalSchema, UpdateOrgPersonalSchema } from './orgPersonal.schemas.js';
-import {
-  getAllOrgPersonalService,
-  getOrgPersonalByIdService,
-  getOrgPersonalBySearchService,
-  createOrgPersonalService,
-  updateOrgPersonalService,
-  deleteOrgPersonalService
-} from './orgPersonal.service.js';
 import { ok, fail } from '../../utils/http.js';
+import { GetAllOrgPersonalQuery } from './application/queries/GetAllOrgPersonalQuery.js';
+import { GetOrgPersonalByIdQuery } from './application/queries/GetOrgPersonalByIdQuery.js';
+import { GetOrgPersonalBySearchQuery } from './application/queries/GetOrgPersonalBySearchQuery.js';
+import { CreateOrgPersonalCommand } from './application/commands/CreateOrgPersonalCommand.js';
+import { UpdateOrgPersonalCommand } from './application/commands/UpdateOrgPersonalCommand.js';
+import { DeleteOrgPersonalCommand } from './application/commands/DeleteOrgPersonalCommand.js';
+import { handleOrgPersonalError } from './infrastructure/errorHandler.js';
 
 // Routes for OrgPersonal CRUD operations
 export default async function orgPersonalRoutes(app: FastifyInstance) {
@@ -71,13 +70,13 @@ export default async function orgPersonalRoutes(app: FastifyInstance) {
         }
       }
     }
-  }, async (_req, reply) => {
+  }, async (req, reply) => {
     try {
-      const records = await getAllOrgPersonalService();
+      const getAllOrgPersonalQuery = req.diScope.resolve<GetAllOrgPersonalQuery>('getAllOrgPersonalQuery');
+      const records = await getAllOrgPersonalQuery.execute(req.user?.sub?.toString());
       return reply.send(ok(records));
     } catch (error: any) {
-      console.error('Error listing orgPersonal:', error);
-      return reply.code(500).send(fail('ORG_PERSONAL_LIST_FAILED'));
+      return handleOrgPersonalError(error, reply);
     }
   });
 
@@ -158,14 +157,11 @@ export default async function orgPersonalRoutes(app: FastifyInstance) {
   }, async (req, reply) => {
     try {
       const { searchTerm } = req.params as { searchTerm: string };
-      const record = await getOrgPersonalBySearchService(searchTerm);
+      const getOrgPersonalBySearchQuery = req.diScope.resolve<GetOrgPersonalBySearchQuery>('getOrgPersonalBySearchQuery');
+      const record = await getOrgPersonalBySearchQuery.execute(searchTerm, req.user?.sub?.toString());
       return reply.send(ok(record));
     } catch (error: any) {
-      if (error.message === 'ORG_PERSONAL_NOT_FOUND') {
-        return reply.code(404).send(fail('ORG_PERSONAL_NOT_FOUND'));
-      }
-      console.error('Error getting orgPersonal by search term:', error);
-      return reply.code(500).send(fail('ORG_PERSONAL_GET_FAILED'));
+      return handleOrgPersonalError(error, reply);
     }
   });
 
@@ -246,14 +242,11 @@ export default async function orgPersonalRoutes(app: FastifyInstance) {
   }, async (req, reply) => {
     try {
       const { interno } = req.params as { interno: number };
-      const record = await getOrgPersonalByIdService(interno);
+      const getOrgPersonalByIdQuery = req.diScope.resolve<GetOrgPersonalByIdQuery>('getOrgPersonalByIdQuery');
+      const record = await getOrgPersonalByIdQuery.execute(interno, req.user?.sub?.toString());
       return reply.send(ok(record));
     } catch (error: any) {
-      if (error.message === 'ORG_PERSONAL_NOT_FOUND') {
-        return reply.code(404).send(fail('ORG_PERSONAL_NOT_FOUND'));
-      }
-      console.error('Error getting orgPersonal:', error);
-      return reply.code(500).send(fail('ORG_PERSONAL_GET_FAILED'));
+      return handleOrgPersonalError(error, reply);
     }
   });
 
@@ -329,7 +322,8 @@ export default async function orgPersonalRoutes(app: FastifyInstance) {
     }
 
     try {
-      const record = await createOrgPersonalService({
+      const createOrgPersonalCommand = req.diScope.resolve<CreateOrgPersonalCommand>('createOrgPersonalCommand');
+      const record = await createOrgPersonalCommand.execute({
         interno: parsed.data.interno,
         clave_organica_0: parsed.data.clave_organica_0 ?? null,
         clave_organica_1: parsed.data.clave_organica_1 ?? null,
@@ -346,11 +340,10 @@ export default async function orgPersonalRoutes(app: FastifyInstance) {
         aplicar: parsed.data.aplicar ?? null,
         bc: parsed.data.bc ?? null,
         porcentaje: parsed.data.porcentaje ?? null
-      });
+      }, req.user?.sub?.toString());
       return reply.code(201).send(ok(record));
     } catch (error: any) {
-      console.error('Error creating orgPersonal:', error);
-      return reply.code(500).send(fail('ORG_PERSONAL_CREATE_FAILED'));
+      return handleOrgPersonalError(error, reply);
     }
   });
 
@@ -445,14 +438,11 @@ export default async function orgPersonalRoutes(app: FastifyInstance) {
     }
 
     try {
-      const record = await updateOrgPersonalService(interno, parsed.data);
+      const updateOrgPersonalCommand = req.diScope.resolve<UpdateOrgPersonalCommand>('updateOrgPersonalCommand');
+      const record = await updateOrgPersonalCommand.execute(interno, parsed.data, req.user?.sub?.toString());
       return reply.send(ok(record));
     } catch (error: any) {
-      if (error.message === 'ORG_PERSONAL_NOT_FOUND') {
-        return reply.code(404).send(fail('ORG_PERSONAL_NOT_FOUND'));
-      }
-      console.error('Error updating orgPersonal:', error);
-      return reply.code(500).send(fail('ORG_PERSONAL_UPDATE_FAILED'));
+      return handleOrgPersonalError(error, reply);
     }
   });
 
@@ -509,14 +499,11 @@ export default async function orgPersonalRoutes(app: FastifyInstance) {
   }, async (req, reply) => {
     try {
       const { interno } = req.params as { interno: number };
-      await deleteOrgPersonalService(interno);
-      return reply.send(ok({}));
+      const deleteOrgPersonalCommand = req.diScope.resolve<DeleteOrgPersonalCommand>('deleteOrgPersonalCommand');
+      const result = await deleteOrgPersonalCommand.execute(interno, req.user?.sub?.toString());
+      return reply.send(ok(result));
     } catch (error: any) {
-      if (error.message === 'ORG_PERSONAL_NOT_FOUND') {
-        return reply.code(404).send(fail('ORG_PERSONAL_NOT_FOUND'));
-      }
-      console.error('Error deleting orgPersonal:', error);
-      return reply.code(500).send(fail('ORG_PERSONAL_DELETE_FAILED'));
+      return handleOrgPersonalError(error, reply);
     }
   });
 }

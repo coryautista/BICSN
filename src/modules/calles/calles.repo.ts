@@ -108,6 +108,18 @@ export async function searchCalles(filters: {
   offset?: number;
 }) {
   const p = await getPool();
+  // Normalize common inputs to avoid mismatches (trim/uppercase)
+  if (filters.estadoId && typeof filters.estadoId === 'string') {
+    filters.estadoId = filters.estadoId.trim().toUpperCase();
+  }
+  if (filters.codigoPostal && typeof filters.codigoPostal === 'string') {
+    filters.codigoPostal = filters.codigoPostal.trim();
+  }
+  if (filters.nombreCalle && typeof filters.nombreCalle === 'string') {
+    filters.nombreCalle = filters.nombreCalle.trim();
+  }
+  
+  // BÚSQUEDA LIBRE: Sin JOINs, busca directamente en los campos de geo.Calles
   let query = `
     SELECT
       c.CalleID,
@@ -117,43 +129,19 @@ export async function searchCalles(filters: {
       c.createdAt,
       c.updatedAt,
       c.createdBy,
-      c.updatedBy,
-      col.NombreColonia,
-      col.TipoAsentamiento,
-      m.MunicipioID,
-      m.NombreMunicipio,
-      cp.CodigoPostalID,
-      cp.CodigoPostal,
-      e.EstadoID,
-      e.NombreEstado
+      c.updatedBy
     FROM geo.Calles c
-    INNER JOIN geo.Colonias col ON c.ColoniaID = col.ColoniaID
-    INNER JOIN geo.Municipios m ON col.MunicipioID = m.MunicipioID
-    INNER JOIN geo.CodigosPostales cp ON col.CodigoPostalID = cp.CodigoPostalID
-    INNER JOIN geo.Estados e ON m.EstadoID = e.EstadoID
     WHERE 1=1
   `;
 
   const params: any[] = [];
 
-  if (filters.estadoId) {
-    query += ` AND e.EstadoID = @estadoId`;
-    params.push({ name: 'estadoId', type: sql.Char(2), value: filters.estadoId });
-  }
-
-  if (filters.municipioId) {
-    query += ` AND m.MunicipioID = @municipioId`;
-    params.push({ name: 'municipioId', type: sql.Int, value: filters.municipioId });
-  }
+  // Nota: estadoId, municipioId, codigoPostal no están directamente en geo.Calles
+  // Solo buscaremos por los campos que sí existen en la tabla
 
   if (filters.coloniaId) {
     query += ` AND c.ColoniaID = @coloniaId`;
     params.push({ name: 'coloniaId', type: sql.Int, value: filters.coloniaId });
-  }
-
-  if (filters.codigoPostal) {
-    query += ` AND cp.CodigoPostal = @codigoPostal`;
-    params.push({ name: 'codigoPostal', type: sql.Char(5), value: filters.codigoPostal });
   }
 
   if (filters.nombreCalle) {
@@ -166,7 +154,7 @@ export async function searchCalles(filters: {
     params.push({ name: 'esValido', type: sql.Bit, value: filters.esValido });
   }
 
-  query += ` ORDER BY e.EstadoID ASC, m.NombreMunicipio ASC, col.NombreColonia ASC, c.NombreCalle ASC`;
+  query += ` ORDER BY c.ColoniaID ASC, c.NombreCalle ASC`;
 
   if (filters.limit) {
     query += ` OFFSET @offset ROWS FETCH NEXT @limit ROWS ONLY`;
@@ -179,6 +167,17 @@ export async function searchCalles(filters: {
     req.input(param.name, param.type, param.value);
   });
 
+  // Debugging: log query and params to help diagnose search issues
+  // (temporary - remove or change to proper logger after debugging)
+  try {
+    // eslint-disable-next-line no-console
+    console.debug('[searchCalles] SQL:', query);
+    // eslint-disable-next-line no-console
+    console.debug('[searchCalles] params:', params);
+  } catch (e) {
+    // ignore logging errors
+  }
+
   const r = await req.query(query);
   return r.recordset.map((row: any) => ({
     calleId: row.CalleID,
@@ -188,24 +187,8 @@ export async function searchCalles(filters: {
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
     createdBy: row.createdBy,
-    updatedBy: row.updatedBy,
-    colonia: {
-      coloniaId: row.ColoniaID,
-      nombreColonia: row.NombreColonia,
-      tipoAsentamiento: row.TipoAsentamiento
-    },
-    municipio: {
-      municipioId: row.MunicipioID,
-      nombreMunicipio: row.NombreMunicipio
-    },
-    codigoPostal: {
-      codigoPostalId: row.CodigoPostalID,
-      codigoPostal: row.CodigoPostal
-    },
-    estado: {
-      estadoId: row.EstadoID,
-      nombreEstado: row.NombreEstado
-    }
+    updatedBy: row.updatedBy
+    // Sin incluir colonia, municipio, codigoPostal, estado ya que no hacemos JOIN
   }));
 }
 

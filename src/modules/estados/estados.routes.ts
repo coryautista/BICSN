@@ -1,9 +1,13 @@
 import { FastifyInstance } from 'fastify';
 import { requireAuth, requireRole } from '../auth/auth.middleware.js';
 import { CreateEstadoSchema, UpdateEstadoSchema, EstadoIdParamSchema } from './estados.schemas.js';
-import { getAllEstados, getEstadoById, createEstadoItem, updateEstadoItem, deleteEstadoItem } from './estados.service.js';
-import { ok, validationError, notFound, internalError } from '../../utils/http.js';
-import { withDbContext } from '../../db/context.js';
+import { ok, validationError } from '../../utils/http.js';
+import { handleEstadosError } from './infrastructure/errorHandler.js';
+import type { GetAllEstadosQuery } from './application/queries/GetAllEstadosQuery.js';
+import type { GetEstadoByIdQuery } from './application/queries/GetEstadoByIdQuery.js';
+import type { CreateEstadoCommand } from './application/commands/CreateEstadoCommand.js';
+import type { UpdateEstadoCommand } from './application/commands/UpdateEstadoCommand.js';
+import type { DeleteEstadoCommand } from './application/commands/DeleteEstadoCommand.js';
 
 export default async function estadosRoutes(app: FastifyInstance) {
 
@@ -46,13 +50,13 @@ export default async function estadosRoutes(app: FastifyInstance) {
         }
       }
     }
-  }, async (_req, reply) => {
+  }, async (req, reply) => {
     try {
-      const estados = await getAllEstados();
+      const getAllEstadosQuery = req.diScope.resolve<GetAllEstadosQuery>('getAllEstadosQuery');
+      const estados = await getAllEstadosQuery.execute();
       return reply.send(ok(estados));
     } catch (error: any) {
-      console.error('Error listing estados:', error);
-      return reply.code(500).send(internalError('Failed to retrieve estados'));
+      return handleEstadosError(error, reply);
     }
   });
 
@@ -135,14 +139,11 @@ export default async function estadosRoutes(app: FastifyInstance) {
     }
 
     try {
-      const estado = await getEstadoById(estadoId);
+      const getEstadoByIdQuery = req.diScope.resolve<GetEstadoByIdQuery>('getEstadoByIdQuery');
+      const estado = await getEstadoByIdQuery.execute(estadoId);
       return reply.send(ok(estado));
     } catch (error: any) {
-      if (error.message === 'ESTADO_NOT_FOUND') {
-        return reply.code(404).send(notFound('Estado', estadoId));
-      }
-      console.error('Error getting estado:', error);
-      return reply.code(500).send(internalError('Failed to retrieve estado'));
+      return handleEstadosError(error, reply);
     }
   });
 
@@ -218,30 +219,24 @@ export default async function estadosRoutes(app: FastifyInstance) {
       }
     }
   }, async (req, reply) => {
-    return withDbContext(req, async (tx) => {
-      const parsed = CreateEstadoSchema.safeParse(req.body);
-      if (!parsed.success) {
-        return reply.code(400).send(validationError(parsed.error.issues));
-      }
+    const parsed = CreateEstadoSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return reply.code(400).send(validationError(parsed.error.issues));
+    }
 
-      try {
-        const userId = req.user?.sub;
-        const estado = await createEstadoItem(
-          parsed.data.estadoId,
-          parsed.data.nombreEstado,
-          parsed.data.esValido ?? false,
-          userId,
-          tx
-        );
-        return reply.code(201).send(ok(estado));
-      } catch (error: any) {
-        if (error.message === 'ESTADO_EXISTS') {
-          return reply.code(409).send({ ok: false, error: { code: 'CONFLICT', message: 'Estado already exists' } });
-        }
-        console.error('Error creating estado:', error);
-        return reply.code(500).send(internalError('Failed to create estado'));
-      }
-    });
+    try {
+      const userId = req.user?.sub;
+      const createEstadoCommand = req.diScope.resolve<CreateEstadoCommand>('createEstadoCommand');
+      const estado = await createEstadoCommand.execute({
+        estadoId: parsed.data.estadoId,
+        nombreEstado: parsed.data.nombreEstado,
+        esValido: parsed.data.esValido ?? false,
+        userId
+      });
+      return reply.code(201).send(ok(estado));
+    } catch (error: any) {
+      return handleEstadosError(error, reply);
+    }
   });
 
   // Actualizar estado (requiere admin)
@@ -321,38 +316,32 @@ export default async function estadosRoutes(app: FastifyInstance) {
       }
     }
   }, async (req, reply) => {
-    return withDbContext(req, async (tx) => {
-      const { estadoId } = req.params as { estadoId: string };
+    const { estadoId } = req.params as { estadoId: string };
 
-      // Validate parameter
-      const paramValidation = EstadoIdParamSchema.safeParse({ estadoId });
-      if (!paramValidation.success) {
-        return reply.code(400).send(validationError(paramValidation.error.issues));
-      }
+    // Validate parameter
+    const paramValidation = EstadoIdParamSchema.safeParse({ estadoId });
+    if (!paramValidation.success) {
+      return reply.code(400).send(validationError(paramValidation.error.issues));
+    }
 
-      const parsed = UpdateEstadoSchema.safeParse(req.body);
-      if (!parsed.success) {
-        return reply.code(400).send(validationError(parsed.error.issues));
-      }
+    const parsed = UpdateEstadoSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return reply.code(400).send(validationError(parsed.error.issues));
+    }
 
-      try {
-        const userId = req.user?.sub;
-        const estado = await updateEstadoItem(
-          estadoId,
-          parsed.data.nombreEstado,
-          parsed.data.esValido,
-          userId,
-          tx
-        );
-        return reply.send(ok(estado));
-      } catch (error: any) {
-        if (error.message === 'ESTADO_NOT_FOUND') {
-          return reply.code(404).send(notFound('Estado', estadoId));
-        }
-        console.error('Error updating estado:', error);
-        return reply.code(500).send(internalError('Failed to update estado'));
-      }
-    });
+    try {
+      const userId = req.user?.sub;
+      const updateEstadoCommand = req.diScope.resolve<UpdateEstadoCommand>('updateEstadoCommand');
+      const estado = await updateEstadoCommand.execute({
+        estadoId,
+        nombreEstado: parsed.data.nombreEstado,
+        esValido: parsed.data.esValido,
+        userId
+      });
+      return reply.send(ok(estado));
+    } catch (error: any) {
+      return handleEstadosError(error, reply);
+    }
   });
 
   // Eliminar estado (requiere admin)
@@ -423,25 +412,20 @@ export default async function estadosRoutes(app: FastifyInstance) {
       }
     }
   }, async (req, reply) => {
-    return withDbContext(req, async (tx) => {
-      const { estadoId } = req.params as { estadoId: string };
+    const { estadoId } = req.params as { estadoId: string };
 
-      // Validate parameter
-      const paramValidation = EstadoIdParamSchema.safeParse({ estadoId });
-      if (!paramValidation.success) {
-        return reply.code(400).send(validationError(paramValidation.error.issues));
-      }
+    // Validate parameter
+    const paramValidation = EstadoIdParamSchema.safeParse({ estadoId });
+    if (!paramValidation.success) {
+      return reply.code(400).send(validationError(paramValidation.error.issues));
+    }
 
-      try {
-        const deletedId = await deleteEstadoItem(estadoId, tx);
-        return reply.send(ok({ estadoId: deletedId }));
-      } catch (error: any) {
-        if (error.message === 'ESTADO_NOT_FOUND') {
-          return reply.code(404).send(notFound('Estado', estadoId));
-        }
-        console.error('Error deleting estado:', error);
-        return reply.code(500).send(internalError('Failed to delete estado'));
-      }
-    });
+    try {
+      const deleteEstadoCommand = req.diScope.resolve<DeleteEstadoCommand>('deleteEstadoCommand');
+      const deletedId = await deleteEstadoCommand.execute({ estadoId });
+      return reply.send(ok({ estadoId: deletedId }));
+    } catch (error: any) {
+      return handleEstadosError(error, reply);
+    }
   });
 }

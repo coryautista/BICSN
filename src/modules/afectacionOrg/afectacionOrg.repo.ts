@@ -1,4 +1,10 @@
 import { getPool, sql } from '../../db/mssql.js';
+import pino from 'pino';
+
+const logger = pino({
+  name: 'afectacionOrg-repo',
+  level: process.env.LOG_LEVEL || 'info'
+});
 
 // Register affectation using stored procedure
 export async function registerAfectacionOrg(data: {
@@ -38,7 +44,13 @@ export async function registerAfectacionOrg(data: {
 
     const result = await request.execute('afec.usp_RegistrarAfectacionOrg');
 
-    console.log(result);
+    logger.debug({
+      operation: 'registerAfectacionOrg',
+      entidad: data.entidad,
+      anio: data.anio,
+      quincena: data.quincena,
+      result: result
+    }, 'Resultado del procedimiento almacenado');
     // Check if the stored procedure executed successfully
     // Since stored procedures don't return values directly, we verify by checking
     // if a record was actually inserted into the BitacoraAfectacionOrg table
@@ -77,7 +89,14 @@ export async function registerAfectacionOrg(data: {
 
   } catch (error: any) {
     // Log the error for debugging
-    console.error('Error registering affectation:', error);
+    logger.error({
+      operation: 'registerAfectacionOrg',
+      entidad: data.entidad,
+      anio: data.anio,
+      quincena: data.quincena,
+      error: error.message,
+      stack: error.stack
+    }, 'Error al registrar afectación');
 
     // Re-throw with more context
     if (error.message.includes('Afectacion registration failed')) {

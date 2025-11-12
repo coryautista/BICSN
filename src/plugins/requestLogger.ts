@@ -3,7 +3,7 @@ import { errorLogger } from '../utils/errorLogger.js';
 
 export default fp(async (app) => {
   // Log all incoming requests
-  app.addHook('onRequest', async (req, reply) => {
+  app.addHook('onRequest', async (req) => {
     // Store request start time for response time calculation
     (req as any).startTime = Date.now();
 

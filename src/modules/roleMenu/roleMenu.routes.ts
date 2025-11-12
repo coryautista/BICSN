@@ -1,8 +1,16 @@
 import { FastifyInstance } from 'fastify';
 import { requireAuth, requireRole } from '../auth/auth.middleware.js';
 import { CreateRoleMenuSchema, UpdateRoleMenuSchema, AssignRoleMenuSchema } from './roleMenu.schemas.js';
-import { getAllRoleMenus, getRoleMenuById, getRoleMenusByRoleId, createRoleMenuItem, updateRoleMenuItem, deleteRoleMenuItem, assignMenuToRole, unassignMenuFromRole, getRoleMenusByTokenRoles } from './roleMenu.service.js';
-import { fail } from '../../utils/http.js';
+import { GetAllRoleMenusQuery } from './application/queries/GetAllRoleMenusQuery.js';
+import { GetRoleMenuByIdQuery } from './application/queries/GetRoleMenuByIdQuery.js';
+import { GetRoleMenusByRoleIdQuery } from './application/queries/GetRoleMenusByRoleIdQuery.js';
+import { GetRoleMenusByTokenRolesQuery } from './application/queries/GetRoleMenusByTokenRolesQuery.js';
+import { CreateRoleMenuCommand } from './application/commands/CreateRoleMenuCommand.js';
+import { UpdateRoleMenuCommand } from './application/commands/UpdateRoleMenuCommand.js';
+import { DeleteRoleMenuCommand } from './application/commands/DeleteRoleMenuCommand.js';
+import { AssignMenuToRoleCommand } from './application/commands/AssignMenuToRoleCommand.js';
+import { UnassignMenuFromRoleCommand } from './application/commands/UnassignMenuFromRoleCommand.js';
+import { handleRoleMenuError } from './infrastructure/errorHandler.js';
 
 export default async function roleMenuRoutes(app: FastifyInstance) {
 
@@ -33,9 +41,14 @@ export default async function roleMenuRoutes(app: FastifyInstance) {
         }
       }
     }
-  }, async (_req, reply) => {
-    const roleMenus = await getAllRoleMenus();
-    return reply.send({ data: roleMenus });
+  }, async (req, reply) => {
+    try {
+      const query = req.diScope.resolve<GetAllRoleMenusQuery>('getAllRoleMenusQuery');
+      const roleMenus = await query.execute({}, req.user?.sub || 'anonymous');
+      return reply.send({ data: roleMenus });
+    } catch (error: any) {
+      return handleRoleMenuError(error, reply);
+    }
   });
 
   // Obtener role-menu por ID (requiere auth)
@@ -98,11 +111,11 @@ export default async function roleMenuRoutes(app: FastifyInstance) {
   }, async (req, reply) => {
     const { id } = req.params as { id: number };
     try {
-      const roleMenu = await getRoleMenuById(id);
+      const query = req.diScope.resolve<GetRoleMenuByIdQuery>('getRoleMenuByIdQuery');
+      const roleMenu = await query.execute({ id }, req.user?.sub || 'anonymous');
       return reply.send({ data: roleMenu });
-    } catch (e: any) {
-      if (e.message === 'ROLE_MENU_NOT_FOUND') return reply.code(404).send(fail(e.message));
-      return reply.code(500).send(fail('ROLE_MENU_FETCH_FAILED'));
+    } catch (error: any) {
+      return handleRoleMenuError(error, reply);
     }
   });
 
@@ -142,8 +155,13 @@ export default async function roleMenuRoutes(app: FastifyInstance) {
     }
   }, async (req, reply) => {
     const { roleId } = req.params as { roleId: string };
-    const roleMenus = await getRoleMenusByRoleId(roleId);
-    return reply.send({ data: roleMenus });
+    try {
+      const query = req.diScope.resolve<GetRoleMenusByRoleIdQuery>('getRoleMenusByRoleIdQuery');
+      const roleMenus = await query.execute({ roleId }, req.user?.sub || 'anonymous');
+      return reply.send({ data: roleMenus });
+    } catch (error: any) {
+      return handleRoleMenuError(error, reply);
+    }
   });
 
   // Crear role-menu (requiere admin)
@@ -220,20 +238,27 @@ export default async function roleMenuRoutes(app: FastifyInstance) {
     }
   }, async (req, reply) => {
     const parsed = CreateRoleMenuSchema.safeParse(req.body);
-    if (!parsed.success) return reply.code(400).send(fail(parsed.error.message));
+    if (!parsed.success) {
+      return reply.code(400).send({
+        ok: false,
+        error: {
+          code: 'VALIDATION_ERROR',
+          message: 'Datos de entrada inválidos',
+          details: parsed.error.issues
+        }
+      });
+    }
 
     try {
-      const roleMenu = await createRoleMenuItem(
-        parsed.data.roleId,
-        parsed.data.menuId,
-        parsed.data.createdAt
-      );
+      const command = req.diScope.resolve<CreateRoleMenuCommand>('createRoleMenuCommand');
+      const roleMenu = await command.execute({
+        roleId: parsed.data.roleId,
+        menuId: parsed.data.menuId,
+        createdAt: parsed.data.createdAt
+      }, req.user?.sub || 'anonymous');
       return reply.code(201).send({ data: roleMenu });
-    } catch (e: any) {
-      if (e.message === 'ROLE_NOT_FOUND') return reply.code(404).send(fail(e.message));
-      if (e.message === 'MENU_NOT_FOUND') return reply.code(404).send(fail(e.message));
-      if (e.message === 'ROLE_MENU_ALREADY_EXISTS') return reply.code(400).send(fail(e.message));
-      return reply.code(500).send(fail('ROLE_MENU_CREATE_FAILED'));
+    } catch (error: any) {
+      return handleRoleMenuError(error, reply);
     }
   });
 
@@ -317,18 +342,26 @@ export default async function roleMenuRoutes(app: FastifyInstance) {
   }, async (req, reply) => {
     const { roleId } = req.params as { roleId: string };
     const parsed = AssignRoleMenuSchema.safeParse({ roleId, ...(req.body as object) });
-    if (!parsed.success) return reply.code(400).send(fail(parsed.error.message));
+    if (!parsed.success) {
+      return reply.code(400).send({
+        ok: false,
+        error: {
+          code: 'VALIDATION_ERROR',
+          message: 'Datos de entrada inválidos',
+          details: parsed.error.issues
+        }
+      });
+    }
 
     try {
-      const roleMenu = await assignMenuToRole(
-        parsed.data.roleId,
-        parsed.data.menuId
-      );
+      const command = req.diScope.resolve<AssignMenuToRoleCommand>('assignMenuToRoleCommand');
+      const roleMenu = await command.execute({
+        roleId: parsed.data.roleId,
+        menuId: parsed.data.menuId
+      }, req.user?.sub || 'anonymous');
       return reply.code(201).send({ data: roleMenu });
-    } catch (e: any) {
-      if (e.message === 'MENU_NOT_FOUND') return reply.code(404).send(fail(e.message));
-      if (e.message === 'ROLE_MENU_ALREADY_EXISTS') return reply.code(400).send(fail(e.message));
-      return reply.code(500).send(fail('ROLE_MENU_ASSIGN_FAILED'));
+    } catch (error: any) {
+      return handleRoleMenuError(error, reply);
     }
   });
 
@@ -413,22 +446,28 @@ export default async function roleMenuRoutes(app: FastifyInstance) {
   }, async (req, reply) => {
     const { id } = req.params as { id: number };
     const parsed = UpdateRoleMenuSchema.safeParse(req.body);
-    if (!parsed.success) return reply.code(400).send(fail(parsed.error.message));
+    if (!parsed.success) {
+      return reply.code(400).send({
+        ok: false,
+        error: {
+          code: 'VALIDATION_ERROR',
+          message: 'Datos de entrada inválidos',
+          details: parsed.error.issues
+        }
+      });
+    }
 
     try {
-      const roleMenu = await updateRoleMenuItem(
+      const command = req.diScope.resolve<UpdateRoleMenuCommand>('updateRoleMenuCommand');
+      const roleMenu = await command.execute({
         id,
-        parsed.data.roleId,
-        parsed.data.menuId,
-        parsed.data.createdAt
-      );
-      if (!roleMenu) return reply.code(404).send(fail('ROLE_MENU_NOT_FOUND'));
+        roleId: parsed.data.roleId,
+        menuId: parsed.data.menuId,
+        createdAt: parsed.data.createdAt
+      }, req.user?.sub || 'anonymous');
       return reply.send({ data: roleMenu });
-    } catch (e: any) {
-      if (e.message === 'ROLE_MENU_NOT_FOUND') return reply.code(404).send(fail(e.message));
-      if (e.message === 'ROLE_MENU_ALREADY_EXISTS') return reply.code(400).send(fail(e.message));
-      if (e.message === 'MENU_NOT_FOUND') return reply.code(404).send(fail(e.message));
-      return reply.code(500).send(fail('ROLE_MENU_UPDATE_FAILED'));
+    } catch (error: any) {
+      return handleRoleMenuError(error, reply);
     }
   });
 
@@ -489,12 +528,11 @@ export default async function roleMenuRoutes(app: FastifyInstance) {
   }, async (req, reply) => {
     const { id } = req.params as { id: number };
     try {
-      const deletedId = await deleteRoleMenuItem(id);
-      if (!deletedId) return reply.code(404).send(fail('ROLE_MENU_NOT_FOUND'));
-      return reply.send({ data: { id: deletedId } });
-    } catch (e: any) {
-      if (e.message === 'ROLE_MENU_NOT_FOUND') return reply.code(404).send(fail(e.message));
-      return reply.code(500).send(fail('ROLE_MENU_DELETE_FAILED'));
+      const command = req.diScope.resolve<DeleteRoleMenuCommand>('deleteRoleMenuCommand');
+      const result = await command.execute({ id }, req.user?.sub || 'anonymous');
+      return reply.send({ data: result });
+    } catch (error: any) {
+      return handleRoleMenuError(error, reply);
     }
   });
 
@@ -525,6 +563,19 @@ export default async function roleMenuRoutes(app: FastifyInstance) {
             }
           }
         },
+        404: {
+          type: 'object',
+          properties: {
+            ok: { type: 'boolean' },
+            error: {
+              type: 'object',
+              properties: {
+                code: { type: 'string' },
+                message: { type: 'string' }
+              }
+            }
+          }
+        },
         500: {
           type: 'object',
           properties: {
@@ -543,10 +594,11 @@ export default async function roleMenuRoutes(app: FastifyInstance) {
   }, async (req, reply) => {
     const { roleId, menuId } = req.params as { roleId: string; menuId: string };
     try {
-      await unassignMenuFromRole(roleId, parseInt(menuId));
-      return reply.send({ data: { message: 'Menu unassigned from role' } });
-    } catch (e: any) {
-      return reply.code(500).send(fail('ROLE_MENU_UNASSIGN_FAILED'));
+      const command = req.diScope.resolve<UnassignMenuFromRoleCommand>('unassignMenuFromRoleCommand');
+      const result = await command.execute({ roleId, menuId: parseInt(menuId) }, req.user?.sub || 'anonymous');
+      return reply.send({ data: result });
+    } catch (error: any) {
+      return handleRoleMenuError(error, reply);
     }
   });
 
@@ -611,11 +663,11 @@ export default async function roleMenuRoutes(app: FastifyInstance) {
   }, async (req, reply) => {
     try {
       const userRoles = req.user?.roles || [];
-      const roleMenus = await getRoleMenusByTokenRoles(userRoles);
+      const query = req.diScope.resolve<GetRoleMenusByTokenRolesQuery>('getRoleMenusByTokenRolesQuery');
+      const roleMenus = await query.execute({ roleNames: userRoles }, req.user?.sub || 'anonymous');
       return reply.send({ data: roleMenus });
-    } catch (e: any) {
-      console.error('Error in /me/menus:', e);
-      return reply.code(500).send(fail('USER_MENUS_FETCH_FAILED'));
+    } catch (error: any) {
+      return handleRoleMenuError(error, reply);
     }
   });
 }

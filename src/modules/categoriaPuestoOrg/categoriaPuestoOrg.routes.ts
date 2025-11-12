@@ -3,18 +3,14 @@ import { requireAuth, requireRole } from '../auth/auth.middleware.js';
 import {
   CreateCategoriaPuestoOrgSchema,
   UpdateCategoriaPuestoOrgSchema,
-  CategoriaPuestoOrgIdParamSchema,
-  ListCategoriaPuestoOrgQuerySchema
+  CategoriaPuestoOrgIdParamSchema
 } from './categoriaPuestoOrg.schemas.js';
-import {
-  getAllCategoriaPuestoOrg,
-  getCategoriaPuestoOrgById,
-  createCategoriaPuestoOrgItem,
-  updateCategoriaPuestoOrgItem,
-  deleteCategoriaPuestoOrgItem
-} from './categoriaPuestoOrg.service.js';
 import { ok, validationError, notFound, internalError } from '../../utils/http.js';
-import { withDbContext } from '../../db/context.js';
+import type { GetAllCategoriaPuestoOrgQuery } from './application/queries/GetAllCategoriaPuestoOrgQuery.js';
+import type { GetCategoriaPuestoOrgByIdQuery } from './application/queries/GetCategoriaPuestoOrgByIdQuery.js';
+import type { CreateCategoriaPuestoOrgCommand } from './application/commands/CreateCategoriaPuestoOrgCommand.js';
+import type { UpdateCategoriaPuestoOrgCommand } from './application/commands/UpdateCategoriaPuestoOrgCommand.js';
+import type { DeleteCategoriaPuestoOrgCommand } from './application/commands/DeleteCategoriaPuestoOrgCommand.js';
 
 export default async function categoriaPuestoOrgRoutes(app: FastifyInstance) {
 
@@ -89,7 +85,8 @@ export default async function categoriaPuestoOrgRoutes(app: FastifyInstance) {
         vigenciaInicio: query.vigenciaInicio,
         categoria: query.categoria
       };
-      const categorias = await getAllCategoriaPuestoOrg(filters);
+      const getAllCategoriaPuestoOrgQuery = req.diScope.resolve<GetAllCategoriaPuestoOrgQuery>('getAllCategoriaPuestoOrgQuery');
+      const categorias = await getAllCategoriaPuestoOrgQuery.execute(filters);
       return reply.send(ok(categorias));
     } catch (error: any) {
       console.error('Error listing categoria-puesto-org:', error);
@@ -184,7 +181,8 @@ export default async function categoriaPuestoOrgRoutes(app: FastifyInstance) {
     }
 
     try {
-      const categoria = await getCategoriaPuestoOrgById(categoriaPuestoOrgId);
+      const getCategoriaPuestoOrgByIdQuery = req.diScope.resolve<GetCategoriaPuestoOrgByIdQuery>('getCategoriaPuestoOrgByIdQuery');
+      const categoria = await getCategoriaPuestoOrgByIdQuery.execute(categoriaPuestoOrgId);
       return reply.send(ok(categoria));
     } catch (error: any) {
       if (error.message === 'CATEGORIA_PUESTO_ORG_NOT_FOUND') {
@@ -282,37 +280,26 @@ export default async function categoriaPuestoOrgRoutes(app: FastifyInstance) {
       }
     }
   }, async (req, reply) => {
-    return withDbContext(req, async (tx) => {
-      const parsed = CreateCategoriaPuestoOrgSchema.safeParse(req.body);
-      if (!parsed.success) {
-        return reply.code(400).send(validationError(parsed.error.issues));
-      }
+    const parsed = CreateCategoriaPuestoOrgSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return reply.code(400).send(validationError(parsed.error.issues));
+    }
 
-      try {
-        const userId = req.user?.sub;
-        const categoria = await createCategoriaPuestoOrgItem(
-          parsed.data.nivel,
-          parsed.data.org0,
-          parsed.data.org1,
-          parsed.data.categoria,
-          parsed.data.nombreCategoria,
-          parsed.data.ingresoBrutoMensual,
-          parsed.data.vigenciaInicio,
-          parsed.data.org2,
-          parsed.data.org3,
-          parsed.data.vigenciaFin,
-          userId,
-          tx
-        );
-        return reply.code(201).send(ok(categoria));
-      } catch (error: any) {
-        if (error.message === 'CATEGORIA_PUESTO_ORG_EXISTS') {
-          return reply.code(409).send({ ok: false, error: { code: 'CONFLICT', message: 'CategoriaPuestoOrg already exists' } });
-        }
-        console.error('Error creating categoria-puesto-org:', error);
-        return reply.code(500).send(internalError('Failed to create categoria-puesto-org'));
+    try {
+      const userId = req.user?.sub;
+      const createCategoriaPuestoOrgCommand = req.diScope.resolve<CreateCategoriaPuestoOrgCommand>('createCategoriaPuestoOrgCommand');
+      const categoria = await createCategoriaPuestoOrgCommand.execute({
+        ...parsed.data,
+        userId
+      });
+      return reply.code(201).send(ok(categoria));
+    } catch (error: any) {
+      if (error.message === 'CATEGORIA_PUESTO_ORG_EXISTS') {
+        return reply.code(409).send({ ok: false, error: { code: 'CONFLICT', message: 'CategoriaPuestoOrg already exists' } });
       }
-    });
+      console.error('Error creating categoria-puesto-org:', error);
+      return reply.code(500).send(internalError('Failed to create categoria-puesto-org'));
+    }
   });
 
   // Actualizar categoría de puesto org (requiere admin)
@@ -401,39 +388,35 @@ export default async function categoriaPuestoOrgRoutes(app: FastifyInstance) {
       }
     }
   }, async (req, reply) => {
-    return withDbContext(req, async (tx) => {
-      const { categoriaPuestoOrgId } = req.params as { categoriaPuestoOrgId: number };
+    const { categoriaPuestoOrgId } = req.params as { categoriaPuestoOrgId: number };
 
-      // Validate parameter
-      const paramValidation = CategoriaPuestoOrgIdParamSchema.safeParse({ categoriaPuestoOrgId });
-      if (!paramValidation.success) {
-        return reply.code(400).send(validationError(paramValidation.error.issues));
-      }
+    // Validate parameter
+    const paramValidation = CategoriaPuestoOrgIdParamSchema.safeParse({ categoriaPuestoOrgId });
+    if (!paramValidation.success) {
+      return reply.code(400).send(validationError(paramValidation.error.issues));
+    }
 
-      const parsed = UpdateCategoriaPuestoOrgSchema.safeParse(req.body);
-      if (!parsed.success) {
-        return reply.code(400).send(validationError(parsed.error.issues));
-      }
+    const parsed = UpdateCategoriaPuestoOrgSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return reply.code(400).send(validationError(parsed.error.issues));
+    }
 
-      try {
-        const userId = req.user?.sub;
-        const categoria = await updateCategoriaPuestoOrgItem(
-          categoriaPuestoOrgId,
-          parsed.data.nombreCategoria,
-          parsed.data.ingresoBrutoMensual,
-          parsed.data.vigenciaFin,
-          userId,
-          tx
-        );
-        return reply.send(ok(categoria));
-      } catch (error: any) {
-        if (error.message === 'CATEGORIA_PUESTO_ORG_NOT_FOUND') {
-          return reply.code(404).send(notFound('CategoriaPuestoOrg', categoriaPuestoOrgId.toString()));
-        }
-        console.error('Error updating categoria-puesto-org:', error);
-        return reply.code(500).send(internalError('Failed to update categoria-puesto-org'));
+    try {
+      const userId = req.user?.sub;
+      const updateCategoriaPuestoOrgCommand = req.diScope.resolve<UpdateCategoriaPuestoOrgCommand>('updateCategoriaPuestoOrgCommand');
+      const categoria = await updateCategoriaPuestoOrgCommand.execute({
+        categoriaPuestoOrgId,
+        ...parsed.data,
+        userId
+      });
+      return reply.send(ok(categoria));
+    } catch (error: any) {
+      if (error.message === 'CATEGORIA_PUESTO_ORG_NOT_FOUND') {
+        return reply.code(404).send(notFound('CategoriaPuestoOrg', categoriaPuestoOrgId.toString()));
       }
-    });
+      console.error('Error updating categoria-puesto-org:', error);
+      return reply.code(500).send(internalError('Failed to update categoria-puesto-org'));
+    }
   });
 
   // Eliminar categoría de puesto org (requiere admin)
@@ -504,25 +487,24 @@ export default async function categoriaPuestoOrgRoutes(app: FastifyInstance) {
       }
     }
   }, async (req, reply) => {
-    return withDbContext(req, async (tx) => {
-      const { categoriaPuestoOrgId } = req.params as { categoriaPuestoOrgId: number };
+    const { categoriaPuestoOrgId } = req.params as { categoriaPuestoOrgId: number };
 
-      // Validate parameter
-      const paramValidation = CategoriaPuestoOrgIdParamSchema.safeParse({ categoriaPuestoOrgId });
-      if (!paramValidation.success) {
-        return reply.code(400).send(validationError(paramValidation.error.issues));
-      }
+    // Validate parameter
+    const paramValidation = CategoriaPuestoOrgIdParamSchema.safeParse({ categoriaPuestoOrgId });
+    if (!paramValidation.success) {
+      return reply.code(400).send(validationError(paramValidation.error.issues));
+    }
 
-      try {
-        const deletedId = await deleteCategoriaPuestoOrgItem(categoriaPuestoOrgId, tx);
-        return reply.send(ok({ categoriaPuestoOrgId: deletedId }));
-      } catch (error: any) {
-        if (error.message === 'CATEGORIA_PUESTO_ORG_NOT_FOUND') {
-          return reply.code(404).send(notFound('CategoriaPuestoOrg', categoriaPuestoOrgId.toString()));
-        }
-        console.error('Error deleting categoria-puesto-org:', error);
-        return reply.code(500).send(internalError('Failed to delete categoria-puesto-org'));
+    try {
+      const deleteCategoriaPuestoOrgCommand = req.diScope.resolve<DeleteCategoriaPuestoOrgCommand>('deleteCategoriaPuestoOrgCommand');
+      const deletedId = await deleteCategoriaPuestoOrgCommand.execute({ categoriaPuestoOrgId });
+      return reply.send(ok({ categoriaPuestoOrgId: deletedId }));
+    } catch (error: any) {
+      if (error.message === 'CATEGORIA_PUESTO_ORG_NOT_FOUND') {
+        return reply.code(404).send(notFound('CategoriaPuestoOrg', categoriaPuestoOrgId.toString()));
       }
-    });
+      console.error('Error deleting categoria-puesto-org:', error);
+      return reply.code(500).send(internalError('Failed to delete categoria-puesto-org'));
+    }
   });
 }

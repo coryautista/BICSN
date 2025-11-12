@@ -158,6 +158,8 @@ export const AfiliadoSchema = z.object({
   expediente: z.string().max(50).nullable(),
   quincenaAplicacion: z.number().int().nullable(),
   anioAplicacion: z.number().int().nullable(),
+  afiliadosComplete: z.number().int().nullable(),
+  numValidacion: z.number().int().nullable(),
   createdAt: z.string().datetime(),
   updatedAt: z.string().datetime()
 });

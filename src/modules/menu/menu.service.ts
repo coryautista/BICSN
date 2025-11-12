@@ -1,3 +1,13 @@
+/**
+ * @deprecated This service is deprecated. Use the following instead:
+ * - Commands: CreateMenuCommand, UpdateMenuCommand, DeleteMenuCommand from ./application/commands
+ * - Queries: GetAllMenusQuery, GetMenuByIdQuery, GetMenuHierarchyQuery from ./application/queries
+ * - Repository: MenuRepository from ./infrastructure/persistence
+ * All dependencies are registered in the DI container (src/di/container.ts)
+ */
+
+// This file is kept for reference only. New code should use the Clean Architecture structure.
+
 import { findMenuById, listMenus, createMenu, updateMenu, deleteMenu } from './menu.repo.js';
 
 export async function getAllMenus() {
@@ -10,17 +20,17 @@ export async function getMenuById(id: number) {
   return menu;
 }
 
-export async function createMenuItem(nombre: string, orden: number, componente?: string, parentId?: number, icono?: string, tx?: any) {
+export async function createMenuItem(nombre: string, orden: number, componente?: string, parentId?: number, icono?: string, _tx?: any) {
   // Validar que el parentId existe si se proporciona
   if (parentId) {
     const parent = await findMenuById(parentId);
     if (!parent) throw new Error('PARENT_MENU_NOT_FOUND');
   }
 
-  return createMenu(nombre, orden, componente, parentId, icono, tx);
+  return createMenu(nombre, componente || '', parentId || null, icono || null, orden);
 }
 
-export async function updateMenuItem(id: number, nombre: string, componente?: string, parentId?: number, icono?: string, orden?: number, tx?: any) {
+export async function updateMenuItem(id: number, nombre: string, componente?: string, parentId?: number, icono?: string, orden?: number, _tx?: any) {
   // Verificar que el menú existe
   const existing = await findMenuById(id);
   if (!existing) throw new Error('MENU_NOT_FOUND');
@@ -34,10 +44,10 @@ export async function updateMenuItem(id: number, nombre: string, componente?: st
     if (parentId === id) throw new Error('MENU_CANNOT_BE_PARENT_OF_ITSELF');
   }
 
-  return updateMenu(id, nombre, componente, parentId, icono, orden, tx);
+  return updateMenu(id, nombre, componente || '', parentId || null, icono || null, orden || 0);
 }
 
-export async function deleteMenuItem(id: number, tx?: any) {
+export async function deleteMenuItem(id: number, _tx?: any) {
   // Verificar que el menú existe
   const existing = await findMenuById(id);
   if (!existing) throw new Error('MENU_NOT_FOUND');
@@ -47,7 +57,7 @@ export async function deleteMenuItem(id: number, tx?: any) {
   const hasChildren = allMenus.some(menu => menu.parentId === id);
   if (hasChildren) throw new Error('CANNOT_DELETE_MENU_WITH_CHILDREN');
 
-  return deleteMenu(id, tx);
+  return deleteMenu(id);
 }
 
 export async function getMenuHierarchy() {

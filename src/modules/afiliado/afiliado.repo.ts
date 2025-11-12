@@ -887,6 +887,7 @@ export async function createAfiliadoAfiliadoOrgMovimiento(data: {
         folio: movimientoRow.folio,
         estatus: movimientoRow.estatus,
         creadoPor: movimientoRow.creadoPor,
+        creadoPorUid: movimientoRow.creadoPorUid || null,
         createdAt: movimientoRow.createdAt?.toISOString() || new Date().toISOString()
       }
     };
