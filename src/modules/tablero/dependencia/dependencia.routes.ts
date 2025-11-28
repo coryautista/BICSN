@@ -1,7 +1,7 @@
 import { FastifyInstance } from 'fastify';
 import { requireAuth, requireRole } from '../../auth/auth.middleware.js';
 import { CreateDependenciaSchema, UpdateDependenciaSchema, DependenciaIdParamSchema } from './dependencia.schemas.js';
-import { getAllDependencias, getDependenciasByTipo, getDependenciasHijas, getDependenciaById, getDependenciaWithHijas, createDependenciaItem, updateDependenciaItem, deleteDependenciaItem } from './dependencia.service.js';
+import { DependenciaService } from './dependencia.service.js';
 import { ok, validationError, notFound, internalError } from '../../../utils/http.js';
 import { withDbContext } from '../../../db/context.js';
 
@@ -60,9 +60,10 @@ export default async function dependenciaRoutes(app: FastifyInstance) {
         }
       }
     }
-  }, async (_req, reply) => {
+  }, async (req, reply) => {
     try {
-      const dependencias = await getAllDependencias();
+      const dependenciaService = req.diScope.resolve<DependenciaService>('dependenciaService');
+      const dependencias = await dependenciaService.getAllDependencias();
       return reply.send(ok(dependencias));
     } catch (error: any) {
       console.error('Error listing dependencias:', error);
@@ -150,7 +151,8 @@ export default async function dependenciaRoutes(app: FastifyInstance) {
     const { tipoDependencia } = req.params as { tipoDependencia: string };
 
     try {
-      const dependencias = await getDependenciasByTipo(tipoDependencia);
+      const dependenciaService = req.diScope.resolve<DependenciaService>('dependenciaService');
+      const dependencias = await dependenciaService.getDependenciasByTipo(tipoDependencia);
       return reply.send(ok(dependencias));
     } catch (error: any) {
       console.error('Error listing dependencias by tipo:', error);
@@ -241,7 +243,8 @@ export default async function dependenciaRoutes(app: FastifyInstance) {
     }
 
     try {
-      const dependencias = await getDependenciasHijas(paramValidation.data.dependenciaId);
+      const dependenciaService = req.diScope.resolve<DependenciaService>('dependenciaService');
+      const dependencias = await dependenciaService.getDependenciasHijas(paramValidation.data.dependenciaId);
       return reply.send(ok(dependencias));
     } catch (error: any) {
       console.error('Error listing dependencias hijas:', error);
@@ -342,7 +345,8 @@ export default async function dependenciaRoutes(app: FastifyInstance) {
     }
 
     try {
-      const dependencia = await getDependenciaById(paramValidation.data.dependenciaId);
+      const dependenciaService = req.diScope.resolve<DependenciaService>('dependenciaService');
+      const dependencia = await dependenciaService.getDependenciaById(paramValidation.data.dependenciaId);
       return reply.send(ok(dependencia));
     } catch (error: any) {
       if (error.message === 'DEPENDENCIA_NOT_FOUND') {
@@ -463,7 +467,8 @@ export default async function dependenciaRoutes(app: FastifyInstance) {
     }
 
     try {
-      const dependencia = await getDependenciaWithHijas(paramValidation.data.dependenciaId);
+      const dependenciaService = req.diScope.resolve<DependenciaService>('dependenciaService');
+      const dependencia = await dependenciaService.getDependenciaWithHijas(paramValidation.data.dependenciaId);
       return reply.send(ok(dependencia));
     } catch (error: any) {
       if (error.message === 'DEPENDENCIA_NOT_FOUND') {
@@ -554,7 +559,8 @@ export default async function dependenciaRoutes(app: FastifyInstance) {
 
       try {
         const userId = req.user?.sub;
-        const dependencia = await createDependenciaItem(
+        const dependenciaService = req.diScope.resolve<DependenciaService>('dependenciaService');
+        const dependencia = await dependenciaService.createDependenciaItem(
           parsed.data.nombre,
           parsed.data.descripcion,
           parsed.data.tipoDependencia,
@@ -685,7 +691,8 @@ export default async function dependenciaRoutes(app: FastifyInstance) {
 
       try {
         const userId = req.user?.sub;
-        const dependencia = await updateDependenciaItem(
+        const dependenciaService = req.diScope.resolve<DependenciaService>('dependenciaService');
+        const dependencia = await dependenciaService.updateDependenciaItem(
           paramValidation.data.dependenciaId,
           parsed.data.nombre,
           parsed.data.descripcion,
@@ -788,7 +795,8 @@ export default async function dependenciaRoutes(app: FastifyInstance) {
       }
 
       try {
-        const deletedId = await deleteDependenciaItem(paramValidation.data.dependenciaId, tx);
+        const dependenciaService = req.diScope.resolve<DependenciaService>('dependenciaService');
+        const deletedId = await dependenciaService.deleteDependenciaItem(paramValidation.data.dependenciaId, tx);
         return reply.send(ok({ id: deletedId }));
       } catch (error: any) {
         if (error.message === 'DEPENDENCIA_NOT_FOUND') {

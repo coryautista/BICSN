@@ -6,7 +6,7 @@ import {
   AfectacionOrgParamsSchema,
   CalculateQuincenaSchema
 } from './afectacionOrg.schemas.js';
-import { calculateQuincenaFromDate } from './afectacionOrg.service.js';
+import { AfectacionOrgService } from './afectacionOrg.service.js';
 import { ok, validationError } from '../../utils/http.js';
 import { GetBitacoraAfectacionQuery } from './application/queries/GetBitacoraAfectacionQuery.js';
 import { GetEstadosAfectacionQuery } from './application/queries/GetEstadosAfectacionQuery.js';
@@ -33,22 +33,18 @@ export default async function afectacionOrgRoutes(app: FastifyInstance) {
       security: [{ bearerAuth: [] }],
       body: {
         type: 'object',
-        required: ['entidad', 'anio', 'quincena', 'orgNivel', 'org0', 'accion', 'resultado', 'usuario', 'appName', 'ip'],
+        required: ['fecha'],
         properties: {
+          fecha: { type: 'string', format: 'date' },
           entidad: { type: 'string' },
-          anio: { type: 'number', minimum: 2000, maximum: 2100 },
-          quincena: { type: 'number', minimum: 1, maximum: 24 },
           orgNivel: { type: 'number', minimum: 0, maximum: 3 },
-          org0: { type: 'string', minLength: 2, maxLength: 2 },
-          org1: { type: 'string', minLength: 2, maxLength: 2 },
-          org2: { type: 'string', minLength: 2, maxLength: 2 },
-          org3: { type: 'string', minLength: 2, maxLength: 2 },
           accion: { type: 'string' },
           resultado: { type: 'string' },
           mensaje: { type: 'string' },
-          usuario: { type: 'string' },
-          appName: { type: 'string' },
-          ip: { type: 'string' }
+          org0: { type: 'string', minLength: 2, maxLength: 2 },
+          org1: { type: 'string', minLength: 2, maxLength: 2 },
+          org2: { type: 'string', minLength: 2, maxLength: 2 },
+          org3: { type: 'string', minLength: 2, maxLength: 2 }
         }
       },
       response: {
@@ -93,19 +89,124 @@ export default async function afectacionOrgRoutes(app: FastifyInstance) {
     }
   }, async (req, reply) => {
     const registrarAfectacionCommand = app.diContainer.resolve<RegistrarAfectacionCommand>('registrarAfectacionCommand');
+    const afectacionOrgService = req.diScope.resolve<AfectacionOrgService>('afectacionOrgService');
     
-    const parsed = RegisterAfectacionOrgSchema.safeParse(req.body);
-    if (!parsed.success) {
-      logger.warn({ errors: parsed.error.issues }, 'Error de validación en registro de afectación');
-      return reply.code(400).send(validationError(parsed.error.issues));
-    }
-
+    const user = (req as any).user;
+    const body = req.body as any;
+    
     try {
+      // 1. Obtener fecha del body (requerido) y calcular anio y quincena
+      if (!body.fecha) {
+        return reply.code(400).send(validationError([{ message: 'fecha is required' }]));
+      }
+      
+      const quincenaData = await afectacionOrgService.calculateQuincenaFromDate(body.fecha);
+      body.anio = quincenaData.anio;
+      body.quincena = quincenaData.quincena;
+      
+      // 2. Establecer valores por defecto si no están en el body
+      if (!body.entidad) {
+        body.entidad = 'AFILIADOS';
+      }
+      if (!body.accion) {
+        body.accion = 'APLICAR';
+      }
+      if (!body.resultado) {
+        body.resultado = 'OK';
+      }
+      
+      // 3. Obtener datos del token y request si no están en el body
+      if (!body.usuario && user?.sub) {
+        body.usuario = user.sub;
+      }
+      
+      if (!body.ip) {
+        body.ip = req.ip || '127.0.0.1';
+      }
+      
+      if (!body.appName) {
+        body.appName = 'BICSN-API';
+      }
+      
+      // 4. Obtener org0, org1, org2, org3 del token si no están en el body (sin verificar orgNivel primero)
+      if (!body.org0 && user?.idOrganica0) {
+        const idOrg0 = user.idOrganica0;
+        body.org0 = typeof idOrg0 === 'string' ? idOrg0.padStart(2, '0') : idOrg0.toString().padStart(2, '0');
+      }
+      
+      if (!body.org1 && user?.idOrganica1) {
+        const idOrg1 = user.idOrganica1;
+        body.org1 = typeof idOrg1 === 'string' ? idOrg1.padStart(2, '0') : idOrg1.toString().padStart(2, '0');
+      }
+      
+      if (!body.org2 && user?.idOrganica2) {
+        const idOrg2 = user.idOrganica2;
+        body.org2 = typeof idOrg2 === 'string' ? idOrg2.padStart(2, '0') : idOrg2.toString().padStart(2, '0');
+      }
+      
+      if (!body.org3 && user?.idOrganica3) {
+        const idOrg3 = user.idOrganica3;
+        body.org3 = typeof idOrg3 === 'string' ? idOrg3.padStart(2, '0') : idOrg3.toString().padStart(2, '0');
+      }
+      
+      // 5. Determinar orgNivel basado en qué orgs están disponibles si no se proporcionó
+      if (body.orgNivel === undefined || body.orgNivel === null) {
+        if (body.org3) {
+          body.orgNivel = 3;
+        } else if (body.org2) {
+          body.orgNivel = 2;
+        } else if (body.org1) {
+          body.orgNivel = 1;
+        } else {
+          body.orgNivel = 0;
+        }
+      }
+      
+      // 6. Normalizar todos los valores org a 2 caracteres con padding
+      if (body.org0) {
+        body.org0 = typeof body.org0 === 'string' 
+          ? body.org0.padStart(2, '0').substring(0, 2)
+          : body.org0.toString().padStart(2, '0').substring(0, 2);
+      }
+      if (body.org1) {
+        body.org1 = typeof body.org1 === 'string' 
+          ? body.org1.padStart(2, '0').substring(0, 2)
+          : body.org1.toString().padStart(2, '0').substring(0, 2);
+      }
+      if (body.org2) {
+        body.org2 = typeof body.org2 === 'string' 
+          ? body.org2.padStart(2, '0').substring(0, 2)
+          : body.org2.toString().padStart(2, '0').substring(0, 2);
+      }
+      if (body.org3) {
+        body.org3 = typeof body.org3 === 'string' 
+          ? body.org3.padStart(2, '0').substring(0, 2)
+          : body.org3.toString().padStart(2, '0').substring(0, 2);
+      }
+      
+      // 7. Validar que org0 esté disponible (del token o del body)
+      if (!body.org0) {
+        return reply.code(400).send(validationError([{ 
+          message: 'org0 is required. It must be provided in the body or available in the user token.' 
+        }]));
+      }
+      
+      // 8. Validar con Zod schema
+      const parsed = RegisterAfectacionOrgSchema.safeParse(body);
+      if (!parsed.success) {
+        logger.warn({ errors: parsed.error.issues }, 'Error de validación en registro de afectación');
+        return reply.code(400).send(validationError(parsed.error.issues));
+      }
+
       logger.info({ data: parsed.data }, 'Registrando afectación');
       const result = await registrarAfectacionCommand.execute(parsed.data);
       return reply.send(ok(result));
     } catch (error: any) {
-      return handleAfectacionError(error, reply, { operation: 'register', body: parsed.data });
+      // Manejar errores de cálculo de quincena
+      if (error.message?.includes('fecha') || error.message?.includes('quincena') || error.message?.includes('InvalidDateForQuincenaError')) {
+        return handleAfectacionError(error, reply, { operation: 'register', fecha: body.fecha });
+      }
+      return handleAfectacionError(error, reply, { operation: 'register', body });
     }
   });
 
@@ -563,7 +664,28 @@ export default async function afectacionOrgRoutes(app: FastifyInstance) {
   }, async (req, reply) => {
     const getUltimaAfectacionQuery = app.diContainer.resolve<GetUltimaAfectacionQuery>('getUltimaAfectacionQuery');
     
+    const user = (req as any).user;
     const query = req.query as any;
+    
+    // Si no se proporcionan org0 y org1 en los query params, obtenerlos del token del usuario
+    if (!query.org0 && user?.idOrganica0) {
+      const idOrg0 = user.idOrganica0;
+      query.org0 = typeof idOrg0 === 'string' ? idOrg0.padStart(2, '0') : idOrg0.toString().padStart(2, '0');
+    }
+    
+    if (!query.org1 && user?.idOrganica1) {
+      const idOrg1 = user.idOrganica1;
+      query.org1 = typeof idOrg1 === 'string' ? idOrg1.padStart(2, '0') : idOrg1.toString().padStart(2, '0');
+    }
+    
+    // Asegurar que org0 y org1 tengan formato de 2 caracteres si están presentes
+    if (query.org0 && query.org0.length === 1) {
+      query.org0 = query.org0.padStart(2, '0');
+    }
+    if (query.org1 && query.org1.length === 1) {
+      query.org1 = query.org1.padStart(2, '0');
+    }
+    
     const parsed = AfectacionOrgQuerySchema.safeParse(query);
     if (!parsed.success) {
       logger.warn({ errors: parsed.error.issues }, 'Error de validación en obtener última afectación');
@@ -739,7 +861,8 @@ export default async function afectacionOrgRoutes(app: FastifyInstance) {
     }
 
     try {
-      const result = await calculateQuincenaFromDate(parsed.data.fecha);
+      const afectacionOrgService = req.diScope.resolve<AfectacionOrgService>('afectacionOrgService');
+      const result = await afectacionOrgService.calculateQuincenaFromDate(parsed.data.fecha);
       return reply.send(ok(result));
     } catch (error: any) {
       return handleAfectacionError(error, reply, { operation: 'calculateQuincena', fecha: parsed.data.fecha });

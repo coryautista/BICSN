@@ -40,6 +40,7 @@ export interface CreateCompleteAfiliadoData {
     expediente: string | null;
     quincenaAplicacion?: number | null;
     anioAplicacion?: number | null;
+    codigoPostal?: number | null;
   };
   afiliadoOrg: {
     nivel0Id: number | null;

@@ -1,4 +1,4 @@
-import { findOrganica0ById, listOrganica0, createOrganica0, updateOrganica0, deleteOrganica0 } from './organica0.repo.js';
+import { findOrganica0ById, listOrganica0, countOrganica0, createOrganica0, updateOrganica0, deleteOrganica0 } from './organica0.repo.js';
 import { CreateOrganica0, UpdateOrganica0 } from './organica0.schemas.js';
 
 // [FIREBIRD] Service layer for ORGANICA_0 operations
@@ -10,8 +10,22 @@ export async function getOrganica0ById(claveOrganica: string) {
   return record;
 }
 
-export async function getAllOrganica0() {
-  return await listOrganica0();
+export async function getAllOrganica0(limit?: number, offset?: number) {
+  console.log(`[SERVICE] getAllOrganica0: Called with limit=${limit}, offset=${offset}`);
+  const startTime = Date.now();
+  const result = await listOrganica0(limit, offset);
+  const endTime = Date.now();
+  console.log(`[SERVICE] getAllOrganica0: Completed in ${endTime - startTime}ms, returned ${result.length} records`);
+  return result;
+}
+
+export async function getOrganica0Count() {
+  console.log(`[SERVICE] getOrganica0Count: Called`);
+  const startTime = Date.now();
+  const result = await countOrganica0();
+  const endTime = Date.now();
+  console.log(`[SERVICE] getOrganica0Count: Completed in ${endTime - startTime}ms, count=${result}`);
+  return result;
 }
 
 export async function createOrganica0Record(data: CreateOrganica0) {

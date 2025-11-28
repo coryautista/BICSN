@@ -15,7 +15,7 @@ export class AfiliadoRepository implements IAfiliadoRepository {
         domicilioCodigoPostal, telefono, estadoCivilId, sexo, correoElectronico, estatus,
         interno, noEmpleado, localidad, municipio, estado, pais, dependientes, poseeInmuebles,
         fechaCarta, nacionalidad, fechaAlta, celular, expediente, quincenaAplicacion,
-        anioAplicacion, createdAt, updatedAt
+        anioAplicacion, codigoPostal, numValidacion, afiliadosComplete, createdAt, updatedAt
       FROM afi.Afiliado
       ORDER BY id
     `);
@@ -58,6 +58,9 @@ export class AfiliadoRepository implements IAfiliadoRepository {
       expediente: row.expediente,
       quincenaAplicacion: row.quincenaAplicacion,
       anioAplicacion: row.anioAplicacion,
+      codigoPostal: row.codigoPostal,
+      numValidacion: row.numValidacion || 1,
+      afiliadosComplete: row.afiliadosComplete || 0,
       createdAt: row.createdAt?.toISOString() || new Date().toISOString(),
       updatedAt: row.updatedAt?.toISOString() || new Date().toISOString()
     }));
@@ -74,7 +77,7 @@ export class AfiliadoRepository implements IAfiliadoRepository {
           domicilioCodigoPostal, telefono, estadoCivilId, sexo, correoElectronico, estatus,
           interno, noEmpleado, localidad, municipio, estado, pais, dependientes, poseeInmuebles,
           fechaCarta, nacionalidad, fechaAlta, celular, expediente, quincenaAplicacion,
-          anioAplicacion, createdAt, updatedAt
+          anioAplicacion, codigoPostal, numValidacion, afiliadosComplete, createdAt, updatedAt
         FROM afi.Afiliado
         WHERE id = @id
       `);
@@ -120,6 +123,9 @@ export class AfiliadoRepository implements IAfiliadoRepository {
       expediente: row.expediente,
       quincenaAplicacion: row.quincenaAplicacion,
       anioAplicacion: row.anioAplicacion,
+      codigoPostal: row.codigoPostal,
+      numValidacion: row.numValidacion || 1,
+      afiliadosComplete: row.afiliadosComplete || 0,
       createdAt: row.createdAt?.toISOString() || new Date().toISOString(),
       updatedAt: row.updatedAt?.toISOString() || new Date().toISOString()
     };
@@ -225,6 +231,9 @@ export class AfiliadoRepository implements IAfiliadoRepository {
       expediente: row.expediente,
       quincenaAplicacion: row.quincenaAplicacion,
       anioAplicacion: row.anioAplicacion,
+      codigoPostal: row.codigoPostal,
+      numValidacion: row.numValidacion || 1,
+      afiliadosComplete: row.afiliadosComplete || 0,
       createdAt: row.createdAt?.toISOString() || new Date().toISOString(),
       updatedAt: row.updatedAt?.toISOString() || new Date().toISOString()
     };
@@ -396,6 +405,9 @@ export class AfiliadoRepository implements IAfiliadoRepository {
       folio: row.folio,
       apellidoPaterno: row.apellidoPaterno,
       apellidoMaterno: row.apellidoMaterno,
+      codigoPostal: row.codigoPostal,
+      numValidacion: row.numValidacion,
+      afiliadosComplete: row.afiliadosComplete,
       nombre: row.nombre,
       curp: row.curp,
       rfc: row.rfc,
@@ -446,5 +458,103 @@ export class AfiliadoRepository implements IAfiliadoRepository {
     if (result.recordset[0].deletedCount === 0) {
       throw new Error('AFILIADO_NOT_FOUND');
     }
+  }
+
+  async aplicarBDIsspeaLote(
+    org0: string,
+    org1: string,
+    usuarioId: string,
+    motivo?: string,
+    observaciones?: string,
+    ipAddress?: string,
+    userAgent?: string
+  ): Promise<import('../../domain/repositories/IAfiliadoRepository.js').AplicarBDIsspeaLoteResult> {
+    // Importar la función del repo legacy
+    const { aplicarBDIsspeaLote } = await import('../../afiliado.repo.js');
+    return await aplicarBDIsspeaLote(org0, org1, usuarioId, motivo, observaciones, ipAddress, userAgent);
+  }
+
+  async findByStatusAndOrganica(
+    org0: string,
+    org1: string,
+    estados: number[]
+  ): Promise<Afiliado[]> {
+    // Construir parámetros dinámicos para los estados
+    const request = this.mssqlPool.request()
+      .input('org0', sql.VarChar(30), org0)
+      .input('org1', sql.VarChar(30), org1);
+    
+    // Agregar cada estado como parámetro
+    estados.forEach((estado, i) => {
+      request.input(`estado${i}`, sql.Int, estado);
+    });
+
+    // Construir la lista de parámetros para el IN clause
+    const estadoParams = estados.map((_, i) => `@estado${i}`).join(', ');
+
+    const result = await request.query(`
+      SELECT DISTINCT
+        a.id, a.folio, a.apellidoPaterno, a.apellidoMaterno, a.nombre, a.curp, a.rfc,
+        a.numeroSeguroSocial, a.fechaNacimiento, a.entidadFederativaNacId,
+        a.domicilioCalle, a.domicilioNumeroExterior, a.domicilioNumeroInterior,
+        a.domicilioEntreCalle1, a.domicilioEntreCalle2,
+        a.domicilioColonia, a.domicilioCodigoPostal, a.telefono, a.estadoCivilId,
+        a.sexo, a.correoElectronico, a.estatus, a.interno, a.noEmpleado, a.localidad,
+        a.municipio, a.estado, a.pais, a.dependientes, a.poseeInmuebles, a.fechaCarta,
+        a.nacionalidad, a.fechaAlta, a.celular, a.expediente, a.quincenaAplicacion, a.anioAplicacion,
+        a.codigoPostal, a.numValidacion, a.afiliadosComplete, a.createdAt, a.updatedAt
+      FROM afi.Afiliado a
+      INNER JOIN afi.AfiliadoOrg ao ON a.id = ao.afiliadoId
+      WHERE ao.claveOrganica0 = @org0
+        AND ao.claveOrganica1 = @org1
+        AND a.numValidacion IN (${estadoParams})
+        AND a.estatus = 1
+      ORDER BY a.id
+    `);
+
+    return result.recordset.map((row: any) => ({
+      id: row.id,
+      folio: row.folio,
+      apellidoPaterno: row.apellidoPaterno,
+      apellidoMaterno: row.apellidoMaterno,
+      nombre: row.nombre,
+      curp: row.curp,
+      rfc: row.rfc,
+      numeroSeguroSocial: row.numeroSeguroSocial,
+      fechaNacimiento: row.fechaNacimiento?.toISOString().split('T')[0] || null,
+      entidadFederativaNacId: row.entidadFederativaNacId,
+      domicilioCalle: row.domicilioCalle,
+      domicilioNumeroExterior: row.domicilioNumeroExterior,
+      domicilioNumeroInterior: row.domicilioNumeroInterior,
+      domicilioEntreCalle1: row.domicilioEntreCalle1,
+      domicilioEntreCalle2: row.domicilioEntreCalle2,
+      domicilioColonia: row.domicilioColonia,
+      domicilioCodigoPostal: row.domicilioCodigoPostal,
+      telefono: row.telefono,
+      estadoCivilId: row.estadoCivilId,
+      sexo: row.sexo,
+      correoElectronico: row.correoElectronico,
+      estatus: row.estatus === 1 || row.estatus === true,
+      interno: row.interno,
+      noEmpleado: row.noEmpleado,
+      localidad: row.localidad,
+      municipio: row.municipio,
+      estado: row.estado,
+      pais: row.pais,
+      dependientes: row.dependientes,
+      poseeInmuebles: row.poseeInmuebles === 1 || row.poseeInmuebles === true ? true : row.poseeInmuebles === 0 || row.poseeInmuebles === false ? false : null,
+      fechaCarta: row.fechaCarta?.toISOString().split('T')[0] || null,
+      nacionalidad: row.nacionalidad,
+      fechaAlta: row.fechaAlta?.toISOString().split('T')[0] || null,
+      celular: row.celular,
+      expediente: row.expediente,
+      quincenaAplicacion: row.quincenaAplicacion,
+      anioAplicacion: row.anioAplicacion,
+      codigoPostal: row.codigoPostal,
+      numValidacion: row.numValidacion || 1,
+      afiliadosComplete: row.afiliadosComplete || 0,
+      createdAt: row.createdAt?.toISOString() || new Date().toISOString(),
+      updatedAt: row.updatedAt?.toISOString() || new Date().toISOString()
+    }));
   }
 }

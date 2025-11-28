@@ -4,10 +4,10 @@ import { CodigoPostal } from '../../domain/entities/CodigoPostal.js';
 import { sql } from '../../../../db/mssql.js';
 
 export class CodigoPostalRepository implements ICodigoPostalRepository {
-  constructor(private pool: ConnectionPool) {}
+  constructor(private mssqlPool: ConnectionPool) {}
 
   async findAll(): Promise<CodigoPostal[]> {
-    const r = await this.pool.request().query(`
+    const r = await this.mssqlPool.request().query(`
       SELECT
         CodigoPostalID,
         CodigoPostal,
@@ -34,7 +34,7 @@ export class CodigoPostalRepository implements ICodigoPostalRepository {
     if (!codigoPostalId || typeof codigoPostalId !== 'number' || codigoPostalId <= 0) {
       throw new Error('Invalid codigoPostalId: must be a positive number');
     }
-    const r = await this.pool.request()
+    const r = await this.mssqlPool.request()
       .input('codigoPostalId', sql.Int, codigoPostalId)
       .query(`
         SELECT
@@ -65,7 +65,7 @@ export class CodigoPostalRepository implements ICodigoPostalRepository {
     if (!codigoPostal || typeof codigoPostal !== 'string' || codigoPostal.length !== 5) {
       throw new Error('Invalid codigoPostal: must be a 5-character string');
     }
-    const r = await this.pool.request()
+    const r = await this.mssqlPool.request()
       .input('codigoPostal', sql.Char(5), codigoPostal)
       .query(`
         SELECT
@@ -100,7 +100,7 @@ export class CodigoPostalRepository implements ICodigoPostalRepository {
       throw new Error('Invalid esValido: must be a boolean');
     }
 
-    const transaction = this.pool.transaction();
+    const transaction = this.mssqlPool.transaction();
     await transaction.begin();
 
     try {
@@ -143,7 +143,7 @@ export class CodigoPostalRepository implements ICodigoPostalRepository {
       throw new Error('At least one field must be provided for update');
     }
 
-    const transaction = this.pool.transaction();
+    const transaction = this.mssqlPool.transaction();
     await transaction.begin();
 
     try {
@@ -187,7 +187,7 @@ export class CodigoPostalRepository implements ICodigoPostalRepository {
       throw new Error('Invalid codigoPostalId: must be a positive number');
     }
 
-    const transaction = this.pool.transaction();
+    const transaction = this.mssqlPool.transaction();
     await transaction.begin();
 
     try {

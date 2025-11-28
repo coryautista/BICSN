@@ -22,7 +22,10 @@ declare module 'fastify' {
       jti: string;
       iat?: number;
       exp?: number;
-    }
+    };
+    diScope?: {
+      resolve<T>(name: string): T;
+    };
   }
 }
 // Fastify type declarations

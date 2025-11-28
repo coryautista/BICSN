@@ -106,14 +106,16 @@ export class DeleteOrganica1Command {
   }
 
   private async checkOrganica1InUse(claveOrganica0: string, claveOrganica1: string): Promise<void> {
-    // Aquí se implementaría la lógica para verificar si la entidad está siendo utilizada
-    // Por ejemplo, verificar si existen entidades organica2, organica3, etc. que dependan de esta
-    // o si hay usuarios/afiliados asignados a esta estructura organizacional
-
-    // Esta es una implementación básica - en un sistema real, esto requeriría
-    // consultas a otras tablas para verificar dependencias
-
-    // Por ahora, asumiremos que no hay dependencias por ahora
-    // En una implementación real, aquí irían las validaciones de integridad referencial
+    const inUse = await this.organica1Repo.isInUse(claveOrganica0, claveOrganica1);
+    if (inUse) {
+      console.warn('ORGANICA1_COMMAND_WARNING', {
+        operation: 'DELETE_ORGANICA1',
+        claveOrganica0,
+        claveOrganica1,
+        reason: 'ORGANICA1_IN_USE',
+        timestamp: new Date().toISOString()
+      });
+      throw new Organica1InUseError(claveOrganica0, claveOrganica1);
+    }
   }
 }

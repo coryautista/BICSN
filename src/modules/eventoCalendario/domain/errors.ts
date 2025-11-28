@@ -59,7 +59,7 @@ export class InvalidEventoCalendarioDataError extends EventoCalendarioError {
 export class InvalidEventoCalendarioTipoError extends EventoCalendarioError {
   constructor(tipo: string) {
     super(
-      `Tipo de evento '${tipo}' no válido. Los tipos válidos son: FERIADO, VACACIONES, EVENTO_ESPECIAL, DIA_NO_LABORABLE`,
+      `Tipo de evento '${tipo}' no válido. Los tipos válidos son: FERIADO, VACACIONES, EVENTO_ESPECIAL, DIA_NO_LABORABLE, ALTA_BAJA_CAMBIO`,
       'tipoValidation',
       { tipo }
     );

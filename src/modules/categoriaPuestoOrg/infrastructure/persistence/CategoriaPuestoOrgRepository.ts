@@ -1,6 +1,7 @@
 import { ConnectionPool } from 'mssql';
 import { ICategoriaPuestoOrgRepository } from '../../domain/repositories/ICategoriaPuestoOrgRepository.js';
 import { CategoriaPuestoOrg, CreateCategoriaPuestoOrgData, UpdateCategoriaPuestoOrgData, ListCategoriaPuestoOrgFilters } from '../../domain/entities/CategoriaPuestoOrg.js';
+import { CategoriaPuestoOrgNotFoundError, InvalidCategoriaPuestoOrgDataError } from '../../domain/errors.js';
 import sql from 'mssql';
 
 export class CategoriaPuestoOrgRepository implements ICategoriaPuestoOrgRepository {
@@ -19,10 +20,12 @@ export class CategoriaPuestoOrgRepository implements ICategoriaPuestoOrgReposito
       ingresoBrutoMensual: row.IngresoBrutoMensual,
       vigenciaInicio: row.VigenciaInicio,
       vigenciaFin: row.VigenciaFin,
-      createdAt: row.createdAt,
-      updatedAt: row.updatedAt,
-      createdBy: row.createdBy,
-      updatedBy: row.updatedBy
+      createdAt: row.createdAt ?? null,
+      updatedAt: row.updatedAt ?? null,
+      createdBy: row.createdBy ?? null,
+      updatedBy: row.updatedBy ?? null,
+      baseConfianza: row.BaseConfianza,
+      porcentaje: row.Porcentaje
     };
   }
 
@@ -42,10 +45,8 @@ export class CategoriaPuestoOrgRepository implements ICategoriaPuestoOrgReposito
           IngresoBrutoMensual,
           VigenciaInicio,
           VigenciaFin,
-          createdAt,
-          updatedAt,
-          createdBy,
-          updatedBy
+          BaseConfianza,
+          Porcentaje
         FROM afi.CategoriaPuestoOrg
         WHERE CategoriaPuestoOrgId = @categoriaPuestoOrgId
       `);
@@ -68,10 +69,8 @@ export class CategoriaPuestoOrgRepository implements ICategoriaPuestoOrgReposito
         IngresoBrutoMensual,
         VigenciaInicio,
         VigenciaFin,
-        createdAt,
-        updatedAt,
-        createdBy,
-        updatedBy
+        BaseConfianza,
+        Porcentaje
       FROM afi.CategoriaPuestoOrg
       WHERE 1=1
     `;
@@ -103,7 +102,7 @@ export class CategoriaPuestoOrgRepository implements ICategoriaPuestoOrgReposito
     }
     if (filters.categoria) {
       query += ' AND Categoria = @categoria';
-      request.input('categoria', sql.VarChar(10), filters.categoria);
+      request.input('categoria', sql.NVarChar(200), filters.categoria);
     }
 
     query += ' ORDER BY Nivel, Org0, Org1, Org2, Org3, VigenciaInicio DESC, Categoria';
@@ -119,17 +118,18 @@ export class CategoriaPuestoOrgRepository implements ICategoriaPuestoOrgReposito
       .input('org1', sql.Char(2), data.org1)
       .input('org2', sql.Char(2), data.org2 ?? null)
       .input('org3', sql.Char(2), data.org3 ?? null)
-      .input('categoria', sql.VarChar(10), data.categoria)
-      .input('nombreCategoria', sql.NVarChar(80), data.nombreCategoria)
+      .input('categoria', sql.NVarChar(200), data.categoria)
+      .input('nombreCategoria', sql.NVarChar(200), data.nombreCategoria)
       .input('ingresoBrutoMensual', sql.Decimal(12, 2), data.ingresoBrutoMensual)
       .input('vigenciaInicio', sql.DateTime2, data.vigenciaInicio)
       .input('vigenciaFin', sql.DateTime2, data.vigenciaFin ?? null)
-      .input('createdBy', sql.VarChar(128), data.userId ?? null)
-      .input('updatedBy', sql.VarChar(128), data.userId ?? null)
+      .input('baseConfianza', sql.NVarChar(1), data.baseConfianza ?? null)
+      .input('porcentaje', sql.Int, data.porcentaje ?? null)
       .query(`
         INSERT INTO afi.CategoriaPuestoOrg (
           Nivel, Org0, Org1, Org2, Org3, Categoria, NombreCategoria,
-          IngresoBrutoMensual, VigenciaInicio, VigenciaFin, createdBy, updatedBy
+          IngresoBrutoMensual, VigenciaInicio, VigenciaFin,
+          BaseConfianza, Porcentaje
         )
         OUTPUT
           INSERTED.CategoriaPuestoOrgId,
@@ -143,13 +143,12 @@ export class CategoriaPuestoOrgRepository implements ICategoriaPuestoOrgReposito
           INSERTED.IngresoBrutoMensual,
           INSERTED.VigenciaInicio,
           INSERTED.VigenciaFin,
-          INSERTED.createdAt,
-          INSERTED.updatedAt,
-          INSERTED.createdBy,
-          INSERTED.updatedBy
+          INSERTED.BaseConfianza,
+          INSERTED.Porcentaje
         VALUES (
           @nivel, @org0, @org1, @org2, @org3, @categoria, @nombreCategoria,
-          @ingresoBrutoMensual, @vigenciaInicio, @vigenciaFin, @createdBy, @updatedBy
+          @ingresoBrutoMensual, @vigenciaInicio, @vigenciaFin,
+          @baseConfianza, @porcentaje
         )
       `);
 
@@ -161,7 +160,7 @@ export class CategoriaPuestoOrgRepository implements ICategoriaPuestoOrgReposito
     const request = this.mssqlPool.request().input('categoriaPuestoOrgId', sql.BigInt, data.categoriaPuestoOrgId);
 
     if (data.nombreCategoria !== undefined) {
-      request.input('nombreCategoria', sql.NVarChar(80), data.nombreCategoria);
+      request.input('nombreCategoria', sql.NVarChar(200), data.nombreCategoria);
       sets.push('NombreCategoria = @nombreCategoria');
     }
     if (data.ingresoBrutoMensual !== undefined) {
@@ -172,13 +171,17 @@ export class CategoriaPuestoOrgRepository implements ICategoriaPuestoOrgReposito
       request.input('vigenciaFin', sql.DateTime2, data.vigenciaFin);
       sets.push('VigenciaFin = @vigenciaFin');
     }
+    if (data.baseConfianza !== undefined) {
+      request.input('baseConfianza', sql.NVarChar(1), data.baseConfianza);
+      sets.push('BaseConfianza = @baseConfianza');
+    }
+    if (data.porcentaje !== undefined) {
+      request.input('porcentaje', sql.Int, data.porcentaje);
+      sets.push('Porcentaje = @porcentaje');
+    }
 
-    sets.push('updatedAt = SYSUTCDATETIME()');
-    request.input('updatedBy', sql.VarChar(128), data.userId ?? null);
-    sets.push('updatedBy = @updatedBy');
-
-    if (sets.length === 2) { // Only updatedAt and updatedBy
-      throw new Error('CATEGORIA_PUESTO_ORG_NO_UPDATE_DATA');
+    if (sets.length === 0) {
+      throw new InvalidCategoriaPuestoOrgDataError('body', 'Debe proporcionar al menos un campo para actualizar');
     }
 
     const updateQuery = `
@@ -196,17 +199,15 @@ export class CategoriaPuestoOrgRepository implements ICategoriaPuestoOrgReposito
         INSERTED.IngresoBrutoMensual,
         INSERTED.VigenciaInicio,
         INSERTED.VigenciaFin,
-        INSERTED.createdAt,
-        INSERTED.updatedAt,
-        INSERTED.createdBy,
-        INSERTED.updatedBy
+        INSERTED.BaseConfianza,
+        INSERTED.Porcentaje
       WHERE CategoriaPuestoOrgId = @categoriaPuestoOrgId
     `;
 
     const result = await request.query(updateQuery);
 
     if (result.recordset.length === 0) {
-      throw new Error('CATEGORIA_PUESTO_ORG_NOT_FOUND');
+      throw new CategoriaPuestoOrgNotFoundError(data.categoriaPuestoOrgId);
     }
 
     return this.mapRowToCategoriaPuestoOrg(result.recordset[0]);
@@ -222,7 +223,7 @@ export class CategoriaPuestoOrgRepository implements ICategoriaPuestoOrgReposito
       `);
 
     if (result.recordset.length === 0) {
-      throw new Error('CATEGORIA_PUESTO_ORG_NOT_FOUND');
+      throw new CategoriaPuestoOrgNotFoundError(categoriaPuestoOrgId);
     }
 
     return result.recordset[0].CategoriaPuestoOrgId;

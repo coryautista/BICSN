@@ -86,23 +86,11 @@ export class DeleteOrganica0Command {
   }
 
   private async checkOrganica0InUse(claveOrganica: string): Promise<void> {
-    // Aquí se implementaría la lógica para verificar si la entidad está siendo utilizada
-    // Por ejemplo, verificar si existen entidades organica1, organica2, etc. que dependan de esta
-    // o si hay usuarios/afiliados asignados a esta estructura organizacional
-
-    // Esta es una implementación básica - en un sistema real, esto requeriría
-    // consultas a otras tablas para verificar dependencias
-
-    // Por ahora, solo verificamos que no esté marcada como "en uso" por alguna regla de negocio
-    // Esta lógica se puede expandir según las necesidades específicas del negocio
-
-    // Ejemplo: verificar si hay registros en tablas relacionadas
-    // const relatedRecords = await this.someRelatedRepo.findByOrganica0(claveOrganica);
-    // if (relatedRecords && relatedRecords.length > 0) {
-    //   throw new Organica0InUseError(claveOrganica);
-    // }
-
-    // Para este ejemplo, asumiremos que no hay dependencias por ahora
-    // En una implementación real, aquí irían las validaciones de integridad referencial
+    const isInUse = await this.organica0Repo.isInUse(claveOrganica);
+    if (isInUse) {
+      throw new Organica0InUseError(claveOrganica);
+    }
   }
+
+ 
 }

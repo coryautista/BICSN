@@ -11,7 +11,22 @@ export function fail(message: string, code?: string, details?: any) {
 }
 
 export function validationError(errors: any[]) {
-  return fail('VALIDATION_ERROR', 'VALIDATION_FAILED', { errors });
+  if (!errors || errors.length === 0) {
+    return fail('Error de validación en los datos proporcionados', 'VALIDATION_FAILED');
+  }
+  
+  // Formatear mensajes de validación más descriptivos
+  const validationMessages = errors.map((error: any) => {
+    const field = error.path?.join('.') || error.instancePath?.replace('/', '') || error.params?.missingProperty || 'campo desconocido';
+    const message = error.message || 'Valor inválido';
+    return `${field}: ${message}`;
+  });
+  
+  const message = validationMessages.length === 1 
+    ? validationMessages[0]
+    : `Errores de validación: ${validationMessages.join(', ')}`;
+    
+  return fail(message, 'VALIDATION_FAILED', { errors });
 }
 
 export function notFound(resource: string, id?: string) {

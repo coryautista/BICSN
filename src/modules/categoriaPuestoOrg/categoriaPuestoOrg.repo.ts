@@ -24,7 +24,9 @@ export async function findCategoriaPuestoOrgById(categoriaPuestoOrgId: number) {
         createdAt,
         updatedAt,
         createdBy,
-        updatedBy
+        updatedBy,
+        BaseConfianza,
+        Porcentaje
       FROM afi.CategoriaPuestoOrg
       WHERE CategoriaPuestoOrgId = @categoriaPuestoOrgId
     `);
@@ -45,7 +47,9 @@ export async function findCategoriaPuestoOrgById(categoriaPuestoOrgId: number) {
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
     createdBy: row.createdBy,
-    updatedBy: row.updatedBy
+    updatedBy: row.updatedBy,
+    baseConfianza: row.BaseConfianza,
+    porcentaje: row.Porcentaje
   };
 }
 
@@ -75,7 +79,9 @@ export async function listCategoriaPuestoOrg(filters: {
       createdAt,
       updatedAt,
       createdBy,
-      updatedBy
+      updatedBy,
+      BaseConfianza,
+      Porcentaje
     FROM afi.CategoriaPuestoOrg
     WHERE 1=1
   `;
@@ -128,7 +134,9 @@ export async function listCategoriaPuestoOrg(filters: {
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
     createdBy: row.createdBy,
-    updatedBy: row.updatedBy
+    updatedBy: row.updatedBy,
+    baseConfianza: row.BaseConfianza,
+    porcentaje: row.Porcentaje
   }));
 }
 
@@ -144,6 +152,8 @@ export async function createCategoriaPuestoOrg(
   org3?: string,
   vigenciaFin?: string,
   userId?: string,
+  baseConfianza?: string,
+  porcentaje?: number,
   tx?: sqlType.Transaction
 ) {
   // Validations
@@ -189,10 +199,13 @@ export async function createCategoriaPuestoOrg(
     .input('vigenciaFin', sql.DateTime2, vigenciaFin ?? null)
     .input('createdBy', sql.VarChar(128), userId ?? null)
     .input('updatedBy', sql.VarChar(128), userId ?? null)
+    .input('baseConfianza', sql.NVarChar(1), baseConfianza ?? null)
+    .input('porcentaje', sql.Int, porcentaje ?? null)
     .query(`
       INSERT INTO afi.CategoriaPuestoOrg (
         Nivel, Org0, Org1, Org2, Org3, Categoria, NombreCategoria,
-        IngresoBrutoMensual, VigenciaInicio, VigenciaFin, createdBy, updatedBy
+        IngresoBrutoMensual, VigenciaInicio, VigenciaFin, createdBy, updatedBy,
+        BaseConfianza, Porcentaje
       )
       OUTPUT
         INSERTED.CategoriaPuestoOrgId,
@@ -209,10 +222,13 @@ export async function createCategoriaPuestoOrg(
         INSERTED.createdAt,
         INSERTED.updatedAt,
         INSERTED.createdBy,
-        INSERTED.updatedBy
+        INSERTED.updatedBy,
+        INSERTED.BaseConfianza,
+        INSERTED.Porcentaje
       VALUES (
         @nivel, @org0, @org1, @org2, @org3, @categoria, @nombreCategoria,
-        @ingresoBrutoMensual, @vigenciaInicio, @vigenciaFin, @createdBy, @updatedBy
+        @ingresoBrutoMensual, @vigenciaInicio, @vigenciaFin, @createdBy, @updatedBy,
+        @baseConfianza, @porcentaje
       )
     `);
   const row = r.recordset[0];
@@ -231,7 +247,9 @@ export async function createCategoriaPuestoOrg(
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
     createdBy: row.createdBy,
-    updatedBy: row.updatedBy
+    updatedBy: row.updatedBy,
+    baseConfianza: row.BaseConfianza,
+    porcentaje: row.Porcentaje
   };
 }
 
@@ -241,6 +259,8 @@ export async function updateCategoriaPuestoOrg(
   ingresoBrutoMensual?: number,
   vigenciaFin?: string,
   userId?: string,
+  baseConfianza?: string,
+  porcentaje?: number,
   tx?: sqlType.Transaction
 ) {
   if (!categoriaPuestoOrgId || typeof categoriaPuestoOrgId !== 'number' || categoriaPuestoOrgId <= 0) {
@@ -260,13 +280,17 @@ export async function updateCategoriaPuestoOrg(
     .input('ingresoBrutoMensual', sql.Decimal(12, 2), ingresoBrutoMensual ?? null)
     .input('vigenciaFin', sql.DateTime2, vigenciaFin ?? null)
     .input('updatedBy', sql.VarChar(128), userId ?? null)
+    .input('baseConfianza', sql.NVarChar(1), baseConfianza ?? null)
+    .input('porcentaje', sql.Int, porcentaje ?? null)
     .query(`
       UPDATE afi.CategoriaPuestoOrg
       SET NombreCategoria = @nombreCategoria,
           IngresoBrutoMensual = @ingresoBrutoMensual,
           VigenciaFin = @vigenciaFin,
           updatedAt = SYSUTCDATETIME(),
-          updatedBy = @updatedBy
+          updatedBy = @updatedBy,
+          BaseConfianza = @baseConfianza,
+          Porcentaje = @porcentaje
       OUTPUT
         INSERTED.CategoriaPuestoOrgId,
         INSERTED.Nivel,
@@ -282,7 +306,9 @@ export async function updateCategoriaPuestoOrg(
         INSERTED.createdAt,
         INSERTED.updatedAt,
         INSERTED.createdBy,
-        INSERTED.updatedBy
+        INSERTED.updatedBy,
+        INSERTED.BaseConfianza,
+        INSERTED.Porcentaje
       WHERE CategoriaPuestoOrgId = @categoriaPuestoOrgId
     `);
   const row = r.recordset[0];
@@ -302,7 +328,9 @@ export async function updateCategoriaPuestoOrg(
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
     createdBy: row.createdBy,
-    updatedBy: row.updatedBy
+    updatedBy: row.updatedBy,
+    baseConfianza: row.BaseConfianza,
+    porcentaje: row.Porcentaje
   };
 }
 

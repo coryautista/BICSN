@@ -8,11 +8,13 @@ export class OrgPersonalRepository implements IOrgPersonalRepository {
   }
 
   async findById(interno: number): Promise<OrgPersonal | undefined> {
-    return await repo.getOrgPersonalById(interno);
+    const result = await repo.getOrgPersonalById(interno);
+    return result === null ? undefined : result;
   }
 
   async findBySearch(searchTerm: string): Promise<OrgPersonal | undefined> {
-    return await repo.getOrgPersonalBySearch(searchTerm);
+    const result = await repo.getOrgPersonalBySearch(searchTerm);
+    return result === null ? undefined : result;
   }
 
   async create(data: CreateOrgPersonalData): Promise<OrgPersonal> {

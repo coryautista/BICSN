@@ -467,6 +467,8 @@ export async function listExpedienteArchivosByCurp(curp: string) {
 
 export async function createExpedienteArchivo(curp: string, tipoCodigo: string | null, titulo: string, fileName: string, mimeType: string, byteSize: number, sha256Hex: string | null, storageProvider: string, storagePath: string, observaciones: string | null, documentTypeId: number | null, userId?: string, tx?: sqlType.Transaction) {
   const req = tx ? new sqlType.Request(tx) : (await getPool()).request();
+  // Increase timeout to 30 seconds to avoid timeouts on slow inserts
+  req.timeout = 30000;
   const r = await req
     .input('curp', sql.Char(18), curp)
     .input('tipoCodigo', sql.VarChar(30), tipoCodigo)

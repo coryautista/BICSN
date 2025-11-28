@@ -5,7 +5,8 @@ import {
   Organica3InvalidClaveOrganica1Error,
   Organica3InvalidClaveOrganica2Error,
   Organica3InvalidClaveOrganica3Error,
-  Organica3DeletionError
+  Organica3DeletionError,
+  Organica3InUseError
 } from '../../domain/errors.js';
 
 export class DeleteOrganica3Command {
@@ -45,8 +46,8 @@ export class DeleteOrganica3Command {
         throw new Organica3NotFoundError(claveOrganica0, claveOrganica1, claveOrganica2, claveOrganica3);
       }
 
-      // Verificar reglas de negocio antes de eliminar
-      await this.validateDeletionRules(claveOrganica0, claveOrganica1, claveOrganica2, claveOrganica3);
+      // Verificar si la entidad está siendo utilizada (lógica de negocio)
+      await this.checkOrganica3InUse(claveOrganica0, claveOrganica1, claveOrganica2, claveOrganica3);
 
       // Eliminar la entidad
       const deleted = await this.organica3Repo.delete(claveOrganica0, claveOrganica1, claveOrganica2, claveOrganica3);
@@ -151,36 +152,19 @@ export class DeleteOrganica3Command {
     }
   }
 
-  private async validateDeletionRules(_claveOrganica0: string, _claveOrganica1: string, _claveOrganica2: string, _claveOrganica3: string): Promise<void> {
-    // Verificar si hay dependencias que impidan la eliminación
-    // Por ejemplo, verificar si hay registros en otras tablas que dependan de esta organica3
-
-    try {
-      // Aquí irían las validaciones de negocio específicas
-      // Por ejemplo, verificar dependencias en otras tablas
-
-      // Si hay dependencias, lanzar error
-      // throw new Organica3DeletionError('No se puede eliminar la organica3 porque tiene dependencias');
-
-    } catch (error) {
-      console.warn('ORGANICA3_DELETION_VALIDATION_WARNING', {
-        claveOrganica0: _claveOrganica0,
-        claveOrganica1: _claveOrganica1,
-        claveOrganica2: _claveOrganica2,
-        claveOrganica3: _claveOrganica3,
-        error: error instanceof Error ? error.message : 'UNKNOWN_ERROR',
+  private async checkOrganica3InUse(claveOrganica0: string, claveOrganica1: string, claveOrganica2: string, claveOrganica3: string): Promise<void> {
+    const inUse = await this.organica3Repo.isInUse(claveOrganica0, claveOrganica1, claveOrganica2, claveOrganica3);
+    if (inUse) {
+      console.warn('ORGANICA3_COMMAND_WARNING', {
+        operation: 'DELETE_ORGANICA3',
+        claveOrganica0,
+        claveOrganica1,
+        claveOrganica2,
+        claveOrganica3,
+        reason: 'ORGANICA3_IN_USE',
         timestamp: new Date().toISOString()
       });
-
-      // Si es otro tipo de error, permitir la eliminación pero loguear
-      console.warn('ORGANICA3_DELETION_DEPENDENCY_CHECK_FAILED', {
-        claveOrganica0: _claveOrganica0,
-        claveOrganica1: _claveOrganica1,
-        claveOrganica2: _claveOrganica2,
-        claveOrganica3: _claveOrganica3,
-        error: error instanceof Error ? error.message : 'UNKNOWN_ERROR',
-        timestamp: new Date().toISOString()
-      });
+      throw new Organica3InUseError(claveOrganica0, claveOrganica1, claveOrganica2, claveOrganica3);
     }
   }
 }

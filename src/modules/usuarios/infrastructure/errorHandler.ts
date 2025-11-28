@@ -14,7 +14,7 @@ import {
   UsuarioError
 } from '../domain/errors.js';
 
-export function handleUsuarioError(error: any, reply: FastifyReply): void {
+export function handleUsuarioError(error: any, reply: FastifyReply): FastifyReply {
   const timestamp = new Date().toISOString();
 
   if (error instanceof UsuarioNotFoundError) {
@@ -22,14 +22,13 @@ export function handleUsuarioError(error: any, reply: FastifyReply): void {
       code: error.code,
       statusCode: error.statusCode
     });
-    reply.code(error.statusCode).send({
+    return reply.code(error.statusCode).send({
       ok: false,
       error: {
         code: error.code,
         message: error.message
       }
     });
-    return;
   }
 
   if (error instanceof UsuarioAlreadyExistsError) {
@@ -37,14 +36,13 @@ export function handleUsuarioError(error: any, reply: FastifyReply): void {
       code: error.code,
       statusCode: error.statusCode
     });
-    reply.code(error.statusCode).send({
+    return reply.code(error.statusCode).send({
       ok: false,
       error: {
         code: error.code,
         message: error.message
       }
     });
-    return;
   }
 
   if (error instanceof UsuarioInvalidEmailError) {
@@ -52,14 +50,13 @@ export function handleUsuarioError(error: any, reply: FastifyReply): void {
       code: error.code,
       statusCode: error.statusCode
     });
-    reply.code(error.statusCode).send({
+    return reply.code(error.statusCode).send({
       ok: false,
       error: {
         code: error.code,
         message: error.message
       }
     });
-    return;
   }
 
   if (error instanceof UsuarioInvalidUsernameError) {
@@ -67,14 +64,13 @@ export function handleUsuarioError(error: any, reply: FastifyReply): void {
       code: error.code,
       statusCode: error.statusCode
     });
-    reply.code(error.statusCode).send({
+    return reply.code(error.statusCode).send({
       ok: false,
       error: {
         code: error.code,
         message: error.message
       }
     });
-    return;
   }
 
   if (error instanceof UsuarioInvalidPasswordError) {
@@ -82,14 +78,13 @@ export function handleUsuarioError(error: any, reply: FastifyReply): void {
       code: error.code,
       statusCode: error.statusCode
     });
-    reply.code(error.statusCode).send({
+    return reply.code(error.statusCode).send({
       ok: false,
       error: {
         code: error.code,
         message: error.message
       }
     });
-    return;
   }
 
   if (error instanceof UsuarioInvalidNameError) {
@@ -97,14 +92,13 @@ export function handleUsuarioError(error: any, reply: FastifyReply): void {
       code: error.code,
       statusCode: error.statusCode
     });
-    reply.code(error.statusCode).send({
+    return reply.code(error.statusCode).send({
       ok: false,
       error: {
         code: error.code,
         message: error.message
       }
     });
-    return;
   }
 
   if (error instanceof UsuarioInvalidIdError) {
@@ -112,14 +106,13 @@ export function handleUsuarioError(error: any, reply: FastifyReply): void {
       code: error.code,
       statusCode: error.statusCode
     });
-    reply.code(error.statusCode).send({
+    return reply.code(error.statusCode).send({
       ok: false,
       error: {
         code: error.code,
         message: error.message
       }
     });
-    return;
   }
 
   if (error instanceof UsuarioInvalidStatusError) {
@@ -127,14 +120,13 @@ export function handleUsuarioError(error: any, reply: FastifyReply): void {
       code: error.code,
       statusCode: error.statusCode
     });
-    reply.code(error.statusCode).send({
+    return reply.code(error.statusCode).send({
       ok: false,
       error: {
         code: error.code,
         message: error.message
       }
     });
-    return;
   }
 
   if (error instanceof UsuarioInUseError) {
@@ -142,14 +134,13 @@ export function handleUsuarioError(error: any, reply: FastifyReply): void {
       code: error.code,
       statusCode: error.statusCode
     });
-    reply.code(error.statusCode).send({
+    return reply.code(error.statusCode).send({
       ok: false,
       error: {
         code: error.code,
         message: error.message
       }
     });
-    return;
   }
 
   if (error instanceof UsuarioPermissionError) {
@@ -157,14 +148,13 @@ export function handleUsuarioError(error: any, reply: FastifyReply): void {
       code: error.code,
       statusCode: error.statusCode
     });
-    reply.code(error.statusCode).send({
+    return reply.code(error.statusCode).send({
       ok: false,
       error: {
         code: error.code,
         message: error.message
       }
     });
-    return;
   }
 
   if (error instanceof UsuarioInvalidRoleError) {
@@ -172,14 +162,13 @@ export function handleUsuarioError(error: any, reply: FastifyReply): void {
       code: error.code,
       statusCode: error.statusCode
     });
-    reply.code(error.statusCode).send({
+    return reply.code(error.statusCode).send({
       ok: false,
       error: {
         code: error.code,
         message: error.message
       }
     });
-    return;
   }
 
   if (error instanceof UsuarioError) {
@@ -187,14 +176,13 @@ export function handleUsuarioError(error: any, reply: FastifyReply): void {
       code: error.code,
       statusCode: error.statusCode
     });
-    reply.code(error.statusCode).send({
+    return reply.code(error.statusCode).send({
       ok: false,
       error: {
         code: error.code,
         message: error.message
       }
     });
-    return;
   }
 
   // Error genérico no manejado
@@ -202,7 +190,7 @@ export function handleUsuarioError(error: any, reply: FastifyReply): void {
     error: error.message || 'Error desconocido',
     stack: error.stack
   });
-  reply.code(500).send({
+  return reply.code(500).send({
     ok: false,
     error: {
       code: 'INTERNAL_ERROR',

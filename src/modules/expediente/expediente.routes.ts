@@ -1217,11 +1217,11 @@ export default async function expedienteRoutes(app: FastifyInstance) {
       return reply.code(400).send(validationError(paramValidation.error.issues));
     }
 
-    return withDbContext(req, async (tx) => {
-      try {
+    try {
+      const result = await withDbContext(req, async (tx) => {
         const data = await req.file();
         if (!data) {
-          return reply.code(400).send(validationError([{ message: 'No se subió ningún archivo' }]));
+          throw new Error('NO_FILE_UPLOADED');
         }
 
         // Get form fields
@@ -1230,7 +1230,7 @@ export default async function expedienteRoutes(app: FastifyInstance) {
         const observaciones = (data.fields.observaciones as any)?.value;
         const documentTypeId = (data.fields.documentTypeId as any)?.value ? parseInt((data.fields.documentTypeId as any).value) : undefined;
 
-        const result = await uploadDocumentToExpediente(
+        const uploadResult = await uploadDocumentToExpediente(
           curp,
           data,
           titulo,
@@ -1241,21 +1241,69 @@ export default async function expedienteRoutes(app: FastifyInstance) {
           tx
         );
 
-        return reply.code(201).send(ok(result));
+        // Return result - commit will happen after this function returns
+        return uploadResult;
+      });
 
-      } catch (error: any) {
-        console.error('Error uploading document:', error);
-        if (error.message === 'EXPEDIENTE_NOT_FOUND') {
-          return reply.code(404).send(notFound('Expediente', curp));
-        }
-        if (error.message === 'DOCUMENT_TYPE_NOT_FOUND') {
-          return reply.code(404).send(notFound('DocumentType', ''));
-        }
-        if (error.message === 'EXPEDIENTE_ARCHIVO_HASH_EXISTS') {
-          return reply.code(409).send({ ok: false, error: { code: 'CONFLICT', message: 'Ya existe un archivo con este hash' } });
-        }
-        return reply.code(500).send(internalError('Error al subir documento'));
+      // Response is sent AFTER commit completes
+      const responseData = ok(result);
+      
+      // Log response details
+      req.log.info({
+        curp,
+        archivoId: result.archivoId,
+        fileName: result.fileName,
+        statusCode: 201
+      }, '[upload-document] Upload completed successfully, sending response');
+      
+      req.log.debug({
+        curp,
+        response: responseData
+      }, '[upload-document] Response data');
+      
+      console.log('[upload-document] Response data:', JSON.stringify(responseData, null, 2));
+      
+      const response = reply.code(201).send(responseData);
+      
+      req.log.info({
+        curp,
+        archivoId: result.archivoId,
+        statusCode: 201
+      }, '[upload-document] Response sent successfully');
+      
+      return response;
+
+    } catch (error: any) {
+      console.error('Error uploading document:', error);
+      console.error('Error stack:', error.stack);
+      console.error('Error code:', error.code);
+      console.error('Error number:', error.number);
+      
+      // Handle timeout errors specifically
+      if (error.code === 'ETIMEOUT' || error.number === 'ETIMEOUT') {
+        return reply.code(504).send({ 
+          ok: false, 
+          error: { 
+            code: 'TIMEOUT', 
+            message: 'La operación tardó demasiado tiempo. Por favor, intente nuevamente.' 
+          } 
+        });
       }
-    });
+      
+      if (error.message === 'NO_FILE_UPLOADED') {
+        return reply.code(400).send(validationError([{ message: 'No se subió ningún archivo' }]));
+      }
+      
+      if (error.message === 'EXPEDIENTE_NOT_FOUND') {
+        return reply.code(404).send(notFound('Expediente', curp));
+      }
+      if (error.message === 'DOCUMENT_TYPE_NOT_FOUND') {
+        return reply.code(404).send(notFound('DocumentType', ''));
+      }
+      if (error.message === 'EXPEDIENTE_ARCHIVO_HASH_EXISTS') {
+        return reply.code(409).send({ ok: false, error: { code: 'CONFLICT', message: 'Ya existe un archivo con este hash' } });
+      }
+      return reply.code(500).send(internalError('Error al subir documento'));
+    }
   });
 }

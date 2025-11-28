@@ -12,10 +12,6 @@ export class ReportsRepository implements IReportsRepository {
   async getMonthlyPersonnelReport(filters: ReportFilters): Promise<MonthlyPersonnelReport[]> {
     const db = getFirebirdDb();
 
-    // Calculate date range for the month
-    const startDate = new Date(filters.year, filters.month - 1, 1);
-    const endDate = new Date(filters.year, filters.month, 1);
-
     return new Promise((resolve, reject) => {
       // Complex query to get monthly report with bi-weekly breakdown
       const sql = `
@@ -92,10 +88,6 @@ export class ReportsRepository implements IReportsRepository {
 
   async getPersonnelMovements(filters: ReportFilters): Promise<PersonnelMovement[]> {
     const db = getFirebirdDb();
-
-    // Calculate date range for the month
-    const startDate = new Date(filters.year, filters.month - 1, 1);
-    const endDate = new Date(filters.year, filters.month, 1);
 
     return new Promise((resolve, reject) => {
       const sql = `

@@ -85,8 +85,8 @@ export class UpdateCategoriaPuestoOrgCommand {
       if (data.nombreCategoria.trim().length === 0) {
         throw new InvalidCategoriaPuestoOrgDataError('nombreCategoria', 'No puede estar vacío');
       }
-      if (data.nombreCategoria.length > 80) {
-        throw new InvalidCategoriaPuestoOrgDataError('nombreCategoria', 'No debe exceder 80 caracteres');
+      if (data.nombreCategoria.length > 200) {
+        throw new InvalidCategoriaPuestoOrgDataError('nombreCategoria', 'No debe exceder 200 caracteres');
       }
     }
 
@@ -118,6 +118,34 @@ export class UpdateCategoriaPuestoOrgCommand {
       const vigenciaFinDate = new Date(data.vigenciaFin + 'T23:59:59.999Z');
       if (isNaN(vigenciaFinDate.getTime())) {
         throw new InvalidCategoriaPuestoOrgDataError('vigenciaFin', 'Fecha inválida');
+      }
+    }
+
+    // Validar baseConfianza si está presente
+    if (data.baseConfianza !== undefined) {
+      if (data.baseConfianza === null) {
+        // Permitir null para limpiar el campo
+        return;
+      }
+      if (typeof data.baseConfianza !== 'string') {
+        throw new InvalidCategoriaPuestoOrgDataError('baseConfianza', 'Debe ser una cadena de texto');
+      }
+      if (data.baseConfianza.length !== 1) {
+        throw new InvalidCategoriaPuestoOrgDataError('baseConfianza', 'Debe ser exactamente 1 carácter');
+      }
+    }
+
+    // Validar porcentaje si está presente
+    if (data.porcentaje !== undefined) {
+      if (data.porcentaje === null) {
+        // Permitir null para limpiar el campo
+        return;
+      }
+      if (typeof data.porcentaje !== 'number') {
+        throw new InvalidCategoriaPuestoOrgDataError('porcentaje', 'Debe ser un número');
+      }
+      if (!Number.isInteger(data.porcentaje) || data.porcentaje < 0 || data.porcentaje > 100) {
+        throw new InvalidCategoriaPuestoOrgDataError('porcentaje', 'Debe ser un entero entre 0 y 100');
       }
     }
   }

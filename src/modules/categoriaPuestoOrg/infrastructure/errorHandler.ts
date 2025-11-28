@@ -17,6 +17,17 @@ import {
   CategoriaPuestoOrgQueryError
 } from '../domain/errors.js';
 
+// Verificar si es un error de mssql
+function isMssqlError(error: any): boolean {
+  return error && (
+    error.name === 'RequestError' ||
+    error.code === 'EREQUEST' ||
+    error.code === 'ETIMEOUT' ||
+    error.code === 'ECONNRESET' ||
+    error.code === 'ESOCKET'
+  );
+}
+
 const logger = pino({
   name: 'categoriaPuestoOrg-errorHandler',
   level: process.env.LOG_LEVEL || 'info'
@@ -132,6 +143,36 @@ export function handleCategoriaPuestoOrgError(error: any, reply: FastifyReply): 
     return reply.code(500).send(fail(error.code, error.message));
   }
 
+  // Errores de base de datos mssql
+  if (isMssqlError(error)) {
+    const dbError = error as any;
+    logger.error({
+      ...logContext,
+      sqlError: dbError.message,
+      sqlCode: dbError.code,
+      sqlNumber: dbError.number,
+      stack: error.stack
+    }, 'Error de base de datos en módulo categoriaPuestoOrg');
+
+    // Mensajes más descriptivos según el tipo de error SQL
+    let errorMessage = 'Error de base de datos';
+    if (dbError.message) {
+      if (dbError.message.includes('Invalid column name')) {
+        errorMessage = 'Error en la estructura de la base de datos: columna no encontrada';
+      } else if (dbError.message.includes('Violation of PRIMARY KEY') || dbError.message.includes('duplicate key')) {
+        errorMessage = 'Ya existe un registro con estos datos';
+      } else if (dbError.message.includes('Violation of FOREIGN KEY')) {
+        errorMessage = 'Los datos referenciados no existen';
+      } else if (dbError.message.includes('Cannot insert NULL')) {
+        errorMessage = 'No se puede insertar un valor nulo en un campo requerido';
+      } else {
+        errorMessage = `Error de base de datos: ${dbError.message}`;
+      }
+    }
+
+    return reply.code(500).send(fail('DATABASE_ERROR', errorMessage));
+  }
+
   // Errores genéricos no tipados
   logger.error({
     ...logContext,
@@ -139,5 +180,5 @@ export function handleCategoriaPuestoOrgError(error: any, reply: FastifyReply): 
     stack: error.stack
   }, 'Error inesperado en módulo categoriaPuestoOrg');
 
-  return reply.code(500).send(fail('CATEGORIA_PUESTO_ORG_INTERNAL_ERROR', 'Error interno del servidor'));
+  return reply.code(500).send(fail('CATEGORIA_PUESTO_ORG_INTERNAL_ERROR', error.message || 'Error interno del servidor'));
 }

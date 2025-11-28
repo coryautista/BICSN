@@ -1,7 +1,7 @@
 import { FastifyReply } from 'fastify';
-import { DomainError } from '../../../utils/errors.js';
+import pino from 'pino';
+import { fail } from '../../../utils/http.js';
 import {
-  Organica0Error,
   Organica0NotFoundError,
   Organica0AlreadyExistsError,
   Organica0InvalidClaveError,
@@ -12,57 +12,95 @@ import {
   Organica0PermissionError
 } from '../domain/errors.js';
 
+const logger = pino({
+  name: 'organica0-errorHandler',
+  level: process.env.LOG_LEVEL || 'info'
+});
+
 /**
- * Manejador centralizado de errores para el módulo organica0
+ * Handler centralizado para errores del módulo Organica0
+ * Mapea errores de dominio a respuestas HTTP apropiadas con logging estructurado
  */
-export function handleOrganica0Error(error: unknown, reply: FastifyReply): FastifyReply {
-  // Log del error para debugging
-  console.error('Error en módulo organica0:', error);
+export function handleOrganica0Error(error: any, reply: FastifyReply): FastifyReply {
+  const logContext = {
+    module: 'organica0',
+    errorType: error.constructor.name,
+    errorCode: error.code || 'UNKNOWN_ERROR',
+    timestamp: new Date().toISOString()
+  };
 
-  // Si es un error del dominio organica0, manejarlo específicamente
-  if (error instanceof Organica0Error) {
-    return reply.status(error.statusCode).send({
-      success: false,
-      error: {
-        code: error.code,
-        message: error.message,
-        timestamp: new Date().toISOString()
-      }
-    });
+  // Logging estructurado según tipo de error
+  if (error instanceof Organica0NotFoundError) {
+    logger.warn({
+      ...logContext,
+      claveOrganica: error.details?.claveOrganica
+    }, 'Entidad organica0 no encontrada');
+    return reply.code(404).send(fail('ORGANICA0_NOT_FOUND', 'Entidad organica0 no encontrada'));
   }
 
-  // Si es un error de dominio genérico, manejarlo
-  if (error instanceof DomainError) {
-    return reply.status(error.statusCode).send({
-      success: false,
-      error: {
-        code: error.code,
-        message: error.message,
-        timestamp: new Date().toISOString()
-      }
-    });
+  if (error instanceof Organica0AlreadyExistsError) {
+    logger.warn({
+      ...logContext,
+      claveOrganica: error.details?.claveOrganica
+    }, 'Intento de crear entidad organica0 duplicada');
+    return reply.code(409).send(fail('ORGANICA0_ALREADY_EXISTS', 'Ya existe una entidad organica0 con estos datos'));
   }
 
-  // Si es un error de validación de Fastify
-  if (error instanceof Error && 'validation' in error) {
-    return reply.status(400).send({
-      success: false,
-      error: {
-        code: 'VALIDATION_ERROR',
-        message: 'Datos de entrada inválidos',
-        details: error.message,
-        timestamp: new Date().toISOString()
-      }
-    });
+  if (error instanceof Organica0InvalidClaveError) {
+    logger.warn({
+      ...logContext,
+      details: error.details
+    }, 'Clave organica0 inválida');
+    return reply.code(400).send(fail('ORGANICA0_INVALID_CLAVE', 'Clave organica0 inválida'));
+  }
+
+  if (error instanceof Organica0InvalidNombreError) {
+    logger.warn({
+      ...logContext,
+      details: error.details
+    }, 'Nombre inválido');
+    return reply.code(400).send(fail('ORGANICA0_INVALID_NOMBRE', 'Nombre inválido'));
+  }
+
+  if (error instanceof Organica0InvalidEstatusError) {
+    logger.warn({
+      ...logContext,
+      details: error.details
+    }, 'Estatus inválido');
+    return reply.code(400).send(fail('ORGANICA0_INVALID_ESTATUS', 'Estatus inválido'));
+  }
+
+  if (error instanceof Organica0InvalidFechaError) {
+    logger.warn({
+      ...logContext,
+      details: error.details
+    }, 'Fecha inválida');
+    return reply.code(400).send(fail('ORGANICA0_INVALID_FECHA', 'Fecha inválida'));
+  }
+
+  if (error instanceof Organica0InUseError) {
+    logger.warn({
+      ...logContext,
+      claveOrganica: error.details?.claveOrganica
+    }, 'Entidad organica0 en uso, no se puede eliminar');
+    return reply.code(409).send(fail('ORGANICA0_IN_USE', 'La entidad organica0 está en uso y no puede ser eliminada'));
+  }
+
+  if (error instanceof Organica0PermissionError) {
+    logger.warn({
+      ...logContext,
+      userId: error.details?.userId,
+      operation: error.details?.operation
+    }, 'Permiso denegado para operación en organica0');
+    return reply.code(403).send(fail('ORGANICA0_PERMISSION_DENIED', 'No tiene permisos para realizar esta operación'));
   }
 
   // Error genérico del servidor
-  return reply.status(500).send({
-    success: false,
-    error: {
-      code: 'INTERNAL_SERVER_ERROR',
-      message: 'Error interno del servidor',
-      timestamp: new Date().toISOString()
-    }
-  });
+  logger.error({
+    ...logContext,
+    error: error instanceof Error ? error.message : 'Error desconocido',
+    stack: error instanceof Error ? error.stack : undefined
+  }, 'Error interno del servidor en módulo organica0');
+
+  return reply.code(500).send(fail('INTERNAL_SERVER_ERROR', 'Error interno del servidor'));
 }

@@ -27,7 +27,7 @@ export const CreateOrganica3Schema = z.object({
    claveOrganica1: z.string().min(1).max(2),
    claveOrganica2: z.string().min(1).max(2),
    claveOrganica3: z.string().min(1).max(2),
-   descripcion: z.string().max(40).optional(),
+   descripcion: z.string().max(40),
    titular: z.number().int().optional(),
    calleNum: z.string().max(40).optional(),
    fraccionamiento: z.string().max(40).optional(),

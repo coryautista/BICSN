@@ -63,7 +63,7 @@ export async function listUserRolesByUsuario(usuarioId: string) {
   }));
 }
 
-export async function createUserRole(usuarioId: string, roleId: string, esActivo: boolean, userId?: string, tx?: sqlType.Transaction) {
+export async function createUserRole(usuarioId: string, roleId: string, esActivo: boolean, tx?: sqlType.Transaction) {
   if (!usuarioId || typeof usuarioId !== 'string' || usuarioId.trim().length === 0) {
     throw new Error('Invalid usuarioId: must be a non-empty string');
   }

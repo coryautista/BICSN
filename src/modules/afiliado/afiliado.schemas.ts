@@ -1,5 +1,27 @@
 import { z } from 'zod';
 
+// Función helper para convertir fecha de formato DD/MM/YYYY a YYYY-MM-DD
+function convertDateFormat(dateString: string | null | undefined): string | null | undefined {
+  if (!dateString || typeof dateString !== 'string') {
+    return dateString;
+  }
+  
+  // Si ya está en formato YYYY-MM-DD, retornarlo tal cual
+  if (/^\d{4}-\d{2}-\d{2}$/.test(dateString)) {
+    return dateString;
+  }
+  
+  // Intentar convertir de DD/MM/YYYY a YYYY-MM-DD
+  const ddmmyyyyMatch = dateString.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+  if (ddmmyyyyMatch) {
+    const [, day, month, year] = ddmmyyyyMatch;
+    return `${year}-${month}-${day}`;
+  }
+  
+  // Si no coincide con ningún formato conocido, retornar tal cual (fallará la validación)
+  return dateString;
+}
+
 export const CreateAfiliadoAfiliadoOrgMovimientoSchema = z.object({
   // Afiliado fields
   folio: z.number().int().nullable().optional(),
@@ -9,7 +31,10 @@ export const CreateAfiliadoAfiliadoOrgMovimientoSchema = z.object({
   curp: z.string().max(18).nullable().optional(),
   rfc: z.string().max(13).nullable().optional(),
   numeroSeguroSocial: z.string().max(50).nullable().optional(),
-  fechaNacimiento: z.string().date().nullable().optional(),
+  fechaNacimiento: z.preprocess(
+    convertDateFormat,
+    z.string().date().nullable().optional()
+  ),
   entidadFederativaNacId: z.number().int().nullable().optional(),
   domicilioCalle: z.string().max(255).nullable().optional(),
   domicilioNumeroExterior: z.string().max(50).nullable().optional(),
@@ -31,19 +56,25 @@ export const CreateAfiliadoAfiliadoOrgMovimientoSchema = z.object({
   pais: z.string().max(100).nullable().optional(),
   dependientes: z.number().int().nullable().optional(),
   poseeInmuebles: z.boolean().nullable().optional(),
-  fechaCarta: z.string().date().nullable().optional(),
+  fechaCarta: z.preprocess(
+    convertDateFormat,
+    z.string().date().nullable().optional()
+  ),
   nacionalidad: z.string().max(80).nullable().optional(),
-  fechaAlta: z.string().date().nullable().optional(),
+  fechaAlta: z.preprocess(
+    convertDateFormat,
+    z.string().date().nullable().optional()
+  ),
   celular: z.string().max(15).nullable().optional(),
   expediente: z.string().max(50).nullable().optional(),
   quincenaAplicacion: z.number().int().nullable().optional(),
   anioAplicacion: z.number().int().nullable().optional(),
 
   // AfiliadoOrg fields
-  nivel0Id: z.number().int().nullable().optional(),
-  nivel1Id: z.number().int().nullable().optional(),
-  nivel2Id: z.number().int().nullable().optional(),
-  nivel3Id: z.number().int().nullable().optional(),
+  nivel0Id: z.union([z.number().int(), z.null()]).optional(),
+  nivel1Id: z.union([z.number().int(), z.null()]).optional(),
+  nivel2Id: z.union([z.number().int(), z.null()]).optional(),
+  nivel3Id: z.union([z.number().int(), z.null()]).optional(),
   claveOrganica0: z.string().max(30).nullable().optional(),
   claveOrganica1: z.string().max(30).nullable().optional(),
   claveOrganica2: z.string().max(30).nullable().optional(),
@@ -53,7 +84,10 @@ export const CreateAfiliadoAfiliadoOrgMovimientoSchema = z.object({
   otrasPrestaciones: z.number().nullable().optional(),
   quinquenios: z.number().nullable().optional(),
   activo: z.boolean().optional().default(true),
-  fechaMovAlt: z.string().date().nullable().optional(),
+  fechaMovAlt: z.preprocess(
+    convertDateFormat,
+    z.union([z.string().date(), z.null()]).optional()
+  ),
   orgs1: z.string().max(200).nullable().optional(),
   orgs2: z.string().max(200).nullable().optional(),
   orgs3: z.string().max(200).nullable().optional(),
@@ -68,7 +102,7 @@ export const CreateAfiliadoAfiliadoOrgMovimientoSchema = z.object({
   // Movimiento fields
   quincenaId: z.string().max(30).nullable().optional(),
   tipoMovimientoId: z.number().int().optional().default(1),
-  fechaMov: z.string().date().nullable().optional(),
+  fechaMov: z.union([z.string().date(), z.null()]).optional(),
   observaciones: z.string().max(1024).nullable().optional(),
   folioMov: z.string().max(100).nullable().optional(),
   estatusMov: z.string().max(30).nullable().optional(),
@@ -241,3 +275,9 @@ export const UpdateAfiliadoSchema = z.object({
   (data) => Object.keys(data).length > 0,
   { message: 'At least one field must be provided for update' }
 );
+
+// Schema para aplicar BDISSPEA en lote
+export const AplicarBDIsspeaLoteSchema = z.object({
+  motivo: z.string().max(500, 'El motivo no debe exceder 500 caracteres').optional(),
+  observaciones: z.string().max(1000, 'Las observaciones no deben exceder 1000 caracteres').optional()
+});

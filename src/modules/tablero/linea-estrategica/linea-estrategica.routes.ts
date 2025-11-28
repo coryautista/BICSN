@@ -1,7 +1,7 @@
 import { FastifyInstance } from 'fastify';
 import { requireAuth, requireRole } from '../../auth/auth.middleware.js';
 import { CreateLineaEstrategicaSchema, UpdateLineaEstrategicaSchema, LineaEstrategicaIdParamSchema, EjeIdParamSchema } from './linea-estrategica.schemas.js';
-import { getAllLineasEstrategicas, getLineasEstrategicasByEje, getLineaEstrategicaById, getLineaEstrategicaWithProgramas, createLineaEstrategicaItem, updateLineaEstrategicaItem, deleteLineaEstrategicaItem } from './linea-estrategica.service.js';
+import { LineaEstrategicaService } from './linea-estrategica.service.js';
 import { ok, validationError, notFound, internalError } from '../../../utils/http.js';
 import { withDbContext } from '../../../db/context.js';
 
@@ -54,9 +54,10 @@ export default async function lineaEstrategicaRoutes(app: FastifyInstance) {
         }
       }
     }
-  }, async (_req, reply) => {
+  }, async (req, reply) => {
     try {
-      const lineasEstrategicas = await getAllLineasEstrategicas();
+      const lineaEstrategicaService = req.diScope.resolve<LineaEstrategicaService>('lineaEstrategicaService');
+      const lineasEstrategicas = await lineaEstrategicaService.getAllLineasEstrategicas();
       return reply.send(ok(lineasEstrategicas));
     } catch (error: any) {
       console.error('Error listing lineas estrategicas:', error);
@@ -141,7 +142,8 @@ export default async function lineaEstrategicaRoutes(app: FastifyInstance) {
     }
 
     try {
-      const lineasEstrategicas = await getLineasEstrategicasByEje(paramValidation.data.ejeId);
+      const lineaEstrategicaService = req.diScope.resolve<LineaEstrategicaService>('lineaEstrategicaService');
+      const lineasEstrategicas = await lineaEstrategicaService.getLineasEstrategicasByEje(paramValidation.data.ejeId);
       return reply.send(ok(lineasEstrategicas));
     } catch (error: any) {
       console.error('Error listing lineas estrategicas by eje:', error);
@@ -236,7 +238,8 @@ export default async function lineaEstrategicaRoutes(app: FastifyInstance) {
     }
 
     try {
-      const lineaEstrategica = await getLineaEstrategicaById(paramValidation.data.lineaEstrategicaId);
+      const lineaEstrategicaService = req.diScope.resolve<LineaEstrategicaService>('lineaEstrategicaService');
+      const lineaEstrategica = await lineaEstrategicaService.getLineaEstrategicaById(paramValidation.data.lineaEstrategicaId);
       return reply.send(ok(lineaEstrategica));
     } catch (error: any) {
       if (error.message === 'LINEA_ESTRATEGICA_NOT_FOUND') {
@@ -345,7 +348,8 @@ export default async function lineaEstrategicaRoutes(app: FastifyInstance) {
     }
 
     try {
-      const lineaEstrategica = await getLineaEstrategicaWithProgramas(paramValidation.data.lineaEstrategicaId);
+      const lineaEstrategicaService = req.diScope.resolve<LineaEstrategicaService>('lineaEstrategicaService');
+      const lineaEstrategica = await lineaEstrategicaService.getLineaEstrategicaWithProgramas(paramValidation.data.lineaEstrategicaId);
       return reply.send(ok(lineaEstrategica));
     } catch (error: any) {
       if (error.message === 'LINEA_ESTRATEGICA_NOT_FOUND') {
@@ -424,7 +428,8 @@ export default async function lineaEstrategicaRoutes(app: FastifyInstance) {
 
       try {
         const userId = req.user?.sub;
-        const lineaEstrategica = await createLineaEstrategicaItem(
+        const lineaEstrategicaService = req.diScope.resolve<LineaEstrategicaService>('lineaEstrategicaService');
+        const lineaEstrategica = await lineaEstrategicaService.createLineaEstrategicaItem(
           parsed.data.idEje,
           parsed.data.nombre,
           parsed.data.descripcion,
@@ -536,7 +541,8 @@ export default async function lineaEstrategicaRoutes(app: FastifyInstance) {
 
       try {
         const userId = req.user?.sub;
-        const lineaEstrategica = await updateLineaEstrategicaItem(
+        const lineaEstrategicaService = req.diScope.resolve<LineaEstrategicaService>('lineaEstrategicaService');
+        const lineaEstrategica = await lineaEstrategicaService.updateLineaEstrategicaItem(
           paramValidation.data.lineaEstrategicaId,
           parsed.data.nombre,
           parsed.data.descripcion,
@@ -632,7 +638,8 @@ export default async function lineaEstrategicaRoutes(app: FastifyInstance) {
       }
 
       try {
-        const deletedId = await deleteLineaEstrategicaItem(paramValidation.data.lineaEstrategicaId, tx);
+        const lineaEstrategicaService = req.diScope.resolve<LineaEstrategicaService>('lineaEstrategicaService');
+        const deletedId = await lineaEstrategicaService.deleteLineaEstrategicaItem(paramValidation.data.lineaEstrategicaId, tx);
         return reply.send(ok({ id: deletedId }));
       } catch (error: any) {
         if (error.message === 'LINEA_ESTRATEGICA_NOT_FOUND') {

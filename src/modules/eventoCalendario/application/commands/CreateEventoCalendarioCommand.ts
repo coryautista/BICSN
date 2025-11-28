@@ -43,18 +43,25 @@ export class CreateEventoCalendarioCommand {
       return result;
 
     } catch (error: any) {
-      // Manejo específico de errores de base de datos
-      if (error.code === '23505') { // Unique constraint violation
-        logger.warn({ ...logContext }, 'Intento de crear evento de calendario duplicado');
-        throw new DuplicateEventoCalendarioError(data.fecha, data.tipo);
-      }
-
+      // Re-lanzar errores específicos del dominio sin modificación
       if (error instanceof DuplicateEventoCalendarioError ||
           error instanceof InvalidEventoCalendarioDataError ||
           error instanceof InvalidEventoCalendarioTipoError ||
           error instanceof InvalidEventoCalendarioFechaError ||
           error instanceof InvalidEventoCalendarioAnioError) {
         throw error;
+      }
+
+      // Manejo específico de errores de base de datos
+      if (error.code === '23505') { // Unique constraint violation
+        logger.warn({ ...logContext }, 'Intento de crear evento de calendario duplicado');
+        throw new DuplicateEventoCalendarioError(data.fecha, data.tipo);
+      }
+
+      // Manejo específico del error de duplicado por mensaje
+      if (error.message === 'EVENTO_CALENDARIO_ALREADY_EXISTS') {
+        logger.warn({ ...logContext }, 'Intento de crear evento de calendario duplicado');
+        throw new DuplicateEventoCalendarioError(data.fecha, data.tipo);
       }
 
       logger.error({
@@ -93,7 +100,7 @@ export class CreateEventoCalendarioCommand {
       throw new InvalidEventoCalendarioDataError('tipo', 'Es requerido y debe ser una cadena');
     }
 
-    const validTipos = ['ARCHIVO_APLICACION', 'ASUETO', 'ALTA_BAJA_CAMBIO', 'PAGO', 'HIPOTECARIO'];
+    const validTipos = ['FERIADO', 'VACACIONES', 'EVENTO_ESPECIAL', 'DIA_NO_LABORABLE', 'ALTA_BAJA_CAMBIO'];
     if (!validTipos.includes(data.tipo)) {
       throw new InvalidEventoCalendarioTipoError(data.tipo);
     }

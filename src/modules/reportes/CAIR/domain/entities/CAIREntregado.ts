@@ -1,0 +1,47 @@
+export interface CAIREntregado {
+  interno: number;
+  nombre: string;
+  rfc: string;
+  noAportaciones: number;
+  aportacion: number;
+  voluntario: number;
+  recuperado: number;
+  aportacionInteres: number;
+  voluntarioInteres: number;
+  entregado: number;
+  periodo: string;
+  fechaEntrega: string;
+  motivo: string;
+  nmotivo: string;
+  titulo: string;
+  leyenda: string;
+  status: string;
+  cheque: string;
+  cveBanco: string;
+  cuenta: string;
+  fechaEmision: string;
+  numBenef: string;
+  nombreBenef: string;
+  entregadoBenef: number;
+  chequeBenef: string;
+  cveBancoBenef: string;
+  cuentaBenef: string;
+  fechaEmisionBenef: string;
+  org00: string;
+  org11: string;
+  org22: string;
+  org33: string;
+  nOrg0: string;
+  nOrg1: string;
+  nOrg2: string;
+  nOrg3: string;
+  activo: string;
+  fecha: string;
+  fechaPaso: string;
+  fechaPa: string;
+  org0: string;
+  org1: string;
+  org2: string;
+  org3: string;
+}
+

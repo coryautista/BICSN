@@ -1,7 +1,7 @@
 import { FastifyInstance } from 'fastify';
 import { requireAuth, requireRole } from '../auth/auth.middleware.js';
 import { CreateCalleSchema, UpdateCalleSchema, CalleIdParamSchema, ColoniaIdParamSchema, CalleQuerySchema } from './calles.schemas.js';
-import { ok, validationError, notFound, internalError } from '../../utils/http.js';
+import { ok, validationError } from '../../utils/http.js';
 import type { GetCalleByIdQuery } from './application/queries/GetCalleByIdQuery.js';
 import type { GetCallesByColoniaQuery } from './application/queries/GetCallesByColoniaQuery.js';
 import type { SearchCallesQuery } from './application/queries/SearchCallesQuery.js';

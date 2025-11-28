@@ -181,10 +181,11 @@ export class UpdateOrganica2Command {
       throw new Organica2InvalidEstatusError('El estatus no puede estar vacío');
     }
 
-    // Valores permitidos para estatus
-    const valoresPermitidos = ['ACTIVO', 'INACTIVO', 'SUSPENDIDO'];
-    if (!valoresPermitidos.includes(trimmed.toUpperCase())) {
-      throw new Organica2InvalidEstatusError(`El estatus debe ser uno de: ${valoresPermitidos.join(', ')}`);
+    // Valores permitidos para estatus (acepta tanto valores completos como abreviados de 1 carácter)
+    const valoresPermitidos = ['ACTIVO', 'INACTIVO', 'SUSPENDIDO', 'A', 'I', 'S'];
+    const valorUpper = trimmed.toUpperCase();
+    if (!valoresPermitidos.includes(valorUpper)) {
+      throw new Organica2InvalidEstatusError(`El estatus debe ser uno de: ACTIVO, INACTIVO, SUSPENDIDO (o sus abreviaciones A, I, S)`);
     }
   }
 

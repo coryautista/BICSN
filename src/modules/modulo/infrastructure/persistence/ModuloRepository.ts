@@ -130,14 +130,15 @@ export class ModuloRepository implements IModuloRepository {
   }
 
   async isInUse(moduloId: number): Promise<boolean> {
-    // Verificar si el módulo está siendo usado en otras tablas
-    // Por ejemplo, en tablas de permisos, roles, etc.
-    // Esta es una implementación básica - en un sistema real habría que verificar
-    // todas las tablas relacionadas
+    const result = await this.mssqlPool.request()
+      .input('moduloId', sql.Int, moduloId)
+      .query(`
+        SELECT COUNT(*) as count
+        FROM dbo.Modulo
+        WHERE id = @moduloId
+      `);
 
-    // Por ahora, retornamos false ya que no hay tablas relacionadas definidas
-    // En el futuro, aquí se agregarían consultas para verificar dependencias
-    return false;
+    return result.recordset[0].count > 0;
   }
 
   private mapRowToModulo(row: any): Modulo {

@@ -21,8 +21,8 @@
     "noUnusedParameters": true,
     "noImplicitReturns": true,
     "noFallthroughCasesInSwitch": true
-    },
-    "ts-node": {
+  },
+  "ts-node": {
       "esm": true
     },
     "include": ["src/**/*", "types/**/*"],

@@ -37,6 +37,8 @@ export interface MovimientoQuincenal {
     expediente: string | null;
     quincenaAplicacion: number | null;
     anioAplicacion: number | null;
+    numValidacion: number;
+    numValidacionDescripcion: string | null;
   };
   afiliadoOrg: {
     id: number;
@@ -70,6 +72,7 @@ export interface MovimientoQuincenal {
     id: number;
     quincenaId: string | null;
     tipoMovimientoId: number;
+    tipoMovimientoDescripcion: string | null;
     afiliadoId: number;
     fecha: string | null;
     observaciones: string | null;

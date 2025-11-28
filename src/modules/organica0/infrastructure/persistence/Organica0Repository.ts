@@ -1,4 +1,4 @@
-import { getFirebirdDb } from '../../../../db/firebird.js';
+import { executeSerializedQuery } from '../../../../db/firebird.js';
 import { IOrganica0Repository } from '../../domain/repositories/IOrganica0Repository.js';
 import { Organica0, CreateOrganica0Data, UpdateOrganica0Data } from '../../domain/entities/Organica0.js';
 import pino from 'pino';
@@ -10,8 +10,8 @@ const logger = pino({
 
 export class Organica0Repository implements IOrganica0Repository {
   async findById(claveOrganica: string): Promise<Organica0 | undefined> {
-    const db = getFirebirdDb();
-    return new Promise((resolve, reject) => {
+    return executeSerializedQuery((db) => {
+      return new Promise<Organica0 | undefined>((resolve, reject) => {
       db.query(
         'SELECT CLAVE_ORGANICA, NOMBRE_ORGANICA, USUARIO, FECHA_REGISTRO, FECHA_FIN, ESTATUS FROM ORGANICA_0 WHERE CLAVE_ORGANICA = ?',
         [claveOrganica],
@@ -35,13 +35,14 @@ export class Organica0Repository implements IOrganica0Repository {
           });
         }
       );
+      });
     });
   }
 
   async findAll(): Promise<Organica0[]> {
     logger.info('Starting findAll operation in Organica0Repository');
-    const db = getFirebirdDb();
-    return new Promise((resolve, reject) => {
+    return executeSerializedQuery((db) => {
+      return new Promise<Organica0[]>((resolve, reject) => {
       logger.debug('Executing Firebird query for ORGANICA_0');
       db.query(
         'SELECT CLAVE_ORGANICA, NOMBRE_ORGANICA, USUARIO, FECHA_REGISTRO, FECHA_FIN, ESTATUS FROM ORGANICA_0 ORDER BY CLAVE_ORGANICA',
@@ -69,14 +70,15 @@ export class Organica0Repository implements IOrganica0Repository {
           resolve(records);
         }
       );
+      });
     });
   }
 
   async create(data: CreateOrganica0Data): Promise<Organica0> {
-    const db = getFirebirdDb();
     const fechaRegistro = new Date();
 
-    return new Promise((resolve, reject) => {
+    return executeSerializedQuery((db) => {
+      return new Promise<Organica0>((resolve, reject) => {
       db.query(
         'INSERT INTO ORGANICA_0 (CLAVE_ORGANICA, NOMBRE_ORGANICA, USUARIO, FECHA_REGISTRO, FECHA_FIN, ESTATUS) VALUES (?, ?, ?, ?, ?, ?)',
         [
@@ -102,11 +104,11 @@ export class Organica0Repository implements IOrganica0Repository {
           });
         }
       );
+      });
     });
   }
 
   async update(claveOrganica: string, data: UpdateOrganica0Data): Promise<Organica0> {
-    const db = getFirebirdDb();
 
     // Build dynamic update query
     const updates: string[] = [];
@@ -140,7 +142,8 @@ export class Organica0Repository implements IOrganica0Repository {
 
     params.push(claveOrganica);
 
-    return new Promise((resolve, reject) => {
+    return executeSerializedQuery((db) => {
+      return new Promise<Organica0>((resolve, reject) => {
       db.query(
         `UPDATE ORGANICA_0 SET ${updates.join(', ')} WHERE CLAVE_ORGANICA = ?`,
         params,
@@ -162,12 +165,13 @@ export class Organica0Repository implements IOrganica0Repository {
           }
         }
       );
+      });
     });
   }
 
   async delete(claveOrganica: string): Promise<boolean> {
-    const db = getFirebirdDb();
-    return new Promise((resolve, reject) => {
+    return executeSerializedQuery((db) => {
+      return new Promise<boolean>((resolve, reject) => {
       db.query(
         'DELETE FROM ORGANICA_0 WHERE CLAVE_ORGANICA = ?',
         [claveOrganica],
@@ -179,6 +183,47 @@ export class Organica0Repository implements IOrganica0Repository {
           resolve(result > 0);
         }
       );
+      });
+    });
+  }
+
+  async isInUse(claveOrganica: string): Promise<boolean> {
+    return executeSerializedQuery((db) => {
+      return new Promise<boolean>((resolve, reject) => {
+      // Check if there are any dependent records in related tables
+      const sql = `
+        SELECT
+          (SELECT COUNT(*) FROM ORGANICA_1 WHERE CLAVE_ORGANICA_0 = ?) +
+          (SELECT COUNT(*) FROM ORGANICA_2 WHERE CLAVE_ORGANICA_0 = ?) +
+          (SELECT COUNT(*) FROM ORGANICA_3 WHERE CLAVE_ORGANICA_0 = ?) +
+          (SELECT COUNT(*) FROM ORG_PERSONAL WHERE CLAVE_ORGANICA_0 = ?) as total_dependents
+        FROM RDB$DATABASE
+      `;
+
+      db.query(sql, [claveOrganica, claveOrganica, claveOrganica, claveOrganica], (err: any, result: any) => {
+        if (err) {
+          logger.error({
+            error: err.message,
+            operation: 'isInUse',
+            claveOrganica
+          }, 'Error checking if organica0 is in use');
+          reject(err);
+          return;
+        }
+
+        const totalDependents = result[0]?.TOTAL_DEPENDENTS || 0;
+        const inUse = totalDependents > 0;
+
+        logger.debug({
+          operation: 'isInUse',
+          claveOrganica,
+          totalDependents,
+          inUse
+        }, 'Checked organica0 usage');
+
+        resolve(inUse);
+      });
+      });
     });
   }
 }

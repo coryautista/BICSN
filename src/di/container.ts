@@ -2,7 +2,7 @@ import { createContainer, asClass, asFunction, InjectionMode } from 'awilix';
 import { getPool as getMssqlPool } from '../db/mssql.js';
 import { getFirebirdDb } from '../db/firebird.js';
 
-// Auth Module
+// Auth Module - Auth module is fully implemented and ready to use
 import { AuthRepository } from '../modules/auth/infrastructure/persistence/AuthRepository.js';
 import { LoginCommand } from '../modules/auth/application/commands/LoginCommand.js';
 import { RegisterCommand } from '../modules/auth/application/commands/RegisterCommand.js';
@@ -61,6 +61,7 @@ import { CreateAfiliadoCommand } from '../modules/afiliado/application/commands/
 import { UpdateAfiliadoCommand } from '../modules/afiliado/application/commands/UpdateAfiliadoCommand.js';
 import { DeleteAfiliadoCommand } from '../modules/afiliado/application/commands/DeleteAfiliadoCommand.js';
 import { CreateCompleteAfiliadoCommand } from '../modules/afiliado/application/commands/CreateCompleteAfiliadoCommand.js';
+import { AplicarBDIsspeaLoteCommand } from '../modules/afiliado/application/commands/AplicarBDIsspeaLoteCommand.js';
 
 // AfiliadoOrg Module
 import { AfiliadoOrgRepository } from '../modules/afiliadoOrg/infrastructure/persistence/AfiliadoOrgRepository.js';
@@ -168,7 +169,6 @@ import { CreatePersonalCommand } from '../modules/personal/application/commands/
 import { UpdatePersonalCommand } from '../modules/personal/application/commands/UpdatePersonalCommand.js';
 import { DeletePersonalCommand } from '../modules/personal/application/commands/DeletePersonalCommand.js';
 
-// OrgPersonal Module
 import { OrgPersonalRepository } from '../modules/orgPersonal/infrastructure/persistence/OrgPersonalRepository.js';
 import { GetAllOrgPersonalQuery } from '../modules/orgPersonal/application/queries/GetAllOrgPersonalQuery.js';
 import { GetOrgPersonalByIdQuery } from '../modules/orgPersonal/application/queries/GetOrgPersonalByIdQuery.js';
@@ -176,6 +176,14 @@ import { GetOrgPersonalBySearchQuery } from '../modules/orgPersonal/application/
 import { CreateOrgPersonalCommand } from '../modules/orgPersonal/application/commands/CreateOrgPersonalCommand.js';
 import { UpdateOrgPersonalCommand } from '../modules/orgPersonal/application/commands/UpdateOrgPersonalCommand.js';
 import { DeleteOrgPersonalCommand } from '../modules/orgPersonal/application/commands/DeleteOrgPersonalCommand.js';
+
+// AportacionesFondos Module
+import { AportacionFondoRepository } from '../modules/aportacionesFondos/infrastructure/persistence/AportacionFondoRepository.js';
+import { GetAportacionesIndividualesQuery } from '../modules/aportacionesFondos/application/queries/GetAportacionesIndividualesQuery.js';
+import { GetAportacionesCompletasQuery } from '../modules/aportacionesFondos/application/queries/GetAportacionesCompletasQuery.js';
+import { GetPrestamosQuery } from '../modules/aportacionesFondos/application/queries/GetPrestamosQuery.js';
+import { GetPrestamosMedianoPlazoQuery } from '../modules/aportacionesFondos/application/queries/GetPrestamosMedianoPlazoQuery.js';
+import { GetPrestamosHipotecariosQuery } from '../modules/aportacionesFondos/application/queries/GetPrestamosHipotecariosQuery.js';
 import { UpdateColoniaCommand } from '../modules/colonias/application/commands/UpdateColoniaCommand.js';
 import { DeleteColoniaCommand } from '../modules/colonias/application/commands/DeleteColoniaCommand.js';
 
@@ -298,6 +306,46 @@ import { DeleteExpedienteArchivoCommand } from '../modules/expediente/applicatio
 import { AfiliadoPersonalRepository } from '../modules/afiliadosPersonal/infrastructure/persistence/AfiliadoPersonalRepository.js';
 import { GetPlantillaQuery } from '../modules/afiliadosPersonal/application/queries/GetPlantillaQuery.js';
 import { BusquedaHistoricoQuery } from '../modules/afiliadosPersonal/application/queries/BusquedaHistoricoQuery.js';
+
+// Tablero Services
+import { EjeService } from '../modules/tablero/eje/eje.service.js';
+import { ProgramaService } from '../modules/tablero/programa/programa.service.js';
+import { LineaEstrategicaService } from '../modules/tablero/linea-estrategica/linea-estrategica.service.js';
+import { IndicadorService } from '../modules/tablero/indicador/indicador.service.js';
+import { IndicadorAnualService } from '../modules/tablero/indicador-anual/indicador-anual.service.js';
+import { DimensionService } from '../modules/tablero/dimension/dimension.service.js';
+import { UnidadMedidaService } from '../modules/tablero/unidad-medida/unidad-medida.service.js';
+import { DependenciaService } from '../modules/tablero/dependencia/dependencia.service.js';
+
+// Organica Services
+import { Organica1Service } from '../modules/organica1/organica1.service.js';
+import { Organica2Service } from '../modules/organica2/organica2.service.js';
+import { Organica3Service } from '../modules/organica3/organica3.service.js';
+
+// Reportes Service
+import { ReportesService } from '../modules/reportes/reportes.service.js';
+
+// AplicacionesQNA Module
+import { AplicacionesQNARepository } from '../modules/reportes/aplicacionesQNA/infrastructure/persistence/AplicacionesQNARepository.js';
+import { GetMovimientosQuincenalesQuery as GetAplicacionesQNAMovimientosQuincenalesQuery } from '../modules/reportes/aplicacionesQNA/application/queries/GetMovimientosQuincenalesQuery.js';
+import { GetAplicacionAportacionesQuery } from '../modules/reportes/aplicacionesQNA/application/queries/GetAplicacionAportacionesQuery.js';
+import { GetAplicacionPCPQuery } from '../modules/reportes/aplicacionesQNA/application/queries/GetAplicacionPCPQuery.js';
+import { GetAplicacionPMPQuery } from '../modules/reportes/aplicacionesQNA/application/queries/GetAplicacionPMPQuery.js';
+import { GetAplicacionHIPQuery } from '../modules/reportes/aplicacionesQNA/application/queries/GetAplicacionHIPQuery.js';
+import { GetConcentradoQuery } from '../modules/reportes/aplicacionesQNA/application/queries/GetConcentradoQuery.js';
+
+// CAIR Module (Submódulo de Reportes)
+import { CAIRRepository } from '../modules/reportes/CAIR/infrastructure/persistence/CAIRRepository.js';
+import { GetEstadoCuentaCAIRQuery } from '../modules/reportes/CAIR/application/queries/GetEstadoCuentaCAIRQuery.js';
+import { GetCAIREntregadoQuery } from '../modules/reportes/CAIR/application/queries/GetCAIREntregadoQuery.js';
+
+// Afiliados Reportes Module (Submódulo de Reportes)
+import { AfiliadosReportesRepository } from '../modules/reportes/afiliados/infrastructure/persistence/AfiliadosReportesRepository.js';
+import { GetHistorialMovimientosQuinQuery } from '../modules/reportes/afiliados/application/queries/GetHistorialMovimientosQuinQuery.js';
+import { GetHistorialMovPromedioSdoQuery } from '../modules/reportes/afiliados/application/queries/GetHistorialMovPromedioSdoQuery.js';
+
+// AfectacionOrg Service
+import { AfectacionOrgService } from '../modules/afectacionOrg/afectacionOrg.service.js';
 
 /**
  * Application-wide Dependency Injection Container
@@ -424,6 +472,7 @@ container.register({
   updateAfiliadoCommand: asClass(UpdateAfiliadoCommand).scoped(),
   deleteAfiliadoCommand: asClass(DeleteAfiliadoCommand).scoped(),
   createCompleteAfiliadoCommand: asClass(CreateCompleteAfiliadoCommand).scoped(),
+  aplicarBDIsspeaLoteCommand: asClass(AplicarBDIsspeaLoteCommand).scoped(),
   
   // ============================================================================
   // AFILIADO ORG MODULE
@@ -818,6 +867,60 @@ container.register({
   // Repositories (Scoped)
   organicaCascadeRepo: asClass(OrganicaCascadeRepository).scoped(),
   
+  // Services (Scoped)
+  ejeService: asClass(EjeService).scoped(),
+  programaService: asClass(ProgramaService).scoped(),
+  lineaEstrategicaService: asClass(LineaEstrategicaService).scoped(),
+  indicadorService: asClass(IndicadorService).scoped(),
+  indicadorAnualService: asClass(IndicadorAnualService).scoped(),
+  dimensionService: asClass(DimensionService).scoped(),
+  unidadMedidaService: asClass(UnidadMedidaService).scoped(),
+  dependenciaService: asClass(DependenciaService).scoped(),
+  organica1Service: asClass(Organica1Service).scoped(),
+  organica2Service: asClass(Organica2Service).scoped(),
+  organica3Service: asClass(Organica3Service).scoped(),
+  reportesService: asClass(ReportesService).scoped(),
+  // Temporary null service for expediente (TODO: Create ExpedienteService or use commands/queries directly)
+  expedienteService: asFunction(() => null).scoped(),
+  afectacionOrgService: asClass(AfectacionOrgService).scoped(),
+  
+  // ============================================================================
+  // APLICACIONES QNA MODULE (Submódulo de Reportes)
+  // ============================================================================
+  
+  // Repositories (Scoped)
+  aplicacionesQNARepo: asClass(AplicacionesQNARepository).scoped(),
+  
+  // Queries (Scoped)
+  getAplicacionesQNAMovimientosQuincenalesQuery: asClass(GetAplicacionesQNAMovimientosQuincenalesQuery).scoped(),
+  getAplicacionAportacionesQuery: asClass(GetAplicacionAportacionesQuery).scoped(),
+  getAplicacionPCPQuery: asClass(GetAplicacionPCPQuery).scoped(),
+  getAplicacionPMPQuery: asClass(GetAplicacionPMPQuery).scoped(),
+  getAplicacionHIPQuery: asClass(GetAplicacionHIPQuery).scoped(),
+  getConcentradoQuery: asClass(GetConcentradoQuery).scoped(),
+  
+  // ============================================================================
+  // CAIR MODULE (Submódulo de Reportes)
+  // ============================================================================
+  
+  // Repositories (Scoped)
+  cairRepo: asClass(CAIRRepository).scoped(),
+  
+  // Queries (Scoped)
+  getEstadoCuentaCAIRQuery: asClass(GetEstadoCuentaCAIRQuery).scoped(),
+  getCAIREntregadoQuery: asClass(GetCAIREntregadoQuery).scoped(),
+  
+  // ============================================================================
+  // AFILIADOS REPORTES MODULE (Submódulo de Reportes)
+  // ============================================================================
+  
+  // Repositories (Scoped)
+  afiliadosReportesRepo: asClass(AfiliadosReportesRepository).scoped(),
+  
+  // Queries (Scoped)
+  getHistorialMovimientosQuinQuery: asClass(GetHistorialMovimientosQuinQuery).scoped(),
+  getHistorialMovPromedioSdoQuery: asClass(GetHistorialMovPromedioSdoQuery).scoped(),
+  
   // Queries (Scoped)
   getOrganica1ChildrenQuery: asClass(GetOrganica1ChildrenQuery).scoped(),
   getOrganica2ChildrenQuery: asClass(GetOrganica2ChildrenQuery).scoped(),
@@ -854,7 +957,21 @@ container.register({
   // Commands (Scoped)
   createOrgPersonalCommand: asClass(CreateOrgPersonalCommand).scoped(),
   updateOrgPersonalCommand: asClass(UpdateOrgPersonalCommand).scoped(),
-  deleteOrgPersonalCommand: asClass(DeleteOrgPersonalCommand).scoped()
+  deleteOrgPersonalCommand: asClass(DeleteOrgPersonalCommand).scoped(),
+
+  // ============================================================================
+  // APORTACIONES FONDOS MODULE
+  // ============================================================================
+  
+  // Repositories (Scoped)
+  aportacionFondoRepo: asClass(AportacionFondoRepository).scoped(),
+  
+  // Queries (Scoped)
+  getAportacionesIndividualesQuery: asClass(GetAportacionesIndividualesQuery).scoped(),
+  getAportacionesCompletasQuery: asClass(GetAportacionesCompletasQuery).scoped(),
+  getPrestamosQuery: asClass(GetPrestamosQuery).scoped(),
+  getPrestamosMedianoPlazoQuery: asClass(GetPrestamosMedianoPlazoQuery).scoped(),
+  getPrestamosHipotecariosQuery: asClass(GetPrestamosHipotecariosQuery).scoped()
 });
 
 /**

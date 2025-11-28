@@ -36,6 +36,9 @@ export interface Afiliado {
   expediente: string | null;
   quincenaAplicacion: number | null;
   anioAplicacion: number | null;
+  codigoPostal: number | null;
+  numValidacion: number;
+  afiliadosComplete: number;
   createdAt: string;
   updatedAt: string;
 }
@@ -77,6 +80,9 @@ export interface CreateAfiliadoData {
   expediente: string | null;
   quincenaAplicacion: number | null;
   anioAplicacion: number | null;
+  codigoPostal: number | null;
+  numValidacion: number;
+  afiliadosComplete: number;
 }
 
 export interface UpdateAfiliadoData {
@@ -117,6 +123,9 @@ export interface UpdateAfiliadoData {
   expediente?: string | null;
   quincenaAplicacion?: number | null;
   anioAplicacion?: number | null;
+  codigoPostal?: number | null;
+  numValidacion?: number;
+  afiliadosComplete?: number;
 }
 
 export interface DeleteAfiliadoData {

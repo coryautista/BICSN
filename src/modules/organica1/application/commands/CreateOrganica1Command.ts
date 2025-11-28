@@ -10,8 +10,7 @@ import {
   Organica1InvalidImssError,
   Organica1InvalidInfonavitError,
   Organica1InvalidEstatusError,
-  Organica1InvalidFechaError,
-  Organica1ParentNotFoundError
+  Organica1InvalidFechaError
 } from '../../domain/errors.js';
 
 export class CreateOrganica1Command {

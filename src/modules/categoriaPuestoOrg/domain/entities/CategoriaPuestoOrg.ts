@@ -14,6 +14,8 @@ export interface CategoriaPuestoOrg {
   updatedAt: string | null;
   createdBy: string | null;
   updatedBy: string | null;
+  baseConfianza: string | null;
+  porcentaje: number | null;
 }
 
 export interface CreateCategoriaPuestoOrgData {
@@ -28,6 +30,8 @@ export interface CreateCategoriaPuestoOrgData {
   vigenciaInicio: string;
   vigenciaFin?: string;
   userId?: string;
+  baseConfianza?: string;
+  porcentaje?: number;
 }
 
 export interface UpdateCategoriaPuestoOrgData {
@@ -36,6 +40,8 @@ export interface UpdateCategoriaPuestoOrgData {
   ingresoBrutoMensual?: number;
   vigenciaFin?: string;
   userId?: string;
+  baseConfianza?: string;
+  porcentaje?: number;
 }
 
 export interface DeleteCategoriaPuestoOrgData {

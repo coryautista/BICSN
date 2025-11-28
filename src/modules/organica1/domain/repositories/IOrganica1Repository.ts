@@ -7,4 +7,5 @@ export interface IOrganica1Repository {
   create(data: CreateOrganica1Data): Promise<Organica1>;
   update(claveOrganica0: string, claveOrganica1: string, data: UpdateOrganica1Data): Promise<Organica1>;
   delete(claveOrganica0: string, claveOrganica1: string): Promise<boolean>;
+  isInUse(claveOrganica0: string, claveOrganica1: string): Promise<boolean>;
 }

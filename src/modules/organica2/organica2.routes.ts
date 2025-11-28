@@ -1,13 +1,10 @@
 import { FastifyInstance } from 'fastify';
 import { requireAuth } from '../auth/auth.middleware.js';
 import { CreateOrganica2Schema, UpdateOrganica2Schema, DynamicQuerySchema } from './organica2.schemas.js';
-import { getOrganica2ByUserToken, queryOrganica2Dynamic } from './organica2.service.js';
-import { ok, fail, validationError, badRequest, internalError } from '../../utils/http.js';
-import { GetAllOrganica2Query } from './application/queries/GetAllOrganica2Query.js';
+import { ok, validationError } from '../../utils/http.js';
 import { GetOrganica2ByIdQuery } from './application/queries/GetOrganica2ByIdQuery.js';
+import { Organica2Service } from './organica2.service.js';
 import { CreateOrganica2Command } from './application/commands/CreateOrganica2Command.js';
-import { UpdateOrganica2Command } from './application/commands/UpdateOrganica2Command.js';
-import { DeleteOrganica2Command } from './application/commands/DeleteOrganica2Command.js';
 import { handleOrganica2Error } from './infrastructure/errorHandler.js';
 
 // [FIREBIRD] Routes for ORGANICA_2 CRUD operations
@@ -17,17 +14,24 @@ export default async function organica2Routes(app: FastifyInstance) {
   app.get('/organica2/my', {
     preHandler: [requireAuth],
     schema: {
-      description: '[FIREBIRD] Get ORGANICA_2 records linked to authenticated user',
+      description: '[FIREBIRD] Obtener registros de ORGANICA_2 vinculados al usuario autenticado',
       tags: ['organica2', 'firebird'],
       security: [{ bearerAuth: [] }],
+      querystring: {
+        type: 'object',
+        properties: {
+          org0: { type: 'string', description: 'Filtro por organica0' },
+          org1: { type: 'string', description: 'Filtro por organica1' }
+        }
+      },
       response: {
         200: {
           type: 'object',
           properties: {
             ok: { type: 'boolean' },
-            data: {
+            data: { 
               type: 'array',
-              items: {
+              items: { 
                 type: 'object',
                 properties: {
                   claveOrganica0: { type: 'string' },
@@ -40,6 +44,19 @@ export default async function organica2Routes(app: FastifyInstance) {
                   usuario: { type: 'string' },
                   estatus: { type: 'string' }
                 }
+              }
+            }
+          }
+        },
+        400: {
+          type: 'object',
+          properties: {
+            ok: { type: 'boolean' },
+            error: {
+              type: 'object',
+              properties: {
+                code: { type: 'string' },
+                message: { type: 'string' }
               }
             }
           }
@@ -59,35 +76,55 @@ export default async function organica2Routes(app: FastifyInstance) {
         }
       }
     }
-  }, async (req, reply) => {
+  }, async (req: any, reply) => {
     try {
-      const user = (req as any).user;
-      const claveOrganica0 = user?.idOrganica0?.toString().padStart(2, '0');
-      const claveOrganica1 = user?.idOrganica1?.toString().padStart(2, '0');
+      const user = req.user;
       
-      const records = await getOrganica2ByUserToken(claveOrganica0, claveOrganica1);
+      // Extract organica0 and organica1 from JWT token
+      // Use query params if provided, otherwise use token values
+      const claveOrganica0 = (req.query as any)?.org0 || user?.idOrganica0?.toString().padStart(2, '0');
+      const claveOrganica1 = (req.query as any)?.org1 || user?.idOrganica1?.toString().padStart(2, '0');
+      
+      if (!claveOrganica0 || !claveOrganica1) {
+        return reply.code(400).send(validationError([{ 
+          message: 'Las claves orgánicas (org0 y org1) son requeridas. Deben estar en el token o proporcionarse como parámetros de consulta.' 
+        }]));
+      }
+      
+      const organica2Service = req.diScope?.resolve('organica2Service') as Organica2Service;
+      if (!organica2Service) {
+        return reply.code(500).send(validationError([{ message: 'Internal server error' }]));
+      }
+      const records = await organica2Service.getOrganica2ByUserToken(claveOrganica0, claveOrganica1);
       return reply.send(ok(records));
-    } catch (error: any) {
-      console.error('Error getting user organica2:', error);
-      return reply.code(500).send(fail('ORGANICA2_USER_FAILED'));
+    } catch (error) {
+      console.error('Error in get organica2 my:', error);
+      return reply.code(500).send(validationError([{ message: 'Internal server error' }]));
     }
   });
 
-  // GET /organica2 - List all records
+  // GET /organica2 - List all records with optional organica0 and organica1 filters
   app.get('/organica2', {
     preHandler: [requireAuth],
     schema: {
-      description: '[FIREBIRD] List all ORGANICA_2 records',
+      description: '[FIREBIRD] List all ORGANICA_2 records with optional organica0 and organica1 filters',
       tags: ['organica2', 'firebird'],
       security: [{ bearerAuth: [] }],
+      querystring: {
+        type: 'object',
+        properties: {
+          org0: { type: 'string', description: 'Filtro por organica0' },
+          org1: { type: 'string', description: 'Filtro por organica1' }
+        }
+      },
       response: {
         200: {
           type: 'object',
           properties: {
             ok: { type: 'boolean' },
-            data: {
+            data: { 
               type: 'array',
-              items: {
+              items: { 
                 type: 'object',
                 properties: {
                   claveOrganica0: { type: 'string' },
@@ -119,14 +156,21 @@ export default async function organica2Routes(app: FastifyInstance) {
         }
       }
     }
-  }, async (req, reply) => {
+  }, async (req: any, reply) => {
     try {
-      const user = (req as any).user;
-      const getAllOrganica2Query = req.diScope.resolve<GetAllOrganica2Query>('getAllOrganica2Query');
-      const records = await getAllOrganica2Query.execute(user?.id?.toString());
+      // Default to organica0='01' and organica1='01' if not provided
+      const { org0 = '01', org1 = '01' } = req.query as { org0?: string; org1?: string };
+
+      // Use organica0 and organica1 filters (parameters are now required)
+      const organica2Service = req.diScope?.resolve('organica2Service') as Organica2Service;
+      if (!organica2Service) {
+        return reply.code(500).send(validationError([{ message: 'Internal server error' }]));
+      }
+      const records = await organica2Service.getOrganica2ByUserToken(org0, org1);
       return reply.send(ok(records));
-    } catch (error: any) {
-      return handleOrganica2Error(error, reply);
+    } catch (error) {
+      console.error('Error in get organica2:', error);
+      return reply.code(500).send(validationError([{ message: 'Internal server error' }]));
     }
   });
 
@@ -134,16 +178,201 @@ export default async function organica2Routes(app: FastifyInstance) {
   app.get('/organica2/:claveOrganica0/:claveOrganica1/:claveOrganica2', {
     preHandler: [requireAuth],
     schema: {
-      description: '[FIREBIRD] Get ORGANICA_2 record by composite key',
+      description: '[FIREBIRD] Obtener registro de ORGANICA_2 por clave compuesta',
       tags: ['organica2', 'firebird'],
       security: [{ bearerAuth: [] }],
       params: {
         type: 'object',
         required: ['claveOrganica0', 'claveOrganica1', 'claveOrganica2'],
         properties: {
-          claveOrganica0: { type: 'string', minLength: 1, maxLength: 2 },
-          claveOrganica1: { type: 'string', minLength: 1, maxLength: 2 },
-          claveOrganica2: { type: 'string', minLength: 1, maxLength: 2 }
+          claveOrganica0: { type: 'string' },
+          claveOrganica1: { type: 'string' },
+          claveOrganica2: { type: 'string' }
+        }
+      },
+      response: {
+        200: {
+          type: 'object',
+          properties: {
+            ok: { type: 'boolean' },
+            data: {
+              type: 'object',
+              properties: {
+                claveOrganica0: { type: 'string' },
+                claveOrganica1: { type: 'string' },
+                claveOrganica2: { type: 'string' },
+                descripcion: { type: 'string' },
+                titular: { type: 'number' },
+                fechaRegistro2: { type: 'string', format: 'date-time' },
+                fechaFin2: { type: 'string', format: 'date-time' },
+                usuario: { type: 'string' },
+                estatus: { type: 'string' }
+              }
+            }
+          }
+        },
+        500: {
+          type: 'object',
+          properties: {
+            ok: { type: 'boolean' },
+            error: {
+              type: 'object',
+              properties: {
+                code: { type: 'string' },
+                message: { type: 'string' }
+              }
+            }
+          }
+        }
+      }
+    }
+  }, async (req: any, reply) => {
+    try {
+      const { claveOrganica0, claveOrganica1, claveOrganica2 } = req.params as any;
+      const query = req.diScope?.resolve('getOrganica2ByIdQuery') as GetOrganica2ByIdQuery;
+      if (!query) {
+        return reply.code(500).send(validationError([{ message: 'Internal server error' }]));
+      }
+      const record = await query.execute(claveOrganica0, claveOrganica1, claveOrganica2);
+      return reply.send(ok(record));
+    } catch (error) {
+      console.error('Error in get organica2 by id:', error);
+      return reply.code(500).send(validationError([{ message: 'Internal server error' }]));
+    }
+  });
+
+  // POST /organica2 - Create new record
+  app.post('/organica2', {
+    preHandler: [requireAuth],
+    schema: {
+      description: '[FIREBIRD] Crear nuevo registro de ORGANICA_2',
+      tags: ['organica2', 'firebird'],
+      security: [{ bearerAuth: [] }],
+      body: {
+        type: 'object',
+        required: ['claveOrganica0', 'claveOrganica1', 'claveOrganica2', 'descripcion'],
+        properties: {
+          claveOrganica0: { type: 'string', minLength: 1, maxLength: 2, description: 'Código organizacional nivel 0 (requerido)' },
+          claveOrganica1: { type: 'string', minLength: 1, maxLength: 2, description: 'Código organizacional nivel 1 (requerido)' },
+          claveOrganica2: { type: 'string', minLength: 1, maxLength: 2, description: 'Código organizacional nivel 2 (requerido)' },
+          descripcion: { type: 'string', maxLength: 40, description: 'Descripción de la orgánica (requerido)' },
+          titular: { type: 'number', description: 'ID del titular (opcional)' },
+          fechaFin2: { type: 'string', format: 'date-time', description: 'Fecha de fin (opcional)' },
+          estatus: { type: 'string', minLength: 1, maxLength: 1, default: 'A', description: 'Estatus (opcional, por defecto: A)' }
+        }
+      },
+      response: {
+        201: {
+          type: 'object',
+          properties: {
+            ok: { type: 'boolean' },
+            data: {
+              type: 'object',
+              properties: {
+                claveOrganica0: { type: 'string' },
+                claveOrganica1: { type: 'string' },
+                claveOrganica2: { type: 'string' },
+                descripcion: { type: 'string' },
+                titular: { type: 'number' },
+                fechaRegistro2: { type: 'string', format: 'date-time' },
+                fechaFin2: { type: 'string', format: 'date-time' },
+                usuario: { type: 'string' },
+                estatus: { type: 'string' }
+              }
+            }
+          }
+        },
+        400: {
+          type: 'object',
+          properties: {
+            ok: { type: 'boolean' },
+            error: {
+              type: 'object',
+              properties: {
+                code: { type: 'string' },
+                message: { type: 'string' }
+              }
+            }
+          }
+        },
+        409: {
+          type: 'object',
+          properties: {
+            ok: { type: 'boolean' },
+            error: {
+              type: 'object',
+              properties: {
+                code: { type: 'string' },
+                message: { type: 'string' }
+              }
+            }
+          }
+        },
+        500: {
+          type: 'object',
+          properties: {
+            ok: { type: 'boolean' },
+            error: {
+              type: 'object',
+              properties: {
+                code: { type: 'string' },
+                message: { type: 'string' }
+              }
+            }
+          }
+        }
+      }
+    }
+  }, async (req: any, reply) => {
+    // Aplicar default de estatus si no viene en el body
+    const body = req.body as Record<string, unknown>;
+    const bodyWithDefaults = {
+      ...body,
+      estatus: body.estatus ?? 'A'
+    };
+    
+    const parsed = CreateOrganica2Schema.safeParse(bodyWithDefaults);
+    if (!parsed.success) {
+      console.error('Validation error:', parsed.error.issues);
+      return reply.code(400).send(validationError(parsed.error.issues));
+    }
+
+    try {
+      const createOrganica2Command = req.diScope?.resolve('createOrganica2Command') as CreateOrganica2Command;
+      if (!createOrganica2Command) {
+        return reply.code(500).send(validationError([{ message: 'Internal server error' }]));
+      }
+      const record = await createOrganica2Command.execute(parsed.data, req.user?.sub?.toString());
+      return reply.code(201).send(ok(record));
+    } catch (error: any) {
+      return handleOrganica2Error(error, reply);
+    }
+  });
+
+  // PUT /organica2/:claveOrganica0/:claveOrganica1/:claveOrganica2 - Update record
+  app.put('/organica2/:claveOrganica0/:claveOrganica1/:claveOrganica2', {
+    preHandler: [requireAuth],
+    schema: {
+      description: '[FIREBIRD] Actualizar registro de ORGANICA_2',
+      tags: ['organica2', 'firebird'],
+      security: [{ bearerAuth: [] }],
+      params: {
+        type: 'object',
+        required: ['claveOrganica0', 'claveOrganica1', 'claveOrganica2'],
+        properties: {
+          claveOrganica0: { type: 'string' },
+          claveOrganica1: { type: 'string' },
+          claveOrganica2: { type: 'string' }
+        }
+      },
+      body: {
+        type: 'object',
+        properties: {
+          descripcion: { type: 'string', maxLength: 40 },
+          titular: { type: 'number' },
+          fechaFin2: { type: 'string', format: 'date-time' },
+          usuario: { type: 'string', maxLength: 13 },
+          estatus: { type: 'string', minLength: 1, maxLength: 1 }
         }
       },
       response: {
@@ -180,19 +409,6 @@ export default async function organica2Routes(app: FastifyInstance) {
             }
           }
         },
-        404: {
-          type: 'object',
-          properties: {
-            ok: { type: 'boolean' },
-            error: {
-              type: 'object',
-              properties: {
-                code: { type: 'string' },
-                message: { type: 'string' }
-              }
-            }
-          }
-        },
         500: {
           type: 'object',
           properties: {
@@ -208,195 +424,24 @@ export default async function organica2Routes(app: FastifyInstance) {
         }
       }
     }
-  }, async (req, reply) => {
-    try {
-      const { claveOrganica0, claveOrganica1, claveOrganica2 } = req.params as { claveOrganica0: string; claveOrganica1: string; claveOrganica2: string };
-      const user = (req as any).user;
-
-      const getOrganica2ByIdQuery = req.diScope.resolve<GetOrganica2ByIdQuery>('getOrganica2ByIdQuery');
-      const record = await getOrganica2ByIdQuery.execute(claveOrganica0, claveOrganica1, claveOrganica2, user?.id?.toString());
-      return reply.send(ok(record));
-    } catch (error: any) {
-      return handleOrganica2Error(error, reply);
-    }
-  });
-
-  // POST /organica2 - Create new record
-  app.post('/organica2', {
-    preHandler: [requireAuth],
-    schema: {
-      description: '[FIREBIRD] Create new ORGANICA_2 record',
-      tags: ['organica2', 'firebird'],
-      security: [{ bearerAuth: [] }],
-      body: {
-        type: 'object',
-        required: ['claveOrganica0', 'claveOrganica1', 'claveOrganica2'],
-        properties: {
-          claveOrganica0: { type: 'string', minLength: 1, maxLength: 2 },
-          claveOrganica1: { type: 'string', minLength: 1, maxLength: 2 },
-          claveOrganica2: { type: 'string', minLength: 1, maxLength: 2 },
-          descripcion: { type: 'string', maxLength: 40 },
-          titular: { type: 'number' },
-          fechaFin2: { type: 'string', format: 'date-time' },
-          usuario: { type: 'string', maxLength: 13 },
-          estatus: { type: 'string', minLength: 1, maxLength: 1 }
-        }
-      },
-      response: {
-        201: {
-          type: 'object',
-          properties: {
-            ok: { type: 'boolean' },
-            data: { type: 'object' }
-          }
-        },
-        400: {
-          type: 'object',
-          properties: {
-            ok: { type: 'boolean' },
-            error: {
-              type: 'object',
-              properties: {
-                code: { type: 'string' },
-                message: { type: 'string' }
-              }
-            }
-          }
-        },
-        409: {
-          type: 'object',
-          properties: {
-            ok: { type: 'boolean' },
-            error: {
-              type: 'object',
-              properties: {
-                code: { type: 'string' },
-                message: { type: 'string' }
-              }
-            }
-          }
-        },
-        500: {
-          type: 'object',
-          properties: {
-            ok: { type: 'boolean' },
-            error: {
-              type: 'object',
-              properties: {
-                code: { type: 'string' },
-                message: { type: 'string' }
-              }
-            }
-          }
-        }
-      }
-    }
-  }, async (req, reply) => {
-    const parsed = CreateOrganica2Schema.safeParse(req.body);
+  }, async (req: any, reply) => {
+    const parsed = UpdateOrganica2Schema.safeParse(req.body);
     if (!parsed.success) {
       console.error('Validation error:', parsed.error.issues);
       return reply.code(400).send(validationError(parsed.error.issues));
     }
 
     try {
-      const user = (req as any).user;
-      const createOrganica2Command = req.diScope.resolve<CreateOrganica2Command>('createOrganica2Command');
-      const record = await createOrganica2Command.execute(parsed.data, user?.id?.toString());
-      return reply.code(201).send(ok(record));
-    } catch (error: any) {
-      return handleOrganica2Error(error, reply);
-    }
-  });
-
-  // PUT /organica2/:claveOrganica0/:claveOrganica1/:claveOrganica2 - Update record
-  app.put('/organica2/:claveOrganica0/:claveOrganica1/:claveOrganica2', {
-    preHandler: [requireAuth],
-    schema: {
-      description: '[FIREBIRD] Update ORGANICA_2 record',
-      tags: ['organica2', 'firebird'],
-      security: [{ bearerAuth: [] }],
-      params: {
-        type: 'object',
-        required: ['claveOrganica0', 'claveOrganica1', 'claveOrganica2'],
-        properties: {
-          claveOrganica0: { type: 'string', minLength: 1, maxLength: 2 },
-          claveOrganica1: { type: 'string', minLength: 1, maxLength: 2 },
-          claveOrganica2: { type: 'string', minLength: 1, maxLength: 2 }
-        }
-      },
-      body: {
-        type: 'object',
-        properties: {
-          descripcion: { type: 'string', maxLength: 40 },
-          titular: { type: 'number' },
-          fechaFin2: { type: 'string', format: 'date-time' },
-          usuario: { type: 'string', maxLength: 13 },
-          estatus: { type: 'string', minLength: 1, maxLength: 1 }
-        }
-      },
-      response: {
-        200: {
-          type: 'object',
-          properties: {
-            ok: { type: 'boolean' },
-            data: { type: 'object' }
-          }
-        },
-        400: {
-          type: 'object',
-          properties: {
-            ok: { type: 'boolean' },
-            error: {
-              type: 'object',
-              properties: {
-                code: { type: 'string' },
-                message: { type: 'string' }
-              }
-            }
-          }
-        },
-        404: {
-          type: 'object',
-          properties: {
-            ok: { type: 'boolean' },
-            error: {
-              type: 'object',
-              properties: {
-                code: { type: 'string' },
-                message: { type: 'string' }
-              }
-            }
-          }
-        },
-        500: {
-          type: 'object',
-          properties: {
-            ok: { type: 'boolean' },
-            error: {
-              type: 'object',
-              properties: {
-                code: { type: 'string' },
-                message: { type: 'string' }
-              }
-            }
-          }
-        }
+      const { claveOrganica0, claveOrganica1, claveOrganica2 } = req.params as any;
+      const organica2Service = req.diScope?.resolve('organica2Service') as Organica2Service;
+      if (!organica2Service) {
+        return reply.code(500).send(validationError([{ message: 'Internal server error' }]));
       }
-    }
-  }, async (req, reply) => {
-    const { claveOrganica0, claveOrganica1, claveOrganica2 } = req.params as { claveOrganica0: string; claveOrganica1: string; claveOrganica2: string };
-    const parsed = UpdateOrganica2Schema.safeParse(req.body);
-    if (!parsed.success) {
-      return reply.code(400).send(validationError(parsed.error.issues));
-    }
-
-    try {
-      const user = (req as any).user;
-      const updateOrganica2Command = req.diScope.resolve<UpdateOrganica2Command>('updateOrganica2Command');
-      const record = await updateOrganica2Command.execute(claveOrganica0, claveOrganica1, claveOrganica2, parsed.data, user?.id?.toString());
+      const record = await organica2Service.updateOrganica2Record(claveOrganica0, claveOrganica1, claveOrganica2, parsed.data, req);
       return reply.send(ok(record));
-    } catch (error: any) {
-      return handleOrganica2Error(error, reply);
+    } catch (error) {
+      console.error('Error in update organica2:', error);
+      return reply.code(500).send(validationError([{ message: 'Internal server error' }]));
     }
   });
 
@@ -404,16 +449,16 @@ export default async function organica2Routes(app: FastifyInstance) {
   app.delete('/organica2/:claveOrganica0/:claveOrganica1/:claveOrganica2', {
     preHandler: [requireAuth],
     schema: {
-      description: '[FIREBIRD] Delete ORGANICA_2 record',
+      description: '[FIREBIRD] Eliminar registro de ORGANICA_2',
       tags: ['organica2', 'firebird'],
       security: [{ bearerAuth: [] }],
       params: {
         type: 'object',
         required: ['claveOrganica0', 'claveOrganica1', 'claveOrganica2'],
         properties: {
-          claveOrganica0: { type: 'string', minLength: 1, maxLength: 2 },
-          claveOrganica1: { type: 'string', minLength: 1, maxLength: 2 },
-          claveOrganica2: { type: 'string', minLength: 1, maxLength: 2 }
+          claveOrganica0: { type: 'string' },
+          claveOrganica1: { type: 'string' },
+          claveOrganica2: { type: 'string' }
         }
       },
       response: {
@@ -422,32 +467,6 @@ export default async function organica2Routes(app: FastifyInstance) {
           properties: {
             ok: { type: 'boolean' },
             data: { type: 'object' }
-          }
-        },
-        404: {
-          type: 'object',
-          properties: {
-            ok: { type: 'boolean' },
-            error: {
-              type: 'object',
-              properties: {
-                code: { type: 'string' },
-                message: { type: 'string' }
-              }
-            }
-          }
-        },
-        409: {
-          type: 'object',
-          properties: {
-            ok: { type: 'boolean' },
-            error: {
-              type: 'object',
-              properties: {
-                code: { type: 'string' },
-                message: { type: 'string' }
-              }
-            }
           }
         },
         500: {
@@ -465,15 +484,18 @@ export default async function organica2Routes(app: FastifyInstance) {
         }
       }
     }
-  }, async (req, reply) => {
+  }, async (req: any, reply) => {
     try {
-      const { claveOrganica0, claveOrganica1, claveOrganica2 } = req.params as { claveOrganica0: string; claveOrganica1: string; claveOrganica2: string };
-      const user = (req as any).user;
-      const deleteOrganica2Command = req.diScope.resolve<DeleteOrganica2Command>('deleteOrganica2Command');
-      const result = await deleteOrganica2Command.execute(claveOrganica0, claveOrganica1, claveOrganica2, user?.id?.toString());
-      return reply.send(ok(result));
-    } catch (error: any) {
-      return handleOrganica2Error(error, reply);
+      const { claveOrganica0, claveOrganica1, claveOrganica2 } = req.params as any;
+      const organica2Service = req.diScope?.resolve('organica2Service') as Organica2Service;
+      if (!organica2Service) {
+        return reply.code(500).send(validationError([{ message: 'Internal server error' }]));
+      }
+      await organica2Service.deleteOrganica2Record(claveOrganica0, claveOrganica1, claveOrganica2, req);
+      return reply.send(ok({}));
+    } catch (error) {
+      console.error('Error in delete organica2:', error);
+      return reply.code(500).send(validationError([{ message: 'Internal server error' }]));
     }
   });
 
@@ -481,7 +503,7 @@ export default async function organica2Routes(app: FastifyInstance) {
   app.post('/organica2/query', {
     preHandler: [requireAuth],
     schema: {
-      description: '[FIREBIRD] Dynamic query for ORGANICA_2 records with filters, sorting, and pagination',
+      description: '[FIREBIRD] Consulta dinámica para registros de ORGANICA_2 con filtros, ordenamiento y paginación',
       tags: ['organica2', 'firebird', 'query'],
       security: [{ bearerAuth: [] }],
       body: {
@@ -489,12 +511,29 @@ export default async function organica2Routes(app: FastifyInstance) {
         properties: {
           filters: {
             type: 'object',
-            additionalProperties: true
+            additionalProperties: true,
+            description: 'Filtros aplicados a la consulta'
           },
-          sortBy: { type: 'string' },
-          sortOrder: { type: 'string', enum: ['ASC', 'DESC'] },
-          limit: { type: 'number', minimum: 1, maximum: 1000 },
-          offset: { type: 'number', minimum: 0 }
+          sortBy: {
+            type: 'string',
+            description: 'Campo por el cual ordenar'
+          },
+          sortOrder: {
+            type: 'string',
+            enum: ['ASC', 'DESC'],
+            description: 'Dirección del ordenamiento'
+          },
+          limit: {
+            type: 'integer',
+            minimum: 1,
+            maximum: 1000,
+            description: 'Número máximo de registros a retornar'
+          },
+          offset: {
+            type: 'integer',
+            minimum: 0,
+            description: 'Número de registros a omitir'
+          }
         }
       },
       response: {
@@ -518,6 +557,14 @@ export default async function organica2Routes(app: FastifyInstance) {
                   estatus: { type: 'string' }
                 }
               }
+            },
+            pagination: {
+              type: 'object',
+              properties: {
+                total: { type: 'integer' },
+                limit: { type: 'integer' },
+                offset: { type: 'integer' }
+              }
             }
           }
         },
@@ -549,24 +596,23 @@ export default async function organica2Routes(app: FastifyInstance) {
         }
       }
     }
-  }, async (req, reply) => {
+  }, async (req: any, reply) => {
     const parsed = DynamicQuerySchema.safeParse(req.body);
     if (!parsed.success) {
+      console.error('Validation error:', parsed.error.issues);
       return reply.code(400).send(validationError(parsed.error.issues));
     }
 
     try {
-      const records = await queryOrganica2Dynamic(parsed.data);
+      const organica2Service = req.diScope?.resolve('organica2Service') as Organica2Service;
+      if (!organica2Service) {
+        return reply.code(500).send(validationError([{ message: 'Internal server error' }]));
+      }
+      const records = await organica2Service.queryOrganica2Dynamic(parsed.data);
       return reply.send(ok(records));
-    } catch (error: any) {
-      if (error.code === 'ER_BAD_FIELD_ERROR') {
-        return reply.code(400).send(badRequest('Invalid field name in query'));
-      }
-      if (error.code === 'ER_PARSE_ERROR') {
-        return reply.code(400).send(badRequest('Invalid query syntax'));
-      }
-      console.error('Error querying organica2:', error);
-      return reply.code(500).send(internalError('Failed to query ORGANICA2 records'));
+    } catch (error) {
+      console.error('Error in query organica2:', error);
+      return reply.code(500).send(validationError([{ message: 'Internal server error' }]));
     }
   });
 }

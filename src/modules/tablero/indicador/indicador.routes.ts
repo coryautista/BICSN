@@ -1,7 +1,7 @@
 import { FastifyInstance } from 'fastify';
 import { requireAuth, requireRole } from '../../auth/auth.middleware.js';
 import { CreateIndicadorSchema, UpdateIndicadorSchema, IndicadorIdParamSchema, ProgramaIdParamSchema, EjeIdParamSchema, LineaEstrategicaIdParamSchema } from './indicador.schemas.js';
-import { getAllIndicadores, getIndicadoresByPrograma, getIndicadoresByLineaEstrategica, getIndicadoresByEje, getIndicadorById, createIndicadorItem, updateIndicadorItem, deleteIndicadorItem } from './indicador.service.js';
+import { IndicadorService } from './indicador.service.js';
 import { ok, validationError, notFound, internalError } from '../../../utils/http.js';
 import { withDbContext } from '../../../db/context.js';
 
@@ -77,9 +77,10 @@ export default async function indicadorRoutes(app: FastifyInstance) {
         }
       }
     }
-  }, async (_req, reply) => {
+  }, async (req, reply) => {
     try {
-      const indicadores = await getAllIndicadores();
+      const indicadorService = req.diScope.resolve<IndicadorService>('indicadorService');
+      const indicadores = await indicadorService.getAllIndicadores();
       return reply.send(ok(indicadores));
     } catch (error: any) {
       console.error('Error listing indicadores:', error);
@@ -187,7 +188,8 @@ export default async function indicadorRoutes(app: FastifyInstance) {
     }
 
     try {
-      const indicadores = await getIndicadoresByPrograma(paramValidation.data.programaId);
+      const indicadorService = req.diScope.resolve<IndicadorService>('indicadorService');
+      const indicadores = await indicadorService.getIndicadoresByPrograma(paramValidation.data.programaId);
       return reply.send(ok(indicadores));
     } catch (error: any) {
       console.error('Error listing indicadores by programa:', error);
@@ -295,7 +297,8 @@ export default async function indicadorRoutes(app: FastifyInstance) {
     }
 
     try {
-      const indicadores = await getIndicadoresByLineaEstrategica(paramValidation.data.lineaEstrategicaId);
+      const indicadorService = req.diScope.resolve<IndicadorService>('indicadorService');
+      const indicadores = await indicadorService.getIndicadoresByLineaEstrategica(paramValidation.data.lineaEstrategicaId);
       return reply.send(ok(indicadores));
     } catch (error: any) {
       console.error('Error listing indicadores by linea estrategica:', error);
@@ -403,7 +406,8 @@ export default async function indicadorRoutes(app: FastifyInstance) {
     }
 
     try {
-      const indicadores = await getIndicadoresByEje(paramValidation.data.ejeId);
+      const indicadorService = req.diScope.resolve<IndicadorService>('indicadorService');
+      const indicadores = await indicadorService.getIndicadoresByEje(paramValidation.data.ejeId);
       return reply.send(ok(indicadores));
     } catch (error: any) {
       console.error('Error listing indicadores by eje:', error);
@@ -523,7 +527,8 @@ export default async function indicadorRoutes(app: FastifyInstance) {
     }
 
     try {
-      const indicador = await getIndicadorById(paramValidation.data.indicadorId);
+      const indicadorService = req.diScope.resolve<IndicadorService>('indicadorService');
+      const indicador = await indicadorService.getIndicadorById(paramValidation.data.indicadorId);
       return reply.send(ok(indicador));
     } catch (error: any) {
       if (error.message === 'INDICADOR_NOT_FOUND') {
@@ -621,7 +626,8 @@ export default async function indicadorRoutes(app: FastifyInstance) {
 
       try {
         const userId = req.user?.sub;
-        const indicador = await createIndicadorItem(
+        const indicadorService = req.diScope.resolve<IndicadorService>('indicadorService');
+        const indicador = await indicadorService.createIndicadorItem(
           parsed.data.idPrograma,
           parsed.data.nombre,
           parsed.data.descripcion,
@@ -762,7 +768,8 @@ export default async function indicadorRoutes(app: FastifyInstance) {
 
       try {
         const userId = req.user?.sub;
-        const indicador = await updateIndicadorItem(
+        const indicadorService = req.diScope.resolve<IndicadorService>('indicadorService');
+        const indicador = await indicadorService.updateIndicadorItem(
           paramValidation.data.indicadorId,
           parsed.data.nombre,
           parsed.data.descripcion,
@@ -868,7 +875,8 @@ export default async function indicadorRoutes(app: FastifyInstance) {
       }
 
       try {
-        const deletedId = await deleteIndicadorItem(paramValidation.data.indicadorId, tx);
+        const indicadorService = req.diScope.resolve<IndicadorService>('indicadorService');
+        const deletedId = await indicadorService.deleteIndicadorItem(paramValidation.data.indicadorId, tx);
         return reply.send(ok({ id: deletedId }));
       } catch (error: any) {
         if (error.message === 'INDICADOR_NOT_FOUND') {

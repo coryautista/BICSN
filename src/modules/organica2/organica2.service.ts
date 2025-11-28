@@ -1,104 +1,110 @@
-import { findOrganica2ById, listOrganica2, createOrganica2, updateOrganica2, deleteOrganica2, dynamicQueryOrganica2, findOrganica2ByUser } from './organica2.repo.js';
 import { CreateOrganica2, UpdateOrganica2, DynamicQuery } from './organica2.schemas.js';
 import { logAudit, extractUserInfo, extractRequestInfo } from '../../utils/audit.js';
 
-// [FIREBIRD] Service layer for ORGANICA_2 operations
-export async function getOrganica2ById(claveOrganica0: string, claveOrganica1: string, claveOrganica2: string) {
-  const record = await findOrganica2ById(claveOrganica0, claveOrganica1, claveOrganica2);
-  if (!record) {
-    throw new Error('ORGANICA2_NOT_FOUND');
-  }
-  return record;
-}
+export class Organica2Service {
+  private organica2Repo: any;
 
-export async function getAllOrganica2() {
-  return await listOrganica2();
-}
-
-export async function createOrganica2Record(data: CreateOrganica2, req?: any) {
-  // Check if record already exists
-  const existing = await findOrganica2ById(data.claveOrganica0, data.claveOrganica1, data.claveOrganica2);
-  if (existing) {
-    throw new Error('ORGANICA2_EXISTS');
+  constructor(organica2Repo: any) {
+    this.organica2Repo = organica2Repo;
   }
 
-  const record = await createOrganica2(data);
-
-  // Audit logging
-  if (req) {
-    const userInfo = extractUserInfo(req);
-    const requestInfo = extractRequestInfo(req);
-    await logAudit({
-      entidad: 'ORGANICA_2',
-      entidadId: `${data.claveOrganica0}-${data.claveOrganica1}-${data.claveOrganica2}`,
-      accion: 'CREATE',
-      datosDespues: record,
-      ...userInfo,
-      ...requestInfo
-    });
+  async getOrganica2ById(claveOrganica0: string, claveOrganica1: string, claveOrganica2: string) {
+    const record = await this.organica2Repo.findById(claveOrganica0, claveOrganica1, claveOrganica2);
+    if (!record) {
+      throw new Error('ORGANICA2_NOT_FOUND');
+    }
+    return record;
   }
 
-  return record;
-}
-
-export async function updateOrganica2Record(claveOrganica0: string, claveOrganica1: string, claveOrganica2: string, data: UpdateOrganica2, req?: any) {
-  const existing = await findOrganica2ById(claveOrganica0, claveOrganica1, claveOrganica2);
-  if (!existing) {
-    throw new Error('ORGANICA2_NOT_FOUND');
+  async getAllOrganica2() {
+    return await this.organica2Repo.findAll();
   }
 
-  const record = await updateOrganica2(claveOrganica0, claveOrganica1, claveOrganica2, data);
+  async createOrganica2Record(data: CreateOrganica2, req?: any) {
+    // Check if record already exists
+    const existing = await this.organica2Repo.findById(data.claveOrganica0, data.claveOrganica1, data.claveOrganica2);
+    if (existing) {
+      throw new Error('ORGANICA2_EXISTS');
+    }
 
-  // Audit logging
-  if (req) {
-    const userInfo = extractUserInfo(req);
-    const requestInfo = extractRequestInfo(req);
-    await logAudit({
-      entidad: 'ORGANICA_2',
-      entidadId: `${claveOrganica0}-${claveOrganica1}-${claveOrganica2}`,
-      accion: 'UPDATE',
-      datosAntes: existing,
-      datosDespues: record,
-      ...userInfo,
-      ...requestInfo
-    });
+    const record = await this.organica2Repo.create(data);
+
+    // Audit logging
+    if (req) {
+      const userInfo = extractUserInfo(req);
+      const requestInfo = extractRequestInfo(req);
+      await logAudit({
+        entidad: 'ORGANICA_2',
+        entidadId: `${data.claveOrganica0}-${data.claveOrganica1}-${data.claveOrganica2}`,
+        accion: 'CREATE',
+        datosDespues: record,
+        ...userInfo,
+        ...requestInfo
+      });
+    }
+
+    return record;
   }
 
-  return record;
-}
+  async updateOrganica2Record(claveOrganica0: string, claveOrganica1: string, claveOrganica2: string, data: UpdateOrganica2, req?: any) {
+    const existing = await this.organica2Repo.findById(claveOrganica0, claveOrganica1, claveOrganica2);
+    if (!existing) {
+      throw new Error('ORGANICA2_NOT_FOUND');
+    }
 
-export async function deleteOrganica2Record(claveOrganica0: string, claveOrganica1: string, claveOrganica2: string, req?: any) {
-  const existing = await findOrganica2ById(claveOrganica0, claveOrganica1, claveOrganica2);
-  if (!existing) {
-    throw new Error('ORGANICA2_NOT_FOUND');
+    const record = await this.organica2Repo.update(claveOrganica0, claveOrganica1, claveOrganica2, data);
+
+    // Audit logging
+    if (req) {
+      const userInfo = extractUserInfo(req);
+      const requestInfo = extractRequestInfo(req);
+      await logAudit({
+        entidad: 'ORGANICA_2',
+        entidadId: `${claveOrganica0}-${claveOrganica1}-${claveOrganica2}`,
+        accion: 'UPDATE',
+        datosAntes: existing,
+        datosDespues: record,
+        ...userInfo,
+        ...requestInfo
+      });
+    }
+
+    return record;
   }
 
-  const deleted = await deleteOrganica2(claveOrganica0, claveOrganica1, claveOrganica2);
-  if (!deleted) {
-    throw new Error('ORGANICA2_DELETE_FAILED');
+  async deleteOrganica2Record(claveOrganica0: string, claveOrganica1: string, claveOrganica2: string, req?: any) {
+    const existing = await this.organica2Repo.findById(claveOrganica0, claveOrganica1, claveOrganica2);
+    if (!existing) {
+      throw new Error('ORGANICA2_NOT_FOUND');
+    }
+
+    const deleted = await this.organica2Repo.delete(claveOrganica0, claveOrganica1, claveOrganica2);
+    if (!deleted) {
+      throw new Error('ORGANICA2_DELETE_FAILED');
+    }
+
+    // Audit logging
+    if (req) {
+      const userInfo = extractUserInfo(req);
+      const requestInfo = extractRequestInfo(req);
+      await logAudit({
+        entidad: 'ORGANICA_2',
+        entidadId: `${claveOrganica0}-${claveOrganica1}-${claveOrganica2}`,
+        accion: 'DELETE',
+        datosAntes: existing,
+        ...userInfo,
+        ...requestInfo
+      });
+    }
+
+    return { claveOrganica0, claveOrganica1, claveOrganica2, deleted: true };
   }
 
-  // Audit logging
-  if (req) {
-    const userInfo = extractUserInfo(req);
-    const requestInfo = extractRequestInfo(req);
-    await logAudit({
-      entidad: 'ORGANICA_2',
-      entidadId: `${claveOrganica0}-${claveOrganica1}-${claveOrganica2}`,
-      accion: 'DELETE',
-      datosAntes: existing,
-      ...userInfo,
-      ...requestInfo
-    });
+  async queryOrganica2Dynamic(query: DynamicQuery) {
+    return await this.organica2Repo.dynamicQuery(query);
   }
 
-  return { claveOrganica0, claveOrganica1, claveOrganica2, deleted: true };
-}
-
-export async function queryOrganica2Dynamic(query: DynamicQuery) {
-  return await dynamicQueryOrganica2(query);
-}
-
-export async function getOrganica2ByUserToken(claveOrganica0?: string, claveOrganica1?: string) {
-  return await findOrganica2ByUser(claveOrganica0, claveOrganica1);
+  async getOrganica2ByUserToken(claveOrganica0?: string, claveOrganica1?: string) {
+    return await this.organica2Repo.findByClaveOrganica0And1(claveOrganica0, claveOrganica1);
+  }
 }

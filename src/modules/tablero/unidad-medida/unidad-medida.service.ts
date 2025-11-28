@@ -1,32 +1,65 @@
-import { findUnidadMedidaById, listUnidadesMedida, listUnidadesMedidaByCategoria, createUnidadMedida, updateUnidadMedida, deleteUnidadMedida } from './unidad-medida.repo.js';
+export class UnidadMedidaService {
+  private unidadMedidaRepo: any;
 
-export async function getAllUnidadesMedida() {
-  return await listUnidadesMedida();
-}
-
-export async function getUnidadesMedidaByCategoria(categoria: string) {
-  return await listUnidadesMedidaByCategoria(categoria);
-}
-
-export async function getUnidadMedidaById(unidadMedidaId: number) {
-  const unidadMedida = await findUnidadMedidaById(unidadMedidaId);
-  if (!unidadMedida) {
-    throw new Error('UNIDAD_MEDIDA_NOT_FOUND');
+  constructor(deps: { unidadMedidaRepo: any }) {
+    this.unidadMedidaRepo = deps.unidadMedidaRepo;
   }
-  return unidadMedida;
-}
 
-export async function createUnidadMedidaItem(
-  nombre: string,
-  simbolo: string,
-  descripcion: string,
-  categoria: string,
-  esActiva?: boolean,
-  userId?: string,
-  tx?: any
-) {
-  try {
-    return await createUnidadMedida(
+  async getAllUnidadesMedida() {
+    return await this.unidadMedidaRepo.findAll();
+  }
+
+  async getUnidadesMedidaByCategoria(categoria: string) {
+    return await this.unidadMedidaRepo.findByCategoria(categoria);
+  }
+
+  async getUnidadMedidaById(unidadMedidaId: number) {
+    const unidadMedida = await this.unidadMedidaRepo.findById(unidadMedidaId);
+    if (!unidadMedida) {
+      throw new Error('UNIDAD_MEDIDA_NOT_FOUND');
+    }
+    return unidadMedida;
+  }
+
+  async createUnidadMedidaItem(
+    nombre: string,
+    simbolo: string,
+    descripcion: string,
+    categoria: string,
+    esActiva?: boolean,
+    userId?: string,
+    tx?: any
+  ) {
+    try {
+      return await this.unidadMedidaRepo.create(
+        nombre,
+        simbolo,
+        descripcion,
+        categoria,
+        esActiva,
+        userId,
+        tx
+      );
+    } catch (error: any) {
+      if (error.message.includes('Violation of PRIMARY KEY constraint')) {
+        throw new Error('UNIDAD_MEDIDA_EXISTS');
+      }
+      throw error;
+    }
+  }
+
+  async updateUnidadMedidaItem(
+    unidadMedidaId: number,
+    nombre?: string,
+    simbolo?: string,
+    descripcion?: string,
+    categoria?: string,
+    esActiva?: boolean,
+    userId?: string,
+    tx?: any
+  ) {
+    const unidadMedida = await this.unidadMedidaRepo.update(
+      unidadMedidaId,
       nombre,
       simbolo,
       descripcion,
@@ -35,44 +68,17 @@ export async function createUnidadMedidaItem(
       userId,
       tx
     );
-  } catch (error: any) {
-    if (error.message.includes('Violation of PRIMARY KEY constraint')) {
-      throw new Error('UNIDAD_MEDIDA_EXISTS');
+    if (!unidadMedida) {
+      throw new Error('UNIDAD_MEDIDA_NOT_FOUND');
     }
-    throw error;
+    return unidadMedida;
   }
-}
 
-export async function updateUnidadMedidaItem(
-  unidadMedidaId: number,
-  nombre?: string,
-  simbolo?: string,
-  descripcion?: string,
-  categoria?: string,
-  esActiva?: boolean,
-  userId?: string,
-  tx?: any
-) {
-  const unidadMedida = await updateUnidadMedida(
-    unidadMedidaId,
-    nombre,
-    simbolo,
-    descripcion,
-    categoria,
-    esActiva,
-    userId,
-    tx
-  );
-  if (!unidadMedida) {
-    throw new Error('UNIDAD_MEDIDA_NOT_FOUND');
+  async deleteUnidadMedidaItem(unidadMedidaId: number, tx?: any) {
+    const deletedId = await this.unidadMedidaRepo.delete(unidadMedidaId, tx);
+    if (!deletedId) {
+      throw new Error('UNIDAD_MEDIDA_NOT_FOUND');
+    }
+    return deletedId;
   }
-  return unidadMedida;
-}
-
-export async function deleteUnidadMedidaItem(unidadMedidaId: number, tx?: any) {
-  const deletedId = await deleteUnidadMedida(unidadMedidaId, tx);
-  if (!deletedId) {
-    throw new Error('UNIDAD_MEDIDA_NOT_FOUND');
-  }
-  return deletedId;
 }

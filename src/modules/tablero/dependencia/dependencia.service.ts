@@ -1,48 +1,92 @@
-import { findDependenciaById, listDependencias, listDependenciasByTipo, listDependenciasHijas, getDependenciaWithHijas as getDependenciaWithHijasRepo, createDependencia, updateDependencia, deleteDependencia } from './dependencia.repo.js';
+export class DependenciaService {
+  private dependenciaRepo: any;
 
-export async function getAllDependencias() {
-  return await listDependencias();
-}
-
-export async function getDependenciasByTipo(tipoDependencia: string) {
-  return await listDependenciasByTipo(tipoDependencia);
-}
-
-export async function getDependenciasHijas(dependenciaPadreId: number) {
-  return await listDependenciasHijas(dependenciaPadreId);
-}
-
-export async function getDependenciaById(dependenciaId: number) {
-  const dependencia = await findDependenciaById(dependenciaId);
-  if (!dependencia) {
-    throw new Error('DEPENDENCIA_NOT_FOUND');
+  constructor(deps: { dependenciaRepo: any }) {
+    this.dependenciaRepo = deps.dependenciaRepo;
   }
-  return dependencia;
-}
 
-export async function getDependenciaWithHijas(dependenciaId: number) {
-  const dependencia = await getDependenciaWithHijasRepo(dependenciaId);
-  if (!dependencia) {
-    throw new Error('DEPENDENCIA_NOT_FOUND');
+  async getAllDependencias() {
+    return await this.dependenciaRepo.findAll();
   }
-  return dependencia;
-}
 
-export async function createDependenciaItem(
-  nombre: string,
-  descripcion: string,
-  tipoDependencia: string,
-  claveDependencia: string,
-  idDependenciaPadre?: number,
-  responsable?: string,
-  telefono?: string,
-  email?: string,
-  esActiva?: boolean,
-  userId?: string,
-  tx?: any
-) {
-  try {
-    return await createDependencia(
+  async getDependenciasByTipo(tipoDependencia: string) {
+    return await this.dependenciaRepo.findByTipo(tipoDependencia);
+  }
+
+  async getDependenciasHijas(dependenciaPadreId: number) {
+    return await this.dependenciaRepo.findHijas(dependenciaPadreId);
+  }
+
+  async getDependenciaById(dependenciaId: number) {
+    const dependencia = await this.dependenciaRepo.findById(dependenciaId);
+    if (!dependencia) {
+      throw new Error('DEPENDENCIA_NOT_FOUND');
+    }
+    return dependencia;
+  }
+
+  async getDependenciaWithHijas(dependenciaId: number) {
+    const dependencia = await this.dependenciaRepo.getDependenciaWithHijas(dependenciaId);
+    if (!dependencia) {
+      throw new Error('DEPENDENCIA_NOT_FOUND');
+    }
+    return dependencia;
+  }
+
+  async createDependenciaItem(
+    nombre: string,
+    descripcion: string,
+    tipoDependencia: string,
+    claveDependencia: string,
+    idDependenciaPadre?: number,
+    responsable?: string,
+    telefono?: string,
+    email?: string,
+    esActiva?: boolean,
+    userId?: string,
+    tx?: any
+  ) {
+    try {
+      return await this.dependenciaRepo.create(
+        nombre,
+        descripcion,
+        tipoDependencia,
+        claveDependencia,
+        idDependenciaPadre,
+        responsable,
+        telefono,
+        email,
+        esActiva,
+        userId,
+        tx
+      );
+    } catch (error: any) {
+      if (error.message.includes('FOREIGN KEY constraint')) {
+        throw new Error('DEPENDENCIA_PADRE_NOT_FOUND');
+      }
+      if (error.message.includes('Violation of PRIMARY KEY constraint')) {
+        throw new Error('DEPENDENCIA_EXISTS');
+      }
+      throw error;
+    }
+  }
+
+  async updateDependenciaItem(
+    dependenciaId: number,
+    nombre?: string,
+    descripcion?: string,
+    tipoDependencia?: string,
+    claveDependencia?: string,
+    idDependenciaPadre?: number,
+    responsable?: string,
+    telefono?: string,
+    email?: string,
+    esActiva?: boolean,
+    userId?: string,
+    tx?: any
+  ) {
+    const dependencia = await this.dependenciaRepo.update(
+      dependenciaId,
       nombre,
       descripcion,
       tipoDependencia,
@@ -55,55 +99,17 @@ export async function createDependenciaItem(
       userId,
       tx
     );
-  } catch (error: any) {
-    if (error.message.includes('FOREIGN KEY constraint')) {
-      throw new Error('DEPENDENCIA_PADRE_NOT_FOUND');
+    if (!dependencia) {
+      throw new Error('DEPENDENCIA_NOT_FOUND');
     }
-    if (error.message.includes('Violation of PRIMARY KEY constraint')) {
-      throw new Error('DEPENDENCIA_EXISTS');
+    return dependencia;
+  }
+
+  async deleteDependenciaItem(dependenciaId: number, tx?: any) {
+    const deletedId = await this.dependenciaRepo.delete(dependenciaId, tx);
+    if (!deletedId) {
+      throw new Error('DEPENDENCIA_NOT_FOUND');
     }
-    throw error;
+    return deletedId;
   }
-}
-
-export async function updateDependenciaItem(
-  dependenciaId: number,
-  nombre?: string,
-  descripcion?: string,
-  tipoDependencia?: string,
-  claveDependencia?: string,
-  idDependenciaPadre?: number,
-  responsable?: string,
-  telefono?: string,
-  email?: string,
-  esActiva?: boolean,
-  userId?: string,
-  tx?: any
-) {
-  const dependencia = await updateDependencia(
-    dependenciaId,
-    nombre,
-    descripcion,
-    tipoDependencia,
-    claveDependencia,
-    idDependenciaPadre,
-    responsable,
-    telefono,
-    email,
-    esActiva,
-    userId,
-    tx
-  );
-  if (!dependencia) {
-    throw new Error('DEPENDENCIA_NOT_FOUND');
-  }
-  return dependencia;
-}
-
-export async function deleteDependenciaItem(dependenciaId: number, tx?: any) {
-  const deletedId = await deleteDependencia(dependenciaId, tx);
-  if (!deletedId) {
-    throw new Error('DEPENDENCIA_NOT_FOUND');
-  }
-  return deletedId;
 }

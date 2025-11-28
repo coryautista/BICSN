@@ -1,100 +1,106 @@
-import { findOrganica1ById, listOrganica1, createOrganica1, updateOrganica1, deleteOrganica1, dynamicQueryOrganica1 } from './organica1.repo.js';
 import { CreateOrganica1, UpdateOrganica1, DynamicQuery } from './organica1.schemas.js';
 import { logAudit, extractUserInfo, extractRequestInfo } from '../../utils/audit.js';
 
-// [FIREBIRD] Service layer for ORGANICA_1 operations
-export async function getOrganica1ById(claveOrganica0: string, claveOrganica1: string) {
-  const record = await findOrganica1ById(claveOrganica0, claveOrganica1);
-  if (!record) {
-    throw new Error('ORGANICA1_NOT_FOUND');
-  }
-  return record;
-}
+export class Organica1Service {
+  private organica1Repo: any;
 
-export async function getAllOrganica1() {
-  return await listOrganica1();
-}
-
-export async function createOrganica1Record(data: CreateOrganica1, req?: any) {
-  // Check if record already exists
-  const existing = await findOrganica1ById(data.claveOrganica0, data.claveOrganica1);
-  if (existing) {
-    throw new Error('ORGANICA1_EXISTS');
+  constructor(deps: { organica1Repo: any }) {
+    this.organica1Repo = deps.organica1Repo;
   }
 
-  const record = await createOrganica1(data);
-
-  // Audit logging
-  if (req) {
-    const userInfo = extractUserInfo(req);
-    const requestInfo = extractRequestInfo(req);
-    await logAudit({
-      entidad: 'ORGANICA_1',
-      entidadId: `${data.claveOrganica0}-${data.claveOrganica1}`,
-      accion: 'CREATE',
-      datosDespues: record,
-      ...userInfo,
-      ...requestInfo
-    });
+  async getOrganica1ById(claveOrganica0: string, claveOrganica1: string) {
+    const record = await this.organica1Repo.findById(claveOrganica0, claveOrganica1);
+    if (!record) {
+      throw new Error('ORGANICA1_NOT_FOUND');
+    }
+    return record;
   }
 
-  return record;
-}
-
-export async function updateOrganica1Record(claveOrganica0: string, claveOrganica1: string, data: UpdateOrganica1, req?: any) {
-  const existing = await findOrganica1ById(claveOrganica0, claveOrganica1);
-  if (!existing) {
-    throw new Error('ORGANICA1_NOT_FOUND');
+  async getAllOrganica1() {
+    return await this.organica1Repo.findAll();
   }
 
-  const record = await updateOrganica1(claveOrganica0, claveOrganica1, data);
+  async createOrganica1Record(data: CreateOrganica1, req?: any) {
+    // Check if record already exists
+    const existing = await this.organica1Repo.findById(data.claveOrganica0, data.claveOrganica1);
+    if (existing) {
+      throw new Error('ORGANICA1_EXISTS');
+    }
 
-  // Audit logging
-  if (req) {
-    const userInfo = extractUserInfo(req);
-    const requestInfo = extractRequestInfo(req);
-    await logAudit({
-      entidad: 'ORGANICA_1',
-      entidadId: `${claveOrganica0}-${claveOrganica1}`,
-      accion: 'UPDATE',
-      datosAntes: existing,
-      datosDespues: record,
-      ...userInfo,
-      ...requestInfo
-    });
+    const record = await this.organica1Repo.create(data);
+
+    // Audit logging
+    if (req) {
+      const userInfo = extractUserInfo(req);
+      const requestInfo = extractRequestInfo(req);
+      await logAudit({
+        entidad: 'ORGANICA_1',
+        entidadId: `${data.claveOrganica0}-${data.claveOrganica1}`,
+        accion: 'CREATE',
+        datosDespues: record,
+        ...userInfo,
+        ...requestInfo
+      });
+    }
+
+    return record;
   }
 
-  return record;
-}
+  async updateOrganica1Record(claveOrganica0: string, claveOrganica1: string, data: UpdateOrganica1, req?: any) {
+    const existing = await this.organica1Repo.findById(claveOrganica0, claveOrganica1);
+    if (!existing) {
+      throw new Error('ORGANICA1_NOT_FOUND');
+    }
 
-export async function deleteOrganica1Record(claveOrganica0: string, claveOrganica1: string, req?: any) {
-  const existing = await findOrganica1ById(claveOrganica0, claveOrganica1);
-  if (!existing) {
-    throw new Error('ORGANICA1_NOT_FOUND');
+    const record = await this.organica1Repo.update(claveOrganica0, claveOrganica1, data);
+
+    // Audit logging
+    if (req) {
+      const userInfo = extractUserInfo(req);
+      const requestInfo = extractRequestInfo(req);
+      await logAudit({
+        entidad: 'ORGANICA_1',
+        entidadId: `${claveOrganica0}-${claveOrganica1}`,
+        accion: 'UPDATE',
+        datosAntes: existing,
+        datosDespues: record,
+        ...userInfo,
+        ...requestInfo
+      });
+    }
+
+    return record;
   }
 
-  const deleted = await deleteOrganica1(claveOrganica0, claveOrganica1);
-  if (!deleted) {
-    throw new Error('ORGANICA1_DELETE_FAILED');
+  async deleteOrganica1Record(claveOrganica0: string, claveOrganica1: string, req?: any) {
+    const existing = await this.organica1Repo.findById(claveOrganica0, claveOrganica1);
+    if (!existing) {
+      throw new Error('ORGANICA1_NOT_FOUND');
+    }
+
+    const deleted = await this.organica1Repo.delete(claveOrganica0, claveOrganica1);
+    if (!deleted) {
+      throw new Error('ORGANICA1_DELETE_FAILED');
+    }
+
+    // Audit logging
+    if (req) {
+      const userInfo = extractUserInfo(req);
+      const requestInfo = extractRequestInfo(req);
+      await logAudit({
+        entidad: 'ORGANICA_1',
+        entidadId: `${claveOrganica0}-${claveOrganica1}`,
+        accion: 'DELETE',
+        datosAntes: existing,
+        ...userInfo,
+        ...requestInfo
+      });
+    }
+
+    return { claveOrganica0, claveOrganica1, deleted: true };
   }
 
-  // Audit logging
-  if (req) {
-    const userInfo = extractUserInfo(req);
-    const requestInfo = extractRequestInfo(req);
-    await logAudit({
-      entidad: 'ORGANICA_1',
-      entidadId: `${claveOrganica0}-${claveOrganica1}`,
-      accion: 'DELETE',
-      datosAntes: existing,
-      ...userInfo,
-      ...requestInfo
-    });
+  async queryOrganica1Dynamic(query: DynamicQuery) {
+    return await this.organica1Repo.dynamicQuery(query);
   }
-
-  return { claveOrganica0, claveOrganica1, deleted: true };
-}
-
-export async function queryOrganica1Dynamic(query: DynamicQuery) {
-  return await dynamicQueryOrganica1(query);
 }

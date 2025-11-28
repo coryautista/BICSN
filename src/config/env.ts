@@ -1,6 +1,7 @@
 import 'dotenv/config';
 
 export const env = {
+  host: process.env.HOST ?? '0.0.0.0',
   port: Number(process.env.PORT ?? 4000),
   nodeEnv: process.env.NODE_ENV ?? 'development',
   logLevel: process.env.LOG_LEVEL ?? 'info',
@@ -32,7 +33,8 @@ export const env = {
     port: Number(process.env.FIREBIRD_PORT ?? 3050),
     database: process.env.FIREBIRD_DATABASE!,
     user: process.env.FIREBIRD_USER!,
-    password: process.env.FIREBIRD_PASSWORD!
+    password: process.env.FIREBIRD_PASSWORD!,
+    charset: process.env.FIREBIRD_CHARSET ?? 'NONE' // NONE (recomendado para evitar U+FFFD), WIN1252, UTF8, ISO8859_1
   },
   ftp: {
     host: process.env.FTP_HOST ?? 'codigosingular.com',

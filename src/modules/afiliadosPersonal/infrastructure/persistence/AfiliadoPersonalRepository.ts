@@ -1,6 +1,13 @@
 import { Database } from 'node-firebird';
 import { AfiliadoPersonal } from '../../domain/entities/AfiliadoPersonal.js';
 import { IAfiliadoPersonalRepository } from '../../domain/repositories/IAfiliadoPersonalRepository.js';
+import { executeSerializedQuery } from '../../../../db/firebird.js';
+import pino from 'pino';
+
+const logger = pino({
+  name: 'afiliadoPersonal-repository',
+  level: process.env.LOG_LEVEL || 'info'
+});
 
 /**
  * Firebird implementation of AfiliadoPersonalRepository
@@ -17,101 +24,135 @@ export class AfiliadoPersonalRepository implements IAfiliadoPersonalRepository {
    * Returns employees with their latest active ORG_PERSONAL record
    */
   async obtenerPlantilla(claveOrganica0: string, claveOrganica1: string): Promise<AfiliadoPersonal[]> {
-    console.log('🔍 [DEBUG] Iniciando consulta obtenerPlantilla con parámetros:', { claveOrganica0, claveOrganica1 });
-    return new Promise((resolve, reject) => {
-      const sql = `
-        SELECT
-          p.INTERNO,
-          p.CURP,
-          p.RFC,
-          p.NOEMPLEADO,
-          p.NOMBRE,
-          p.APELLIDO_PATERNO,
-          p.APELLIDO_MATERNO,
-          p.FECHA_NACIMIENTO,
-          p.SEGURO_SOCIAL,
-          p.CALLE_NUMERO,
-          p.FRACCIONAMIENTO,
-          p.CODIGO_POSTAL,
-          p.TELEFONO,
-          p.SEXO,
-          p.ESTADO_CIVIL,
-          p.LOCALIDAD,
-          p.MUNICIPIO,
-          p.ESTADO,
-          p.PAIS,
-          p.DEPENDIENTES,
-          p.POSEE_INMUEBLES,
-          p.FULLNAME,
-          p.FECHA_CARTA,
-          p.EMAIL,
-          p.NACIONALIDAD,
-          p.FECHA_ALTA,
-          p.CELULAR,
-          p.EXPEDIENTE,
-          p.F_EXPEDIENTE,
-          o.CLAVE_ORGANICA_0,
-          o.CLAVE_ORGANICA_1,
-          o.CLAVE_ORGANICA_2,
-          o.CLAVE_ORGANICA_3,
-          o.SUELDO,
-          o.OTRAS_PRESTACIONES,
-          o.QUINQUENIOS,
-          o.ACTIVO,
-          o.FECHA_MOV_ALT,
-          o.ORGS1,
-          o.ORGS2,
-          o.ORGS3,
-          o.ORGS,
-          o.DSUELDO,
-          o.DOTRAS_PRESTACIONES,
-          o.DQUINQUENIOS,
-          o.APLICAR,
-          o.BC,
-          o.PORCENTAJE
-        FROM PERSONAL p
-        INNER JOIN ORG_PERSONAL o
-          ON o.INTERNO = p.INTERNO
-         AND o.ACTIVO IN ('A', 'L')
-         AND o.CLAVE_ORGANICA_0 = ?
-         AND o.CLAVE_ORGANICA_1 = ?
-         AND o.FECHA_MOV_ALT = (
-               SELECT MAX(x.FECHA_MOV_ALT)
-               FROM ORG_PERSONAL x
-               WHERE x.INTERNO = p.INTERNO
-                 AND x.CLAVE_ORGANICA_0 = ?
-                 AND x.CLAVE_ORGANICA_1 = ?
-             )
-         AND o.ORGS = (
-               SELECT MAX(x2.ORGS)
-               FROM ORG_PERSONAL x2
-               WHERE x2.INTERNO = p.INTERNO
-                 AND x2.CLAVE_ORGANICA_0 = ?
-                 AND x2.CLAVE_ORGANICA_1 = ?
-                 AND x2.FECHA_MOV_ALT = o.FECHA_MOV_ALT
-             )
-      `;
+    const logContext = {
+      operation: 'obtenerPlantilla',
+      claveOrganica0,
+      claveOrganica1
+    };
 
-      console.log('🔍 [DEBUG] SQL Query:', sql);
-      console.log('🔍 [DEBUG] SQL Parameters:', [claveOrganica0, claveOrganica1, claveOrganica0, claveOrganica1, claveOrganica0, claveOrganica1]);
+    logger.debug(logContext, 'Iniciando consulta obtenerPlantilla');
 
-      this.firebirdDb.query(
-        sql,
-        [claveOrganica0, claveOrganica1, claveOrganica0, claveOrganica1, claveOrganica0, claveOrganica1],
-        (err: any, result: any) => {
-          console.log('🔍 [DEBUG] Firebird query callback ejecutado');
+    const sql = `
+      SELECT
+        p.INTERNO,
+        p.CURP,
+        p.RFC,
+        p.NOEMPLEADO,
+        p.NOMBRE,
+        p.APELLIDO_PATERNO,
+        p.APELLIDO_MATERNO,
+        p.FECHA_NACIMIENTO,
+        p.SEGURO_SOCIAL,
+        p.CALLE_NUMERO,
+        p.FRACCIONAMIENTO,
+        p.CODIGO_POSTAL,
+        p.TELEFONO,
+        p.SEXO,
+        p.ESTADO_CIVIL,
+        p.LOCALIDAD,
+        p.MUNICIPIO,
+        p.ESTADO,
+        p.PAIS,
+        p.DEPENDIENTES,
+        p.POSEE_INMUEBLES,
+        p.FULLNAME,
+        p.FECHA_CARTA,
+        p.EMAIL,
+        p.NACIONALIDAD,
+        p.FECHA_ALTA,
+        p.CELULAR,
+        p.EXPEDIENTE,
+        p.F_EXPEDIENTE,
+        o.CLAVE_ORGANICA_0,
+        o.CLAVE_ORGANICA_1,
+        o.CLAVE_ORGANICA_2,
+        o.CLAVE_ORGANICA_3,
+        o.SUELDO,
+        o.OTRAS_PRESTACIONES,
+        o.QUINQUENIOS,
+        o.ACTIVO,
+        o.FECHA_MOV_ALT,
+        o.ORGS1,
+        o.ORGS2,
+        o.ORGS3,
+        o.ORGS,
+        o.DSUELDO,
+        o.DOTRAS_PRESTACIONES,
+        o.DQUINQUENIOS,
+        o.APLICAR,
+        o.BC,
+        o.PORCENTAJE
+      FROM PERSONAL p
+      INNER JOIN ORG_PERSONAL o
+        ON o.INTERNO = p.INTERNO
+       AND o.ACTIVO IN ('A', 'L')
+       AND o.CLAVE_ORGANICA_0 = ?
+       AND o.CLAVE_ORGANICA_1 = ?
+       AND o.FECHA_MOV_ALT = (
+             SELECT MAX(x.FECHA_MOV_ALT)
+             FROM ORG_PERSONAL x
+             WHERE x.INTERNO = p.INTERNO
+               AND x.CLAVE_ORGANICA_0 = ?
+               AND x.CLAVE_ORGANICA_1 = ?
+           )
+       AND o.ORGS = (
+             SELECT MAX(x2.ORGS)
+             FROM ORG_PERSONAL x2
+             WHERE x2.INTERNO = p.INTERNO
+               AND x2.CLAVE_ORGANICA_0 = ?
+               AND x2.CLAVE_ORGANICA_1 = ?
+               AND x2.FECHA_MOV_ALT = o.FECHA_MOV_ALT
+           )
+    `;
+
+    const params = [claveOrganica0, claveOrganica1, claveOrganica0, claveOrganica1, claveOrganica0, claveOrganica1];
+
+    logger.debug({ ...logContext, sql, params }, 'Ejecutando consulta SQL');
+
+    return executeSerializedQuery((db) => {
+      return new Promise<AfiliadoPersonal[]>((resolve, reject) => {
+        // Validar que la conexión esté disponible
+        if (!db || typeof db.query !== 'function') {
+          logger.error(logContext, 'Conexión Firebird no disponible');
+          reject(new Error('Firebird connection not available'));
+          return;
+        }
+
+        // Timeout para prevenir consultas colgadas
+        const timeoutId = setTimeout(() => {
+          logger.error({ ...logContext, timeout: true }, 'Timeout en consulta Firebird');
+          reject(new Error('Firebird query timeout'));
+        }, 30000); // 30 segundos
+
+        db.query(sql, params, (err: any, result: any) => {
+          clearTimeout(timeoutId);
+
           if (err) {
-            console.error('🔍 [DEBUG] Error en consulta Firebird:', err);
+            logger.error({ ...logContext, error: err.message, stack: err.stack }, 'Error en consulta Firebird');
             reject(err);
             return;
           }
 
-          console.log('🔍 [DEBUG] Resultado de consulta:', result ? result.length : 'undefined', 'registros');
-          const records = result.map((row: any) => this.mapRowToEntity(row));
-          console.log('🔍 [DEBUG] Registros mapeados:', records.length);
-          resolve(records);
-        }
-      );
+          if (!result) {
+            logger.warn(logContext, 'Consulta Firebird retornó resultado nulo');
+            resolve([]);
+            return;
+          }
+
+          try {
+            // Validar que result sea un array
+            const records = Array.isArray(result) ? result : [];
+            logger.debug({ ...logContext, recordCount: records.length }, 'Registros obtenidos de Firebird');
+
+            const mappedRecords = records.map((row: any) => this.mapRowToEntity(row));
+            logger.info({ ...logContext, recordCount: mappedRecords.length }, 'Consulta obtenerPlantilla completada exitosamente');
+            resolve(mappedRecords);
+          } catch (mapError: any) {
+            logger.error({ ...logContext, error: mapError.message, stack: mapError.stack }, 'Error al mapear registros');
+            reject(new Error(`Error mapping records: ${mapError.message}`));
+          }
+        });
+      });
     });
   }
 
@@ -121,93 +162,138 @@ export class AfiliadoPersonalRepository implements IAfiliadoPersonalRepository {
    * Returns employees with their latest ORG_PERSONAL record regardless of ACTIVO status
    */
   async busquedaHistorico(searchTerm?: string): Promise<AfiliadoPersonal[]> {
-    return new Promise((resolve, reject) => {
-      let sql = `
-        SELECT
-          p.INTERNO,
-          p.CURP,
-          p.RFC,
-          p.NOEMPLEADO,
-          p.NOMBRE,
-          p.APELLIDO_PATERNO,
-          p.APELLIDO_MATERNO,
-          p.FECHA_NACIMIENTO,
-          p.SEGURO_SOCIAL,
-          p.CALLE_NUMERO,
-          p.FRACCIONAMIENTO,
-          p.CODIGO_POSTAL,
-          p.TELEFONO,
-          p.SEXO,
-          p.ESTADO_CIVIL,
-          p.LOCALIDAD,
-          p.MUNICIPIO,
-          p.ESTADO,
-          p.PAIS,
-          p.DEPENDIENTES,
-          p.POSEE_INMUEBLES,
-          p.FULLNAME,
-          p.FECHA_CARTA,
-          p.EMAIL,
-          p.NACIONALIDAD,
-          p.FECHA_ALTA,
-          p.CELULAR,
-          p.EXPEDIENTE,
-          p.F_EXPEDIENTE,
-          o.CLAVE_ORGANICA_0,
-          o.CLAVE_ORGANICA_1,
-          o.CLAVE_ORGANICA_2,
-          o.CLAVE_ORGANICA_3,
-          o.SUELDO,
-          o.OTRAS_PRESTACIONES,
-          o.QUINQUENIOS,
-          o.ACTIVO,
-          o.FECHA_MOV_ALT,
-          o.ORGS1,
-          o.ORGS2,
-          o.ORGS3,
-          o.ORGS,
-          o.DSUELDO,
-          o.DOTRAS_PRESTACIONES,
-          o.DQUINQUENIOS,
-          o.APLICAR,
-          o.BC,
-          o.PORCENTAJE
-        FROM PERSONAL p
-        INNER JOIN ORG_PERSONAL o
-          ON o.INTERNO = p.INTERNO
-         AND o.FECHA_MOV_ALT = (
-               SELECT MAX(x.FECHA_MOV_ALT)
-               FROM ORG_PERSONAL x
-               WHERE x.INTERNO = p.INTERNO
-             )
-         AND o.ORGS = (
-               SELECT MAX(x2.ORGS)
-               FROM ORG_PERSONAL x2
-               WHERE x2.INTERNO = p.INTERNO
-                 AND x2.FECHA_MOV_ALT = o.FECHA_MOV_ALT
-             )
+    const logContext = {
+      operation: 'busquedaHistorico',
+      searchTerm
+    };
+
+    logger.debug(logContext, 'Iniciando búsqueda histórica');
+
+    let sql = `
+      SELECT
+        p.INTERNO,
+        p.CURP,
+        p.RFC,
+        p.NOEMPLEADO,
+        p.NOMBRE,
+        p.APELLIDO_PATERNO,
+        p.APELLIDO_MATERNO,
+        p.FECHA_NACIMIENTO,
+        p.SEGURO_SOCIAL,
+        p.CALLE_NUMERO,
+        p.FRACCIONAMIENTO,
+        p.CODIGO_POSTAL,
+        p.TELEFONO,
+        p.SEXO,
+        p.ESTADO_CIVIL,
+        p.LOCALIDAD,
+        p.MUNICIPIO,
+        p.ESTADO,
+        p.PAIS,
+        p.DEPENDIENTES,
+        p.POSEE_INMUEBLES,
+        p.FULLNAME,
+        p.FECHA_CARTA,
+        p.EMAIL,
+        p.NACIONALIDAD,
+        p.FECHA_ALTA,
+        p.CELULAR,
+        p.EXPEDIENTE,
+        p.F_EXPEDIENTE,
+        o.CLAVE_ORGANICA_0,
+        o.CLAVE_ORGANICA_1,
+        o.CLAVE_ORGANICA_2,
+        o.CLAVE_ORGANICA_3,
+        o.SUELDO,
+        o.OTRAS_PRESTACIONES,
+        o.QUINQUENIOS,
+        o.ACTIVO,
+        o.FECHA_MOV_ALT,
+        o.ORGS1,
+        o.ORGS2,
+        o.ORGS3,
+        o.ORGS,
+        o.DSUELDO,
+        o.DOTRAS_PRESTACIONES,
+        o.DQUINQUENIOS,
+        o.APLICAR,
+        o.BC,
+        o.PORCENTAJE
+      FROM PERSONAL p
+      INNER JOIN ORG_PERSONAL o
+        ON o.INTERNO = p.INTERNO
+       AND o.FECHA_MOV_ALT = (
+             SELECT MAX(x.FECHA_MOV_ALT)
+             FROM ORG_PERSONAL x
+             WHERE x.INTERNO = p.INTERNO
+           )
+       AND o.ORGS = (
+             SELECT MAX(x2.ORGS)
+             FROM ORG_PERSONAL x2
+             WHERE x2.INTERNO = p.INTERNO
+               AND x2.FECHA_MOV_ALT = o.FECHA_MOV_ALT
+           )
+    `;
+
+    const params: any[] = [];
+
+    if (searchTerm && searchTerm.trim()) {
+      const searchValue = searchTerm.trim().toUpperCase();
+      const escapedSearch = searchValue.replace(/'/g, "''");
+      sql += `
+        WHERE (UPPER(p.RFC) CONTAINING '${escapedSearch}'
+            OR UPPER(p.CURP) CONTAINING '${escapedSearch}'
+            OR UPPER(p.INTERNO) CONTAINING '${escapedSearch}'
+            OR UPPER(p.NOEMPLEADO) CONTAINING '${escapedSearch}'
+            OR UPPER(p.FULLNAME) CONTAINING '${escapedSearch}')
       `;
+    }
 
-      if (searchTerm && searchTerm.trim()) {
-        const searchValue = searchTerm.trim().toUpperCase();
-        const escapedSearch = searchValue.replace(/'/g, "''");
-        sql += `
-          WHERE (UPPER(p.RFC) CONTAINING '${escapedSearch}'
-              OR UPPER(p.CURP) CONTAINING '${escapedSearch}'
-              OR UPPER(p.INTERNO) CONTAINING '${escapedSearch}'
-              OR UPPER(p.NOEMPLEADO) CONTAINING '${escapedSearch}'
-              OR UPPER(p.FULLNAME) CONTAINING '${escapedSearch}')
-        `;
-      }
+    logger.debug({ ...logContext, sql, params }, 'Ejecutando consulta SQL');
 
-      this.firebirdDb.query(sql, [], (err: any, result: any) => {
-        if (err) {
-          reject(err);
+    return executeSerializedQuery((db) => {
+      return new Promise<AfiliadoPersonal[]>((resolve, reject) => {
+        // Validar que la conexión esté disponible
+        if (!db || typeof db.query !== 'function') {
+          logger.error(logContext, 'Conexión Firebird no disponible');
+          reject(new Error('Firebird connection not available'));
           return;
         }
 
-        const records = result.map((row: any) => this.mapRowToEntity(row));
-        resolve(records);
+        // Timeout para prevenir consultas colgadas
+        const timeoutId = setTimeout(() => {
+          logger.error({ ...logContext, timeout: true }, 'Timeout en consulta Firebird');
+          reject(new Error('Firebird query timeout'));
+        }, 30000); // 30 segundos
+
+        db.query(sql, params, (err: any, result: any) => {
+          clearTimeout(timeoutId);
+
+          if (err) {
+            logger.error({ ...logContext, error: err.message, stack: err.stack }, 'Error en consulta Firebird');
+            reject(err);
+            return;
+          }
+
+          if (!result) {
+            logger.warn(logContext, 'Consulta Firebird retornó resultado nulo');
+            resolve([]);
+            return;
+          }
+
+          try {
+            // Validar que result sea un array
+            const records = Array.isArray(result) ? result : [];
+            logger.debug({ ...logContext, recordCount: records.length }, 'Registros obtenidos de Firebird');
+
+            const mappedRecords = records.map((row: any) => this.mapRowToEntity(row));
+            logger.info({ ...logContext, recordCount: mappedRecords.length }, 'Búsqueda histórica completada exitosamente');
+            resolve(mappedRecords);
+          } catch (mapError: any) {
+            logger.error({ ...logContext, error: mapError.message, stack: mapError.stack }, 'Error al mapear registros');
+            reject(new Error(`Error mapping records: ${mapError.message}`));
+          }
+        });
       });
     });
   }

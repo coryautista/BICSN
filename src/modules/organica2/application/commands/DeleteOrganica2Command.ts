@@ -4,7 +4,8 @@ import {
   Organica2InvalidClaveOrganica0Error,
   Organica2InvalidClaveOrganica1Error,
   Organica2InvalidClaveOrganica2Error,
-  Organica2DeletionError
+  Organica2DeletionError,
+  Organica2InUseError
 } from '../../domain/errors.js';
 
 export class DeleteOrganica2Command {
@@ -41,8 +42,8 @@ export class DeleteOrganica2Command {
         throw new Organica2NotFoundError(claveOrganica0, claveOrganica1, claveOrganica2);
       }
 
-      // Verificar reglas de negocio antes de eliminar
-      await this.validateDeletionRules(claveOrganica0, claveOrganica1, claveOrganica2);
+      // Verificar si la entidad está siendo utilizada (lógica de negocio)
+      await this.checkOrganica2InUse(claveOrganica0, claveOrganica1, claveOrganica2);
 
       // Eliminar la entidad
       const deleted = await this.organica2Repo.delete(claveOrganica0, claveOrganica1, claveOrganica2);
@@ -129,38 +130,18 @@ export class DeleteOrganica2Command {
     }
   }
 
-  private async validateDeletionRules(claveOrganica0: string, claveOrganica1: string, claveOrganica2: string): Promise<void> {
-    // Verificar si hay dependencias que impidan la eliminación
-    // Por ejemplo, verificar si hay registros en organica3 que dependan de esta organica2
-
-    try {
-      // Aquí irían las validaciones de negocio específicas
-      // Por ejemplo, verificar dependencias en otras tablas
-
-      // Si hay dependencias, lanzar error
-      // throw new Organica2DeletionError('No se puede eliminar la organica2 porque tiene dependencias');
-
-    } catch (error) {
-      console.warn('ORGANICA2_DELETION_VALIDATION_WARNING', {
+  private async checkOrganica2InUse(claveOrganica0: string, claveOrganica1: string, claveOrganica2: string): Promise<void> {
+    const inUse = await this.organica2Repo.isInUse(claveOrganica0, claveOrganica1, claveOrganica2);
+    if (inUse) {
+      console.warn('ORGANICA2_COMMAND_WARNING', {
+        operation: 'DELETE_ORGANICA2',
         claveOrganica0,
         claveOrganica1,
         claveOrganica2,
-        error: error instanceof Error ? error.message : 'UNKNOWN_ERROR',
+        reason: 'ORGANICA2_IN_USE',
         timestamp: new Date().toISOString()
       });
-
-      if (error instanceof Organica2DeletionError) {
-        throw error;
-      }
-
-      // Si es otro tipo de error, permitir la eliminación pero loguear
-      console.warn('ORGANICA2_DELETION_DEPENDENCY_CHECK_FAILED', {
-        claveOrganica0,
-        claveOrganica1,
-        claveOrganica2,
-        error: error instanceof Error ? error.message : 'UNKNOWN_ERROR',
-        timestamp: new Date().toISOString()
-      });
+      throw new Organica2InUseError(claveOrganica0, claveOrganica1, claveOrganica2);
     }
   }
 }

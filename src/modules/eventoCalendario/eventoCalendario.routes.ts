@@ -30,7 +30,7 @@ export default async function eventoCalendarioRoutes(app: FastifyInstance) {
                 properties: {
                   id: { type: 'integer' },
                   fecha: { type: 'string', format: 'date' },
-                  tipo: { type: 'string', enum: ['FERIADO', 'VACACIONES', 'EVENTO_ESPECIAL', 'DIA_NO_LABORABLE'] },
+                  tipo: { type: 'string', enum: ['FERIADO', 'VACACIONES', 'EVENTO_ESPECIAL', 'DIA_NO_LABORABLE', 'ALTA_BAJA_CAMBIO'] },
                   anio: { type: 'integer' },
                   createdAt: { type: 'string', format: 'date-time' }
                 }
@@ -253,7 +253,7 @@ export default async function eventoCalendarioRoutes(app: FastifyInstance) {
         required: ['fecha', 'tipo', 'anio'],
         properties: {
           fecha: { type: 'string', format: 'date' },
-          tipo: { type: 'string', enum: ['FERIADO', 'VACACIONES', 'EVENTO_ESPECIAL', 'DIA_NO_LABORABLE', 'HIPOTECARIO'] },
+          tipo: { type: 'string', enum: ['FERIADO', 'VACACIONES', 'EVENTO_ESPECIAL', 'DIA_NO_LABORABLE', 'ALTA_BAJA_CAMBIO'] },
           anio: { type: 'integer' },
           createdAt: { type: 'string', format: 'date-time' }
         }
@@ -267,7 +267,7 @@ export default async function eventoCalendarioRoutes(app: FastifyInstance) {
               properties: {
                 id: { type: 'integer' },
                 fecha: { type: 'string', format: 'date' },
-                tipo: { type: 'string', enum: ['FERIADO', 'VACACIONES', 'EVENTO_ESPECIAL', 'DIA_NO_LABORABLE', 'HIPOTECARIO'] },
+                tipo: { type: 'string', enum: ['FERIADO', 'VACACIONES', 'EVENTO_ESPECIAL', 'DIA_NO_LABORABLE', 'ALTA_BAJA_CAMBIO'] },
                 anio: { type: 'integer' },
                 createdAt: { type: 'string', format: 'date-time' }
               }
@@ -318,7 +318,15 @@ export default async function eventoCalendarioRoutes(app: FastifyInstance) {
   }, async (req, reply) => {
     const parsed = CreateEventoCalendarioSchema.safeParse(req.body);
     if (!parsed.success) {
-      return reply.code(400).send(validationError(parsed.error.issues));
+      const validationErrorResponse = {
+        ok: false,
+        error: {
+          code: 'VALIDATION_FAILED',
+          message: 'Error de validación en los datos del evento de calendario',
+          details: parsed.error.issues
+        }
+      };
+      return reply.code(400).send(validationErrorResponse);
     }
 
     try {

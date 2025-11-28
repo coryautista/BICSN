@@ -2,16 +2,19 @@ import { z } from 'zod';
 
 // Schema for registering an organizational affectation
 export const RegisterAfectacionOrgSchema = z.object({
-  entidad: z.string().min(1, 'Entidad is required'),
+  fecha: z.string().refine(val => !isNaN(Date.parse(val)), {
+    message: 'Fecha must be a valid date string'
+  }),
+  entidad: z.string().default('AFILIADOS'),
   anio: z.number().int().min(2000).max(2100, 'Anio must be between 2000 and 2100'),
   quincena: z.number().int().min(1).max(24, 'Quincena must be between 1 and 24'),
-  orgNivel: z.number().int().min(0).max(3, 'OrgNivel must be between 0 and 3'),
+  orgNivel: z.number().int().min(0).max(3, 'OrgNivel must be between 0 and 3').default(3),
   org0: z.string().length(2, 'Org0 must be exactly 2 characters'),
   org1: z.string().length(2, 'Org1 must be exactly 2 characters').optional(),
   org2: z.string().length(2, 'Org2 must be exactly 2 characters').optional(),
   org3: z.string().length(2, 'Org3 must be exactly 2 characters').optional(),
-  accion: z.string().min(1, 'Accion is required'),
-  resultado: z.string().min(1, 'Resultado is required'),
+  accion: z.string().default('APLICAR'),
+  resultado: z.string().default('OK'),
   mensaje: z.string().optional(),
   usuario: z.string().min(1, 'Usuario is required'),
   appName: z.string().min(1, 'AppName is required'),

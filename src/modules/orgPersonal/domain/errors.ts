@@ -10,13 +10,27 @@ export class OrgPersonalError extends DomainError {
 }
 
 /**
- * Error cuando un registro orgPersonal no es encontrado
+ * Error cuando un registro orgPersonal no es encontrado por interno
  */
 export class OrgPersonalNotFoundError extends OrgPersonalError {
   constructor(interno: number) {
     super(
       `Registro orgPersonal con interno ${interno} no encontrado`,
       'ORG_PERSONAL_NOT_FOUND',
+      404
+    );
+  }
+}
+
+/**
+ * Error cuando no se encuentra un registro por CURP/RFC/Nombre
+ */
+export class OrgPersonalSearchNotFoundError extends OrgPersonalError {
+  constructor(searchTerm: string, searchType: 'CURP' | 'RFC' | 'NOMBRE' = 'CURP') {
+    const typeLabel = searchType === 'CURP' ? 'CURP' : searchType === 'RFC' ? 'RFC' : 'nombre';
+    super(
+      `No se encontró ningún registro con ${typeLabel}: ${searchTerm}`,
+      'ORG_PERSONAL_SEARCH_NOT_FOUND',
       404
     );
   }

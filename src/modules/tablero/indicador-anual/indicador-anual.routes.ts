@@ -1,7 +1,7 @@
 import { FastifyInstance } from 'fastify';
 import { requireAuth, requireRole } from '../../auth/auth.middleware.js';
 import { CreateIndicadorAnualSchema, UpdateIndicadorAnualSchema, IndicadorAnualIdParamSchema, IndicadorIdParamSchema, AnioParamSchema } from './indicador-anual.schemas.js';
-import { getIndicadoresAnualesByIndicador, getIndicadoresAnualesByAnio, getIndicadorAnualById, createIndicadorAnualItem, updateIndicadorAnualItem, deleteIndicadorAnualItem } from './indicador-anual.service.js';
+import { IndicadorAnualService } from './indicador-anual.service.js';
 import { ok, validationError, notFound, internalError } from '../../../utils/http.js';
 import { withDbContext } from '../../../db/context.js';
 
@@ -102,7 +102,8 @@ export default async function indicadorAnualRoutes(app: FastifyInstance) {
     }
 
     try {
-      const indicadoresAnuales = await getIndicadoresAnualesByIndicador(paramValidation.data.indicadorId);
+      const indicadorAnualService = req.diScope.resolve<IndicadorAnualService>('indicadorAnualService');
+      const indicadoresAnuales = await indicadorAnualService.getIndicadoresAnualesByIndicador(paramValidation.data.indicadorId);
       return reply.send(ok(indicadoresAnuales));
     } catch (error: any) {
       console.error('Error listing indicadores anuales by indicador:', error);
@@ -205,7 +206,8 @@ export default async function indicadorAnualRoutes(app: FastifyInstance) {
     }
 
     try {
-      const indicadoresAnuales = await getIndicadoresAnualesByAnio(paramValidation.data.anio);
+      const indicadorAnualService = req.diScope.resolve<IndicadorAnualService>('indicadorAnualService');
+      const indicadoresAnuales = await indicadorAnualService.getIndicadoresAnualesByAnio(paramValidation.data.anio);
       return reply.send(ok(indicadoresAnuales));
     } catch (error: any) {
       console.error('Error listing indicadores anuales by anio:', error);
@@ -318,7 +320,8 @@ export default async function indicadorAnualRoutes(app: FastifyInstance) {
     }
 
     try {
-      const indicadorAnual = await getIndicadorAnualById(paramValidation.data.indicadorAnualId);
+      const indicadorAnualService = req.diScope.resolve<IndicadorAnualService>('indicadorAnualService');
+      const indicadorAnual = await indicadorAnualService.getIndicadorAnualById(paramValidation.data.indicadorAnualId);
       return reply.send(ok(indicadorAnual));
     } catch (error: any) {
       if (error.message === 'INDICADOR_ANUAL_NOT_FOUND') {
@@ -423,7 +426,8 @@ export default async function indicadorAnualRoutes(app: FastifyInstance) {
 
       try {
         const userId = req.user?.sub;
-        const indicadorAnual = await createIndicadorAnualItem(
+        const indicadorAnualService = req.diScope.resolve<IndicadorAnualService>('indicadorAnualService');
+        const indicadorAnual = await indicadorAnualService.createIndicadorAnualItem(
           parsed.data.idIndicador,
           parsed.data.anio,
           parsed.data.enero,
@@ -573,7 +577,8 @@ export default async function indicadorAnualRoutes(app: FastifyInstance) {
 
       try {
         const userId = req.user?.sub;
-        const indicadorAnual = await updateIndicadorAnualItem(
+        const indicadorAnualService = req.diScope.resolve<IndicadorAnualService>('indicadorAnualService');
+        const indicadorAnual = await indicadorAnualService.updateIndicadorAnualItem(
           paramValidation.data.indicadorAnualId,
           parsed.data.enero,
           parsed.data.febrero,
@@ -681,7 +686,8 @@ export default async function indicadorAnualRoutes(app: FastifyInstance) {
       }
 
       try {
-        const deletedId = await deleteIndicadorAnualItem(paramValidation.data.indicadorAnualId, tx);
+        const indicadorAnualService = req.diScope.resolve<IndicadorAnualService>('indicadorAnualService');
+        const deletedId = await indicadorAnualService.deleteIndicadorAnualItem(paramValidation.data.indicadorAnualId, tx);
         return reply.send(ok({ id: deletedId }));
       } catch (error: any) {
         if (error.message === 'INDICADOR_ANUAL_NOT_FOUND') {

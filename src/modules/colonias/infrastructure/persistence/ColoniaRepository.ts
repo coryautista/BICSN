@@ -4,7 +4,7 @@ import { Colonia, ColoniaDetailed, SearchColoniasFilters } from '../../domain/en
 import { sql } from '../../../../db/mssql.js';
 
 export class ColoniaRepository implements IColoniaRepository {
-  constructor(private pool: ConnectionPool) {}
+  constructor(private mssqlPool: ConnectionPool) {}
 
   private mapRowToColoniaDetailed(row: any): ColoniaDetailed {
     return {
@@ -56,7 +56,7 @@ export class ColoniaRepository implements IColoniaRepository {
     if (!coloniaId || typeof coloniaId !== 'number' || coloniaId <= 0) {
       throw new Error('Invalid coloniaId: must be a positive number');
     }
-    const r = await this.pool.request()
+    const r = await this.mssqlPool.request()
       .input('coloniaId', sql.Int, coloniaId)
       .query(`
         SELECT
@@ -89,7 +89,7 @@ export class ColoniaRepository implements IColoniaRepository {
     if (!municipioId || typeof municipioId !== 'number' || municipioId <= 0) {
       throw new Error('Invalid municipioId: must be a positive number');
     }
-    const r = await this.pool.request()
+    const r = await this.mssqlPool.request()
       .input('municipioId', sql.Int, municipioId)
       .query(`
         SELECT
@@ -116,7 +116,7 @@ export class ColoniaRepository implements IColoniaRepository {
     if (!codigoPostalId || typeof codigoPostalId !== 'number' || codigoPostalId <= 0) {
       throw new Error('Invalid codigoPostalId: must be a positive number');
     }
-    const r = await this.pool.request()
+    const r = await this.mssqlPool.request()
       .input('codigoPostalId', sql.Int, codigoPostalId)
       .query(`
         SELECT
@@ -172,7 +172,7 @@ export class ColoniaRepository implements IColoniaRepository {
       ORDER BY c.NombreColonia ASC
     `;
 
-    const req = this.pool.request();
+    const req = this.mssqlPool.request();
     req.input('nombreColonia', sql.VarChar(102), `%${filters.nombreColonia}%`);
 
     const r = await req.query(query);
@@ -180,7 +180,7 @@ export class ColoniaRepository implements IColoniaRepository {
   }
 
   async create(municipioId: number, codigoPostalId: number, nombreColonia: string, tipoAsentamiento?: string, esValido?: boolean, userId?: string): Promise<ColoniaDetailed> {
-    const transaction = this.pool.transaction();
+    const transaction = this.mssqlPool.transaction();
     await transaction.begin();
 
     try {
@@ -217,7 +217,7 @@ export class ColoniaRepository implements IColoniaRepository {
   }
 
   async update(coloniaId: number, nombreColonia?: string, tipoAsentamiento?: string, esValido?: boolean, userId?: string): Promise<ColoniaDetailed | undefined> {
-    const transaction = this.pool.transaction();
+    const transaction = this.mssqlPool.transaction();
     await transaction.begin();
 
     try {
@@ -265,7 +265,7 @@ export class ColoniaRepository implements IColoniaRepository {
   }
 
   async delete(coloniaId: number): Promise<number | undefined> {
-    const transaction = this.pool.transaction();
+    const transaction = this.mssqlPool.transaction();
     await transaction.begin();
 
     try {

@@ -14,6 +14,9 @@ export async function withDbContext<T>(
     await tx.begin();
 
     const r = new sql.Request(tx);
+    // Increase request timeout for session context setup and commit
+    // Note: timeout is set via the connection pool configuration, not directly on Request
+    // The requestTimeout in sqlConfig.options applies to all requests
 
     // Set session context values
     const sessionValues = [
@@ -36,12 +39,21 @@ export async function withDbContext<T>(
     const result = await fn(tx);
 
     // Commit the transaction
+    // Note: commit() uses the connection timeout, which should be sufficient
+    console.log('[withDbContext] Starting commit...');
+    const commitStart = Date.now();
     await tx.commit();
+    const commitDuration = Date.now() - commitStart;
+    console.log(`[withDbContext] Commit completed in ${commitDuration}ms`);
 
     return result;
   } catch (error) {
     // Rollback on error
-    await tx.rollback();
+    try {
+      await tx.rollback();
+    } catch (rollbackError) {
+      console.error('Error during rollback:', rollbackError);
+    }
     throw error;
   }
 }

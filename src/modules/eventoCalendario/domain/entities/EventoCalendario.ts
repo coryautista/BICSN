@@ -1,14 +1,14 @@
 export interface EventoCalendario {
   id: number;
   fecha: string; // YYYY-MM-DD format
-  tipo: 'FERIADO' | 'VACACIONES' | 'EVENTO_ESPECIAL' | 'DIA_NO_LABORABLE';
+  tipo: 'FERIADO' | 'VACACIONES' | 'EVENTO_ESPECIAL' | 'DIA_NO_LABORABLE' | 'ALTA_BAJA_CAMBIO';
   anio: number;
   createdAt: string;
 }
 
 export interface CreateEventoCalendarioData {
   fecha: string; // YYYY-MM-DD format
-  tipo: 'FERIADO' | 'VACACIONES' | 'EVENTO_ESPECIAL' | 'DIA_NO_LABORABLE';
+  tipo: 'FERIADO' | 'VACACIONES' | 'EVENTO_ESPECIAL' | 'DIA_NO_LABORABLE' | 'ALTA_BAJA_CAMBIO';
   anio: number;
   createdAt?: string;
 }
@@ -16,7 +16,7 @@ export interface CreateEventoCalendarioData {
 export interface UpdateEventoCalendarioData {
   id: number;
   fecha?: string;
-  tipo?: 'FERIADO' | 'VACACIONES' | 'EVENTO_ESPECIAL' | 'DIA_NO_LABORABLE';
+  tipo?: 'FERIADO' | 'VACACIONES' | 'EVENTO_ESPECIAL' | 'DIA_NO_LABORABLE' | 'ALTA_BAJA_CAMBIO';
   anio?: number;
   createdAt?: string;
 }

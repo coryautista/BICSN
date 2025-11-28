@@ -122,6 +122,8 @@ export default async function afiliadosPersonalRoutes(app: FastifyInstance) {
       const claveOrganica1 = user.idOrganica1.toString();
 
       const records = await getPlantillaQuery.execute(claveOrganica0, claveOrganica1);
+      
+      // El mojibake se limpia automáticamente por el plugin mojibakeCleaner
       return reply.send(ok(records));
     } catch (error: any) {
       return handleAfiliadosPersonalError(error, reply);
@@ -185,6 +187,8 @@ export default async function afiliadosPersonalRoutes(app: FastifyInstance) {
     try {
       const { search } = req.query as { search?: string };
       const records = await busquedaHistoricoQuery.execute(search);
+      
+      // El mojibake se limpia automáticamente por el plugin mojibakeCleaner
       return reply.send(ok(records));
     } catch (error: any) {
       return handleAfiliadosPersonalError(error, reply);

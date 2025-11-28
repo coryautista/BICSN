@@ -1,12 +1,12 @@
-import { getFirebirdDb } from '../../db/firebird.js';
+import { executeSerializedQuery, executeSafeQuery } from '../../db/firebird.js';
 import { Organica3, CreateOrganica3, UpdateOrganica3, DynamicQuery } from './organica3.schemas.js';
 
 // [FIREBIRD] Repository for ORGANICA_3 table operations
 export async function findOrganica3ById(claveOrganica0: string, claveOrganica1: string, claveOrganica2: string, claveOrganica3: string): Promise<Organica3 | undefined> {
-  const db = getFirebirdDb();
-  return new Promise((resolve, reject) => {
-    db.query(
-      'SELECT CLAVE_ORGANICA_0, CLAVE_ORGANICA_1, CLAVE_ORGANICA_2, CLAVE_ORGANICA_3, DESCRIPCION, TITULAR, CALLE_NUM, FRACCIONAMIENTO, CODIGO_POSTAL, TELEFONO, FAX, LOCALIDAD, MUNICIPIO, ESTADO, FECHA_REGISTRO_3, FECHA_FIN_3, USUARIO, ESTATUS FROM ORGANICA_3 WHERE CLAVE_ORGANICA_0 = ? AND CLAVE_ORGANICA_1 = ? AND CLAVE_ORGANICA_2 = ? AND CLAVE_ORGANICA_3 = ?',
+  return executeSerializedQuery((db) => {
+    return new Promise<Organica3 | undefined>((resolve, reject) => {
+      db.query(
+        'SELECT CLAVE_ORGANICA_0, CLAVE_ORGANICA_1, CLAVE_ORGANICA_2, CLAVE_ORGANICA_3, DESCRIPCION, TITULAR, CALLE_NUM, FRACCIONAMIENTO, CODIGO_POSTAL, TELEFONO, FAX, LOCALIDAD, MUNICIPIO, ESTADO, FECHA_REGISTRO_3, FECHA_FIN_3, USUARIO, ESTATUS FROM ORGANICA_3 WHERE CLAVE_ORGANICA_0 = ? AND CLAVE_ORGANICA_1 = ? AND CLAVE_ORGANICA_2 = ? AND CLAVE_ORGANICA_3 = ?',
       [claveOrganica0, claveOrganica1, claveOrganica2, claveOrganica3],
       (err: any, result: any) => {
         if (err) {
@@ -40,14 +40,15 @@ export async function findOrganica3ById(claveOrganica0: string, claveOrganica1: 
         });
       }
     );
+    });
   });
 }
 
 export async function listOrganica3(): Promise<Organica3[]> {
-  const db = getFirebirdDb();
-  return new Promise((resolve, reject) => {
-    db.query(
-      'SELECT CLAVE_ORGANICA_0, CLAVE_ORGANICA_1, CLAVE_ORGANICA_2, CLAVE_ORGANICA_3, DESCRIPCION, TITULAR, CALLE_NUM, FRACCIONAMIENTO, CODIGO_POSTAL, TELEFONO, FAX, LOCALIDAD, MUNICIPIO, ESTADO, FECHA_REGISTRO_3, FECHA_FIN_3, USUARIO, ESTATUS FROM ORGANICA_3 ORDER BY CLAVE_ORGANICA_0, CLAVE_ORGANICA_1, CLAVE_ORGANICA_2, CLAVE_ORGANICA_3',
+  return executeSerializedQuery((db) => {
+    return new Promise<Organica3[]>((resolve, reject) => {
+      db.query(
+        'SELECT CLAVE_ORGANICA_0, CLAVE_ORGANICA_1, CLAVE_ORGANICA_2, CLAVE_ORGANICA_3, DESCRIPCION, TITULAR, CALLE_NUM, FRACCIONAMIENTO, CODIGO_POSTAL, TELEFONO, FAX, LOCALIDAD, MUNICIPIO, ESTADO, FECHA_REGISTRO_3, FECHA_FIN_3, USUARIO, ESTATUS FROM ORGANICA_3 ORDER BY CLAVE_ORGANICA_0, CLAVE_ORGANICA_1, CLAVE_ORGANICA_2, CLAVE_ORGANICA_3',
       [],
       (err: any, result: any) => {
         if (err) {
@@ -77,16 +78,17 @@ export async function listOrganica3(): Promise<Organica3[]> {
         resolve(records);
       }
     );
+    });
   });
 }
 
 export async function createOrganica3(data: CreateOrganica3): Promise<Organica3> {
-  const db = getFirebirdDb();
   const fechaRegistro3 = new Date();
 
-  return new Promise((resolve, reject) => {
-    db.query(
-      'INSERT INTO ORGANICA_3 (CLAVE_ORGANICA_0, CLAVE_ORGANICA_1, CLAVE_ORGANICA_2, CLAVE_ORGANICA_3, DESCRIPCION, TITULAR, CALLE_NUM, FRACCIONAMIENTO, CODIGO_POSTAL, TELEFONO, FAX, LOCALIDAD, MUNICIPIO, ESTADO, FECHA_REGISTRO_3, FECHA_FIN_3, USUARIO, ESTATUS) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+  return executeSerializedQuery((db) => {
+    return new Promise<Organica3>((resolve, reject) => {
+      db.query(
+        'INSERT INTO ORGANICA_3 (CLAVE_ORGANICA_0, CLAVE_ORGANICA_1, CLAVE_ORGANICA_2, CLAVE_ORGANICA_3, DESCRIPCION, TITULAR, CALLE_NUM, FRACCIONAMIENTO, CODIGO_POSTAL, TELEFONO, FAX, LOCALIDAD, MUNICIPIO, ESTADO, FECHA_REGISTRO_3, FECHA_FIN_3, USUARIO, ESTATUS) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
       [
         data.claveOrganica0,
         data.claveOrganica1,
@@ -134,11 +136,11 @@ export async function createOrganica3(data: CreateOrganica3): Promise<Organica3>
         });
       }
     );
+    });
   });
 }
 
 export async function updateOrganica3(claveOrganica0: string, claveOrganica1: string, claveOrganica2: string, claveOrganica3: string, data: UpdateOrganica3): Promise<Organica3 | undefined> {
-  const db = getFirebirdDb();
 
   // Build dynamic update query
   const updates: string[] = [];
@@ -204,9 +206,10 @@ export async function updateOrganica3(claveOrganica0: string, claveOrganica1: st
 
   params.push(claveOrganica0, claveOrganica1, claveOrganica2, claveOrganica3);
 
-  return new Promise((resolve, reject) => {
-    db.query(
-      `UPDATE ORGANICA_3 SET ${updates.join(', ')} WHERE CLAVE_ORGANICA_0 = ? AND CLAVE_ORGANICA_1 = ? AND CLAVE_ORGANICA_2 = ? AND CLAVE_ORGANICA_3 = ?`,
+  return executeSerializedQuery((db) => {
+    return new Promise<Organica3 | undefined>((resolve, reject) => {
+      db.query(
+        `UPDATE ORGANICA_3 SET ${updates.join(', ')} WHERE CLAVE_ORGANICA_0 = ? AND CLAVE_ORGANICA_1 = ? AND CLAVE_ORGANICA_2 = ? AND CLAVE_ORGANICA_3 = ?`,
       params,
       (err: any) => {
         if (err) {
@@ -217,14 +220,15 @@ export async function updateOrganica3(claveOrganica0: string, claveOrganica1: st
         findOrganica3ById(claveOrganica0, claveOrganica1, claveOrganica2, claveOrganica3).then(resolve).catch(reject);
       }
     );
+    });
   });
 }
 
 export async function deleteOrganica3(claveOrganica0: string, claveOrganica1: string, claveOrganica2: string, claveOrganica3: string): Promise<boolean> {
-  const db = getFirebirdDb();
-  return new Promise((resolve, reject) => {
-    db.query(
-      'DELETE FROM ORGANICA_3 WHERE CLAVE_ORGANICA_0 = ? AND CLAVE_ORGANICA_1 = ? AND CLAVE_ORGANICA_2 = ? AND CLAVE_ORGANICA_3 = ?',
+  return executeSerializedQuery((db) => {
+    return new Promise<boolean>((resolve, reject) => {
+      db.query(
+        'DELETE FROM ORGANICA_3 WHERE CLAVE_ORGANICA_0 = ? AND CLAVE_ORGANICA_1 = ? AND CLAVE_ORGANICA_2 = ? AND CLAVE_ORGANICA_3 = ?',
       [claveOrganica0, claveOrganica1, claveOrganica2, claveOrganica3],
       (err: any, result: any) => {
         if (err) {
@@ -234,11 +238,11 @@ export async function deleteOrganica3(claveOrganica0: string, claveOrganica1: st
         resolve(result > 0);
       }
     );
+    });
   });
 }
 
 export async function dynamicQueryOrganica3(query: DynamicQuery): Promise<Organica3[]> {
-  const db = getFirebirdDb();
 
   let sql = 'SELECT CLAVE_ORGANICA_0, CLAVE_ORGANICA_1, CLAVE_ORGANICA_2, CLAVE_ORGANICA_3, DESCRIPCION, TITULAR, CALLE_NUM, FRACCIONAMIENTO, CODIGO_POSTAL, TELEFONO, FAX, LOCALIDAD, MUNICIPIO, ESTADO, FECHA_REGISTRO_3, FECHA_FIN_3, USUARIO, ESTATUS FROM ORGANICA_3';
   const params: any[] = [];
@@ -282,39 +286,40 @@ export async function dynamicQueryOrganica3(query: DynamicQuery): Promise<Organi
     params.push(query.offset + 1000); // Default limit if offset specified
   }
 
-  return new Promise((resolve, reject) => {
-    db.query(sql, params, (err: any, result: any) => {
-      if (err) {
-        reject(err);
-        return;
-      }
-      const records = result.map((row: any) => ({
-        claveOrganica0: row.CLAVE_ORGANICA_0,
-        claveOrganica1: row.CLAVE_ORGANICA_1,
-        claveOrganica2: row.CLAVE_ORGANICA_2,
-        claveOrganica3: row.CLAVE_ORGANICA_3,
-        descripcion: row.DESCRIPCION,
-        titular: row.TITULAR,
-        calleNum: row.CALLE_NUM,
-        fraccionamiento: row.FRACCIONAMIENTO,
-        codigoPostal: row.CODIGO_POSTAL,
-        telefono: row.TELEFONO,
-        fax: row.FAX,
-        localidad: row.LOCALIDAD,
-        municipio: row.MUNICIPIO,
-        estado: row.ESTADO,
-        fechaRegistro3: new Date(row.FECHA_REGISTRO_3),
-        fechaFin3: row.FECHA_FIN_3 ? new Date(row.FECHA_FIN_3) : undefined,
-        usuario: row.USUARIO,
-        estatus: row.ESTATUS
-      }));
-      resolve(records);
+  return executeSerializedQuery((db) => {
+    return new Promise<Organica3[]>((resolve, reject) => {
+      db.query(sql, params, (err: any, result: any) => {
+        if (err) {
+          reject(err);
+          return;
+        }
+        const records = result.map((row: any) => ({
+          claveOrganica0: row.CLAVE_ORGANICA_0,
+          claveOrganica1: row.CLAVE_ORGANICA_1,
+          claveOrganica2: row.CLAVE_ORGANICA_2,
+          claveOrganica3: row.CLAVE_ORGANICA_3,
+          descripcion: row.DESCRIPCION,
+          titular: row.TITULAR,
+          calleNum: row.CALLE_NUM,
+          fraccionamiento: row.FRACCIONAMIENTO,
+          codigoPostal: row.CODIGO_POSTAL,
+          telefono: row.TELEFONO,
+          fax: row.FAX,
+          localidad: row.LOCALIDAD,
+          municipio: row.MUNICIPIO,
+          estado: row.ESTADO,
+          fechaRegistro3: new Date(row.FECHA_REGISTRO_3),
+          fechaFin3: row.FECHA_FIN_3 ? new Date(row.FECHA_FIN_3) : undefined,
+          usuario: row.USUARIO,
+          estatus: row.ESTATUS
+        }));
+        resolve(records);
+      });
     });
   });
 }
 
 export async function findOrganica3ByUserAndParam(claveOrganica0?: string, claveOrganica1?: string, claveOrganica2?: string): Promise<Organica3[]> {
-  const db = getFirebirdDb();
   
   let sql = 'SELECT CLAVE_ORGANICA_0, CLAVE_ORGANICA_1, CLAVE_ORGANICA_2, CLAVE_ORGANICA_3, DESCRIPCION, TITULAR, CALLE_NUM, FRACCIONAMIENTO, CODIGO_POSTAL, TELEFONO, FAX, LOCALIDAD, MUNICIPIO, ESTADO, FECHA_REGISTRO_3, FECHA_FIN_3, USUARIO, ESTATUS FROM ORGANICA_3';
   const params: any[] = [];
@@ -341,33 +346,35 @@ export async function findOrganica3ByUserAndParam(claveOrganica0?: string, clave
 
   sql += ' ORDER BY CLAVE_ORGANICA_0, CLAVE_ORGANICA_1, CLAVE_ORGANICA_2, CLAVE_ORGANICA_3';
 
-  return new Promise((resolve, reject) => {
-    db.query(sql, params, (err: any, result: any) => {
-      if (err) {
-        reject(err);
-        return;
-      }
-      const records = result.map((row: any) => ({
-        claveOrganica0: row.CLAVE_ORGANICA_0,
-        claveOrganica1: row.CLAVE_ORGANICA_1,
-        claveOrganica2: row.CLAVE_ORGANICA_2,
-        claveOrganica3: row.CLAVE_ORGANICA_3,
-        descripcion: row.DESCRIPCION,
-        titular: row.TITULAR,
-        calleNum: row.CALLE_NUM,
-        fraccionamiento: row.FRACCIONAMIENTO,
-        codigoPostal: row.CODIGO_POSTAL,
-        telefono: row.TELEFONO,
-        fax: row.FAX,
-        localidad: row.LOCALIDAD,
-        municipio: row.MUNICIPIO,
-        estado: row.ESTADO,
-        fechaRegistro3: new Date(row.FECHA_REGISTRO_3),
-        fechaFin3: row.FECHA_FIN_3 ? new Date(row.FECHA_FIN_3) : undefined,
-        usuario: row.USUARIO,
-        estatus: row.ESTATUS
-      }));
-      resolve(records);
+  return executeSerializedQuery((db) => {
+    return new Promise<Organica3[]>((resolve, reject) => {
+      db.query(sql, params, (err: any, result: any) => {
+        if (err) {
+          reject(err);
+          return;
+        }
+        const records = result.map((row: any) => ({
+          claveOrganica0: row.CLAVE_ORGANICA_0,
+          claveOrganica1: row.CLAVE_ORGANICA_1,
+          claveOrganica2: row.CLAVE_ORGANICA_2,
+          claveOrganica3: row.CLAVE_ORGANICA_3,
+          descripcion: row.DESCRIPCION,
+          titular: row.TITULAR,
+          calleNum: row.CALLE_NUM,
+          fraccionamiento: row.FRACCIONAMIENTO,
+          codigoPostal: row.CODIGO_POSTAL,
+          telefono: row.TELEFONO,
+          fax: row.FAX,
+          localidad: row.LOCALIDAD,
+          municipio: row.MUNICIPIO,
+          estado: row.ESTADO,
+          fechaRegistro3: new Date(row.FECHA_REGISTRO_3),
+          fechaFin3: row.FECHA_FIN_3 ? new Date(row.FECHA_FIN_3) : undefined,
+          usuario: row.USUARIO,
+          estatus: row.ESTATUS
+        }));
+        resolve(records);
+      });
     });
   });
 }

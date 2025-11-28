@@ -1,7 +1,7 @@
 import { FastifyInstance } from 'fastify';
 import { requireAuth, requireRole } from '../../auth/auth.middleware.js';
 import { CreateDimensionSchema, UpdateDimensionSchema, DimensionIdParamSchema } from './dimension.schemas.js';
-import { getAllDimensiones, getDimensionesByTipo, getDimensionById, createDimensionItem, updateDimensionItem, deleteDimensionItem } from './dimension.service.js';
+import { DimensionService } from './dimension.service.js';
 import { ok, validationError, notFound, internalError } from '../../../utils/http.js';
 import { withDbContext } from '../../../db/context.js';
 
@@ -48,9 +48,10 @@ export default async function dimensionRoutes(app: FastifyInstance) {
         }
       }
     }
-  }, async (_req, reply) => {
+  }, async (req, reply) => {
     try {
-      const dimensiones = await getAllDimensiones();
+      const dimensionService = req.diScope.resolve<DimensionService>('dimensionService');
+      const dimensiones = await dimensionService.getAllDimensiones();
       return reply.send(ok(dimensiones));
     } catch (error: any) {
       console.error('Error listing dimensiones:', error);
@@ -126,7 +127,8 @@ export default async function dimensionRoutes(app: FastifyInstance) {
     const { tipoDimension } = req.params as { tipoDimension: string };
 
     try {
-      const dimensiones = await getDimensionesByTipo(tipoDimension);
+      const dimensionService = req.diScope.resolve<DimensionService>('dimensionService');
+      const dimensiones = await dimensionService.getDimensionesByTipo(tipoDimension);
       return reply.send(ok(dimensiones));
     } catch (error: any) {
       console.error('Error listing dimensiones by tipo:', error);
@@ -215,7 +217,8 @@ export default async function dimensionRoutes(app: FastifyInstance) {
     }
 
     try {
-      const dimension = await getDimensionById(paramValidation.data.dimensionId);
+      const dimensionService = req.diScope.resolve<DimensionService>('dimensionService');
+      const dimension = await dimensionService.getDimensionById(paramValidation.data.dimensionId);
       return reply.send(ok(dimension));
     } catch (error: any) {
       if (error.message === 'DIMENSION_NOT_FOUND') {
@@ -296,7 +299,8 @@ export default async function dimensionRoutes(app: FastifyInstance) {
 
       try {
         const userId = req.user?.sub;
-        const dimension = await createDimensionItem(
+        const dimensionService = req.diScope.resolve<DimensionService>('dimensionService');
+        const dimension = await dimensionService.createDimensionItem(
           parsed.data.nombre,
           parsed.data.descripcion,
           parsed.data.tipoDimension,
@@ -409,7 +413,8 @@ export default async function dimensionRoutes(app: FastifyInstance) {
 
       try {
         const userId = req.user?.sub;
-        const dimension = await updateDimensionItem(
+        const dimensionService = req.diScope.resolve<DimensionService>('dimensionService');
+        const dimension = await dimensionService.updateDimensionItem(
           paramValidation.data.dimensionId,
           parsed.data.nombre,
           parsed.data.descripcion,
@@ -507,7 +512,8 @@ export default async function dimensionRoutes(app: FastifyInstance) {
       }
 
       try {
-        const deletedId = await deleteDimensionItem(paramValidation.data.dimensionId, tx);
+        const dimensionService = req.diScope.resolve<DimensionService>('dimensionService');
+        const deletedId = await dimensionService.deleteDimensionItem(paramValidation.data.dimensionId, tx);
         return reply.send(ok({ id: deletedId }));
       } catch (error: any) {
         if (error.message === 'DIMENSION_NOT_FOUND') {

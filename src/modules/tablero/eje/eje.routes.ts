@@ -1,7 +1,7 @@
 import { FastifyInstance } from 'fastify';
 import { requireAuth, requireRole } from '../../auth/auth.middleware.js';
 import { CreateEjeSchema, UpdateEjeSchema, EjeIdParamSchema } from './eje.schemas.js';
-import { getAllEjes, getEjeById, getEjeWithLineas, createEjeItem, updateEjeItem, deleteEjeItem } from './eje.service.js';
+import { EjeService } from './eje.service.js';
 import { ok, validationError, notFound, internalError } from '../../../utils/http.js';
 import { withDbContext } from '../../../db/context.js';
 
@@ -45,9 +45,10 @@ export default async function ejeRoutes(app: FastifyInstance) {
         }
       }
     }
-  }, async (_req, reply) => {
+  }, async (req, reply) => {
     try {
-      const ejes = await getAllEjes();
+      const ejeService = req.diScope.resolve<EjeService>('ejeService');
+      const ejes = await ejeService.getAllEjes();
       return reply.send(ok(ejes));
     } catch (error: any) {
       console.error('Error listing ejes:', error);
@@ -133,7 +134,8 @@ export default async function ejeRoutes(app: FastifyInstance) {
     }
 
     try {
-      const eje = await getEjeById(paramValidation.data.ejeId);
+      const ejeService = req.diScope.resolve<EjeService>('ejeService');
+      const eje = await ejeService.getEjeById(paramValidation.data.ejeId);
       return reply.send(ok(eje));
     } catch (error: any) {
       if (error.message === 'EJE_NOT_FOUND') {
@@ -233,7 +235,8 @@ export default async function ejeRoutes(app: FastifyInstance) {
     }
 
     try {
-      const eje = await getEjeWithLineas(paramValidation.data.ejeId);
+      const ejeService = req.diScope.resolve<EjeService>('ejeService');
+      const eje = await ejeService.getEjeWithLineas(paramValidation.data.ejeId);
       return reply.send(ok(eje));
     } catch (error: any) {
       if (error.message === 'EJE_NOT_FOUND') {
@@ -308,7 +311,8 @@ export default async function ejeRoutes(app: FastifyInstance) {
 
       try {
         const userId = req.user?.sub;
-        const eje = await createEjeItem(
+        const ejeService = req.diScope.resolve<EjeService>('ejeService');
+        const eje = await ejeService.createEjeItem(
           parsed.data.nombre,
           userId,
           tx
@@ -413,7 +417,8 @@ export default async function ejeRoutes(app: FastifyInstance) {
 
       try {
         const userId = req.user?.sub;
-        const eje = await updateEjeItem(
+        const ejeService = req.diScope.resolve<EjeService>('ejeService');
+        const eje = await ejeService.updateEjeItem(
           paramValidation.data.ejeId,
           parsed.data.nombre,
           userId,
@@ -508,7 +513,8 @@ export default async function ejeRoutes(app: FastifyInstance) {
       }
 
       try {
-        const deletedId = await deleteEjeItem(paramValidation.data.ejeId, tx);
+        const ejeService = req.diScope.resolve<EjeService>('ejeService');
+        const deletedId = await ejeService.deleteEjeItem(paramValidation.data.ejeId, tx);
         return reply.send(ok({ id: deletedId }));
       } catch (error: any) {
         if (error.message === 'EJE_NOT_FOUND') {

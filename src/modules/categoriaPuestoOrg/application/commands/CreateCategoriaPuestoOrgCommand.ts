@@ -122,16 +122,16 @@ export class CreateCategoriaPuestoOrgCommand {
     if (!data.categoria || typeof data.categoria !== 'string' || data.categoria.trim().length === 0) {
       throw new InvalidCategoriaPuestoOrgDataError('categoria', 'Es requerida y debe ser una cadena no vacía');
     }
-    if (data.categoria.length > 10) {
-      throw new InvalidCategoriaPuestoOrgDataError('categoria', 'No debe exceder 10 caracteres');
+    if (data.categoria.length > 200) {
+      throw new InvalidCategoriaPuestoOrgDataError('categoria', 'No debe exceder 200 caracteres');
     }
 
     // Validar nombreCategoria
     if (!data.nombreCategoria || typeof data.nombreCategoria !== 'string' || data.nombreCategoria.trim().length === 0) {
       throw new InvalidCategoriaPuestoOrgDataError('nombreCategoria', 'Es requerido y debe ser una cadena no vacía');
     }
-    if (data.nombreCategoria.length > 80) {
-      throw new InvalidCategoriaPuestoOrgDataError('nombreCategoria', 'No debe exceder 80 caracteres');
+    if (data.nombreCategoria.length > 200) {
+      throw new InvalidCategoriaPuestoOrgDataError('nombreCategoria', 'No debe exceder 200 caracteres');
     }
 
     // Validar ingresoBrutoMensual
@@ -171,6 +171,26 @@ export class CreateCategoriaPuestoOrgCommand {
 
       if (vigenciaInicioDate >= vigenciaFinDate) {
         throw new InvalidVigenciaDatesError(data.vigenciaInicio, data.vigenciaFin);
+      }
+    }
+
+    // Validar baseConfianza si está presente
+    if (data.baseConfianza !== undefined && data.baseConfianza !== null) {
+      if (typeof data.baseConfianza !== 'string') {
+        throw new InvalidCategoriaPuestoOrgDataError('baseConfianza', 'Debe ser una cadena de texto');
+      }
+      if (data.baseConfianza.length !== 1) {
+        throw new InvalidCategoriaPuestoOrgDataError('baseConfianza', 'Debe ser exactamente 1 carácter');
+      }
+    }
+
+    // Validar porcentaje si está presente
+    if (data.porcentaje !== undefined && data.porcentaje !== null) {
+      if (typeof data.porcentaje !== 'number') {
+        throw new InvalidCategoriaPuestoOrgDataError('porcentaje', 'Debe ser un número');
+      }
+      if (!Number.isInteger(data.porcentaje) || data.porcentaje < 0 || data.porcentaje > 100) {
+        throw new InvalidCategoriaPuestoOrgDataError('porcentaje', 'Debe ser un entero entre 0 y 100');
       }
     }
   }

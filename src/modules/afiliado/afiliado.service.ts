@@ -223,49 +223,9 @@ export async function deleteAfiliadoService(id: number): Promise<void> {
   }
 }
 
-export async function getMovimientosQuincenalesService(userOrg0: string, userOrg1: string): Promise<Array<{
-  afiliado: {
-    id: number;
-    folio: number | null;
-    apellidoPaterno: string | null;
-    apellidoMaterno: string | null;
-    nombre: string | null;
-    curp: string | null;
-    rfc: string | null;
-    numeroSeguroSocial: string | null;
-    fechaNacimiento: string | null;
-    entidadFederativaNacId: number | null;
-    domicilioCalle: string | null;
-    domicilioNumeroExterior: string | null;
-    domicilioNumeroInterior: string | null;
-    domicilioEntreCalle1: string | null;
-    domicilioEntreCalle2: string | null;
-    domicilioColonia: string | null;
-    domicilioCodigoPostal: number | null;
-    telefono: string | null;
-    estadoCivilId: number | null;
-    sexo: string | null;
-    correoElectronico: string | null;
-    estatus: boolean;
-    interno: number | null;
-    noEmpleado: string | null;
-    localidad: string | null;
-    municipio: string | null;
-    estado: string | null;
-    pais: string | null;
-    dependientes: number | null;
-    poseeInmuebles: boolean | null;
-    fechaCarta: string | null;
-    nacionalidad: string | null;
-    fechaAlta: string | null;
-    celular: string | null;
-    expediente: string | null;
-    quincenaAplicacion: number | null;
-    anioAplicacion: number | null;
-  };
-  afiliadoOrg: Omit<AfiliadoOrg, 'createdAt' | 'updatedAt'>;
-  movimiento: Omit<Movimiento, 'createdAt'>;
-}>> {
+import type { MovimientoQuincenal } from './domain/entities/MovimientoQuincenal.js';
+
+export async function getMovimientosQuincenalesService(userOrg0: string, userOrg1: string): Promise<MovimientoQuincenal[]> {
   const logContext = {
     operation: 'getMovimientosQuincenales',
     userOrg0,
@@ -282,7 +242,7 @@ export async function getMovimientosQuincenalesService(userOrg0: string, userOrg
       .input('userOrg1', sql.Char(2), userOrg1)
       .query(`
         SELECT
-          -- Afiliado fields (excluding control/audit fields)
+          -- Afiliado fields
           a.id as afiliado_id,
           a.folio,
           a.apellidoPaterno,
@@ -320,8 +280,9 @@ export async function getMovimientosQuincenalesService(userOrg0: string, userOrg
           a.expediente,
           a.quincenaAplicacion,
           a.anioAplicacion,
+          a.numValidacion,
 
-          -- AfiliadoOrg fields (excluding control/audit fields)
+          -- AfiliadoOrg fields
           ao.id as afiliadoOrg_id,
           ao.afiliadoId,
           ao.nivel0Id,
@@ -349,25 +310,33 @@ export async function getMovimientosQuincenalesService(userOrg0: string, userOrg
           ao.bc,
           ao.porcentaje,
 
-          -- Movimiento fields (excluding control/audit fields)
+          -- Movimiento fields
           m.id as movimiento_id,
           m.quincenaId,
           m.tipoMovimientoId,
-          m.afiliadoId,
+          m.afiliadoId as movimiento_afiliadoId,
           m.fecha,
           m.observaciones,
-          m.folio,
-          m.estatus,
+          m.folio as movimiento_folio,
+          m.estatus as movimiento_estatus,
           m.creadoPor,
-          m.creadoPorUid
+          m.creadoPorUid,
+
+          -- TipoMovimiento fields
+          tm.nombre as tipoMovimientoDescripcion,
+
+          -- AfiliadoStatusControl fields
+          statusCtrl.nombreStatus as numValidacionDescripcion
 
         FROM afi.Afiliado a
         INNER JOIN afi.AfiliadoOrg ao ON a.id = ao.afiliadoId
         INNER JOIN afi.Movimiento m ON a.id = m.afiliadoId
+        LEFT JOIN afi.TipoMovimiento tm ON m.tipoMovimientoId = tm.id
+        LEFT JOIN afi.AfiliadoStatusControl statusCtrl ON a.numValidacion = statusCtrl.numValidacion
         WHERE ao.claveOrganica0 = @userOrg0
           AND ao.claveOrganica1 = @userOrg1
           AND a.estatus = 1
-          AND m.estatus = 'A'
+          AND m.estatus IN ('A', 'L')
         ORDER BY a.id, m.id
       `);
 
@@ -409,7 +378,9 @@ export async function getMovimientosQuincenalesService(userOrg0: string, userOrg
         celular: row.celular,
         expediente: row.expediente,
         quincenaAplicacion: row.quincenaAplicacion ? parseInt(row.quincenaAplicacion) : null,
-        anioAplicacion: row.anioAplicacion ? parseInt(row.anioAplicacion) : null
+        anioAplicacion: row.anioAplicacion ? parseInt(row.anioAplicacion) : null,
+        numValidacion: row.numValidacion || 1,
+        numValidacionDescripcion: row.numValidacionDescripcion
       },
       afiliadoOrg: {
         id: parseInt(row.afiliadoOrg_id) || 0,
@@ -443,11 +414,12 @@ export async function getMovimientosQuincenalesService(userOrg0: string, userOrg
         id: parseInt(row.movimiento_id) || 0,
         quincenaId: row.quincenaId,
         tipoMovimientoId: row.tipoMovimientoId ? parseInt(row.tipoMovimientoId) : 0,
-        afiliadoId: parseInt(row.afiliadoId) || 0,
+        tipoMovimientoDescripcion: row.tipoMovimientoDescripcion,
+        afiliadoId: parseInt(row.movimiento_afiliadoId) || 0,
         fecha: row.fecha?.toISOString().split('T')[0] || null,
         observaciones: row.observaciones,
-        folio: row.folio,
-        estatus: row.estatus,
+        folio: row.movimiento_folio,
+        estatus: row.movimiento_estatus,
         creadoPor: row.creadoPor ? parseInt(row.creadoPor) : null,
         creadoPorUid: row.creadoPorUid
       }
@@ -530,6 +502,7 @@ export async function createAfiliadoAfiliadoOrgMovimientoService(data: {
   folioMov?: string | null;
   estatusMov?: string | null;
   creadoPor?: number | null;
+  creadoPorUid?: string | null;
 }): Promise<{ afiliado: Afiliado; afiliadoOrg: AfiliadoOrg; movimiento: Movimiento }> {
   // Calcular quincena y año basado en claveOrganica para generar fechas automáticamente
   const claveOrganica0 = data.claveOrganica0 || '';
@@ -596,7 +569,10 @@ export async function createAfiliadoAfiliadoOrgMovimientoService(data: {
       celular: data.celular ?? null,
       expediente: data.expediente ?? null,
       quincenaAplicacion: data.quincenaAplicacion ?? null,
-      anioAplicacion: data.anioAplicacion ?? null
+      anioAplicacion: data.anioAplicacion ?? null,
+      codigoPostal: data.domicilioCodigoPostal ?? null,
+      numValidacion: 1,
+      afiliadosComplete: 0
     },
     afiliadoOrg: {
       nivel0Id: data.nivel0Id ?? null,
@@ -632,7 +608,7 @@ export async function createAfiliadoAfiliadoOrgMovimientoService(data: {
       folio: data.folioMov ?? null,
       estatus: data.estatusMov ?? null,
       creadoPor: data.creadoPor ?? null,
-      creadoPorUid: null // Will be set by the route handler with user token
+      creadoPorUid: data.creadoPorUid ?? null
     }
   });
 }

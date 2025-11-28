@@ -1,39 +1,4 @@
-import { findEventoCalendarioById, listEventoCalendarios, findEventoCalendariosByAnio, createEventoCalendario, updateEventoCalendario, deleteEventoCalendario, findEventoCalendariosByDateRange } from './eventoCalendario.repo.js';
 
-export async function getAllEventoCalendarios() {
-  return listEventoCalendarios();
-}
-
-export async function getEventoCalendariosByAnio(anio: number) {
-  return findEventoCalendariosByAnio(anio);
-}
-
-export async function getEventoCalendarioById(id: number) {
-  const evento = await findEventoCalendarioById(id);
-  if (!evento) throw new Error('EVENTO_CALENDARIO_NOT_FOUND');
-  return evento;
-}
-
-export async function createEventoCalendarioItem(fecha: string, tipo: string, anio: number, createdAt: string, tx?: any) {
-  return createEventoCalendario(fecha, tipo, anio, createdAt, tx);
-}
-
-export async function updateEventoCalendarioItem(id: number, fecha?: string, tipo?: string, anio?: number, createdAt?: string, tx?: any) {
-  // Verificar que el evento existe
-  const existing = await findEventoCalendarioById(id);
-  if (!existing) throw new Error('EVENTO_CALENDARIO_NOT_FOUND');
-
-  return updateEventoCalendario(id, fecha, tipo, anio, createdAt, tx);
-}
-
-export async function deleteEventoCalendarioItem(id: number, tx?: any) {
-  // Verificar que el evento existe
-  const existing = await findEventoCalendarioById(id);
-  if (!existing) throw new Error('EVENTO_CALENDARIO_NOT_FOUND');
-
-  return deleteEventoCalendario(id, tx);
-}
-
-export async function getEventoCalendariosByDateRange(fechaInicio: string, fechaFin: string, tipo?: string) {
-  return findEventoCalendariosByDateRange(fechaInicio, fechaFin, tipo);
-}
+// Legacy service functions have been migrated to use DI pattern
+// Routes now use Commands and Queries directly via req.diScope.resolve()
+// This file can be removed in the future if no legacy code depends on it

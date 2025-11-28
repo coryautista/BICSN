@@ -128,3 +128,28 @@ export class AfiliadoValidationError extends ValidationError {
     super(`Error de validación de afiliado: ${message}`, details);
   }
 }
+
+export class AplicarBDIsspeaError extends DatabaseError {
+  constructor(message: string, details?: any) {
+    super(`Error al aplicar BDISSPEA en lote: ${message}`, details);
+  }
+}
+
+export class OrganicaNoConfiguradaError extends ValidationError {
+  constructor() {
+    super('El usuario no tiene orgánica configurada (idOrganica0 o idOrganica1 faltantes)', {
+      field: 'user.organica',
+      reason: 'missing_organica'
+    });
+  }
+}
+
+export class NoAfiliadosElegiblesError extends BusinessRuleViolationError {
+  constructor(org0: string, org1: string) {
+    super(`No se encontraron afiliados elegibles (estados 2 o 3) para la orgánica ${org0}/${org1}`, {
+      org0,
+      org1,
+      estadosRequeridos: [2, 3]
+    });
+  }
+}

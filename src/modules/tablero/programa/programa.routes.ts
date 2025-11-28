@@ -1,7 +1,7 @@
 import { FastifyInstance } from 'fastify';
 import { requireAuth, requireRole } from '../../auth/auth.middleware.js';
 import { CreateProgramaSchema, UpdateProgramaSchema, ProgramaIdParamSchema, EjeIdParamSchema, LineaEstrategicaIdParamSchema } from './programa.schemas.js';
-import { getAllProgramas, getProgramasByEje, getProgramasByLineaEstrategica, getProgramaById, createProgramaItem, updateProgramaItem, deleteProgramaItem } from './programa.service.js';
+import { ProgramaService } from './programa.service.js';
 import { ok, validationError, notFound, internalError } from '../../../utils/http.js';
 import { withDbContext } from '../../../db/context.js';
 
@@ -62,9 +62,10 @@ export default async function programaRoutes(app: FastifyInstance) {
         }
       }
     }
-  }, async (_req, reply) => {
+  }, async (req, reply) => {
     try {
-      const programas = await getAllProgramas();
+      const programaService = req.diScope.resolve<ProgramaService>('programaService');
+      const programas = await programaService.getAllProgramas();
       return reply.send(ok(programas));
     } catch (error: any) {
       console.error('Error listing programas:', error);
@@ -151,7 +152,8 @@ export default async function programaRoutes(app: FastifyInstance) {
     }
 
     try {
-      const programas = await getProgramasByEje(paramValidation.data.ejeId);
+      const programaService = req.diScope.resolve<ProgramaService>('programaService');
+      const programas = await programaService.getProgramasByEje(paramValidation.data.ejeId);
       return reply.send(ok(programas));
     } catch (error: any) {
       console.error('Error listing programas by eje:', error);
@@ -237,7 +239,8 @@ export default async function programaRoutes(app: FastifyInstance) {
     }
 
     try {
-      const programas = await getProgramasByLineaEstrategica(paramValidation.data.lineaEstrategicaId);
+      const programaService = req.diScope.resolve<ProgramaService>('programaService');
+      const programas = await programaService.getProgramasByLineaEstrategica(paramValidation.data.lineaEstrategicaId);
       return reply.send(ok(programas));
     } catch (error: any) {
       console.error('Error listing programas by linea estrategica:', error);
@@ -341,7 +344,8 @@ export default async function programaRoutes(app: FastifyInstance) {
     }
 
     try {
-      const programa = await getProgramaById(paramValidation.data.programaId);
+      const programaService = req.diScope.resolve<ProgramaService>('programaService');
+      const programa = await programaService.getProgramaById(paramValidation.data.programaId);
       return reply.send(ok(programa));
     } catch (error: any) {
       if (error.message === 'PROGRAMA_NOT_FOUND') {
@@ -422,7 +426,8 @@ export default async function programaRoutes(app: FastifyInstance) {
 
       try {
         const userId = req.user?.sub;
-        const programa = await createProgramaItem(
+        const programaService = req.diScope.resolve<ProgramaService>('programaService');
+        const programa = await programaService.createProgramaItem(
           parsed.data.idEje,
           parsed.data.idLineaEstrategica,
           parsed.data.nombre,
@@ -539,7 +544,8 @@ export default async function programaRoutes(app: FastifyInstance) {
 
       try {
         const userId = req.user?.sub;
-        const programa = await updateProgramaItem(
+        const programaService = req.diScope.resolve<ProgramaService>('programaService');
+        const programa = await programaService.updateProgramaItem(
           paramValidation.data.programaId,
           parsed.data.nombre,
           parsed.data.descripcion,
@@ -635,7 +641,8 @@ export default async function programaRoutes(app: FastifyInstance) {
       }
 
       try {
-        const deletedId = await deleteProgramaItem(paramValidation.data.programaId, tx);
+        const programaService = req.diScope.resolve<ProgramaService>('programaService');
+        const deletedId = await programaService.deleteProgramaItem(paramValidation.data.programaId, tx);
         return reply.send(ok({ id: deletedId }));
       } catch (error: any) {
         if (error.message === 'PROGRAMA_NOT_FOUND') {

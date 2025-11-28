@@ -17,10 +17,9 @@ export const CreateOrganica2Schema = z.object({
    claveOrganica0: z.string().min(1).max(2),
    claveOrganica1: z.string().min(1).max(2),
    claveOrganica2: z.string().min(1).max(2),
-   descripcion: z.string().max(40).optional(),
+   descripcion: z.string().max(40),
    titular: z.number().int().optional(),
    fechaFin2: z.string().datetime().optional().transform((val) => val ? new Date(val) : undefined),
-   usuario: z.string().max(13).optional(),
    estatus: z.string().min(1).max(1).default('A')
  });
 

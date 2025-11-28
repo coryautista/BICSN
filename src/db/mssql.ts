@@ -10,6 +10,8 @@ const sqlConfig: SqlConfig = {
   options: {
     encrypt: config.sql.options.encrypt,
     trustServerCertificate: config.sql.options.trustServerCertificate,
+    requestTimeout: 60000, // 60 seconds timeout for requests
+    connectTimeout: 30000, // 30 seconds timeout for connection
   },
   pool: config.sql.pool,
 };

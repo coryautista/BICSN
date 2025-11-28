@@ -1,5 +1,6 @@
 import { FastifyReply } from 'fastify';
 import pino from 'pino';
+import { fail } from '../../../utils/http.js';
 import {
   EventoCalendarioError,
   EventoCalendarioNotFoundError,
@@ -21,11 +22,17 @@ const logger = pino({
 });
 
 export function handleEventoCalendarioError(error: any, reply: FastifyReply): FastifyReply {
+  const logContext = {
+    module: 'eventoCalendario',
+    errorType: error.constructor.name,
+    errorCode: error.code || 'UNKNOWN_ERROR',
+    timestamp: new Date().toISOString()
+  };
+
   // Log del error con contexto
   logger.error({
+    ...logContext,
     error: error.message,
-    name: error.name,
-    code: error.code,
     statusCode: error.statusCode,
     details: error.details,
     stack: error.stack
@@ -33,117 +40,58 @@ export function handleEventoCalendarioError(error: any, reply: FastifyReply): Fa
 
   // Manejo específico de errores del dominio eventoCalendario
   if (error instanceof EventoCalendarioNotFoundError) {
-    return reply.status(404).send({
-      error: 'Evento de calendario no encontrado',
-      message: error.message,
-      code: error.code
-    });
+    return reply.code(404).send(fail(error.code, error.message));
   }
 
   if (error instanceof EventoCalendariosNotFoundError) {
-    return reply.status(404).send({
-      error: 'Eventos de calendario no encontrados',
-      message: error.message,
-      code: error.code
-    });
+    return reply.code(404).send(fail(error.code, error.message));
   }
 
   if (error instanceof EventoCalendarioByAnioNotFoundError) {
-    return reply.status(404).send({
-      error: 'Eventos de calendario no encontrados',
-      message: error.message,
-      code: error.code
-    });
+    return reply.code(404).send(fail(error.code, error.message));
   }
 
   if (error instanceof EventoCalendarioByDateRangeNotFoundError) {
-    return reply.status(404).send({
-      error: 'Eventos de calendario no encontrados',
-      message: error.message,
-      code: error.code
-    });
+    return reply.code(404).send(fail(error.code, error.message));
   }
 
   if (error instanceof DuplicateEventoCalendarioError) {
-    return reply.status(409).send({
-      error: 'Evento de calendario duplicado',
-      message: error.message,
-      code: error.code
-    });
+    return reply.code(409).send(fail(error.code, error.message));
   }
 
   if (error instanceof InvalidEventoCalendarioDataError) {
-    return reply.status(400).send({
-      error: 'Datos de evento de calendario inválidos',
-      message: error.message,
-      code: error.code
-    });
+    return reply.code(400).send(fail(error.code, error.message));
   }
 
   if (error instanceof InvalidEventoCalendarioTipoError) {
-    return reply.status(400).send({
-      error: 'Tipo de evento inválido',
-      message: error.message,
-      code: error.code
-    });
+    return reply.code(400).send(fail(error.code, error.message));
   }
 
   if (error instanceof InvalidEventoCalendarioFechaError) {
-    return reply.status(400).send({
-      error: 'Fecha de evento inválida',
-      message: error.message,
-      code: error.code
-    });
+    return reply.code(400).send(fail(error.code, error.message));
   }
 
   if (error instanceof InvalidEventoCalendarioAnioError) {
-    return reply.status(400).send({
-      error: 'Año de evento inválido',
-      message: error.message,
-      code: error.code
-    });
+    return reply.code(400).send(fail(error.code, error.message));
   }
 
   if (error instanceof EventoCalendarioQueryError) {
-    return reply.status(500).send({
-      error: 'Error en consulta de eventos de calendario',
-      message: error.message,
-      code: error.code
-    });
+    return reply.code(500).send(fail(error.code, error.message));
   }
 
   if (error instanceof EventoCalendarioCommandError) {
-    return reply.status(500).send({
-      error: 'Error en operación de eventos de calendario',
-      message: error.message,
-      code: error.code
-    });
+    return reply.code(500).send(fail(error.code, error.message));
   }
 
   if (error instanceof EventoCalendarioError) {
-    return reply.status(error.statusCode || 500).send({
-      error: 'Error en eventos de calendario',
-      message: error.message,
-      code: error.code
-    });
+    return reply.code(error.statusCode || 500).send(fail(error.code, error.message));
   }
 
   // Errores genéricos
   if (error.code === '23505') { // Unique constraint violation
-    return reply.status(409).send({
-      error: 'Conflicto de datos',
-      message: 'Ya existe un evento de calendario con estos datos'
-    });
+    return reply.code(409).send(fail('DUPLICATE_ERROR', 'Ya existe un evento de calendario con estos datos'));
   }
 
   // Error genérico
-  logger.error({
-    error: error.message,
-    stack: error.stack
-  }, 'Error no manejado en módulo eventoCalendario');
-
-  return reply.status(500).send({
-    error: 'Error interno del servidor',
-    message: 'Ha ocurrido un error inesperado'
-  });
+  return reply.code(500).send(fail('INTERNAL_ERROR', 'Ha ocurrido un error inesperado'));
 }

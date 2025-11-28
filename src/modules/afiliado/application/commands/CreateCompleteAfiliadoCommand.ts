@@ -133,7 +133,10 @@ export class CreateCompleteAfiliadoCommand {
         .input('celular', sql.VarChar(15), data.afiliado.celular)
         .input('expediente', sql.VarChar(50), data.afiliado.expediente)
         .input('quincenaAplicacion', sql.TinyInt, quincenaAplicacion)
-        .input('anioAplicacion', sql.SmallInt, anioAplicacion);
+        .input('anioAplicacion', sql.SmallInt, anioAplicacion)
+        .input('codigoPostal', sql.Int, data.afiliado.codigoPostal ?? data.afiliado.domicilioCodigoPostal)
+        .input('numValidacion', sql.Int, 1)
+        .input('afiliadosComplete', sql.Int, 0);
 
       const afiliadoResult = await afiliadoRequest.query(`
         INSERT INTO afi.Afiliado (
@@ -145,7 +148,7 @@ export class CreateCompleteAfiliadoCommand {
           correoElectronico, estatus, interno, noEmpleado, localidad,
           municipio, estado, pais, dependientes, poseeInmuebles,
           fechaCarta, nacionalidad, fechaAlta, celular, expediente,
-          quincenaAplicacion, anioAplicacion
+          quincenaAplicacion, anioAplicacion, codigoPostal, numValidacion, afiliadosComplete
         )
         OUTPUT INSERTED.*
         VALUES (
@@ -157,7 +160,7 @@ export class CreateCompleteAfiliadoCommand {
           @correoElectronico, @estatus, @interno, @noEmpleado, @localidad,
           @municipio, @estado, @pais, @dependientes, @poseeInmuebles,
           @fechaCarta, @nacionalidad, @fechaAlta, @celular, @expediente,
-          @quincenaAplicacion, @anioAplicacion
+          @quincenaAplicacion, @anioAplicacion, @codigoPostal, @numValidacion, @afiliadosComplete
         )
       `);
 
@@ -268,6 +271,9 @@ export class CreateCompleteAfiliadoCommand {
           folio: afiliadoRow.folio,
           apellidoPaterno: afiliadoRow.apellidoPaterno,
           apellidoMaterno: afiliadoRow.apellidoMaterno,
+          codigoPostal: afiliadoRow.codigoPostal,
+          numValidacion: afiliadoRow.numValidacion,
+          afiliadosComplete: afiliadoRow.afiliadosComplete,
           nombre: afiliadoRow.nombre,
           curp: afiliadoRow.curp,
           rfc: afiliadoRow.rfc,

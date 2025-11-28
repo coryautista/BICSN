@@ -1,11 +1,11 @@
 import { IOrganicaCascadeRepository } from '../../domain/repositories/IOrganicaCascadeRepository.js';
 import { OrganicaChild } from '../../domain/entities/OrganicaChild.js';
-import { getFirebirdDb } from '../../../../db/firebird.js';
+import { executeSerializedQuery } from '../../../../db/firebird.js';
 
 export class OrganicaCascadeRepository implements IOrganicaCascadeRepository {
   async findOrganica1ByOrganica0(claveOrganica0: string): Promise<OrganicaChild[]> {
-    const db = getFirebirdDb();
-    return new Promise((resolve, reject) => {
+    return executeSerializedQuery((db) => {
+      return new Promise<OrganicaChild[]>((resolve, reject) => {
       db.query(
         `SELECT 
           CLAVE_ORGANICA_0, 
@@ -32,12 +32,13 @@ export class OrganicaCascadeRepository implements IOrganicaCascadeRepository {
           resolve(records);
         }
       );
+      });
     });
   }
 
   async findOrganica2ByOrganica1(claveOrganica0: string, claveOrganica1: string): Promise<OrganicaChild[]> {
-    const db = getFirebirdDb();
-    return new Promise((resolve, reject) => {
+    return executeSerializedQuery((db) => {
+      return new Promise<OrganicaChild[]>((resolve, reject) => {
       db.query(
         `SELECT 
           CLAVE_ORGANICA_0, 
@@ -66,12 +67,13 @@ export class OrganicaCascadeRepository implements IOrganicaCascadeRepository {
           resolve(records);
         }
       );
+      });
     });
   }
 
   async findOrganica3ByOrganica2(claveOrganica0: string, claveOrganica1: string, claveOrganica2: string): Promise<OrganicaChild[]> {
-    const db = getFirebirdDb();
-    return new Promise((resolve, reject) => {
+    return executeSerializedQuery((db) => {
+      return new Promise<OrganicaChild[]>((resolve, reject) => {
       db.query(
         `SELECT 
           CLAVE_ORGANICA_0, 
@@ -102,6 +104,7 @@ export class OrganicaCascadeRepository implements IOrganicaCascadeRepository {
           resolve(records);
         }
       );
+      });
     });
   }
 }

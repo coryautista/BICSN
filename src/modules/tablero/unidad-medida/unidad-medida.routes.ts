@@ -1,7 +1,7 @@
 import { FastifyInstance } from 'fastify';
 import { requireAuth, requireRole } from '../../auth/auth.middleware.js';
 import { CreateUnidadMedidaSchema, UpdateUnidadMedidaSchema, UnidadMedidaIdParamSchema } from './unidad-medida.schemas.js';
-import { getAllUnidadesMedida, getUnidadesMedidaByCategoria, getUnidadMedidaById, createUnidadMedidaItem, updateUnidadMedidaItem, deleteUnidadMedidaItem } from './unidad-medida.service.js';
+import { UnidadMedidaService } from './unidad-medida.service.js';
 import { ok, validationError, notFound, internalError } from '../../../utils/http.js';
 import { withDbContext } from '../../../db/context.js';
 
@@ -49,9 +49,10 @@ export default async function unidadMedidaRoutes(app: FastifyInstance) {
         }
       }
     }
-  }, async (_req, reply) => {
+  }, async (req, reply) => {
     try {
-      const unidadesMedida = await getAllUnidadesMedida();
+      const unidadMedidaService = req.diScope.resolve<UnidadMedidaService>('unidadMedidaService');
+      const unidadesMedida = await unidadMedidaService.getAllUnidadesMedida();
       return reply.send(ok(unidadesMedida));
     } catch (error: any) {
       console.error('Error listing unidades-medida:', error);
@@ -128,7 +129,8 @@ export default async function unidadMedidaRoutes(app: FastifyInstance) {
     const { categoria } = req.params as { categoria: string };
 
     try {
-      const unidadesMedida = await getUnidadesMedidaByCategoria(categoria);
+      const unidadMedidaService = req.diScope.resolve<UnidadMedidaService>('unidadMedidaService');
+      const unidadesMedida = await unidadMedidaService.getUnidadesMedidaByCategoria(categoria);
       return reply.send(ok(unidadesMedida));
     } catch (error: any) {
       console.error('Error listing unidades-medida by categoria:', error);
@@ -218,7 +220,8 @@ export default async function unidadMedidaRoutes(app: FastifyInstance) {
     }
 
     try {
-      const unidadMedida = await getUnidadMedidaById(paramValidation.data.unidadMedidaId);
+      const unidadMedidaService = req.diScope.resolve<UnidadMedidaService>('unidadMedidaService');
+      const unidadMedida = await unidadMedidaService.getUnidadMedidaById(paramValidation.data.unidadMedidaId);
       return reply.send(ok(unidadMedida));
     } catch (error: any) {
       if (error.message === 'UNIDAD_MEDIDA_NOT_FOUND') {
@@ -301,7 +304,8 @@ export default async function unidadMedidaRoutes(app: FastifyInstance) {
 
       try {
         const userId = req.user?.sub;
-        const unidadMedida = await createUnidadMedidaItem(
+        const unidadMedidaService = req.diScope.resolve<UnidadMedidaService>('unidadMedidaService');
+        const unidadMedida = await unidadMedidaService.createUnidadMedidaItem(
           parsed.data.nombre,
           parsed.data.simbolo,
           parsed.data.descripcion,
@@ -417,7 +421,8 @@ export default async function unidadMedidaRoutes(app: FastifyInstance) {
 
       try {
         const userId = req.user?.sub;
-        const unidadMedida = await updateUnidadMedidaItem(
+        const unidadMedidaService = req.diScope.resolve<UnidadMedidaService>('unidadMedidaService');
+        const unidadMedida = await unidadMedidaService.updateUnidadMedidaItem(
           paramValidation.data.unidadMedidaId,
           parsed.data.nombre,
           parsed.data.simbolo,
@@ -516,7 +521,8 @@ export default async function unidadMedidaRoutes(app: FastifyInstance) {
       }
 
       try {
-        const deletedId = await deleteUnidadMedidaItem(paramValidation.data.unidadMedidaId, tx);
+        const unidadMedidaService = req.diScope.resolve<UnidadMedidaService>('unidadMedidaService');
+        const deletedId = await unidadMedidaService.deleteUnidadMedidaItem(paramValidation.data.unidadMedidaId, tx);
         return reply.send(ok({ id: deletedId }));
       } catch (error: any) {
         if (error.message === 'UNIDAD_MEDIDA_NOT_FOUND') {

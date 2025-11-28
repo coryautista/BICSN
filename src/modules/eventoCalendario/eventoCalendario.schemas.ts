@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-const TipoEventoEnum = z.enum(['FERIADO', 'VACACIONES', 'EVENTO_ESPECIAL', 'DIA_NO_LABORABLE']);
+const TipoEventoEnum = z.enum(['FERIADO', 'VACACIONES', 'EVENTO_ESPECIAL', 'DIA_NO_LABORABLE', 'ALTA_BAJA_CAMBIO']);
 
 export const CreateEventoCalendarioSchema = z.object({
   fecha: z.string().date(), // YYYY-MM-DD
