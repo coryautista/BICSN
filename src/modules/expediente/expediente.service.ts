@@ -225,7 +225,8 @@ export async function uploadDocumentToExpediente(
       archivoId: archivo.archivoId,
       success: true,
       message: 'Documento subido exitosamente',
-      expedienteCreated
+      expedienteCreated,
+      fileName: fileData.filename
     };
 
     logger.info({ ...logContext, archivoId: archivo.archivoId, expedienteCreated }, 'Carga de documento completada exitosamente');

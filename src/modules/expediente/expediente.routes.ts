@@ -1281,7 +1281,7 @@ export default async function expedienteRoutes(app: FastifyInstance) {
       
       // Handle timeout errors specifically
       if (error.code === 'ETIMEOUT' || error.number === 'ETIMEOUT') {
-        return reply.code(504).send({ 
+        return reply.code(504 as any).send({ 
           ok: false, 
           error: { 
             code: 'TIMEOUT', 

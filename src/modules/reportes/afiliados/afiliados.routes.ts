@@ -52,7 +52,7 @@ export async function afiliadosReportesRoutes(fastify: FastifyInstance) {
           error: {
             code: 'VALIDATION_ERROR',
             message: 'Parámetros de consulta inválidos',
-            details: parsed.error.errors,
+            details: parsed.error.issues,
             timestamp: new Date().toISOString()
           }
         });
@@ -147,7 +147,7 @@ export async function afiliadosReportesRoutes(fastify: FastifyInstance) {
           error: {
             code: 'VALIDATION_ERROR',
             message: 'Parámetros de consulta inválidos',
-            details: parsed.error.errors,
+            details: parsed.error.issues,
             timestamp: new Date().toISOString()
           }
         });

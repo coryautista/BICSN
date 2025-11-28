@@ -3,6 +3,8 @@ import { AportacionIndividual, AportacionCompleta, TipoFondo, AportacionFondo } 
 import { Prestamo } from '../../domain/entities/Prestamo.js';
 import { PrestamoMedianoPlazo } from '../../domain/entities/PrestamoMedianoPlazo.js';
 import { PrestamoHipotecario } from '../../domain/entities/PrestamoHipotecario.js';
+import { AportacionGuarderia } from '../../domain/entities/AportacionGuarderia.js';
+import { PensionNominaTransitorio } from '../../domain/entities/PensionNominaTransitorio.js';
 import { AportacionFondoDomainError, AportacionFondoError, AportacionFondoErrorMessages } from '../../domain/errors.js';
 import { getOrgPersonalByClavesOrganicas } from '../../../orgPersonal/orgPersonal.repo.js';
 import { getPool, sql } from '../../../../db/mssql.js';
@@ -1170,6 +1172,563 @@ export class AportacionFondoRepository implements IAportacionFondoRepository {
       }
 
       return aportacion;
+    });
+  }
+
+  /**
+   * Obtiene quincena y año desde BitacoraAfectacionOrg
+   */
+  async obtenerQuincenaYAnio(org0: string, org1: string): Promise<{ quincena: number; anio: number }> {
+    const logContext = { org0, org1 };
+    
+    try {
+      // Validar parámetros de entrada
+      if (!org0 || org0.trim().length === 0) {
+        throw new AportacionFondoDomainError(
+          'Clave orgánica 0 es requerida para obtener quincena y año',
+          AportacionFondoError.CLAVE_ORGANICA_REQUERIDA
+        );
+      }
+
+      if (!org1 || org1.trim().length === 0) {
+        throw new AportacionFondoDomainError(
+          'Clave orgánica 1 es requerida para obtener quincena y año',
+          AportacionFondoError.CLAVE_ORGANICA_REQUERIDA
+        );
+      }
+
+      if (org0.length > 2) {
+        throw new AportacionFondoDomainError(
+          `Clave orgánica 0 inválida: "${org0}". Debe tener máximo 2 caracteres`,
+          AportacionFondoError.CLAVE_ORGANICA_INVALIDA
+        );
+      }
+
+      if (org1.length > 2) {
+        throw new AportacionFondoDomainError(
+          `Clave orgánica 1 inválida: "${org1}". Debe tener máximo 2 caracteres`,
+          AportacionFondoError.CLAVE_ORGANICA_INVALIDA
+        );
+      }
+
+      console.log('[APORTACIONES_FONDOS] [QUINCENA_ANIO] Consultando BitacoraAfectacionOrg', logContext);
+      const p = await getPool();
+      
+      const result = await p.request()
+        .input('Org0', sql.Char(2), org0)
+        .input('Org1', sql.Char(2), org1)
+        .query(`
+          SELECT TOP 1 Quincena, Anio, CreatedAt
+          FROM afec.BitacoraAfectacionOrg
+          WHERE Org0 = @Org0
+            AND Org1 = @Org1
+            AND Accion = 'APLICAR'
+          ORDER BY Anio DESC, Quincena DESC, CreatedAt DESC
+        `);
+
+      if (result.recordset.length === 0) {
+        console.warn('[APORTACIONES_FONDOS] [QUINCENA_ANIO] No se encontró registro en BitacoraAfectacionOrg', logContext);
+        throw new AportacionFondoDomainError(
+          `No se encontró registro con Accion='APLICAR' para las claves orgánicas ${org0}/${org1} en BitacoraAfectacionOrg`,
+          AportacionFondoError.PERIODO_NO_ENCONTRADO
+        );
+      }
+
+      const registro = result.recordset[0];
+      const quincena = registro.Quincena;
+      const anio = registro.Anio;
+
+      // Validar que quincena y año sean válidos
+      if (!quincena || quincena < 1 || quincena > 24) {
+        throw new AportacionFondoDomainError(
+          `Quincena inválida: ${quincena}. Debe estar entre 1 y 24`,
+          AportacionFondoError.PARAMETRO_INVALIDO
+        );
+      }
+
+      if (!anio || anio < 2000 || anio > 2100) {
+        throw new AportacionFondoDomainError(
+          `Año inválido: ${anio}. Debe estar entre 2000 y 2100`,
+          AportacionFondoError.PARAMETRO_INVALIDO
+        );
+      }
+
+      console.log('[APORTACIONES_FONDOS] [QUINCENA_ANIO] Quincena y año obtenidos exitosamente', {
+        ...logContext,
+        quincena,
+        anio
+      });
+      
+      return { quincena, anio };
+    } catch (error) {
+      if (error instanceof AportacionFondoDomainError) {
+        throw error;
+      }
+      console.error('[APORTACIONES_FONDOS] [QUINCENA_ANIO] Error al obtener quincena y año', {
+        ...logContext,
+        error: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined
+      });
+      throw new AportacionFondoDomainError(
+        `Error al obtener quincena y año para ${org0}/${org1}: ${error instanceof Error ? error.message : 'Error desconocido'}`,
+        AportacionFondoError.ERROR_CALCULO_APORTACION
+      );
+    }
+  }
+
+  /**
+   * Obtiene aportación guarderías ejecutando la función EBI2_RECIBOS_IMPRIMIR en Firebird
+   */
+  async obtenerAportacionGuarderias(
+    org0: string,
+    org1: string,
+    periodo: string
+  ): Promise<AportacionGuarderia[]> {
+    const logContext = {
+      org0,
+      org1,
+      periodo,
+      funcion: 'EBI2_RECIBOS_IMPRIMIR'
+    };
+
+    // Validar parámetros de entrada
+    if (!org0 || org0.trim().length === 0) {
+      throw new AportacionFondoDomainError(
+        'Clave orgánica 0 es requerida',
+        AportacionFondoError.CLAVE_ORGANICA_REQUERIDA
+      );
+    }
+
+    if (!org1 || org1.trim().length === 0) {
+      throw new AportacionFondoDomainError(
+        'Clave orgánica 1 es requerida',
+        AportacionFondoError.CLAVE_ORGANICA_REQUERIDA
+      );
+    }
+
+    if (!periodo || periodo.trim().length === 0) {
+      throw new AportacionFondoDomainError(
+        'Período es requerido',
+        AportacionFondoError.PARAMETRO_INVALIDO
+      );
+    }
+
+    if (org0.length > 2) {
+      throw new AportacionFondoDomainError(
+        `Clave orgánica 0 inválida: "${org0}". Debe tener máximo 2 caracteres`,
+        AportacionFondoError.CLAVE_ORGANICA_INVALIDA
+      );
+    }
+
+    if (org1.length > 2) {
+      throw new AportacionFondoDomainError(
+        `Clave orgánica 1 inválida: "${org1}". Debe tener máximo 2 caracteres`,
+        AportacionFondoError.CLAVE_ORGANICA_INVALIDA
+      );
+    }
+
+    const startTime = Date.now();
+    
+    console.log('[APORTACIONES_FONDOS] [APORTACION_GUARDERIAS] Iniciando consulta serializada', logContext);
+    
+    // Ejecutar función EBI2_RECIBOS_IMPRIMIR de forma serializada
+    const sql = `
+      SELECT 
+        p.TITULAR_NOMBRE, 
+        p.TITULAR_NO_EMPLEADO, 
+        p.TITULAR_MONTO, 
+        p.TITULAR_RFC,
+        p.TITULAR_MONTO_TEXTO, 
+        p.TITULAR_ORG0, 
+        p.TITULAR_ORG0_NOMBRE,
+        p.TITULAR_ORG1, 
+        p.TITULAR_ORG1_NOMBRE, 
+        p.TITULAR_ORG2,
+        p.TITULAR_ORG2_NOMBRE, 
+        p.TITULAR_ORG3, 
+        p.TITULAR_ORG3_NOMBRE,
+        p.ENTIDAD_MONTO, 
+        p.RECIBO_AJUSTE, 
+        p.RECIBO_TOTAL, 
+        p.RECIBO_MES_ANO,
+        p.RECIBO_FECHA_VENC, 
+        p.RECIBO_FOLIO, 
+        p.MENOR_ID, 
+        p.MENOR_NOMBRE,
+        p.MENOR_RFC, 
+        p.MENOR_NIVEL, 
+        p.MENOR_SALA, 
+        p.ESTATUS
+      FROM EBI2_RECIBOS_IMPRIMIR(?) p
+      WHERE p.TITULAR_ORG0 = ? AND p.TITULAR_ORG1 = ?
+    `;
+
+    return executeSerializedQuery((db) => {
+      return new Promise<AportacionGuarderia[]>((resolve, reject) => {
+        console.log('[APORTACIONES_FONDOS] [APORTACION_GUARDERIAS] Ejecutando función', logContext);
+
+        // Validar que la conexión esté disponible
+        if (!db || typeof db.query !== 'function') {
+          console.error('[APORTACIONES_FONDOS] [APORTACION_GUARDERIAS] Conexión Firebird inválida', logContext);
+          reject(new AportacionFondoDomainError(
+            'Conexión a Firebird no disponible o inválida',
+            AportacionFondoError.ERROR_FIREBIRD_CONEXION
+          ));
+          return;
+        }
+
+        try {
+          db.query(
+            sql,
+            [periodo, org0, org1],
+            (err: any, result: any) => {
+              const duration = Date.now() - startTime;
+              
+              if (err) {
+                console.error('[APORTACIONES_FONDOS] [APORTACION_GUARDERIAS] Error ejecutando función', {
+                  ...logContext,
+                  error: err.message || String(err),
+                  errorCode: err.code,
+                  errorName: err.name,
+                  stack: err.stack,
+                  duracionMs: duration
+                });
+                reject(new AportacionFondoDomainError(
+                  `Error al ejecutar función EBI2_RECIBOS_IMPRIMIR con parámetros PERIODO=${periodo}, ORG0=${org0}, ORG1=${org1}: ${err.message || String(err)}`,
+                  AportacionFondoError.ERROR_FIREBIRD_PROCEDIMIENTO
+                ));
+                return;
+              }
+
+              if (!result) {
+                console.warn('[APORTACIONES_FONDOS] [APORTACION_GUARDERIAS] Resultado nulo recibido', { ...logContext, duracionMs: duration });
+                resolve([]);
+                return;
+              }
+
+              // Normalizar resultado a array
+              const resultArray = Array.isArray(result) ? result : (result ? [result] : []);
+
+              if (resultArray.length === 0) {
+                console.log('[APORTACIONES_FONDOS] [APORTACION_GUARDERIAS] No se encontraron aportaciones', { ...logContext, duracionMs: duration });
+                resolve([]);
+                return;
+              }
+
+              // Mapear resultados a entidad AportacionGuarderia
+              const aportaciones: AportacionGuarderia[] = resultArray.map((row: any) => ({
+                titular_nombre: row.TITULAR_NOMBRE || null,
+                titular_no_empleado: row.TITULAR_NO_EMPLEADO || null,
+                titular_monto: row.TITULAR_MONTO !== null && row.TITULAR_MONTO !== undefined ? Number(row.TITULAR_MONTO) : null,
+                titular_rfc: row.TITULAR_RFC || null,
+                titular_monto_texto: row.TITULAR_MONTO_TEXTO || null,
+                titular_org0: row.TITULAR_ORG0 || null,
+                titular_org0_nombre: row.TITULAR_ORG0_NOMBRE || null,
+                titular_org1: row.TITULAR_ORG1 || null,
+                titular_org1_nombre: row.TITULAR_ORG1_NOMBRE || null,
+                titular_org2: row.TITULAR_ORG2 || null,
+                titular_org2_nombre: row.TITULAR_ORG2_NOMBRE || null,
+                titular_org3: row.TITULAR_ORG3 || null,
+                titular_org3_nombre: row.TITULAR_ORG3_NOMBRE || null,
+                entidad_monto: row.ENTIDAD_MONTO !== null && row.ENTIDAD_MONTO !== undefined ? Number(row.ENTIDAD_MONTO) : null,
+                recibo_ajuste: row.RECIBO_AJUSTE !== null && row.RECIBO_AJUSTE !== undefined ? Number(row.RECIBO_AJUSTE) : null,
+                recibo_total: row.RECIBO_TOTAL !== null && row.RECIBO_TOTAL !== undefined ? Number(row.RECIBO_TOTAL) : null,
+                recibo_mes_ano: row.RECIBO_MES_ANO || null,
+                recibo_fecha_venc: row.RECIBO_FECHA_VENC ? new Date(row.RECIBO_FECHA_VENC) : null,
+                recibo_folio: row.RECIBO_FOLIO || null,
+                menor_id: row.MENOR_ID !== null && row.MENOR_ID !== undefined ? Number(row.MENOR_ID) : null,
+                menor_nombre: row.MENOR_NOMBRE || null,
+                menor_rfc: row.MENOR_RFC || null,
+                menor_nivel: row.MENOR_NIVEL || null,
+                menor_sala: row.MENOR_SALA || null,
+                estatus: row.ESTATUS || null
+              }));
+
+              console.log('[APORTACIONES_FONDOS] [APORTACION_GUARDERIAS] Consulta completada exitosamente', {
+                ...logContext,
+                totalAportaciones: aportaciones.length,
+                duracionMs: duration
+              });
+
+              resolve(aportaciones);
+            }
+          );
+        } catch (error: any) {
+          const duration = Date.now() - startTime;
+          console.error('[APORTACIONES_FONDOS] [APORTACION_GUARDERIAS] Error inesperado', {
+            ...logContext,
+            error: error.message || String(error),
+            stack: error.stack,
+            duracionMs: duration
+          });
+          reject(new AportacionFondoDomainError(
+            `Error inesperado al ejecutar función EBI2_RECIBOS_IMPRIMIR: ${error.message || 'Error desconocido'}`,
+            AportacionFondoError.ERROR_FIREBIRD_PROCEDIMIENTO
+          ));
+        }
+      });
+    });
+  }
+
+  /**
+   * Obtiene pensión nómina transitorio ejecutando la función PENSION_NOMINA_QNAL_TRANSITORIO en Firebird
+   */
+  async obtenerPensionNominaTransitorio(
+    org0: string,
+    org1: string,
+    periodo: string
+  ): Promise<PensionNominaTransitorio[]> {
+    const logContext = {
+      org0,
+      org1,
+      periodo,
+      funcion: 'PENSION_NOMINA_QNAL_TRANSITORIO'
+    };
+
+    // Validar parámetros de entrada
+    if (!org0 || org0.trim().length === 0) {
+      throw new AportacionFondoDomainError(
+        'Clave orgánica 0 es requerida',
+        AportacionFondoError.CLAVE_ORGANICA_REQUERIDA
+      );
+    }
+
+    if (!org1 || org1.trim().length === 0) {
+      throw new AportacionFondoDomainError(
+        'Clave orgánica 1 es requerida',
+        AportacionFondoError.CLAVE_ORGANICA_REQUERIDA
+      );
+    }
+
+    if (!periodo || periodo.trim().length === 0) {
+      throw new AportacionFondoDomainError(
+        'Período es requerido',
+        AportacionFondoError.PARAMETRO_INVALIDO
+      );
+    }
+
+    if (org0.length > 2) {
+      throw new AportacionFondoDomainError(
+        `Clave orgánica 0 inválida: "${org0}". Debe tener máximo 2 caracteres`,
+        AportacionFondoError.CLAVE_ORGANICA_INVALIDA
+      );
+    }
+
+    if (org1.length > 2) {
+      throw new AportacionFondoDomainError(
+        `Clave orgánica 1 inválida: "${org1}". Debe tener máximo 2 caracteres`,
+        AportacionFondoError.CLAVE_ORGANICA_INVALIDA
+      );
+    }
+
+    const startTime = Date.now();
+    
+    console.log('[APORTACIONES_FONDOS] [PENSION_NOMINA_TRANSITORIO] Iniciando consulta serializada', logContext);
+    
+    // Ejecutar función PENSION_NOMINA_QNAL_TRANSITORIO de forma serializada
+    const sql = `
+      SELECT 
+        p.FPENSION, 
+        p.INTERNO, 
+        p.NOMBRES, 
+        p.NONOMBRE, 
+        p.RFC, 
+        p.NORFC, 
+        p.ORG0,
+        p.ORG1, 
+        p.ORG2, 
+        p.ORG3, 
+        p.SUELDO, 
+        p.OPRESTACIONES, 
+        p.QUINQUENIOS, 
+        p.SDO,
+        p.OPREST, 
+        p.QUINQ, 
+        p.TPENSION, 
+        p.TRANSITORIO, 
+        p.NORG0, 
+        p.NORG1, 
+        p.NORG2,
+        p.NORG3, 
+        p.CCONCEPTO, 
+        p.DESCRIPCION, 
+        p.IMPORTE, 
+        p.DEFUNCION, 
+        p.PCP,
+        p.PALIMENTICIA, 
+        p.RETROACTIVO, 
+        p.PAYUDAECON, 
+        p.OTROSP1, 
+        p.OTROSP2,
+        p.OTROSP3, 
+        p.OTROSP4, 
+        p.OTROSP5, 
+        p.TERRENO, 
+        p.HIPVIV, 
+        p.PRODENTAL, 
+        p.OTROD1,
+        p.OTROD2, 
+        p.OTROD3, 
+        p.OTROD4, 
+        p.OTROD5, 
+        p.OTROD6, 
+        p.TPERCEP, 
+        p.TDEDUC,
+        p.TOTAL, 
+        p.FIN, 
+        p.INICIO, 
+        p.ANIO, 
+        p.SIHAY, 
+        p.PORCENTAJE, 
+        p.SDOPORC,
+        p.AYUDPORC, 
+        p.QUINQPORC, 
+        p.TRANSORG0, 
+        p.TRANSORG1, 
+        p.TRANSNORG0,
+        p.TRANSNORG1
+      FROM PENSION_NOMINA_QNAL_TRANSITORIO(?) p
+      WHERE p.ORG0 = ? AND p.ORG1 = ?
+    `;
+
+    return executeSerializedQuery((db) => {
+      return new Promise<PensionNominaTransitorio[]>((resolve, reject) => {
+        console.log('[APORTACIONES_FONDOS] [PENSION_NOMINA_TRANSITORIO] Ejecutando función', logContext);
+
+        // Validar que la conexión esté disponible
+        if (!db || typeof db.query !== 'function') {
+          console.error('[APORTACIONES_FONDOS] [PENSION_NOMINA_TRANSITORIO] Conexión Firebird inválida', logContext);
+          reject(new AportacionFondoDomainError(
+            'Conexión a Firebird no disponible o inválida',
+            AportacionFondoError.ERROR_FIREBIRD_CONEXION
+          ));
+          return;
+        }
+
+        try {
+          db.query(
+            sql,
+            [periodo, org0, org1],
+            (err: any, result: any) => {
+              const duration = Date.now() - startTime;
+              
+              if (err) {
+                console.error('[APORTACIONES_FONDOS] [PENSION_NOMINA_TRANSITORIO] Error ejecutando función', {
+                  ...logContext,
+                  error: err.message || String(err),
+                  errorCode: err.code,
+                  errorName: err.name,
+                  stack: err.stack,
+                  duracionMs: duration
+                });
+                reject(new AportacionFondoDomainError(
+                  `Error al ejecutar función PENSION_NOMINA_QNAL_TRANSITORIO con parámetros PERIODO=${periodo}, ORG0=${org0}, ORG1=${org1}: ${err.message || String(err)}`,
+                  AportacionFondoError.ERROR_FIREBIRD_PROCEDIMIENTO
+                ));
+                return;
+              }
+
+              if (!result) {
+                console.warn('[APORTACIONES_FONDOS] [PENSION_NOMINA_TRANSITORIO] Resultado nulo recibido', { ...logContext, duracionMs: duration });
+                resolve([]);
+                return;
+              }
+
+              // Normalizar resultado a array
+              const resultArray = Array.isArray(result) ? result : (result ? [result] : []);
+
+              if (resultArray.length === 0) {
+                console.log('[APORTACIONES_FONDOS] [PENSION_NOMINA_TRANSITORIO] No se encontraron registros', { ...logContext, duracionMs: duration });
+                resolve([]);
+                return;
+              }
+
+              // Mapear resultados a entidad PensionNominaTransitorio
+              const registros: PensionNominaTransitorio[] = resultArray.map((row: any) => ({
+                fpension: row.FPENSION !== null && row.FPENSION !== undefined ? Number(row.FPENSION) : null,
+                interno: row.INTERNO !== null && row.INTERNO !== undefined ? Number(row.INTERNO) : null,
+                nombres: row.NOMBRES || null,
+                nonombre: row.NONOMBRE || null,
+                rfc: row.RFC || null,
+                norfc: row.NORFC || null,
+                org0: row.ORG0 || null,
+                org1: row.ORG1 || null,
+                org2: row.ORG2 || null,
+                org3: row.ORG3 || null,
+                sueldo: row.SUELDO !== null && row.SUELDO !== undefined ? Number(row.SUELDO) : null,
+                oprestaciones: row.OPRESTACIONES !== null && row.OPRESTACIONES !== undefined ? Number(row.OPRESTACIONES) : null,
+                quinquenios: row.QUINQUENIOS !== null && row.QUINQUENIOS !== undefined ? Number(row.QUINQUENIOS) : null,
+                sdo: row.SDO !== null && row.SDO !== undefined ? Number(row.SDO) : null,
+                oprest: row.OPREST !== null && row.OPREST !== undefined ? Number(row.OPREST) : null,
+                quinq: row.QUINQ !== null && row.QUINQ !== undefined ? Number(row.QUINQ) : null,
+                tpension: row.TPENSION !== null && row.TPENSION !== undefined ? Number(row.TPENSION) : null,
+                transitorio: row.TRANSITORIO !== null && row.TRANSITORIO !== undefined ? Number(row.TRANSITORIO) : null,
+                norg0: row.NORG0 || null,
+                norg1: row.NORG1 || null,
+                norg2: row.NORG2 || null,
+                norg3: row.NORG3 || null,
+                cconcepto: row.CCONCEPTO || null,
+                descripcion: row.DESCRIPCION || null,
+                importe: row.IMPORTE !== null && row.IMPORTE !== undefined ? Number(row.IMPORTE) : null,
+                defuncion: row.DEFUNCION ? new Date(row.DEFUNCION) : null,
+                pcp: row.PCP !== null && row.PCP !== undefined ? Number(row.PCP) : null,
+                palimenticia: row.PALIMENTICIA !== null && row.PALIMENTICIA !== undefined ? Number(row.PALIMENTICIA) : null,
+                retroactivo: row.RETROACTIVO !== null && row.RETROACTIVO !== undefined ? Number(row.RETROACTIVO) : null,
+                payudaecon: row.PAYUDAECON !== null && row.PAYUDAECON !== undefined ? Number(row.PAYUDAECON) : null,
+                otrosp1: row.OTROSP1 !== null && row.OTROSP1 !== undefined ? Number(row.OTROSP1) : null,
+                otrosp2: row.OTROSP2 !== null && row.OTROSP2 !== undefined ? Number(row.OTROSP2) : null,
+                otrosp3: row.OTROSP3 !== null && row.OTROSP3 !== undefined ? Number(row.OTROSP3) : null,
+                otrosp4: row.OTROSP4 !== null && row.OTROSP4 !== undefined ? Number(row.OTROSP4) : null,
+                otrosp5: row.OTROSP5 !== null && row.OTROSP5 !== undefined ? Number(row.OTROSP5) : null,
+                terreno: row.TERRENO !== null && row.TERRENO !== undefined ? Number(row.TERRENO) : null,
+                hipviv: row.HIPVIV !== null && row.HIPVIV !== undefined ? Number(row.HIPVIV) : null,
+                prodental: row.PRODENTAL !== null && row.PRODENTAL !== undefined ? Number(row.PRODENTAL) : null,
+                otrod1: row.OTROD1 !== null && row.OTROD1 !== undefined ? Number(row.OTROD1) : null,
+                otrod2: row.OTROD2 !== null && row.OTROD2 !== undefined ? Number(row.OTROD2) : null,
+                otrod3: row.OTROD3 !== null && row.OTROD3 !== undefined ? Number(row.OTROD3) : null,
+                otrod4: row.OTROD4 !== null && row.OTROD4 !== undefined ? Number(row.OTROD4) : null,
+                otrod5: row.OTROD5 !== null && row.OTROD5 !== undefined ? Number(row.OTROD5) : null,
+                otrod6: row.OTROD6 !== null && row.OTROD6 !== undefined ? Number(row.OTROD6) : null,
+                tpercep: row.TPERCEP !== null && row.TPERCEP !== undefined ? Number(row.TPERCEP) : null,
+                tdeduc: row.TDEDUC !== null && row.TDEDUC !== undefined ? Number(row.TDEDUC) : null,
+                total: row.TOTAL !== null && row.TOTAL !== undefined ? Number(row.TOTAL) : null,
+                fin: row.FIN ? new Date(row.FIN) : null,
+                inicio: row.INICIO ? new Date(row.INICIO) : null,
+                anio: row.ANIO !== null && row.ANIO !== undefined ? Number(row.ANIO) : null,
+                sihay: row.SIHAY || null,
+                porcentaje: row.PORCENTAJE !== null && row.PORCENTAJE !== undefined ? Number(row.PORCENTAJE) : null,
+                sdoporc: row.SDOPORC !== null && row.SDOPORC !== undefined ? Number(row.SDOPORC) : null,
+                ayudporc: row.AYUDPORC !== null && row.AYUDPORC !== undefined ? Number(row.AYUDPORC) : null,
+                quinqporc: row.QUINQPORC !== null && row.QUINQPORC !== undefined ? Number(row.QUINQPORC) : null,
+                transorg0: row.TRANSORG0 || null,
+                transorg1: row.TRANSORG1 || null,
+                transnorg0: row.TRANSNORG0 || null,
+                transnorg1: row.TRANSNORG1 || null
+              }));
+
+              console.log('[APORTACIONES_FONDOS] [PENSION_NOMINA_TRANSITORIO] Consulta completada exitosamente', {
+                ...logContext,
+                totalRegistros: registros.length,
+                duracionMs: duration
+              });
+
+              resolve(registros);
+            }
+          );
+        } catch (error: any) {
+          const duration = Date.now() - startTime;
+          console.error('[APORTACIONES_FONDOS] [PENSION_NOMINA_TRANSITORIO] Error inesperado', {
+            ...logContext,
+            error: error.message || String(error),
+            stack: error.stack,
+            duracionMs: duration
+          });
+          reject(new AportacionFondoDomainError(
+            `Error inesperado al ejecutar función PENSION_NOMINA_QNAL_TRANSITORIO: ${error.message || 'Error desconocido'}`,
+            AportacionFondoError.ERROR_FIREBIRD_PROCEDIMIENTO
+          ));
+        }
+      });
     });
   }
 }

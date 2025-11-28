@@ -7,6 +7,8 @@ import { GetAportacionesCompletasQuery } from './application/queries/GetAportaci
 import { GetPrestamosQuery } from './application/queries/GetPrestamosQuery.js';
 import { GetPrestamosMedianoPlazoQuery } from './application/queries/GetPrestamosMedianoPlazoQuery.js';
 import { GetPrestamosHipotecariosQuery } from './application/queries/GetPrestamosHipotecariosQuery.js';
+import { GetAportacionGuarderiasQuery } from './application/queries/GetAportacionGuarderiasQuery.js';
+import { GetPensionNominaTransitorioQuery } from './application/queries/GetPensionNominaTransitorioQuery.js';
 import { handleAportacionesFondosError } from './infrastructure/errorHandler.js';
 
 // Routes for fund contributions operations
@@ -738,6 +740,344 @@ export default async function aportacionesFondosRoutes(app: FastifyInstance) {
       console.log(`[APORTACIONES_FONDOS] [ROUTE] [${requestId}] Solicitud completada exitosamente`, {
         totalPrestamos: result.prestamos.length,
         computadoraAntigua: result.computadora_antigua,
+        duracionMs: duration
+      });
+
+      return reply.send(ok(result));
+    } catch (error: any) {
+      const duration = Date.now() - startTime;
+      console.error(`[APORTACIONES_FONDOS] [ROUTE] [${requestId}] Error en solicitud`, {
+        error: error.message || String(error),
+        errorCode: error.code,
+        duracionMs: duration
+      });
+      return handleAportacionesFondosError(error, reply);
+    }
+  });
+
+  // GET /aportacionesFondos/aportacion-guarderias - Get aportación guarderías
+  app.get('/aportacionesFondos/aportacion-guarderias', {
+    preHandler: [requireAuth],
+    schema: {
+      description: 'Get aportación guarderías by executing EBI2_RECIBOS_IMPRIMIR function',
+      tags: ['aportacionesFondos'],
+      security: [{ bearerAuth: [] }],
+      querystring: {
+        type: 'object',
+        properties: {
+          clave_organica_0: { type: 'string', maxLength: 2 },
+          clave_organica_1: { type: 'string', maxLength: 2 }
+        }
+      },
+      response: {
+        200: {
+          type: 'object',
+          properties: {
+            ok: { type: 'boolean' },
+            data: {
+              type: 'object',
+              properties: {
+                clave_organica_0: { type: 'string' },
+                clave_organica_1: { type: 'string' },
+                periodo: { type: 'string' },
+                aportaciones: {
+                  type: 'array',
+                  items: {
+                    type: 'object',
+                    properties: {
+                      titular_nombre: { type: 'string', nullable: true },
+                      titular_no_empleado: { type: 'string', nullable: true },
+                      titular_monto: { type: 'number', nullable: true },
+                      titular_rfc: { type: 'string', nullable: true },
+                      titular_monto_texto: { type: 'string', nullable: true },
+                      titular_org0: { type: 'string', nullable: true },
+                      titular_org0_nombre: { type: 'string', nullable: true },
+                      titular_org1: { type: 'string', nullable: true },
+                      titular_org1_nombre: { type: 'string', nullable: true },
+                      titular_org2: { type: 'string', nullable: true },
+                      titular_org2_nombre: { type: 'string', nullable: true },
+                      titular_org3: { type: 'string', nullable: true },
+                      titular_org3_nombre: { type: 'string', nullable: true },
+                      entidad_monto: { type: 'number', nullable: true },
+                      recibo_ajuste: { type: 'number', nullable: true },
+                      recibo_total: { type: 'number', nullable: true },
+                      recibo_mes_ano: { type: 'string', nullable: true },
+                      recibo_fecha_venc: { type: 'string', nullable: true },
+                      recibo_folio: { type: 'string', nullable: true },
+                      menor_id: { type: 'number', nullable: true },
+                      menor_nombre: { type: 'string', nullable: true },
+                      menor_rfc: { type: 'string', nullable: true },
+                      menor_nivel: { type: 'string', nullable: true },
+                      menor_sala: { type: 'string', nullable: true },
+                      estatus: { type: 'string', nullable: true }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        400: {
+          type: 'object',
+          properties: {
+            ok: { type: 'boolean' },
+            error: {
+              type: 'object',
+              properties: {
+                code: { type: 'string' },
+                message: { type: 'string' }
+              }
+            }
+          }
+        },
+        500: {
+          type: 'object',
+          properties: {
+            ok: { type: 'boolean' },
+            error: {
+              type: 'object',
+              properties: {
+                code: { type: 'string' },
+                message: { type: 'string' }
+              }
+            }
+          }
+        }
+      }
+    }
+  }, async (req, reply) => {
+    const requestId = `req_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    const startTime = Date.now();
+    
+    try {
+      console.log(`[APORTACIONES_FONDOS] [ROUTE] [${requestId}] Iniciando solicitud aportación guarderías`, {
+        method: req.method,
+        url: req.url,
+        ip: req.ip
+      });
+
+      // Get user information from token
+      const user = req.user;
+      if (!user) {
+        console.warn(`[APORTACIONES_FONDOS] [ROUTE] [${requestId}] Usuario no autenticado`);
+        return reply.send(unauthorized('Usuario no autenticado'));
+      }
+
+      // Extract user organica keys and entity status
+      const userClave0 = (user as any).idOrganica0 || '';
+      const userClave1 = (user as any).idOrganica1 || '';
+      const entidades = (user as any).entidades || [false];
+      const isEntidad = entidades[0] === true; // Check first role's isEntidad status
+
+      console.log(`[APORTACIONES_FONDOS] [ROUTE] [${requestId}] Usuario autenticado`, {
+        userId: user.sub,
+        userClave0,
+        userClave1,
+        isEntidad,
+        queryParams: req.query
+      });
+
+      const getAportacionGuarderiasQuery = req.diScope.resolve<GetAportacionGuarderiasQuery>('getAportacionGuarderiasQuery');
+      
+      const result = await getAportacionGuarderiasQuery.execute(
+        userClave0,
+        userClave1,
+        isEntidad,
+        (req.query as any)?.clave_organica_0,
+        (req.query as any)?.clave_organica_1,
+        user.sub?.toString()
+      );
+
+      const duration = Date.now() - startTime;
+      console.log(`[APORTACIONES_FONDOS] [ROUTE] [${requestId}] Solicitud completada exitosamente`, {
+        totalAportaciones: result.aportaciones.length,
+        periodo: result.periodo,
+        duracionMs: duration
+      });
+
+      return reply.send(ok(result));
+    } catch (error: any) {
+      const duration = Date.now() - startTime;
+      console.error(`[APORTACIONES_FONDOS] [ROUTE] [${requestId}] Error en solicitud`, {
+        error: error.message || String(error),
+        errorCode: error.code,
+        duracionMs: duration
+      });
+      return handleAportacionesFondosError(error, reply);
+    }
+  });
+
+  // GET /aportacionesFondos/pension-nomina-transitorio - Get pensión nómina transitorio
+  app.get('/aportacionesFondos/pension-nomina-transitorio', {
+    preHandler: [requireAuth],
+    schema: {
+      description: 'Get pensión nómina transitorio by executing PENSION_NOMINA_QNAL_TRANSITORIO function',
+      tags: ['aportacionesFondos'],
+      security: [{ bearerAuth: [] }],
+      querystring: {
+        type: 'object',
+        properties: {
+          clave_organica_0: { type: 'string', maxLength: 2 },
+          clave_organica_1: { type: 'string', maxLength: 2 }
+        }
+      },
+      response: {
+        200: {
+          type: 'object',
+          properties: {
+            ok: { type: 'boolean' },
+            data: {
+              type: 'object',
+              properties: {
+                clave_organica_0: { type: 'string' },
+                clave_organica_1: { type: 'string' },
+                periodo: { type: 'string' },
+                registros: {
+                  type: 'array',
+                  items: {
+                    type: 'object',
+                    properties: {
+                      fpension: { type: 'number', nullable: true },
+                      interno: { type: 'number', nullable: true },
+                      nombres: { type: 'string', nullable: true },
+                      nonombre: { type: 'string', nullable: true },
+                      rfc: { type: 'string', nullable: true },
+                      norfc: { type: 'string', nullable: true },
+                      org0: { type: 'string', nullable: true },
+                      org1: { type: 'string', nullable: true },
+                      org2: { type: 'string', nullable: true },
+                      org3: { type: 'string', nullable: true },
+                      sueldo: { type: 'number', nullable: true },
+                      oprestaciones: { type: 'number', nullable: true },
+                      quinquenios: { type: 'number', nullable: true },
+                      sdo: { type: 'number', nullable: true },
+                      oprest: { type: 'number', nullable: true },
+                      quinq: { type: 'number', nullable: true },
+                      tpension: { type: 'number', nullable: true },
+                      transitorio: { type: 'number', nullable: true },
+                      norg0: { type: 'string', nullable: true },
+                      norg1: { type: 'string', nullable: true },
+                      norg2: { type: 'string', nullable: true },
+                      norg3: { type: 'string', nullable: true },
+                      cconcepto: { type: 'string', nullable: true },
+                      descripcion: { type: 'string', nullable: true },
+                      importe: { type: 'number', nullable: true },
+                      defuncion: { type: 'string', nullable: true },
+                      pcp: { type: 'number', nullable: true },
+                      palimenticia: { type: 'number', nullable: true },
+                      retroactivo: { type: 'number', nullable: true },
+                      payudaecon: { type: 'number', nullable: true },
+                      otrosp1: { type: 'number', nullable: true },
+                      otrosp2: { type: 'number', nullable: true },
+                      otrosp3: { type: 'number', nullable: true },
+                      otrosp4: { type: 'number', nullable: true },
+                      otrosp5: { type: 'number', nullable: true },
+                      terreno: { type: 'number', nullable: true },
+                      hipviv: { type: 'number', nullable: true },
+                      prodental: { type: 'number', nullable: true },
+                      otrod1: { type: 'number', nullable: true },
+                      otrod2: { type: 'number', nullable: true },
+                      otrod3: { type: 'number', nullable: true },
+                      otrod4: { type: 'number', nullable: true },
+                      otrod5: { type: 'number', nullable: true },
+                      otrod6: { type: 'number', nullable: true },
+                      tpercep: { type: 'number', nullable: true },
+                      tdeduc: { type: 'number', nullable: true },
+                      total: { type: 'number', nullable: true },
+                      fin: { type: 'string', nullable: true },
+                      inicio: { type: 'string', nullable: true },
+                      anio: { type: 'number', nullable: true },
+                      sihay: { type: 'string', nullable: true },
+                      porcentaje: { type: 'number', nullable: true },
+                      sdoporc: { type: 'number', nullable: true },
+                      ayudporc: { type: 'number', nullable: true },
+                      quinqporc: { type: 'number', nullable: true },
+                      transorg0: { type: 'string', nullable: true },
+                      transorg1: { type: 'string', nullable: true },
+                      transnorg0: { type: 'string', nullable: true },
+                      transnorg1: { type: 'string', nullable: true }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        400: {
+          type: 'object',
+          properties: {
+            ok: { type: 'boolean' },
+            error: {
+              type: 'object',
+              properties: {
+                code: { type: 'string' },
+                message: { type: 'string' }
+              }
+            }
+          }
+        },
+        500: {
+          type: 'object',
+          properties: {
+            ok: { type: 'boolean' },
+            error: {
+              type: 'object',
+              properties: {
+                code: { type: 'string' },
+                message: { type: 'string' }
+              }
+            }
+          }
+        }
+      }
+    }
+  }, async (req, reply) => {
+    const requestId = `req_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    const startTime = Date.now();
+    
+    try {
+      console.log(`[APORTACIONES_FONDOS] [ROUTE] [${requestId}] Iniciando solicitud pensión nómina transitorio`, {
+        method: req.method,
+        url: req.url,
+        ip: req.ip
+      });
+
+      // Get user information from token
+      const user = req.user;
+      if (!user) {
+        console.warn(`[APORTACIONES_FONDOS] [ROUTE] [${requestId}] Usuario no autenticado`);
+        return reply.send(unauthorized('Usuario no autenticado'));
+      }
+
+      // Extract user organica keys and entity status
+      const userClave0 = (user as any).idOrganica0 || '';
+      const userClave1 = (user as any).idOrganica1 || '';
+      const entidades = (user as any).entidades || [false];
+      const isEntidad = entidades[0] === true; // Check first role's isEntidad status
+
+      console.log(`[APORTACIONES_FONDOS] [ROUTE] [${requestId}] Usuario autenticado`, {
+        userId: user.sub,
+        userClave0,
+        userClave1,
+        isEntidad,
+        queryParams: req.query
+      });
+
+      const getPensionNominaTransitorioQuery = req.diScope.resolve<GetPensionNominaTransitorioQuery>('getPensionNominaTransitorioQuery');
+      
+      const result = await getPensionNominaTransitorioQuery.execute(
+        userClave0,
+        userClave1,
+        isEntidad,
+        (req.query as any)?.clave_organica_0,
+        (req.query as any)?.clave_organica_1,
+        user.sub?.toString()
+      );
+
+      const duration = Date.now() - startTime;
+      console.log(`[APORTACIONES_FONDOS] [ROUTE] [${requestId}] Solicitud completada exitosamente`, {
+        totalRegistros: result.registros.length,
+        periodo: result.periodo,
         duracionMs: duration
       });
 

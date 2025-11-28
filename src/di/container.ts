@@ -184,6 +184,8 @@ import { GetAportacionesCompletasQuery } from '../modules/aportacionesFondos/app
 import { GetPrestamosQuery } from '../modules/aportacionesFondos/application/queries/GetPrestamosQuery.js';
 import { GetPrestamosMedianoPlazoQuery } from '../modules/aportacionesFondos/application/queries/GetPrestamosMedianoPlazoQuery.js';
 import { GetPrestamosHipotecariosQuery } from '../modules/aportacionesFondos/application/queries/GetPrestamosHipotecariosQuery.js';
+import { GetAportacionGuarderiasQuery } from '../modules/aportacionesFondos/application/queries/GetAportacionGuarderiasQuery.js';
+import { GetPensionNominaTransitorioQuery } from '../modules/aportacionesFondos/application/queries/GetPensionNominaTransitorioQuery.js';
 import { UpdateColoniaCommand } from '../modules/colonias/application/commands/UpdateColoniaCommand.js';
 import { DeleteColoniaCommand } from '../modules/colonias/application/commands/DeleteColoniaCommand.js';
 
@@ -971,7 +973,9 @@ container.register({
   getAportacionesCompletasQuery: asClass(GetAportacionesCompletasQuery).scoped(),
   getPrestamosQuery: asClass(GetPrestamosQuery).scoped(),
   getPrestamosMedianoPlazoQuery: asClass(GetPrestamosMedianoPlazoQuery).scoped(),
-  getPrestamosHipotecariosQuery: asClass(GetPrestamosHipotecariosQuery).scoped()
+  getPrestamosHipotecariosQuery: asClass(GetPrestamosHipotecariosQuery).scoped(),
+  getAportacionGuarderiasQuery: asClass(GetAportacionGuarderiasQuery).scoped(),
+  getPensionNominaTransitorioQuery: asClass(GetPensionNominaTransitorioQuery).scoped()
 });
 
 /**
