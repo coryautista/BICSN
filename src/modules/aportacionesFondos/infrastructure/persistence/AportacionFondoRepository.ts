@@ -1472,15 +1472,20 @@ export class AportacionFondoRepository implements IAportacionFondoRepository {
 
   /**
    * Obtiene pensión nómina transitorio ejecutando la función PENSION_NOMINA_QNAL_TRANSITORIO en Firebird
+   * Para pensionados: org0='04' y org1='60' son hardcodeados, org2 y org3 vienen del token del usuario
    */
   async obtenerPensionNominaTransitorio(
     org0: string,
     org1: string,
+    org2: string,
+    org3: string,
     periodo: string
   ): Promise<PensionNominaTransitorio[]> {
     const logContext = {
       org0,
       org1,
+      org2,
+      org3,
       periodo,
       funcion: 'PENSION_NOMINA_QNAL_TRANSITORIO'
     };
@@ -1496,6 +1501,20 @@ export class AportacionFondoRepository implements IAportacionFondoRepository {
     if (!org1 || org1.trim().length === 0) {
       throw new AportacionFondoDomainError(
         'Clave orgánica 1 es requerida',
+        AportacionFondoError.CLAVE_ORGANICA_REQUERIDA
+      );
+    }
+
+    if (!org2 || org2.trim().length === 0) {
+      throw new AportacionFondoDomainError(
+        'Clave orgánica 2 es requerida',
+        AportacionFondoError.CLAVE_ORGANICA_REQUERIDA
+      );
+    }
+
+    if (!org3 || org3.trim().length === 0) {
+      throw new AportacionFondoDomainError(
+        'Clave orgánica 3 es requerida',
         AportacionFondoError.CLAVE_ORGANICA_REQUERIDA
       );
     }
@@ -1517,6 +1536,20 @@ export class AportacionFondoRepository implements IAportacionFondoRepository {
     if (org1.length > 2) {
       throw new AportacionFondoDomainError(
         `Clave orgánica 1 inválida: "${org1}". Debe tener máximo 2 caracteres`,
+        AportacionFondoError.CLAVE_ORGANICA_INVALIDA
+      );
+    }
+
+    if (org2.length > 2) {
+      throw new AportacionFondoDomainError(
+        `Clave orgánica 2 inválida: "${org2}". Debe tener máximo 2 caracteres`,
+        AportacionFondoError.CLAVE_ORGANICA_INVALIDA
+      );
+    }
+
+    if (org3.length > 2) {
+      throw new AportacionFondoDomainError(
+        `Clave orgánica 3 inválida: "${org3}". Debe tener máximo 2 caracteres`,
         AportacionFondoError.CLAVE_ORGANICA_INVALIDA
       );
     }
@@ -1588,7 +1621,7 @@ export class AportacionFondoRepository implements IAportacionFondoRepository {
         p.TRANSNORG0,
         p.TRANSNORG1
       FROM PENSION_NOMINA_QNAL_TRANSITORIO(?) p
-      WHERE p.ORG0 = ? AND p.ORG1 = ?
+      WHERE p.ORG0 = ? AND p.ORG1 = ? AND p.ORG2 = ? AND p.ORG3 = ?
     `;
 
     return executeSerializedQuery((db) => {
@@ -1608,7 +1641,7 @@ export class AportacionFondoRepository implements IAportacionFondoRepository {
         try {
           db.query(
             sql,
-            [periodo, org0, org1],
+            [periodo, org0, org1, org2, org3],
             (err: any, result: any) => {
               const duration = Date.now() - startTime;
               
@@ -1622,7 +1655,7 @@ export class AportacionFondoRepository implements IAportacionFondoRepository {
                   duracionMs: duration
                 });
                 reject(new AportacionFondoDomainError(
-                  `Error al ejecutar función PENSION_NOMINA_QNAL_TRANSITORIO con parámetros PERIODO=${periodo}, ORG0=${org0}, ORG1=${org1}: ${err.message || String(err)}`,
+                  `Error al ejecutar función PENSION_NOMINA_QNAL_TRANSITORIO con parámetros PERIODO=${periodo}, ORG0=${org0}, ORG1=${org1}, ORG2=${org2}, ORG3=${org3}: ${err.message || String(err)}`,
                   AportacionFondoError.ERROR_FIREBIRD_PROCEDIMIENTO
                 ));
                 return;

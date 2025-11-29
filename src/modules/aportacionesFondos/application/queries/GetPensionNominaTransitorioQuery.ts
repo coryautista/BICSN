@@ -41,11 +41,12 @@ export class GetPensionNominaTransitorioQuery {
       );
       console.log('[APORTACIONES_FONDOS] [PENSION_NOMINA_TRANSITORIO] Acceso validado', { ...logContext, clavesValidadas: claves });
 
-      // Obtener quincena y año desde BitacoraAfectacionOrg
-      console.log('[APORTACIONES_FONDOS] [PENSION_NOMINA_TRANSITORIO] Obteniendo quincena y año', { ...logContext, org0: claves.clave0, org1: claves.clave1 });
+      // Obtener quincena y año desde BitacoraAfectacionOrg usando org0 y org1 del token
+      // Para pensionados, usamos las claves orgánicas del usuario para obtener el período
+      console.log('[APORTACIONES_FONDOS] [PENSION_NOMINA_TRANSITORIO] Obteniendo quincena y año', { ...logContext, org0: userClave0, org1: userClave1 });
       const { quincena, anio } = await this.aportacionFondoRepo.obtenerQuincenaYAnio(
-        claves.clave0,
-        claves.clave1
+        userClave0,
+        userClave1
       );
       console.log('[APORTACIONES_FONDOS] [PENSION_NOMINA_TRANSITORIO] Quincena y año obtenidos', { ...logContext, quincena, anio });
 
@@ -55,11 +56,26 @@ export class GetPensionNominaTransitorioQuery {
       const periodo = quincenaStr + anioStr;
       console.log('[APORTACIONES_FONDOS] [PENSION_NOMINA_TRANSITORIO] Período calculado', { ...logContext, periodo, quincena, anio });
 
+      // Para pensionados: org0='04' y org1='60' son hardcodeados, org2 y org3 vienen del token
+      const org0Pension = '04';
+      const org1Pension = '60';
+      const org2Pension = userClave0;
+      const org3Pension = userClave1;
+
       // Obtener registros ejecutando función PENSION_NOMINA_QNAL_TRANSITORIO
-      console.log('[APORTACIONES_FONDOS] [PENSION_NOMINA_TRANSITORIO] Ejecutando función PENSION_NOMINA_QNAL_TRANSITORIO', { ...logContext, periodo });
+      console.log('[APORTACIONES_FONDOS] [PENSION_NOMINA_TRANSITORIO] Ejecutando función PENSION_NOMINA_QNAL_TRANSITORIO', { 
+        ...logContext, 
+        periodo,
+        org0: org0Pension,
+        org1: org1Pension,
+        org2: org2Pension,
+        org3: org3Pension
+      });
       const registros = await this.aportacionFondoRepo.obtenerPensionNominaTransitorio(
-        claves.clave0,
-        claves.clave1,
+        org0Pension,
+        org1Pension,
+        org2Pension,
+        org3Pension,
         periodo
       );
 
@@ -71,9 +87,10 @@ export class GetPensionNominaTransitorioQuery {
         duracionMs: duration
       });
 
+      // Retornar org2 y org3 del token (las claves orgánicas reales del usuario)
       return {
-        clave_organica_0: claves.clave0,
-        clave_organica_1: claves.clave1,
+        clave_organica_0: userClave0,
+        clave_organica_1: userClave1,
         periodo,
         registros
       };
