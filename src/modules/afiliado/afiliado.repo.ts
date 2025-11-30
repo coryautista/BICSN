@@ -1166,7 +1166,7 @@ export async function marcarAfiliadosCompletosParaOrganica(
   return { afectados };
 }
 
-// Actualizar BitacoraAfectacionOrg de "Aplicar" a "Terminado" para la orgánica del usuario
+// Actualizar BitacoraAfectacionOrg de "APLICAR" a "APLICAR" para la orgánica del usuario
 export async function actualizarBitacoraAfectacionOrg(
   org0: string,
   org1: string,
@@ -1195,23 +1195,23 @@ export async function actualizarBitacoraAfectacionOrg(
 
   const registro = r.recordset[0];
   
-  // Actualizar el registro de "Aplicar" a "Terminado"
+  // Actualizar el registro de "Aplicar" a "APLICAR"
   const updateResult = await p.request()
     .input('id', sql.BigInt, registro.Id)
     .input('usuarioId', sql.NVarChar(50), usuarioId)
     .query(`
       UPDATE afec.BitacoraAfectacionOrg
-      SET Accion = 'Terminado',
+      SET Accion = 'APLICAR',
           ModifiedAt = SYSUTCDATETIME(),
           Usuario = @usuarioId,
           Resultado = 'OK',
-          Mensaje = 'Proceso de afiliación completado - Estado aplicado a BDIsspea'
+          Mensaje = 'Proceso de afiliación completado - Estado aplicado a Movimientos BDIsspea'
       OUTPUT INSERTED.*
       WHERE Id = @id
     `);
 
   const registrosAfectados = updateResult.rowsAffected[0] || 0;
-  console.log(`Actualizado BitacoraAfectacionOrg: ${registrosAfectados} registros cambiados de "Aplicar" a "Terminado"`);
+  console.log(`Actualizado BitacoraAfectacionOrg: ${registrosAfectados} registros cambiados de "APLICAR" a "APLICAR"`);
   
   return {
     actualizado: registrosAfectados > 0,
@@ -1271,11 +1271,11 @@ export async function aplicarBDIsspea(
       .input('usuarioId', sql.NVarChar(50), usuarioId)
       .query(`
         UPDATE TOP (1) bao
-        SET bao.Accion = 'Terminado',
+        SET bao.Accion = 'APLICAR',
             bao.ModifiedAt = SYSUTCDATETIME(),
             bao.Usuario = @usuarioId,
             bao.Resultado = 'OK',
-            bao.Mensaje = 'Proceso de afiliación completado - Estado aplicado a BDIsspea'
+            bao.Mensaje = 'Proceso de afiliación completado - Estado aplicado a Movimientos BDIsspea'
         FROM afec.BitacoraAfectacionOrg bao
         WHERE bao.Org0 = @org0
           AND bao.Org1 = @org1
@@ -2054,7 +2054,7 @@ export async function aplicarBDIsspeaLote(
   let bitacoraActualizada = 0;
   
   if (todosExitosos) {
-    console.log(`\n   🔄 Actualizando BitacoraAfectacionOrg como "Terminado"...`);
+    console.log(`\n   🔄 Actualizando BitacoraAfectacionOrg como "APLICAR"...`);
     
     let transaction: any = null;
     
@@ -2074,15 +2074,15 @@ export async function aplicarBDIsspeaLote(
       const txTime = Date.now() - txStart;
       console.log(`      Transacción iniciada en ${txTime}ms`);
 
-      // Actualizar BitacoraAfectacionOrg como "Terminado"
+      // Actualizar BitacoraAfectacionOrg como "APLICAR"
       const bitacoraStart = Date.now();
       const sqlBitacora = `
         UPDATE TOP (1) bao
-        SET bao.Accion = 'Terminado',
+        SET bao.Accion = 'APLICAR',
             bao.ModifiedAt = SYSUTCDATETIME(),
             bao.Usuario = '${usuarioId}',
             bao.Resultado = 'OK',
-            bao.Mensaje = 'Todos los afiliados procesados exitosamente - ${afiliadosExitosos} afiliados aplicados a BDIsspea'
+            bao.Mensaje = 'Todos los afiliados procesados exitosamente - ${afiliadosExitosos} afiliados aplicados a Movimientos BDIsspea'
         FROM afec.BitacoraAfectacionOrg bao
         WHERE bao.Org0 = '${org0}'
           AND bao.Org1 = '${org1}'
@@ -2097,7 +2097,7 @@ export async function aplicarBDIsspeaLote(
         .input('mensaje', sql.NVarChar(4000), `Todos los afiliados procesados exitosamente - ${afiliadosExitosos} afiliados aplicados a BDIsspea`)
         .query(`
           UPDATE TOP (1) bao
-          SET bao.Accion = 'Terminado',
+          SET bao.Accion = 'APLICAR',
               bao.ModifiedAt = SYSUTCDATETIME(),
               bao.Usuario = @usuarioId,
               bao.Resultado = 'OK',
@@ -2120,7 +2120,7 @@ export async function aplicarBDIsspeaLote(
         registrosActualizados: bitacoraActualizada,
         sqlExecuted: sqlBitacora,
         elapsedMs: Date.now() - startTime
-      }, 'BitacoraAfectacionOrg actualizada como Terminado');
+      }, 'BitacoraAfectacionOrg actualizada como APLICAR para Movimientos BDIsspea');
 
       // Hacer commit de la transacción
       console.log(`\n      💾 Haciendo commit...`);
@@ -2184,7 +2184,7 @@ export async function aplicarBDIsspeaLote(
     
   } else {
     console.log(`\n   ⚠️  NO se actualizará BitacoraAfectacionOrg porque hay afiliados fallidos`);
-    console.log(`      Para marcarla como "Terminado", TODOS los afiliados deben procesarse exitosamente`);
+    console.log(`      Para marcarla como "APLICAR", TODOS los afiliados deben procesarse exitosamente`);
     
     logger.warn({
       operation: 'aplicarBDIsspeaLote',

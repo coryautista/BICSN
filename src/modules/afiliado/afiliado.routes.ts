@@ -3824,7 +3824,7 @@ export default async function afiliadoRoutes(app: FastifyInstance) {
     },
     preHandler: [requireAuth],
     schema: {
-      description: 'Aplicar BDIsspea en lote a TODOS los afiliados en numValidacion=2 (Aprobado) o numValidacion=3 (En Revisión) de la orgánica del usuario. Esta operación incluye: 1) Cambiar todos los afiliados elegibles a numValidacion=7, 2) Marcar todos los afiliados de la orgánica como completos (afiliadosComplete=1), 3) Actualizar BitacoraAfectacionOrg de "Aplicar" a "Terminado"',
+      description: 'Aplicar BDIsspea en lote a TODOS los afiliados en numValidacion=2 (Aprobado) o numValidacion=3 (En Revisión) de la orgánica del usuario. Esta operación incluye: 1) Cambiar todos los afiliados elegibles a numValidacion=7, 2) Marcar todos los afiliados de la orgánica como completos (afiliadosComplete=1), 3) Actualizar BitacoraAfectacionOrg de "Aplicar" a "APLICAR"',
       tags: ['afiliado'],
       security: [{ bearerAuth: [] }],
       body: {
