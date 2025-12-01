@@ -1,9 +1,17 @@
 import { FastifyInstance } from 'fastify';
 import { requireAuth, requireRole } from '../../auth/auth.middleware.js';
 import { CreateIndicadorSchema, UpdateIndicadorSchema, IndicadorIdParamSchema, ProgramaIdParamSchema, EjeIdParamSchema, LineaEstrategicaIdParamSchema } from './indicador.schemas.js';
-import { IndicadorService } from './indicador.service.js';
-import { ok, validationError, notFound, internalError } from '../../../utils/http.js';
+import { ok, validationError } from '../../../utils/http.js';
 import { withDbContext } from '../../../db/context.js';
+import { handleIndicadorError } from './infrastructure/errorHandler.js';
+import { GetAllIndicadoresQuery } from './application/queries/GetAllIndicadoresQuery.js';
+import { GetIndicadorByIdQuery } from './application/queries/GetIndicadorByIdQuery.js';
+import { GetIndicadoresByProgramaQuery } from './application/queries/GetIndicadoresByProgramaQuery.js';
+import { GetIndicadoresByLineaEstrategicaQuery } from './application/queries/GetIndicadoresByLineaEstrategicaQuery.js';
+import { GetIndicadoresByEjeQuery } from './application/queries/GetIndicadoresByEjeQuery.js';
+import { CreateIndicadorCommand } from './application/commands/CreateIndicadorCommand.js';
+import { UpdateIndicadorCommand } from './application/commands/UpdateIndicadorCommand.js';
+import { DeleteIndicadorCommand } from './application/commands/DeleteIndicadorCommand.js';
 
 export default async function indicadorRoutes(app: FastifyInstance) {
 
@@ -79,12 +87,11 @@ export default async function indicadorRoutes(app: FastifyInstance) {
     }
   }, async (req, reply) => {
     try {
-      const indicadorService = req.diScope.resolve<IndicadorService>('indicadorService');
-      const indicadores = await indicadorService.getAllIndicadores();
+      const getAllIndicadoresQuery = req.diScope.resolve<GetAllIndicadoresQuery>('getAllIndicadoresQuery');
+      const indicadores = await getAllIndicadoresQuery.execute();
       return reply.send(ok(indicadores));
     } catch (error: any) {
-      console.error('Error listing indicadores:', error);
-      return reply.code(500).send(internalError('Failed to retrieve indicadores'));
+      return handleIndicadorError(error, reply);
     }
   });
 
@@ -188,12 +195,11 @@ export default async function indicadorRoutes(app: FastifyInstance) {
     }
 
     try {
-      const indicadorService = req.diScope.resolve<IndicadorService>('indicadorService');
-      const indicadores = await indicadorService.getIndicadoresByPrograma(paramValidation.data.programaId);
+      const getIndicadoresByProgramaQuery = req.diScope.resolve<GetIndicadoresByProgramaQuery>('getIndicadoresByProgramaQuery');
+      const indicadores = await getIndicadoresByProgramaQuery.execute({ programaId: paramValidation.data.programaId });
       return reply.send(ok(indicadores));
     } catch (error: any) {
-      console.error('Error listing indicadores by programa:', error);
-      return reply.code(500).send(internalError('Failed to retrieve indicadores'));
+      return handleIndicadorError(error, reply);
     }
   });
 
@@ -297,12 +303,11 @@ export default async function indicadorRoutes(app: FastifyInstance) {
     }
 
     try {
-      const indicadorService = req.diScope.resolve<IndicadorService>('indicadorService');
-      const indicadores = await indicadorService.getIndicadoresByLineaEstrategica(paramValidation.data.lineaEstrategicaId);
+      const getIndicadoresByLineaEstrategicaQuery = req.diScope.resolve<GetIndicadoresByLineaEstrategicaQuery>('getIndicadoresByLineaEstrategicaQuery');
+      const indicadores = await getIndicadoresByLineaEstrategicaQuery.execute({ lineaEstrategicaId: paramValidation.data.lineaEstrategicaId });
       return reply.send(ok(indicadores));
     } catch (error: any) {
-      console.error('Error listing indicadores by linea estrategica:', error);
-      return reply.code(500).send(internalError('Failed to retrieve indicadores'));
+      return handleIndicadorError(error, reply);
     }
   });
 
@@ -406,12 +411,11 @@ export default async function indicadorRoutes(app: FastifyInstance) {
     }
 
     try {
-      const indicadorService = req.diScope.resolve<IndicadorService>('indicadorService');
-      const indicadores = await indicadorService.getIndicadoresByEje(paramValidation.data.ejeId);
+      const getIndicadoresByEjeQuery = req.diScope.resolve<GetIndicadoresByEjeQuery>('getIndicadoresByEjeQuery');
+      const indicadores = await getIndicadoresByEjeQuery.execute({ ejeId: paramValidation.data.ejeId });
       return reply.send(ok(indicadores));
     } catch (error: any) {
-      console.error('Error listing indicadores by eje:', error);
-      return reply.code(500).send(internalError('Failed to retrieve indicadores'));
+      return handleIndicadorError(error, reply);
     }
   });
 
@@ -527,15 +531,11 @@ export default async function indicadorRoutes(app: FastifyInstance) {
     }
 
     try {
-      const indicadorService = req.diScope.resolve<IndicadorService>('indicadorService');
-      const indicador = await indicadorService.getIndicadorById(paramValidation.data.indicadorId);
+      const getIndicadorByIdQuery = req.diScope.resolve<GetIndicadorByIdQuery>('getIndicadorByIdQuery');
+      const indicador = await getIndicadorByIdQuery.execute({ indicadorId: paramValidation.data.indicadorId });
       return reply.send(ok(indicador));
     } catch (error: any) {
-      if (error.message === 'INDICADOR_NOT_FOUND') {
-        return reply.code(404).send(notFound('Indicador', indicadorId));
-      }
-      console.error('Error getting indicador:', error);
-      return reply.code(500).send(internalError('Failed to retrieve indicador'));
+      return handleIndicadorError(error, reply);
     }
   });
 
@@ -626,31 +626,26 @@ export default async function indicadorRoutes(app: FastifyInstance) {
 
       try {
         const userId = req.user?.sub;
-        const indicadorService = req.diScope.resolve<IndicadorService>('indicadorService');
-        const indicador = await indicadorService.createIndicadorItem(
-          parsed.data.idPrograma,
-          parsed.data.nombre,
-          parsed.data.descripcion,
-          parsed.data.tipoIndicador,
-          parsed.data.frecuenciaMedicion,
-          parsed.data.meta,
-          parsed.data.sentido,
-          parsed.data.formula,
-          parsed.data.idUnidadMedida,
-          parsed.data.idDimension,
-          parsed.data.fuenteDatos,
-          parsed.data.responsable,
-          parsed.data.observaciones,
-          userId,
-          tx
-        );
+        const createIndicadorCommand = req.diScope.resolve<CreateIndicadorCommand>('createIndicadorCommand');
+        const indicador = await createIndicadorCommand.execute({
+          idPrograma: parsed.data.idPrograma,
+          nombre: parsed.data.nombre,
+          descripcion: parsed.data.descripcion,
+          tipoIndicador: parsed.data.tipoIndicador,
+          frecuenciaMedicion: parsed.data.frecuenciaMedicion,
+          meta: parsed.data.meta,
+          sentido: parsed.data.sentido,
+          formula: parsed.data.formula,
+          idUnidadMedida: parsed.data.idUnidadMedida,
+          idDimension: parsed.data.idDimension,
+          fuenteDatos: parsed.data.fuenteDatos,
+          responsable: parsed.data.responsable,
+          observaciones: parsed.data.observaciones,
+          userId
+        }, tx);
         return reply.code(201).send(ok(indicador));
       } catch (error: any) {
-        if (error.message === 'PROGRAMA_NOT_FOUND') {
-          return reply.code(400).send({ ok: false, error: { code: 'BAD_REQUEST', message: 'Programa not found' } });
-        }
-        console.error('Error creating indicador:', error);
-        return reply.code(500).send(internalError('Failed to create indicador'));
+        return handleIndicadorError(error, reply);
       }
     });
   });
@@ -768,31 +763,26 @@ export default async function indicadorRoutes(app: FastifyInstance) {
 
       try {
         const userId = req.user?.sub;
-        const indicadorService = req.diScope.resolve<IndicadorService>('indicadorService');
-        const indicador = await indicadorService.updateIndicadorItem(
-          paramValidation.data.indicadorId,
-          parsed.data.nombre,
-          parsed.data.descripcion,
-          parsed.data.tipoIndicador,
-          parsed.data.frecuenciaMedicion,
-          parsed.data.meta,
-          parsed.data.sentido,
-          parsed.data.formula,
-          parsed.data.idUnidadMedida,
-          parsed.data.idDimension,
-          parsed.data.fuenteDatos,
-          parsed.data.responsable,
-          parsed.data.observaciones,
-          userId,
-          tx
-        );
+        const updateIndicadorCommand = req.diScope.resolve<UpdateIndicadorCommand>('updateIndicadorCommand');
+        const indicador = await updateIndicadorCommand.execute({
+          indicadorId: paramValidation.data.indicadorId,
+          nombre: parsed.data.nombre,
+          descripcion: parsed.data.descripcion,
+          tipoIndicador: parsed.data.tipoIndicador,
+          frecuenciaMedicion: parsed.data.frecuenciaMedicion,
+          meta: parsed.data.meta,
+          sentido: parsed.data.sentido,
+          formula: parsed.data.formula,
+          idUnidadMedida: parsed.data.idUnidadMedida,
+          idDimension: parsed.data.idDimension,
+          fuenteDatos: parsed.data.fuenteDatos,
+          responsable: parsed.data.responsable,
+          observaciones: parsed.data.observaciones,
+          userId
+        }, tx);
         return reply.send(ok(indicador));
       } catch (error: any) {
-        if (error.message === 'INDICADOR_NOT_FOUND') {
-          return reply.code(404).send(notFound('Indicador', indicadorId));
-        }
-        console.error('Error updating indicador:', error);
-        return reply.code(500).send(internalError('Failed to update indicador'));
+        return handleIndicadorError(error, reply);
       }
     });
   });
@@ -875,15 +865,11 @@ export default async function indicadorRoutes(app: FastifyInstance) {
       }
 
       try {
-        const indicadorService = req.diScope.resolve<IndicadorService>('indicadorService');
-        const deletedId = await indicadorService.deleteIndicadorItem(paramValidation.data.indicadorId, tx);
+        const deleteIndicadorCommand = req.diScope.resolve<DeleteIndicadorCommand>('deleteIndicadorCommand');
+        const deletedId = await deleteIndicadorCommand.execute({ indicadorId: paramValidation.data.indicadorId }, tx);
         return reply.send(ok({ id: deletedId }));
       } catch (error: any) {
-        if (error.message === 'INDICADOR_NOT_FOUND') {
-          return reply.code(404).send(notFound('Indicador', indicadorId));
-        }
-        console.error('Error deleting indicador:', error);
-        return reply.code(500).send(internalError('Failed to delete indicador'));
+        return handleIndicadorError(error, reply);
       }
     });
   });

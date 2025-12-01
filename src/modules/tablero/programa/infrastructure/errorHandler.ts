@@ -10,6 +10,8 @@ import {
   ProgramaPermissionError,
   ProgramaInUseError
 } from '../domain/errors.js';
+import { EjeNotFoundError } from '../../eje/domain/errors.js';
+import { LineaEstrategicaNotFoundError } from '../../linea-estrategica/domain/errors.js';
 
 const logger = pino({
   name: 'programaErrorHandler',
@@ -60,6 +62,15 @@ export function handleProgramaError(error: any, reply: FastifyReply): FastifyRep
 
   if (error instanceof ProgramaPermissionError) {
     return reply.code(403).send(fail(error.code, error.message));
+  }
+
+  // Manejo de errores relacionados (Eje y LineaEstrategica)
+  if (error instanceof EjeNotFoundError) {
+    return reply.code(400).send(fail(error.code, error.message));
+  }
+
+  if (error instanceof LineaEstrategicaNotFoundError) {
+    return reply.code(400).send(fail(error.code, error.message));
   }
 
   // Manejo de errores genéricos del dominio

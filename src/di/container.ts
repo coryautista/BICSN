@@ -309,23 +309,101 @@ import { AfiliadoPersonalRepository } from '../modules/afiliadosPersonal/infrast
 import { GetPlantillaQuery } from '../modules/afiliadosPersonal/application/queries/GetPlantillaQuery.js';
 import { BusquedaHistoricoQuery } from '../modules/afiliadosPersonal/application/queries/BusquedaHistoricoQuery.js';
 
-// Tablero Services
-import { EjeService } from '../modules/tablero/eje/eje.service.js';
-import { ProgramaService } from '../modules/tablero/programa/programa.service.js';
-import { LineaEstrategicaService } from '../modules/tablero/linea-estrategica/linea-estrategica.service.js';
-import { IndicadorService } from '../modules/tablero/indicador/indicador.service.js';
-import { IndicadorAnualService } from '../modules/tablero/indicador-anual/indicador-anual.service.js';
-import { DimensionService } from '../modules/tablero/dimension/dimension.service.js';
-import { UnidadMedidaService } from '../modules/tablero/unidad-medida/unidad-medida.service.js';
-import { DependenciaService } from '../modules/tablero/dependencia/dependencia.service.js';
+// Tablero Services (Legacy - TODOS MIGRADOS A CQRS)
+// Todos los servicios legacy han sido eliminados y reemplazados por Commands/Queries
+
+// Tablero Repositories
+import { EjeRepository } from '../modules/tablero/eje/infrastructure/persistence/EjeRepository.js';
+import { ProgramaRepository } from '../modules/tablero/programa/infrastructure/ProgramaRepository.js';
+
+// Tablero Eje Commands & Queries
+import { CreateEjeCommand } from '../modules/tablero/eje/application/commands/CreateEjeCommand.js';
+import { UpdateEjeCommand } from '../modules/tablero/eje/application/commands/UpdateEjeCommand.js';
+import { DeleteEjeCommand } from '../modules/tablero/eje/application/commands/DeleteEjeCommand.js';
+import { GetAllEjesQuery } from '../modules/tablero/eje/application/queries/GetAllEjesQuery.js';
+import { GetEjeByIdQuery } from '../modules/tablero/eje/application/queries/GetEjeByIdQuery.js';
+import { GetEjeWithLineasQuery } from '../modules/tablero/eje/application/queries/GetEjeWithLineasQuery.js';
+
+// Tablero Dimension Commands & Queries
+import { CreateDimensionCommand } from '../modules/tablero/dimension/application/commands/CreateDimensionCommand.js';
+import { UpdateDimensionCommand } from '../modules/tablero/dimension/application/commands/UpdateDimensionCommand.js';
+import { DeleteDimensionCommand } from '../modules/tablero/dimension/application/commands/DeleteDimensionCommand.js';
+import { GetAllDimensionesQuery } from '../modules/tablero/dimension/application/queries/GetAllDimensionesQuery.js';
+import { GetDimensionByIdQuery } from '../modules/tablero/dimension/application/queries/GetDimensionByIdQuery.js';
+import { GetDimensionesByTipoQuery } from '../modules/tablero/dimension/application/queries/GetDimensionesByTipoQuery.js';
+
+// Tablero UnidadMedida Commands & Queries
+import { CreateUnidadMedidaCommand } from '../modules/tablero/unidad-medida/application/commands/CreateUnidadMedidaCommand.js';
+import { UpdateUnidadMedidaCommand } from '../modules/tablero/unidad-medida/application/commands/UpdateUnidadMedidaCommand.js';
+import { DeleteUnidadMedidaCommand } from '../modules/tablero/unidad-medida/application/commands/DeleteUnidadMedidaCommand.js';
+import { GetAllUnidadesMedidaQuery } from '../modules/tablero/unidad-medida/application/queries/GetAllUnidadesMedidaQuery.js';
+import { GetUnidadMedidaByIdQuery } from '../modules/tablero/unidad-medida/application/queries/GetUnidadMedidaByIdQuery.js';
+import { GetUnidadesMedidaByCategoriaQuery } from '../modules/tablero/unidad-medida/application/queries/GetUnidadesMedidaByCategoriaQuery.js';
+
+// Tablero Dependencia Commands & Queries
+import { CreateDependenciaCommand } from '../modules/tablero/dependencia/application/commands/CreateDependenciaCommand.js';
+import { UpdateDependenciaCommand } from '../modules/tablero/dependencia/application/commands/UpdateDependenciaCommand.js';
+import { DeleteDependenciaCommand } from '../modules/tablero/dependencia/application/commands/DeleteDependenciaCommand.js';
+import { GetAllDependenciasQuery } from '../modules/tablero/dependencia/application/queries/GetAllDependenciasQuery.js';
+import { GetDependenciaByIdQuery } from '../modules/tablero/dependencia/application/queries/GetDependenciaByIdQuery.js';
+import { GetDependenciasByTipoQuery } from '../modules/tablero/dependencia/application/queries/GetDependenciasByTipoQuery.js';
+import { GetDependenciasHijasQuery } from '../modules/tablero/dependencia/application/queries/GetDependenciasHijasQuery.js';
+import { GetDependenciaWithHijasQuery } from '../modules/tablero/dependencia/application/queries/GetDependenciaWithHijasQuery.js';
+
+// Tablero LineaEstrategica Commands & Queries
+import { CreateLineaEstrategicaCommand } from '../modules/tablero/linea-estrategica/application/commands/CreateLineaEstrategicaCommand.js';
+import { UpdateLineaEstrategicaCommand } from '../modules/tablero/linea-estrategica/application/commands/UpdateLineaEstrategicaCommand.js';
+import { DeleteLineaEstrategicaCommand } from '../modules/tablero/linea-estrategica/application/commands/DeleteLineaEstrategicaCommand.js';
+import { GetAllLineasEstrategicasQuery } from '../modules/tablero/linea-estrategica/application/queries/GetAllLineasEstrategicasQuery.js';
+import { GetLineaEstrategicaByIdQuery } from '../modules/tablero/linea-estrategica/application/queries/GetLineaEstrategicaByIdQuery.js';
+import { GetLineasEstrategicasByEjeQuery } from '../modules/tablero/linea-estrategica/application/queries/GetLineasEstrategicasByEjeQuery.js';
+import { GetLineaEstrategicaWithProgramasQuery } from '../modules/tablero/linea-estrategica/application/queries/GetLineaEstrategicaWithProgramasQuery.js';
+
+// Tablero Programa Commands & Queries
+import { CreateProgramaCommand } from '../modules/tablero/programa/application/commands/CreateProgramaCommand.js';
+import { UpdateProgramaCommand } from '../modules/tablero/programa/application/commands/UpdateProgramaCommand.js';
+import { DeleteProgramaCommand } from '../modules/tablero/programa/application/commands/DeleteProgramaCommand.js';
+import { GetAllProgramasQuery } from '../modules/tablero/programa/application/queries/GetAllProgramasQuery.js';
+import { GetProgramaByIdQuery } from '../modules/tablero/programa/application/queries/GetProgramaByIdQuery.js';
+import { GetProgramasByEjeQuery } from '../modules/tablero/programa/application/queries/GetProgramasByEjeQuery.js';
+import { GetProgramasByLineaEstrategicaQuery } from '../modules/tablero/programa/application/queries/GetProgramasByLineaEstrategicaQuery.js';
+
+// Tablero Indicador Commands & Queries
+import { CreateIndicadorCommand } from '../modules/tablero/indicador/application/commands/CreateIndicadorCommand.js';
+import { UpdateIndicadorCommand } from '../modules/tablero/indicador/application/commands/UpdateIndicadorCommand.js';
+import { DeleteIndicadorCommand } from '../modules/tablero/indicador/application/commands/DeleteIndicadorCommand.js';
+import { GetAllIndicadoresQuery } from '../modules/tablero/indicador/application/queries/GetAllIndicadoresQuery.js';
+import { GetIndicadorByIdQuery } from '../modules/tablero/indicador/application/queries/GetIndicadorByIdQuery.js';
+import { GetIndicadoresByProgramaQuery } from '../modules/tablero/indicador/application/queries/GetIndicadoresByProgramaQuery.js';
+import { GetIndicadoresByLineaEstrategicaQuery } from '../modules/tablero/indicador/application/queries/GetIndicadoresByLineaEstrategicaQuery.js';
+import { GetIndicadoresByEjeQuery } from '../modules/tablero/indicador/application/queries/GetIndicadoresByEjeQuery.js';
+
+// Tablero IndicadorAnual Commands & Queries
+import { CreateIndicadorAnualCommand } from '../modules/tablero/indicador-anual/application/commands/CreateIndicadorAnualCommand.js';
+import { UpdateIndicadorAnualCommand } from '../modules/tablero/indicador-anual/application/commands/UpdateIndicadorAnualCommand.js';
+import { DeleteIndicadorAnualCommand } from '../modules/tablero/indicador-anual/application/commands/DeleteIndicadorAnualCommand.js';
+import { GetIndicadorAnualByIdQuery } from '../modules/tablero/indicador-anual/application/queries/GetIndicadorAnualByIdQuery.js';
+import { GetIndicadoresAnualesByIndicadorQuery } from '../modules/tablero/indicador-anual/application/queries/GetIndicadoresAnualesByIndicadorQuery.js';
+import { GetIndicadoresAnualesByAnioQuery } from '../modules/tablero/indicador-anual/application/queries/GetIndicadoresAnualesByAnioQuery.js';
+
+// Tablero Repositories
+import { DimensionRepository } from '../modules/tablero/dimension/infrastructure/persistence/DimensionRepository.js';
+import { UnidadMedidaRepository } from '../modules/tablero/unidad-medida/infrastructure/persistence/UnidadMedidaRepository.js';
+import { DependenciaRepository } from '../modules/tablero/dependencia/infrastructure/persistence/DependenciaRepository.js';
+import { LineaEstrategicaRepository } from '../modules/tablero/linea-estrategica/infrastructure/persistence/LineaEstrategicaRepository.js';
+import { ProgramaRepository } from '../modules/tablero/programa/infrastructure/persistence/ProgramaRepository.js';
+import { IndicadorRepository } from '../modules/tablero/indicador/infrastructure/persistence/IndicadorRepository.js';
+import { IndicadorAnualRepository } from '../modules/tablero/indicador-anual/infrastructure/persistence/IndicadorAnualRepository.js';
 
 // Organica Services
 import { Organica1Service } from '../modules/organica1/organica1.service.js';
 import { Organica2Service } from '../modules/organica2/organica2.service.js';
 import { Organica3Service } from '../modules/organica3/organica3.service.js';
 
-// Reportes Service
-import { ReportesService } from '../modules/reportes/reportes.service.js';
+// Reportes Module (Main)
+import { ReportsRepository } from '../modules/reportes/infrastructure/persistence/ReportsRepository.js';
+import { GetMonthlyPersonnelReportQuery } from '../modules/reportes/application/queries/GetMonthlyPersonnelReportQuery.js';
+import { GetPersonnelMovementsQuery } from '../modules/reportes/application/queries/GetPersonnelMovementsQuery.js';
 
 // AplicacionesQNA Module
 import { AplicacionesQNARepository } from '../modules/reportes/aplicacionesQNA/infrastructure/persistence/AplicacionesQNARepository.js';
@@ -869,22 +947,122 @@ container.register({
   // Repositories (Scoped)
   organicaCascadeRepo: asClass(OrganicaCascadeRepository).scoped(),
   
-  // Services (Scoped)
-  ejeService: asClass(EjeService).scoped(),
-  programaService: asClass(ProgramaService).scoped(),
-  lineaEstrategicaService: asClass(LineaEstrategicaService).scoped(),
-  indicadorService: asClass(IndicadorService).scoped(),
-  indicadorAnualService: asClass(IndicadorAnualService).scoped(),
-  dimensionService: asClass(DimensionService).scoped(),
-  unidadMedidaService: asClass(UnidadMedidaService).scoped(),
-  dependenciaService: asClass(DependenciaService).scoped(),
+  // Tablero Repositories (Scoped)
+  ejeRepo: asClass(EjeRepository).scoped(),
+  dimensionRepo: asClass(DimensionRepository).scoped(),
+  unidadMedidaRepo: asClass(UnidadMedidaRepository).scoped(),
+  dependenciaRepo: asClass(DependenciaRepository).scoped(),
+  lineaEstrategicaRepo: asClass(LineaEstrategicaRepository).scoped(),
+  programaRepo: asClass(ProgramaRepository).scoped(),
+  indicadorRepo: asClass(IndicadorRepository).scoped(),
+  indicadorAnualRepo: asClass(IndicadorAnualRepository).scoped(),
+  
+  // Tablero Eje Commands (Scoped)
+  createEjeCommand: asClass(CreateEjeCommand).scoped(),
+  updateEjeCommand: asClass(UpdateEjeCommand).scoped(),
+  deleteEjeCommand: asClass(DeleteEjeCommand).scoped(),
+  
+  // Tablero Eje Queries (Scoped)
+  getAllEjesQuery: asClass(GetAllEjesQuery).scoped(),
+  getEjeByIdQuery: asClass(GetEjeByIdQuery).scoped(),
+  getEjeWithLineasQuery: asClass(GetEjeWithLineasQuery).scoped(),
+  
+  // Tablero Dimension Commands (Scoped)
+  createDimensionCommand: asClass(CreateDimensionCommand).scoped(),
+  updateDimensionCommand: asClass(UpdateDimensionCommand).scoped(),
+  deleteDimensionCommand: asClass(DeleteDimensionCommand).scoped(),
+  
+  // Tablero Dimension Queries (Scoped)
+  getAllDimensionesQuery: asClass(GetAllDimensionesQuery).scoped(),
+  getDimensionByIdQuery: asClass(GetDimensionByIdQuery).scoped(),
+  getDimensionesByTipoQuery: asClass(GetDimensionesByTipoQuery).scoped(),
+  
+  // Tablero UnidadMedida Commands (Scoped)
+  createUnidadMedidaCommand: asClass(CreateUnidadMedidaCommand).scoped(),
+  updateUnidadMedidaCommand: asClass(UpdateUnidadMedidaCommand).scoped(),
+  deleteUnidadMedidaCommand: asClass(DeleteUnidadMedidaCommand).scoped(),
+  
+  // Tablero UnidadMedida Queries (Scoped)
+  getAllUnidadesMedidaQuery: asClass(GetAllUnidadesMedidaQuery).scoped(),
+  getUnidadMedidaByIdQuery: asClass(GetUnidadMedidaByIdQuery).scoped(),
+  getUnidadesMedidaByCategoriaQuery: asClass(GetUnidadesMedidaByCategoriaQuery).scoped(),
+  
+  // Tablero Dependencia Commands (Scoped)
+  createDependenciaCommand: asClass(CreateDependenciaCommand).scoped(),
+  updateDependenciaCommand: asClass(UpdateDependenciaCommand).scoped(),
+  deleteDependenciaCommand: asClass(DeleteDependenciaCommand).scoped(),
+  
+  // Tablero Dependencia Queries (Scoped)
+  getAllDependenciasQuery: asClass(GetAllDependenciasQuery).scoped(),
+  getDependenciaByIdQuery: asClass(GetDependenciaByIdQuery).scoped(),
+  getDependenciasByTipoQuery: asClass(GetDependenciasByTipoQuery).scoped(),
+  getDependenciasHijasQuery: asClass(GetDependenciasHijasQuery).scoped(),
+  getDependenciaWithHijasQuery: asClass(GetDependenciaWithHijasQuery).scoped(),
+  
+  // Tablero LineaEstrategica Commands (Scoped)
+  createLineaEstrategicaCommand: asClass(CreateLineaEstrategicaCommand).scoped(),
+  updateLineaEstrategicaCommand: asClass(UpdateLineaEstrategicaCommand).scoped(),
+  deleteLineaEstrategicaCommand: asClass(DeleteLineaEstrategicaCommand).scoped(),
+  
+  // Tablero LineaEstrategica Queries (Scoped)
+  getAllLineasEstrategicasQuery: asClass(GetAllLineasEstrategicasQuery).scoped(),
+  getLineaEstrategicaByIdQuery: asClass(GetLineaEstrategicaByIdQuery).scoped(),
+  getLineasEstrategicasByEjeQuery: asClass(GetLineasEstrategicasByEjeQuery).scoped(),
+  getLineaEstrategicaWithProgramasQuery: asClass(GetLineaEstrategicaWithProgramasQuery).scoped(),
+  
+  // Tablero Programa Commands (Scoped)
+  createProgramaCommand: asClass(CreateProgramaCommand).scoped(),
+  updateProgramaCommand: asClass(UpdateProgramaCommand).scoped(),
+  deleteProgramaCommand: asClass(DeleteProgramaCommand).scoped(),
+  
+  // Tablero Programa Queries (Scoped)
+  getAllProgramasQuery: asClass(GetAllProgramasQuery).scoped(),
+  getProgramaByIdQuery: asClass(GetProgramaByIdQuery).scoped(),
+  getProgramasByEjeQuery: asClass(GetProgramasByEjeQuery).scoped(),
+  getProgramasByLineaEstrategicaQuery: asClass(GetProgramasByLineaEstrategicaQuery).scoped(),
+  
+  // Tablero Indicador Commands (Scoped)
+  createIndicadorCommand: asClass(CreateIndicadorCommand).scoped(),
+  updateIndicadorCommand: asClass(UpdateIndicadorCommand).scoped(),
+  deleteIndicadorCommand: asClass(DeleteIndicadorCommand).scoped(),
+  
+  // Tablero Indicador Queries (Scoped)
+  getAllIndicadoresQuery: asClass(GetAllIndicadoresQuery).scoped(),
+  getIndicadorByIdQuery: asClass(GetIndicadorByIdQuery).scoped(),
+  getIndicadoresByProgramaQuery: asClass(GetIndicadoresByProgramaQuery).scoped(),
+  getIndicadoresByLineaEstrategicaQuery: asClass(GetIndicadoresByLineaEstrategicaQuery).scoped(),
+  getIndicadoresByEjeQuery: asClass(GetIndicadoresByEjeQuery).scoped(),
+  
+  // Tablero IndicadorAnual Commands (Scoped)
+  createIndicadorAnualCommand: asClass(CreateIndicadorAnualCommand).scoped(),
+  updateIndicadorAnualCommand: asClass(UpdateIndicadorAnualCommand).scoped(),
+  deleteIndicadorAnualCommand: asClass(DeleteIndicadorAnualCommand).scoped(),
+  
+  // Tablero IndicadorAnual Queries (Scoped)
+  getIndicadorAnualByIdQuery: asClass(GetIndicadorAnualByIdQuery).scoped(),
+  getIndicadoresAnualesByIndicadorQuery: asClass(GetIndicadoresAnualesByIndicadorQuery).scoped(),
+  getIndicadoresAnualesByAnioQuery: asClass(GetIndicadoresAnualesByAnioQuery).scoped(),
+  
+  // Services (Scoped) - Legacy
+  // TODOS LOS SERVICIOS DE TABLERO Y REPORTES HAN SIDO MIGRADOS A CQRS
+  // Los servicios legacy han sido eliminados completamente
   organica1Service: asClass(Organica1Service).scoped(),
   organica2Service: asClass(Organica2Service).scoped(),
   organica3Service: asClass(Organica3Service).scoped(),
-  reportesService: asClass(ReportesService).scoped(),
   // Temporary null service for expediente (TODO: Create ExpedienteService or use commands/queries directly)
   expedienteService: asFunction(() => null).scoped(),
   afectacionOrgService: asClass(AfectacionOrgService).scoped(),
+  
+  // ============================================================================
+  // REPORTES MODULE (Principal)
+  // ============================================================================
+  
+  // Repositories (Scoped)
+  reportsRepo: asClass(ReportsRepository).scoped(),
+  
+  // Queries (Scoped)
+  getMonthlyPersonnelReportQuery: asClass(GetMonthlyPersonnelReportQuery).scoped(),
+  getPersonnelMovementsQuery: asClass(GetPersonnelMovementsQuery).scoped(),
   
   // ============================================================================
   // APLICACIONES QNA MODULE (Submódulo de Reportes)

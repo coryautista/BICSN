@@ -1,5 +1,10 @@
 import { CreateOrganica1, UpdateOrganica1, DynamicQuery } from './organica1.schemas.js';
 import { logAudit, extractUserInfo, extractRequestInfo } from '../../utils/audit.js';
+import {
+  Organica1NotFoundError,
+  Organica1AlreadyExistsError,
+  Organica1DeletionError
+} from './domain/errors.js';
 
 export class Organica1Service {
   private organica1Repo: any;
@@ -11,7 +16,7 @@ export class Organica1Service {
   async getOrganica1ById(claveOrganica0: string, claveOrganica1: string) {
     const record = await this.organica1Repo.findById(claveOrganica0, claveOrganica1);
     if (!record) {
-      throw new Error('ORGANICA1_NOT_FOUND');
+      throw new Organica1NotFoundError(claveOrganica0, claveOrganica1);
     }
     return record;
   }
@@ -24,7 +29,7 @@ export class Organica1Service {
     // Check if record already exists
     const existing = await this.organica1Repo.findById(data.claveOrganica0, data.claveOrganica1);
     if (existing) {
-      throw new Error('ORGANICA1_EXISTS');
+      throw new Organica1AlreadyExistsError(data.claveOrganica0, data.claveOrganica1);
     }
 
     const record = await this.organica1Repo.create(data);
@@ -49,7 +54,7 @@ export class Organica1Service {
   async updateOrganica1Record(claveOrganica0: string, claveOrganica1: string, data: UpdateOrganica1, req?: any) {
     const existing = await this.organica1Repo.findById(claveOrganica0, claveOrganica1);
     if (!existing) {
-      throw new Error('ORGANICA1_NOT_FOUND');
+      throw new Organica1NotFoundError(claveOrganica0, claveOrganica1);
     }
 
     const record = await this.organica1Repo.update(claveOrganica0, claveOrganica1, data);
@@ -75,12 +80,12 @@ export class Organica1Service {
   async deleteOrganica1Record(claveOrganica0: string, claveOrganica1: string, req?: any) {
     const existing = await this.organica1Repo.findById(claveOrganica0, claveOrganica1);
     if (!existing) {
-      throw new Error('ORGANICA1_NOT_FOUND');
+      throw new Organica1NotFoundError(claveOrganica0, claveOrganica1);
     }
 
     const deleted = await this.organica1Repo.delete(claveOrganica0, claveOrganica1);
     if (!deleted) {
-      throw new Error('ORGANICA1_DELETE_FAILED');
+      throw new Organica1DeletionError('No se pudo eliminar la entidad');
     }
 
     // Audit logging

@@ -1,5 +1,10 @@
 import { CreateOrganica2, UpdateOrganica2, DynamicQuery } from './organica2.schemas.js';
 import { logAudit, extractUserInfo, extractRequestInfo } from '../../utils/audit.js';
+import {
+  Organica2NotFoundError,
+  Organica2AlreadyExistsError,
+  Organica2DeletionError
+} from './domain/errors.js';
 
 export class Organica2Service {
   private organica2Repo: any;
@@ -11,7 +16,7 @@ export class Organica2Service {
   async getOrganica2ById(claveOrganica0: string, claveOrganica1: string, claveOrganica2: string) {
     const record = await this.organica2Repo.findById(claveOrganica0, claveOrganica1, claveOrganica2);
     if (!record) {
-      throw new Error('ORGANICA2_NOT_FOUND');
+      throw new Organica2NotFoundError(claveOrganica0, claveOrganica1, claveOrganica2);
     }
     return record;
   }
@@ -24,7 +29,7 @@ export class Organica2Service {
     // Check if record already exists
     const existing = await this.organica2Repo.findById(data.claveOrganica0, data.claveOrganica1, data.claveOrganica2);
     if (existing) {
-      throw new Error('ORGANICA2_EXISTS');
+      throw new Organica2AlreadyExistsError(data.claveOrganica0, data.claveOrganica1, data.claveOrganica2);
     }
 
     const record = await this.organica2Repo.create(data);
@@ -49,7 +54,7 @@ export class Organica2Service {
   async updateOrganica2Record(claveOrganica0: string, claveOrganica1: string, claveOrganica2: string, data: UpdateOrganica2, req?: any) {
     const existing = await this.organica2Repo.findById(claveOrganica0, claveOrganica1, claveOrganica2);
     if (!existing) {
-      throw new Error('ORGANICA2_NOT_FOUND');
+      throw new Organica2NotFoundError(claveOrganica0, claveOrganica1, claveOrganica2);
     }
 
     const record = await this.organica2Repo.update(claveOrganica0, claveOrganica1, claveOrganica2, data);
@@ -75,12 +80,12 @@ export class Organica2Service {
   async deleteOrganica2Record(claveOrganica0: string, claveOrganica1: string, claveOrganica2: string, req?: any) {
     const existing = await this.organica2Repo.findById(claveOrganica0, claveOrganica1, claveOrganica2);
     if (!existing) {
-      throw new Error('ORGANICA2_NOT_FOUND');
+      throw new Organica2NotFoundError(claveOrganica0, claveOrganica1, claveOrganica2);
     }
 
     const deleted = await this.organica2Repo.delete(claveOrganica0, claveOrganica1, claveOrganica2);
     if (!deleted) {
-      throw new Error('ORGANICA2_DELETE_FAILED');
+      throw new Organica2DeletionError('No se pudo eliminar la entidad');
     }
 
     // Audit logging

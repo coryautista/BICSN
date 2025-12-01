@@ -1,6 +1,7 @@
 import { FastifyReply } from 'fastify';
 import pino from 'pino';
 import { fail } from '../../../../utils/http.js';
+import { DomainError } from '../../../../utils/errors.js';
 import {
   IndicadorAnualError,
   IndicadorAnualNotFoundError,
@@ -10,6 +11,7 @@ import {
   IndicadorAnualPermissionError,
   IndicadorAnualInUseError
 } from '../domain/errors.js';
+import { IndicadorNotFoundError } from '../../indicador/domain/errors.js';
 
 const logger = pino({
   name: 'indicadorAnualErrorHandler',
@@ -42,29 +44,40 @@ export function handleIndicadorAnualError(error: any, reply: FastifyReply): Fast
 
   // Manejo específico de errores del dominio IndicadorAnual
   if (error instanceof IndicadorAnualNotFoundError) {
-    return reply.code(404).send(fail(error.code, error.message));
+    const domainError = error as DomainError;
+    return reply.code(404).send(fail(domainError.code, domainError.message));
+  }
+
+  if (error instanceof IndicadorNotFoundError) {
+    const domainError = error as DomainError;
+    return reply.code(400).send(fail(domainError.code, domainError.message));
   }
 
   if (error instanceof IndicadorAnualAlreadyExistsError) {
-    return reply.code(409).send(fail(error.code, error.message));
+    const domainError = error as DomainError;
+    return reply.code(409).send(fail(domainError.code, domainError.message));
   }
 
   if (error instanceof InvalidIndicadorAnualNombreError ||
       error instanceof InvalidIndicadorAnualDescripcionError) {
-    return reply.code(400).send(fail(error.code, error.message));
+    const domainError = error as DomainError;
+    return reply.code(400).send(fail(domainError.code, domainError.message));
   }
 
   if (error instanceof IndicadorAnualInUseError) {
-    return reply.code(409).send(fail(error.code, error.message));
+    const domainError = error as DomainError;
+    return reply.code(409).send(fail(domainError.code, domainError.message));
   }
 
   if (error instanceof IndicadorAnualPermissionError) {
-    return reply.code(403).send(fail(error.code, error.message));
+    const domainError = error as DomainError;
+    return reply.code(403).send(fail(domainError.code, domainError.message));
   }
 
   // Manejo de errores genéricos del dominio
   if (error instanceof IndicadorAnualError) {
-    return reply.code(400).send(fail(error.code, error.message));
+    const domainError = error as DomainError;
+    return reply.code(400).send(fail(domainError.code, domainError.message));
   }
 
   // Error genérico no manejado

@@ -1,9 +1,17 @@
 import { FastifyInstance } from 'fastify';
 import { requireAuth, requireRole } from '../../auth/auth.middleware.js';
-import { CreateDependenciaSchema, UpdateDependenciaSchema, DependenciaIdParamSchema } from './dependencia.schemas.js';
-import { DependenciaService } from './dependencia.service.js';
-import { ok, validationError, notFound, internalError } from '../../../utils/http.js';
+import { CreateDependenciaSchema, UpdateDependenciaSchema, DependenciaIdParamSchema, TipoDependenciaParamSchema } from './dependencia.schemas.js';
+import { ok, validationError } from '../../../utils/http.js';
 import { withDbContext } from '../../../db/context.js';
+import { handleDependenciaError } from './infrastructure/errorHandler.js';
+import { GetAllDependenciasQuery } from './application/queries/GetAllDependenciasQuery.js';
+import { GetDependenciaByIdQuery } from './application/queries/GetDependenciaByIdQuery.js';
+import { GetDependenciasByTipoQuery } from './application/queries/GetDependenciasByTipoQuery.js';
+import { GetDependenciasHijasQuery } from './application/queries/GetDependenciasHijasQuery.js';
+import { GetDependenciaWithHijasQuery } from './application/queries/GetDependenciaWithHijasQuery.js';
+import { CreateDependenciaCommand } from './application/commands/CreateDependenciaCommand.js';
+import { UpdateDependenciaCommand } from './application/commands/UpdateDependenciaCommand.js';
+import { DeleteDependenciaCommand } from './application/commands/DeleteDependenciaCommand.js';
 
 export default async function dependenciaRoutes(app: FastifyInstance) {
 
@@ -62,12 +70,11 @@ export default async function dependenciaRoutes(app: FastifyInstance) {
     }
   }, async (req, reply) => {
     try {
-      const dependenciaService = req.diScope.resolve<DependenciaService>('dependenciaService');
-      const dependencias = await dependenciaService.getAllDependencias();
+      const getAllDependenciasQuery = req.diScope.resolve<GetAllDependenciasQuery>('getAllDependenciasQuery');
+      const dependencias = await getAllDependenciasQuery.execute();
       return reply.send(ok(dependencias));
     } catch (error: any) {
-      console.error('Error listing dependencias:', error);
-      return reply.code(500).send(internalError('Failed to retrieve dependencias'));
+      return handleDependenciaError(error, reply);
     }
   });
 
@@ -150,13 +157,17 @@ export default async function dependenciaRoutes(app: FastifyInstance) {
   }, async (req, reply) => {
     const { tipoDependencia } = req.params as { tipoDependencia: string };
 
+    const paramValidation = TipoDependenciaParamSchema.safeParse({ tipoDependencia });
+    if (!paramValidation.success) {
+      return reply.code(400).send(validationError(paramValidation.error.issues));
+    }
+
     try {
-      const dependenciaService = req.diScope.resolve<DependenciaService>('dependenciaService');
-      const dependencias = await dependenciaService.getDependenciasByTipo(tipoDependencia);
+      const getDependenciasByTipoQuery = req.diScope.resolve<GetDependenciasByTipoQuery>('getDependenciasByTipoQuery');
+      const dependencias = await getDependenciasByTipoQuery.execute(paramValidation.data.tipoDependencia);
       return reply.send(ok(dependencias));
     } catch (error: any) {
-      console.error('Error listing dependencias by tipo:', error);
-      return reply.code(500).send(internalError('Failed to retrieve dependencias'));
+      return handleDependenciaError(error, reply);
     }
   });
 
@@ -243,12 +254,11 @@ export default async function dependenciaRoutes(app: FastifyInstance) {
     }
 
     try {
-      const dependenciaService = req.diScope.resolve<DependenciaService>('dependenciaService');
-      const dependencias = await dependenciaService.getDependenciasHijas(paramValidation.data.dependenciaId);
+      const getDependenciasHijasQuery = req.diScope.resolve<GetDependenciasHijasQuery>('getDependenciasHijasQuery');
+      const dependencias = await getDependenciasHijasQuery.execute(paramValidation.data.dependenciaId);
       return reply.send(ok(dependencias));
     } catch (error: any) {
-      console.error('Error listing dependencias hijas:', error);
-      return reply.code(500).send(internalError('Failed to retrieve dependencias'));
+      return handleDependenciaError(error, reply);
     }
   });
 
@@ -345,15 +355,11 @@ export default async function dependenciaRoutes(app: FastifyInstance) {
     }
 
     try {
-      const dependenciaService = req.diScope.resolve<DependenciaService>('dependenciaService');
-      const dependencia = await dependenciaService.getDependenciaById(paramValidation.data.dependenciaId);
+      const getDependenciaByIdQuery = req.diScope.resolve<GetDependenciaByIdQuery>('getDependenciaByIdQuery');
+      const dependencia = await getDependenciaByIdQuery.execute(paramValidation.data.dependenciaId);
       return reply.send(ok(dependencia));
     } catch (error: any) {
-      if (error.message === 'DEPENDENCIA_NOT_FOUND') {
-        return reply.code(404).send(notFound('Dependencia', dependenciaId));
-      }
-      console.error('Error getting dependencia:', error);
-      return reply.code(500).send(internalError('Failed to retrieve dependencia'));
+      return handleDependenciaError(error, reply);
     }
   });
 
@@ -467,15 +473,11 @@ export default async function dependenciaRoutes(app: FastifyInstance) {
     }
 
     try {
-      const dependenciaService = req.diScope.resolve<DependenciaService>('dependenciaService');
-      const dependencia = await dependenciaService.getDependenciaWithHijas(paramValidation.data.dependenciaId);
+      const getDependenciaWithHijasQuery = req.diScope.resolve<GetDependenciaWithHijasQuery>('getDependenciaWithHijasQuery');
+      const dependencia = await getDependenciaWithHijasQuery.execute(paramValidation.data.dependenciaId);
       return reply.send(ok(dependencia));
     } catch (error: any) {
-      if (error.message === 'DEPENDENCIA_NOT_FOUND') {
-        return reply.code(404).send(notFound('Dependencia', dependenciaId));
-      }
-      console.error('Error getting dependencia completa:', error);
-      return reply.code(500).send(internalError('Failed to retrieve dependencia'));
+      return handleDependenciaError(error, reply);
     }
   });
 
@@ -559,27 +561,22 @@ export default async function dependenciaRoutes(app: FastifyInstance) {
 
       try {
         const userId = req.user?.sub;
-        const dependenciaService = req.diScope.resolve<DependenciaService>('dependenciaService');
-        const dependencia = await dependenciaService.createDependenciaItem(
-          parsed.data.nombre,
-          parsed.data.descripcion,
-          parsed.data.tipoDependencia,
-          parsed.data.claveDependencia,
-          parsed.data.idDependenciaPadre,
-          parsed.data.responsable,
-          parsed.data.telefono,
-          parsed.data.email,
-          parsed.data.esActiva,
-          userId,
-          tx
-        );
+        const createDependenciaCommand = req.diScope.resolve<CreateDependenciaCommand>('createDependenciaCommand');
+        const dependencia = await createDependenciaCommand.execute({
+          nombre: parsed.data.nombre,
+          descripcion: parsed.data.descripcion,
+          tipoDependencia: parsed.data.tipoDependencia,
+          claveDependencia: parsed.data.claveDependencia,
+          idDependenciaPadre: parsed.data.idDependenciaPadre,
+          responsable: parsed.data.responsable,
+          telefono: parsed.data.telefono,
+          email: parsed.data.email,
+          esActiva: parsed.data.esActiva,
+          userId
+        }, tx);
         return reply.code(201).send(ok(dependencia));
       } catch (error: any) {
-        if (error.message === 'DEPENDENCIA_PADRE_NOT_FOUND') {
-          return reply.code(400).send({ ok: false, error: { code: 'BAD_REQUEST', message: 'Dependencia padre not found' } });
-        }
-        console.error('Error creating dependencia:', error);
-        return reply.code(500).send(internalError('Failed to create dependencia'));
+        return handleDependenciaError(error, reply);
       }
     });
   });
@@ -691,28 +688,23 @@ export default async function dependenciaRoutes(app: FastifyInstance) {
 
       try {
         const userId = req.user?.sub;
-        const dependenciaService = req.diScope.resolve<DependenciaService>('dependenciaService');
-        const dependencia = await dependenciaService.updateDependenciaItem(
-          paramValidation.data.dependenciaId,
-          parsed.data.nombre,
-          parsed.data.descripcion,
-          parsed.data.tipoDependencia,
-          parsed.data.claveDependencia,
-          parsed.data.idDependenciaPadre,
-          parsed.data.responsable,
-          parsed.data.telefono,
-          parsed.data.email,
-          parsed.data.esActiva,
-          userId,
-          tx
-        );
+        const updateDependenciaCommand = req.diScope.resolve<UpdateDependenciaCommand>('updateDependenciaCommand');
+        const dependencia = await updateDependenciaCommand.execute({
+          dependenciaId: paramValidation.data.dependenciaId,
+          nombre: parsed.data.nombre,
+          descripcion: parsed.data.descripcion,
+          tipoDependencia: parsed.data.tipoDependencia,
+          claveDependencia: parsed.data.claveDependencia,
+          idDependenciaPadre: parsed.data.idDependenciaPadre,
+          responsable: parsed.data.responsable,
+          telefono: parsed.data.telefono,
+          email: parsed.data.email,
+          esActiva: parsed.data.esActiva,
+          userId
+        }, tx);
         return reply.send(ok(dependencia));
       } catch (error: any) {
-        if (error.message === 'DEPENDENCIA_NOT_FOUND') {
-          return reply.code(404).send(notFound('Dependencia', dependenciaId));
-        }
-        console.error('Error updating dependencia:', error);
-        return reply.code(500).send(internalError('Failed to update dependencia'));
+        return handleDependenciaError(error, reply);
       }
     });
   });
@@ -795,15 +787,13 @@ export default async function dependenciaRoutes(app: FastifyInstance) {
       }
 
       try {
-        const dependenciaService = req.diScope.resolve<DependenciaService>('dependenciaService');
-        const deletedId = await dependenciaService.deleteDependenciaItem(paramValidation.data.dependenciaId, tx);
+        const deleteDependenciaCommand = req.diScope.resolve<DeleteDependenciaCommand>('deleteDependenciaCommand');
+        const deletedId = await deleteDependenciaCommand.execute({
+          dependenciaId: paramValidation.data.dependenciaId
+        }, tx);
         return reply.send(ok({ id: deletedId }));
       } catch (error: any) {
-        if (error.message === 'DEPENDENCIA_NOT_FOUND') {
-          return reply.code(404).send(notFound('Dependencia', dependenciaId));
-        }
-        console.error('Error deleting dependencia:', error);
-        return reply.code(500).send(internalError('Failed to delete dependencia'));
+        return handleDependenciaError(error, reply);
       }
     });
   });

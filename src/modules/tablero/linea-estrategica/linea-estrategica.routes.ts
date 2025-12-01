@@ -1,9 +1,16 @@
 import { FastifyInstance } from 'fastify';
 import { requireAuth, requireRole } from '../../auth/auth.middleware.js';
 import { CreateLineaEstrategicaSchema, UpdateLineaEstrategicaSchema, LineaEstrategicaIdParamSchema, EjeIdParamSchema } from './linea-estrategica.schemas.js';
-import { LineaEstrategicaService } from './linea-estrategica.service.js';
-import { ok, validationError, notFound, internalError } from '../../../utils/http.js';
+import { ok, validationError } from '../../../utils/http.js';
 import { withDbContext } from '../../../db/context.js';
+import { handleLineaEstrategicaError } from './infrastructure/errorHandler.js';
+import { GetAllLineasEstrategicasQuery } from './application/queries/GetAllLineasEstrategicasQuery.js';
+import { GetLineaEstrategicaByIdQuery } from './application/queries/GetLineaEstrategicaByIdQuery.js';
+import { GetLineasEstrategicasByEjeQuery } from './application/queries/GetLineasEstrategicasByEjeQuery.js';
+import { GetLineaEstrategicaWithProgramasQuery } from './application/queries/GetLineaEstrategicaWithProgramasQuery.js';
+import { CreateLineaEstrategicaCommand } from './application/commands/CreateLineaEstrategicaCommand.js';
+import { UpdateLineaEstrategicaCommand } from './application/commands/UpdateLineaEstrategicaCommand.js';
+import { DeleteLineaEstrategicaCommand } from './application/commands/DeleteLineaEstrategicaCommand.js';
 
 export default async function lineaEstrategicaRoutes(app: FastifyInstance) {
 
@@ -56,12 +63,11 @@ export default async function lineaEstrategicaRoutes(app: FastifyInstance) {
     }
   }, async (req, reply) => {
     try {
-      const lineaEstrategicaService = req.diScope.resolve<LineaEstrategicaService>('lineaEstrategicaService');
-      const lineasEstrategicas = await lineaEstrategicaService.getAllLineasEstrategicas();
+      const getAllLineasEstrategicasQuery = req.diScope.resolve<GetAllLineasEstrategicasQuery>('getAllLineasEstrategicasQuery');
+      const lineasEstrategicas = await getAllLineasEstrategicasQuery.execute();
       return reply.send(ok(lineasEstrategicas));
     } catch (error: any) {
-      console.error('Error listing lineas estrategicas:', error);
-      return reply.code(500).send(internalError('Failed to retrieve lineas estrategicas'));
+      return handleLineaEstrategicaError(error, reply);
     }
   });
 
@@ -142,12 +148,11 @@ export default async function lineaEstrategicaRoutes(app: FastifyInstance) {
     }
 
     try {
-      const lineaEstrategicaService = req.diScope.resolve<LineaEstrategicaService>('lineaEstrategicaService');
-      const lineasEstrategicas = await lineaEstrategicaService.getLineasEstrategicasByEje(paramValidation.data.ejeId);
+      const getLineasEstrategicasByEjeQuery = req.diScope.resolve<GetLineasEstrategicasByEjeQuery>('getLineasEstrategicasByEjeQuery');
+      const lineasEstrategicas = await getLineasEstrategicasByEjeQuery.execute(paramValidation.data.ejeId);
       return reply.send(ok(lineasEstrategicas));
     } catch (error: any) {
-      console.error('Error listing lineas estrategicas by eje:', error);
-      return reply.code(500).send(internalError('Failed to retrieve lineas estrategicas'));
+      return handleLineaEstrategicaError(error, reply);
     }
   });
 
@@ -238,15 +243,11 @@ export default async function lineaEstrategicaRoutes(app: FastifyInstance) {
     }
 
     try {
-      const lineaEstrategicaService = req.diScope.resolve<LineaEstrategicaService>('lineaEstrategicaService');
-      const lineaEstrategica = await lineaEstrategicaService.getLineaEstrategicaById(paramValidation.data.lineaEstrategicaId);
+      const getLineaEstrategicaByIdQuery = req.diScope.resolve<GetLineaEstrategicaByIdQuery>('getLineaEstrategicaByIdQuery');
+      const lineaEstrategica = await getLineaEstrategicaByIdQuery.execute(paramValidation.data.lineaEstrategicaId);
       return reply.send(ok(lineaEstrategica));
     } catch (error: any) {
-      if (error.message === 'LINEA_ESTRATEGICA_NOT_FOUND') {
-        return reply.code(404).send(notFound('Linea estrategica', lineaEstrategicaId));
-      }
-      console.error('Error getting linea estrategica:', error);
-      return reply.code(500).send(internalError('Failed to retrieve linea estrategica'));
+      return handleLineaEstrategicaError(error, reply);
     }
   });
 
@@ -348,15 +349,11 @@ export default async function lineaEstrategicaRoutes(app: FastifyInstance) {
     }
 
     try {
-      const lineaEstrategicaService = req.diScope.resolve<LineaEstrategicaService>('lineaEstrategicaService');
-      const lineaEstrategica = await lineaEstrategicaService.getLineaEstrategicaWithProgramas(paramValidation.data.lineaEstrategicaId);
+      const getLineaEstrategicaWithProgramasQuery = req.diScope.resolve<GetLineaEstrategicaWithProgramasQuery>('getLineaEstrategicaWithProgramasQuery');
+      const lineaEstrategica = await getLineaEstrategicaWithProgramasQuery.execute(paramValidation.data.lineaEstrategicaId);
       return reply.send(ok(lineaEstrategica));
     } catch (error: any) {
-      if (error.message === 'LINEA_ESTRATEGICA_NOT_FOUND') {
-        return reply.code(404).send(notFound('Linea estrategica', lineaEstrategicaId));
-      }
-      console.error('Error getting linea estrategica with programas:', error);
-      return reply.code(500).send(internalError('Failed to retrieve linea estrategica with programas'));
+      return handleLineaEstrategicaError(error, reply);
     }
   });
 
@@ -428,21 +425,16 @@ export default async function lineaEstrategicaRoutes(app: FastifyInstance) {
 
       try {
         const userId = req.user?.sub;
-        const lineaEstrategicaService = req.diScope.resolve<LineaEstrategicaService>('lineaEstrategicaService');
-        const lineaEstrategica = await lineaEstrategicaService.createLineaEstrategicaItem(
-          parsed.data.idEje,
-          parsed.data.nombre,
-          parsed.data.descripcion,
-          userId,
-          tx
-        );
+        const createLineaEstrategicaCommand = req.diScope.resolve<CreateLineaEstrategicaCommand>('createLineaEstrategicaCommand');
+        const lineaEstrategica = await createLineaEstrategicaCommand.execute({
+          idEje: parsed.data.idEje,
+          nombre: parsed.data.nombre,
+          descripcion: parsed.data.descripcion,
+          userId
+        }, tx);
         return reply.code(201).send(ok(lineaEstrategica));
       } catch (error: any) {
-        if (error.message === 'EJE_NOT_FOUND') {
-          return reply.code(400).send({ ok: false, error: { code: 'BAD_REQUEST', message: 'Eje not found' } });
-        }
-        console.error('Error creating linea estrategica:', error);
-        return reply.code(500).send(internalError('Failed to create linea estrategica'));
+        return handleLineaEstrategicaError(error, reply);
       }
     });
   });
@@ -541,21 +533,16 @@ export default async function lineaEstrategicaRoutes(app: FastifyInstance) {
 
       try {
         const userId = req.user?.sub;
-        const lineaEstrategicaService = req.diScope.resolve<LineaEstrategicaService>('lineaEstrategicaService');
-        const lineaEstrategica = await lineaEstrategicaService.updateLineaEstrategicaItem(
-          paramValidation.data.lineaEstrategicaId,
-          parsed.data.nombre,
-          parsed.data.descripcion,
-          userId,
-          tx
-        );
+        const updateLineaEstrategicaCommand = req.diScope.resolve<UpdateLineaEstrategicaCommand>('updateLineaEstrategicaCommand');
+        const lineaEstrategica = await updateLineaEstrategicaCommand.execute({
+          lineaEstrategicaId: paramValidation.data.lineaEstrategicaId,
+          nombre: parsed.data.nombre,
+          descripcion: parsed.data.descripcion,
+          userId
+        }, tx);
         return reply.send(ok(lineaEstrategica));
       } catch (error: any) {
-        if (error.message === 'LINEA_ESTRATEGICA_NOT_FOUND') {
-          return reply.code(404).send(notFound('Linea estrategica', lineaEstrategicaId));
-        }
-        console.error('Error updating linea estrategica:', error);
-        return reply.code(500).send(internalError('Failed to update linea estrategica'));
+        return handleLineaEstrategicaError(error, reply);
       }
     });
   });
@@ -638,15 +625,13 @@ export default async function lineaEstrategicaRoutes(app: FastifyInstance) {
       }
 
       try {
-        const lineaEstrategicaService = req.diScope.resolve<LineaEstrategicaService>('lineaEstrategicaService');
-        const deletedId = await lineaEstrategicaService.deleteLineaEstrategicaItem(paramValidation.data.lineaEstrategicaId, tx);
+        const deleteLineaEstrategicaCommand = req.diScope.resolve<DeleteLineaEstrategicaCommand>('deleteLineaEstrategicaCommand');
+        const deletedId = await deleteLineaEstrategicaCommand.execute({
+          lineaEstrategicaId: paramValidation.data.lineaEstrategicaId
+        }, tx);
         return reply.send(ok({ id: deletedId }));
       } catch (error: any) {
-        if (error.message === 'LINEA_ESTRATEGICA_NOT_FOUND') {
-          return reply.code(404).send(notFound('Linea estrategica', lineaEstrategicaId));
-        }
-        console.error('Error deleting linea estrategica:', error);
-        return reply.code(500).send(internalError('Failed to delete linea estrategica'));
+        return handleLineaEstrategicaError(error, reply);
       }
     });
   });

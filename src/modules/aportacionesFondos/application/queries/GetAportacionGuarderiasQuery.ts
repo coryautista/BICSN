@@ -49,9 +49,8 @@ export class GetAportacionGuarderiasQuery {
       );
       console.log('[APORTACIONES_FONDOS] [APORTACION_GUARDERIAS] Quincena y año obtenidos', { ...logContext, quincena, anio });
 
-      // Calcular período: (quincena-1) con padding de 2 dígitos + dos últimos dígitos del año
-      const quincenaMenosUno = quincena - 1;
-      const quincenaStr = String(quincenaMenosUno).padStart(2, '0');
+      // Calcular período: quincena con padding de 2 dígitos + dos últimos dígitos del año
+      const quincenaStr = String(quincena).padStart(2, '0');
       const anioStr = String(anio).slice(-2);
       const periodo = quincenaStr + anioStr;
       console.log('[APORTACIONES_FONDOS] [APORTACION_GUARDERIAS] Período calculado', { ...logContext, periodo, quincena, anio });

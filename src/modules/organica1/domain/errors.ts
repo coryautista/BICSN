@@ -204,3 +204,17 @@ export class Organica1PermissionError extends DomainError {
     );
   }
 }
+
+/**
+ * Error cuando falla la eliminación de una entidad organica1
+ */
+export class Organica1DeletionError extends DomainError {
+  constructor(details: string) {
+    super(
+      `Error en la eliminación de organica1: ${details}`,
+      'ORGANICA1_DELETION_ERROR',
+      500,
+      { details }
+    );
+  }
+}

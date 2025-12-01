@@ -1,5 +1,11 @@
 import { IReportsRepository } from '../../domain/repositories/IReportsRepository.js';
 import { MonthlyPersonnelReport, ReportFilters } from '../../domain/entities/MonthlyPersonnelReport.js';
+import {
+  MissingMonthOrYearError,
+  InvalidMonthError,
+  InvalidYearError,
+  ReportDatabaseError
+} from '../../domain/errors.js';
 import pino from 'pino';
 
 const logger = pino({
@@ -21,15 +27,15 @@ export class GetMonthlyPersonnelReportQuery {
     try {
       // Validate filters
       if (!filters.month || !filters.year) {
-        throw new Error('Month and year are required');
+        throw new MissingMonthOrYearError();
       }
 
       if (filters.month < 1 || filters.month > 12) {
-        throw new Error('Month must be between 1 and 12');
+        throw new InvalidMonthError(filters.month);
       }
 
       if (filters.year < 2000 || filters.year > new Date().getFullYear() + 1) {
-        throw new Error('Invalid year provided');
+        throw new InvalidYearError(filters.year);
       }
 
       const reports = await this.reportsRepo.getMonthlyPersonnelReport(filters);
@@ -45,13 +51,27 @@ export class GetMonthlyPersonnelReportQuery {
       return reports;
 
     } catch (error) {
+      // Re-throw domain errors as-is
+      if (error instanceof MissingMonthOrYearError ||
+          error instanceof InvalidMonthError ||
+          error instanceof InvalidYearError) {
+        throw error;
+      }
+
       logger.error({
         operation: 'GET_MONTHLY_PERSONNEL_REPORT',
         userId: userId || 'SYSTEM',
         filters,
         error: error instanceof Error ? error.message : 'UNKNOWN_ERROR',
+        stack: error instanceof Error ? error.stack : undefined,
         timestamp: new Date().toISOString()
       }, 'REPORTS_QUERY_ERROR');
+
+      // Wrap database errors
+      if (error instanceof Error) {
+        throw new ReportDatabaseError(error.message, { originalError: error.message });
+      }
+
       throw error;
     }
   }

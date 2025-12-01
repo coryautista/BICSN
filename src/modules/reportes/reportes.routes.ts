@@ -1,5 +1,6 @@
 import { FastifyInstance } from 'fastify';
-import { ReportesService } from './reportes.service.js';
+import { GetMonthlyPersonnelReportQuery } from './application/queries/GetMonthlyPersonnelReportQuery.js';
+import { GetPersonnelMovementsQuery } from './application/queries/GetPersonnelMovementsQuery.js';
 import { handleReportsError } from './infrastructure/errorHandler.js';
 import { aplicacionesQNARoutes } from './aplicacionesQNA/aplicacionesQNA.routes.js';
 import { CAIRRoutes } from './CAIR/CAIR.routes.js';
@@ -14,14 +15,15 @@ export async function reportesRoutes(fastify: FastifyInstance) {
   
   // Registrar submódulo Afiliados
   await fastify.register(afiliadosReportesRoutes, { prefix: '/afiliados' });
+  
   // GET /reportes/mensual - Reporte mensual de personal con desglose por quincenas
   fastify.get('/mensual', async (request, reply) => {
     try {
       const filters = request.query as any;
       const userId = (request as any).user?.id;
 
-      const reportesService = request.diScope.resolve<ReportesService>('reportesService');
-      const reports = await reportesService.getMonthlyPersonnelReport(filters, userId);
+      const getMonthlyReportQuery = request.diScope.resolve<GetMonthlyPersonnelReportQuery>('getMonthlyPersonnelReportQuery');
+      const reports = await getMonthlyReportQuery.execute(filters, userId);
 
       return {
         success: true,
@@ -39,8 +41,8 @@ export async function reportesRoutes(fastify: FastifyInstance) {
       const filters = request.query as any;
       const userId = (request as any).user?.id;
 
-      const reportesService = request.diScope.resolve<ReportesService>('reportesService');
-      const movements = await reportesService.getPersonnelMovements(filters, userId);
+      const getPersonnelMovementsQuery = request.diScope.resolve<GetPersonnelMovementsQuery>('getPersonnelMovementsQuery');
+      const movements = await getPersonnelMovementsQuery.execute(filters, userId);
 
       return {
         success: true,

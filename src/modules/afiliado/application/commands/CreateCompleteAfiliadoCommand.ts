@@ -1,5 +1,6 @@
 import { ConnectionPool } from 'mssql';
 import { sql } from '../../../../db/mssql.js';
+import { executeSerializedQuery } from '../../../../db/firebird.js';
 import { CreateCompleteAfiliadoData, CompleteAfiliadoResult } from '../../domain/entities/CompleteAfiliado.js';
 import { getPool } from '../../../../db/mssql.js';
 import pino from 'pino';
@@ -418,12 +419,100 @@ export class CreateCompleteAfiliadoCommand {
     let needsRegistration = false;
 
     if (result.recordset.length === 0) {
-      quincena = 1;
-      anio = currentYear;
-      needsRegistration = true;
-      logger.info({
-        org0, org1, org2, org3, quincena, anio
-      }, 'No existe quincena para orgánica, creando quincena inicial');
+      // No hay registros para esta orgánica, consultar Firebird para obtener quincena y año
+      try {
+        // Validar que org0 y org1 existan antes de consultar Firebird
+        if (!org0 || !org1) {
+          throw new Error('org0 y org1 son requeridos para consultar Firebird');
+        }
+
+        logger.info({
+          org0, org1, org2, org3
+        }, 'No existe quincena para orgánica, consultando Firebird AP_G_APLICADO_TIPO...');
+        
+        // Consultar Firebird para obtener quincena y fecha
+        const firebirdResult = await executeSerializedQuery((db) => {
+          return new Promise<{ QUINCENA: number; FECHA: string }>((resolve, reject) => {
+            try {
+              const sql = `SELECT p.QUINCENA, p.FECHA FROM AP_G_APLICADO_TIPO(?, ?, '01', '01') p`;
+              const params = [org0, org1];
+
+              const timeoutId = setTimeout(() => {
+                reject(new Error('Tiempo de espera agotado en consulta Firebird AP_G_APLICADO_TIPO'));
+              }, 30000); // 30 segundos de timeout
+
+              db.query(sql, params, (err: any, result: any) => {
+                clearTimeout(timeoutId);
+                
+                if (err) {
+                  logger.error({
+                    org0, org1, error: err.message
+                  }, 'Error al consultar AP_G_APLICADO_TIPO en Firebird');
+                  reject(err);
+                  return;
+                }
+
+                if (!result || result.length === 0) {
+                  reject(new Error('AP_G_APLICADO_TIPO no retornó resultados'));
+                  return;
+                }
+
+                const row = result[0];
+                resolve({
+                  QUINCENA: row.QUINCENA,
+                  FECHA: row.FECHA
+                });
+              });
+            } catch (error: any) {
+              reject(error);
+            }
+          });
+        });
+
+        // Parsear QUINCENA: formato QQAA (quincena 2 dígitos + año 2 últimos dígitos)
+        // Ejemplo: 2125 = quincena 21 del año 2025
+        const quincenaStr = String(firebirdResult.QUINCENA).padStart(4, '0');
+        const quincenaParsed = parseInt(quincenaStr.substring(0, 2));
+        const anioSuffix = parseInt(quincenaStr.substring(2, 4));
+        const anioFromQuincena = 2000 + anioSuffix; // Asumiendo siglo 20xx
+
+        // Parsear FECHA: formato DD.MM.YYYY (ej: 15.11.2025)
+        let anioFromFecha: number | null = null;
+        if (firebirdResult.FECHA) {
+          const fechaParts = firebirdResult.FECHA.split('.');
+          if (fechaParts.length === 3) {
+            const anioFecha = parseInt(fechaParts[2]);
+            if (!isNaN(anioFecha) && anioFecha >= 2000 && anioFecha <= 2100) {
+              anioFromFecha = anioFecha;
+            }
+          }
+        }
+
+        // Validar y usar los valores parseados
+        if (quincenaParsed >= 1 && quincenaParsed <= 24 && anioFromQuincena >= 2000 && anioFromQuincena <= 2100) {
+          quincena = quincenaParsed;
+          // Preferir año de FECHA si está disponible y es válido, sino usar año de QUINCENA
+          anio = anioFromFecha && anioFromFecha >= 2000 && anioFromFecha <= 2100 ? anioFromFecha : anioFromQuincena;
+          needsRegistration = true;
+          logger.info({
+            org0, org1, org2, org3, quincena, anio,
+            quincenaRaw: firebirdResult.QUINCENA,
+            fechaRaw: firebirdResult.FECHA
+          }, 'Quincena obtenida de Firebird');
+        } else {
+          throw new Error(`Valores parseados inválidos: quincena=${quincenaParsed}, año=${anioFromQuincena}`);
+        }
+      } catch (error: any) {
+        // Fallback: usar quincena 1 y año actual si Firebird falla
+        const errorMessage = error instanceof Error ? error.message : 'Error desconocido';
+        logger.warn({
+          org0, org1, org2, org3,
+          error: errorMessage
+        }, `Error al consultar Firebird para obtener quincena, usando fallback: quincena 1, año ${currentYear}`);
+        quincena = 1;
+        anio = currentYear;
+        needsRegistration = true;
+      }
     } else {
       const lastRecord = result.recordset[0];
       const lastQuincena = lastRecord.Quincena;

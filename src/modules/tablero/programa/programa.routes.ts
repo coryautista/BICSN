@@ -1,9 +1,16 @@
 import { FastifyInstance } from 'fastify';
 import { requireAuth, requireRole } from '../../auth/auth.middleware.js';
 import { CreateProgramaSchema, UpdateProgramaSchema, ProgramaIdParamSchema, EjeIdParamSchema, LineaEstrategicaIdParamSchema } from './programa.schemas.js';
-import { ProgramaService } from './programa.service.js';
-import { ok, validationError, notFound, internalError } from '../../../utils/http.js';
+import { ok, validationError } from '../../../utils/http.js';
 import { withDbContext } from '../../../db/context.js';
+import { handleProgramaError } from './infrastructure/errorHandler.js';
+import { GetAllProgramasQuery } from './application/queries/GetAllProgramasQuery.js';
+import { GetProgramaByIdQuery } from './application/queries/GetProgramaByIdQuery.js';
+import { GetProgramasByEjeQuery } from './application/queries/GetProgramasByEjeQuery.js';
+import { GetProgramasByLineaEstrategicaQuery } from './application/queries/GetProgramasByLineaEstrategicaQuery.js';
+import { CreateProgramaCommand } from './application/commands/CreateProgramaCommand.js';
+import { UpdateProgramaCommand } from './application/commands/UpdateProgramaCommand.js';
+import { DeleteProgramaCommand } from './application/commands/DeleteProgramaCommand.js';
 
 export default async function programaRoutes(app: FastifyInstance) {
 
@@ -64,12 +71,11 @@ export default async function programaRoutes(app: FastifyInstance) {
     }
   }, async (req, reply) => {
     try {
-      const programaService = req.diScope.resolve<ProgramaService>('programaService');
-      const programas = await programaService.getAllProgramas();
+      const getAllProgramasQuery = req.diScope.resolve<GetAllProgramasQuery>('getAllProgramasQuery');
+      const programas = await getAllProgramasQuery.execute();
       return reply.send(ok(programas));
     } catch (error: any) {
-      console.error('Error listing programas:', error);
-      return reply.code(500).send(internalError('Failed to retrieve programas'));
+      return handleProgramaError(error, reply);
     }
   });
 
@@ -152,12 +158,11 @@ export default async function programaRoutes(app: FastifyInstance) {
     }
 
     try {
-      const programaService = req.diScope.resolve<ProgramaService>('programaService');
-      const programas = await programaService.getProgramasByEje(paramValidation.data.ejeId);
+      const getProgramasByEjeQuery = req.diScope.resolve<GetProgramasByEjeQuery>('getProgramasByEjeQuery');
+      const programas = await getProgramasByEjeQuery.execute(paramValidation.data.ejeId);
       return reply.send(ok(programas));
     } catch (error: any) {
-      console.error('Error listing programas by eje:', error);
-      return reply.code(500).send(internalError('Failed to retrieve programas'));
+      return handleProgramaError(error, reply);
     }
   });
 
@@ -239,12 +244,11 @@ export default async function programaRoutes(app: FastifyInstance) {
     }
 
     try {
-      const programaService = req.diScope.resolve<ProgramaService>('programaService');
-      const programas = await programaService.getProgramasByLineaEstrategica(paramValidation.data.lineaEstrategicaId);
+      const getProgramasByLineaEstrategicaQuery = req.diScope.resolve<GetProgramasByLineaEstrategicaQuery>('getProgramasByLineaEstrategicaQuery');
+      const programas = await getProgramasByLineaEstrategicaQuery.execute(paramValidation.data.lineaEstrategicaId);
       return reply.send(ok(programas));
     } catch (error: any) {
-      console.error('Error listing programas by linea estrategica:', error);
-      return reply.code(500).send(internalError('Failed to retrieve programas'));
+      return handleProgramaError(error, reply);
     }
   });
 
@@ -344,15 +348,11 @@ export default async function programaRoutes(app: FastifyInstance) {
     }
 
     try {
-      const programaService = req.diScope.resolve<ProgramaService>('programaService');
-      const programa = await programaService.getProgramaById(paramValidation.data.programaId);
+      const getProgramaByIdQuery = req.diScope.resolve<GetProgramaByIdQuery>('getProgramaByIdQuery');
+      const programa = await getProgramaByIdQuery.execute(paramValidation.data.programaId);
       return reply.send(ok(programa));
     } catch (error: any) {
-      if (error.message === 'PROGRAMA_NOT_FOUND') {
-        return reply.code(404).send(notFound('Programa', programaId));
-      }
-      console.error('Error getting programa:', error);
-      return reply.code(500).send(internalError('Failed to retrieve programa'));
+      return handleProgramaError(error, reply);
     }
   });
 
@@ -426,25 +426,17 @@ export default async function programaRoutes(app: FastifyInstance) {
 
       try {
         const userId = req.user?.sub;
-        const programaService = req.diScope.resolve<ProgramaService>('programaService');
-        const programa = await programaService.createProgramaItem(
-          parsed.data.idEje,
-          parsed.data.idLineaEstrategica,
-          parsed.data.nombre,
-          parsed.data.descripcion,
-          userId,
-          tx
-        );
+        const createProgramaCommand = req.diScope.resolve<CreateProgramaCommand>('createProgramaCommand');
+        const programa = await createProgramaCommand.execute({
+          idEje: parsed.data.idEje,
+          idLineaEstrategica: parsed.data.idLineaEstrategica,
+          nombre: parsed.data.nombre,
+          descripcion: parsed.data.descripcion,
+          userId
+        }, tx);
         return reply.code(201).send(ok(programa));
       } catch (error: any) {
-        if (error.message === 'EJE_NOT_FOUND') {
-          return reply.code(400).send({ ok: false, error: { code: 'BAD_REQUEST', message: 'Eje not found' } });
-        }
-        if (error.message === 'LINEA_ESTRATEGICA_NOT_FOUND') {
-          return reply.code(400).send({ ok: false, error: { code: 'BAD_REQUEST', message: 'Linea estrategica not found' } });
-        }
-        console.error('Error creating programa:', error);
-        return reply.code(500).send(internalError('Failed to create programa'));
+        return handleProgramaError(error, reply);
       }
     });
   });
@@ -544,21 +536,16 @@ export default async function programaRoutes(app: FastifyInstance) {
 
       try {
         const userId = req.user?.sub;
-        const programaService = req.diScope.resolve<ProgramaService>('programaService');
-        const programa = await programaService.updateProgramaItem(
-          paramValidation.data.programaId,
-          parsed.data.nombre,
-          parsed.data.descripcion,
-          userId,
-          tx
-        );
+        const updateProgramaCommand = req.diScope.resolve<UpdateProgramaCommand>('updateProgramaCommand');
+        const programa = await updateProgramaCommand.execute({
+          programaId: paramValidation.data.programaId,
+          nombre: parsed.data.nombre,
+          descripcion: parsed.data.descripcion,
+          userId
+        }, tx);
         return reply.send(ok(programa));
       } catch (error: any) {
-        if (error.message === 'PROGRAMA_NOT_FOUND') {
-          return reply.code(404).send(notFound('Programa', programaId));
-        }
-        console.error('Error updating programa:', error);
-        return reply.code(500).send(internalError('Failed to update programa'));
+        return handleProgramaError(error, reply);
       }
     });
   });
@@ -641,15 +628,13 @@ export default async function programaRoutes(app: FastifyInstance) {
       }
 
       try {
-        const programaService = req.diScope.resolve<ProgramaService>('programaService');
-        const deletedId = await programaService.deleteProgramaItem(paramValidation.data.programaId, tx);
+        const deleteProgramaCommand = req.diScope.resolve<DeleteProgramaCommand>('deleteProgramaCommand');
+        const deletedId = await deleteProgramaCommand.execute({
+          programaId: paramValidation.data.programaId
+        }, tx);
         return reply.send(ok({ id: deletedId }));
       } catch (error: any) {
-        if (error.message === 'PROGRAMA_NOT_FOUND') {
-          return reply.code(404).send(notFound('Programa', programaId));
-        }
-        console.error('Error deleting programa:', error);
-        return reply.code(500).send(internalError('Failed to delete programa'));
+        return handleProgramaError(error, reply);
       }
     });
   });

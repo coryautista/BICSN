@@ -1,186 +1,176 @@
 # BICSN
 
-Node.js 20 + TypeScript project with Fastify and SQL Server connection.
+API REST construida con Node.js 20, TypeScript y Fastify siguiendo Clean Architecture + DDD + CQRS.
 
-## Features
+## 🚀 Inicio Rápido
 
-- **Fastify**: Fast and low overhead web framework
-- **TypeScript**: Type-safe development
-- **SQL Server**: Database connectivity using mssql
-- **Firebird**: Additional database support
-- **Pino**: High-performance logging
-- **Security**: Built-in helmet and CORS support
-- **Environment Configuration**: dotenv for environment variables
-- **Clean Architecture**: CQRS, Repository Pattern, Dependency Injection
-- **API Versioning**: Header-based versioning system (Accept-Version)
-- **Authentication**: JWT-based auth with Argon2 password hashing
-- **Swagger/OpenAPI**: Auto-generated API documentation
-
-## Prerequisites
+### Prerrequisitos
 
 - Node.js >= 20.0.0
-- npm or yarn
+- npm o yarn
 - SQL Server instance
+- Firebird database
 
-## Installation
+### Instalación
 
-1. Clone the repository:
 ```bash
+# 1. Clonar repositorio
 git clone <repository-url>
 cd BICSN
-```
 
-2. Install dependencies:
-```bash
+# 2. Instalar dependencias
 npm install
-```
 
-3. Configure environment variables:
-```bash
+# 3. Configurar variables de entorno
 cp .env.example .env
+# Editar .env con tus credenciales
 ```
 
-Edit the `.env` file with your SQL Server configuration:
-- `DB_SERVER`: SQL Server hostname/IP
-- `DB_DATABASE`: Database name
-- `DB_USER`: Database user
-- `DB_PASSWORD`: Database password
-- `DB_PORT`: SQL Server port (default: 1433)
-- `DB_ENCRYPT`: Enable encryption (true/false)
-- `DB_TRUST_SERVER_CERTIFICATE`: Trust server certificate (true/false)
+### Desarrollo
 
-## Development
-
-Run the development server with hot-reload:
 ```bash
 npm run dev
 ```
 
-The server will start on `http://localhost:3000` (or the port specified in `.env`)
+El servidor iniciará en `http://localhost:4000` (o el puerto especificado en `.env`)
 
-## Building
+### Producción
 
-Compile TypeScript to JavaScript:
 ```bash
 npm run build
-```
-
-The compiled files will be in the `dist/` directory.
-
-## Production
-
-Start the production server:
-```bash
 npm start
 ```
 
-## Project Structure
+## 📁 Estructura del Proyecto
 
 ```
 BICSN/
 ├── src/
-│   ├── server.ts              # Main server entry point
+│   ├── server.ts              # Punto de entrada principal
+│   ├── app/
+│   │   └── routeRegistrar.ts  # Registro centralizado de rutas
 │   ├── config/
-│   │   └── env.ts             # Environment configuration
+│   │   └── env.ts             # Configuración de entorno
 │   ├── db/
-│   │   ├── mssql.ts           # SQL Server connection
-│   │   ├── firebird.ts        # Firebird connection
-│   │   └── context.ts         # Database context
-│   ├── modules/               # Feature modules
-│   │   ├── auth/              # Authentication module
-│   │   │   ├── application/   # Commands & Queries (CQRS)
-│   │   │   ├── domain/        # Entities & Repository interfaces
-│   │   │   ├── infrastructure/# Repository implementations
-│   │   │   ├── auth.routes.ts # Routes v1.0.0
-│   │   │   └── auth.routes.v2.ts # Routes v2.0.0 (versionadas)
-│   │   ├── usuarios/          # User management
-│   │   └── [otros módulos]/   # Other feature modules
-│   ├── plugins/
-│   │   ├── logger.ts          # Pino logger plugin
-│   │   ├── requestLogger.ts   # Request logging
-│   │   └── versioning.ts      # API versioning plugin
-│   └── utils/
-│       ├── versioning.ts      # Versioning utilities
-│       ├── http.ts            # HTTP helpers
-│       └── audit.ts           # Audit logging
-├── docs/                      # Documentation
-│   ├── INDEX-VERSIONADO.md    # Versioning index
-│   ├── VERSIONADO.md          # Versioning guide
-│   ├── ARQUITECTURA-VERSIONADO.md # Architecture diagrams
-│   ├── TEST-VERSIONADO.md     # Testing guide
-│   └── EJEMPLOS-CLIENTE-VERSIONADO.md # Client examples
-├── .env.example               # Environment variables template
-├── .gitignore                 # Git ignore rules
-├── package.json               # Project dependencies
-├── tsconfig.json              # TypeScript configuration
-└── README.md                  # Project documentation
+│   │   ├── mssql.ts           # Conexión SQL Server
+│   │   ├── firebird.ts        # Conexión Firebird
+│   │   └── context.ts         # Contexto de base de datos
+│   ├── di/
+│   │   └── container.ts       # Contenedor DI (Awilix)
+│   ├── modules/               # Módulos de negocio
+│   │   ├── auth/              # Autenticación
+│   │   ├── afiliado/          # Gestión de afiliados
+│   │   ├── reportes/          # Reportes (estructura modular)
+│   │   ├── tablero/           # Tablero (estructura modular)
+│   │   └── [otros módulos]/
+│   ├── plugins/               # Plugins de Fastify
+│   └── utils/                 # Utilidades
+├── docs/                      # Documentación
+│   ├── ARQUITECTURA_PROYECTO.md      # Arquitectura completa
+│   ├── ARQUITECTURA_MODULOS_COMPLEJOS.md # Módulos modulares
+│   └── [otra documentación]/
+└── package.json
 ```
 
-## API Endpoints
+## 🏗️ Arquitectura
 
-### Documentation
-- `GET /docs` - Swagger UI (Interactive API documentation)
-- `GET /docs/json` - OpenAPI JSON specification
+El proyecto sigue **Clean Architecture** con las siguientes capas:
 
-### Health & Info
-- `GET /health` - Basic health check (uptime, timestamp)
-- `GET /health/detailed` - Detailed health check (databases, dependencies, system metrics)
-- `GET /health/db` - Database-specific health check
-- `GET /v1/info` - Server information
+- **Presentation**: Routes, Schemas, Middleware (Fastify, Zod)
+- **Application**: Commands & Queries (CQRS)
+- **Domain**: Entities, Repository Interfaces, Domain Errors
+- **Infrastructure**: Repository Implementations, Database Connections
 
-**📚 Documentación de Health Checks:**
-Ver [HEALTH-CHECKS.md](./HEALTH-CHECKS.md) para guías completas de monitoreo, alertas e integración.
+### Patrones Implementados
 
-### Authentication (Versionado)
-- `POST /v1/auth/login` - User login
-  - **v1.0.0** (default): Basic login response
-  - **v2.0.0** (with `Accept-Version: 2.0.0`): Enhanced response with metadata
-- `POST /v1/auth/register` - User registration
-- `POST /v1/auth/refresh` - Refresh access token
-- `POST /v1/auth/logout` - User logout
+- ✅ **Clean Architecture**: Separación en capas
+- ✅ **DDD**: Domain-Driven Design
+- ✅ **CQRS**: Command Query Responsibility Segregation
+- ✅ **Dependency Injection**: Awilix
+- ✅ **Repository Pattern**: Abstracción del acceso a datos
 
-### API Versioning
+**📚 Documentación Completa de Arquitectura:**
+Ver [docs/ARQUITECTURA_PROYECTO.md](./docs/ARQUITECTURA_PROYECTO.md) para detalles completos.
 
-Este proyecto implementa versionado de API usando el header `Accept-Version`.
+## 🗄️ Bases de Datos
 
-**Ejemplo - Login v1.0.0 (default):**
-```powershell
-Invoke-WebRequest -Uri "http://localhost:4000/v1/auth/login" `
-  -Method POST `
-  -Headers @{"Content-Type"="application/json"} `
-  -Body '{"usernameOrEmail":"admin","password":"***"}'
+El proyecto utiliza **dos bases de datos**:
+
+- **Firebird**: Sistema principal (mayoría de funcionalidad, CRUD completo)
+- **SQL Server**: Sistema complementario (datos nuevos que no existen en Firebird)
+
+**Configuración en `.env`**:
+```env
+# SQL Server
+SQLSERVER_SERVER=...
+SQLSERVER_DB=...
+SQLSERVER_USER=...
+SQLSERVER_PASSWORD=...
+
+# Firebird
+FIREBIRD_HOST=...
+FIREBIRD_DATABASE=...
+FIREBIRD_USER=...
+FIREBIRD_PASSWORD=...
+FIREBIRD_CHARSET=NONE
 ```
 
-**Ejemplo - Login v2.0.0 (con metadata):**
-```powershell
-Invoke-WebRequest -Uri "http://localhost:4000/v1/auth/login" `
-  -Method POST `
-  -Headers @{
-    "Content-Type"="application/json"
-    "Accept-Version"="2.0.0"
-  } `
-  -Body '{"usernameOrEmail":"admin","password":"***"}'
+Ver [docs/ARQUITECTURA_PROYECTO.md](./docs/ARQUITECTURA_PROYECTO.md#manejo-de-bases-de-datos) para detalles.
+
+## 📦 Estructura de Módulos
+
+### Módulo Estándar
+
+```
+src/modules/[nombreModulo]/
+├── domain/              # Entidades, interfaces, errores
+├── application/         # Commands & Queries
+├── infrastructure/      # Implementaciones
+├── [nombre].routes.ts   # Rutas HTTP
+└── [nombre].schemas.ts  # Validación
 ```
 
-**📚 Documentación Completa de Versionado:**
-Ver [INDEX-VERSIONADO.md](./INDEX-VERSIONADO.md) para guías completas, ejemplos y arquitectura.
+### Módulos Modulares
 
-## Dependencies
+Los módulos grandes (`reportes/`, `tablero/`) usan estructura modular con submódulos.
 
-### Production
-- `fastify` - Web framework
-- `fastify-helmet` - Security headers
-- `fastify-cors` - CORS support
-- `mssql` - SQL Server client
-- `dotenv` - Environment variables
-- `pino` - Logger
+Ver [docs/ARQUITECTURA_MODULOS_COMPLEJOS.md](./docs/ARQUITECTURA_MODULOS_COMPLEJOS.md) para detalles.
 
-### Development
-- `typescript` - TypeScript compiler
-- `ts-node-dev` - Development server with hot-reload
-- `@types/node` - Node.js type definitions
-- `pino-pretty` - Pretty logging for development
+## 🔌 API Endpoints
 
-## License
+### Documentación
+- `GET /docs` - Swagger UI
+- `GET /docs/json` - OpenAPI JSON
+
+### Health Checks
+- `GET /health` - Health check básico
+- `GET /health/detailed` - Health check detallado
+- `GET /health/db` - Health check de base de datos
+
+### Autenticación
+- `POST /v1/auth/login` - Login
+- `POST /v1/auth/register` - Registro
+- `POST /v1/auth/refresh` - Refresh token
+- `POST /v1/auth/logout` - Logout
+
+**Nota**: La API usa versionado basado en headers (`Accept-Version`). Ver [docs/INDEX-VERSIONADO.md](./docs/INDEX-VERSIONADO.md) para detalles.
+
+## 🛠️ Tecnologías
+
+- **Fastify**: Web framework
+- **TypeScript**: Lenguaje
+- **Awilix**: Dependency Injection
+- **Zod**: Validación
+- **Pino**: Logging
+- **JWT**: Autenticación
+- **Swagger**: Documentación API
+
+## 📚 Documentación
+
+- [Arquitectura del Proyecto](./docs/ARQUITECTURA_PROYECTO.md) - Arquitectura completa
+- [Módulos Modulares](./docs/ARQUITECTURA_MODULOS_COMPLEJOS.md) - Estructura de módulos grandes
+- [Sistema de Versionado](./docs/INDEX-VERSIONADO.md) - Versionado de API
+
+## 📝 Licencia
 
 ISC

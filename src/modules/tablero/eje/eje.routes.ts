@@ -1,9 +1,15 @@
 import { FastifyInstance } from 'fastify';
 import { requireAuth, requireRole } from '../../auth/auth.middleware.js';
 import { CreateEjeSchema, UpdateEjeSchema, EjeIdParamSchema } from './eje.schemas.js';
-import { EjeService } from './eje.service.js';
-import { ok, validationError, notFound, internalError } from '../../../utils/http.js';
+import { ok, validationError } from '../../../utils/http.js';
 import { withDbContext } from '../../../db/context.js';
+import { handleEjeError } from './infrastructure/errorHandler.js';
+import { GetAllEjesQuery } from './application/queries/GetAllEjesQuery.js';
+import { GetEjeByIdQuery } from './application/queries/GetEjeByIdQuery.js';
+import { GetEjeWithLineasQuery } from './application/queries/GetEjeWithLineasQuery.js';
+import { CreateEjeCommand } from './application/commands/CreateEjeCommand.js';
+import { UpdateEjeCommand } from './application/commands/UpdateEjeCommand.js';
+import { DeleteEjeCommand } from './application/commands/DeleteEjeCommand.js';
 
 export default async function ejeRoutes(app: FastifyInstance) {
 
@@ -47,12 +53,11 @@ export default async function ejeRoutes(app: FastifyInstance) {
     }
   }, async (req, reply) => {
     try {
-      const ejeService = req.diScope.resolve<EjeService>('ejeService');
-      const ejes = await ejeService.getAllEjes();
+      const getAllEjesQuery = req.diScope.resolve<GetAllEjesQuery>('getAllEjesQuery');
+      const ejes = await getAllEjesQuery.execute();
       return reply.send(ok(ejes));
     } catch (error: any) {
-      console.error('Error listing ejes:', error);
-      return reply.code(500).send(internalError('Failed to retrieve ejes'));
+      return handleEjeError(error, reply);
     }
   });
 
@@ -134,15 +139,11 @@ export default async function ejeRoutes(app: FastifyInstance) {
     }
 
     try {
-      const ejeService = req.diScope.resolve<EjeService>('ejeService');
-      const eje = await ejeService.getEjeById(paramValidation.data.ejeId);
+      const getEjeByIdQuery = req.diScope.resolve<GetEjeByIdQuery>('getEjeByIdQuery');
+      const eje = await getEjeByIdQuery.execute(paramValidation.data.ejeId);
       return reply.send(ok(eje));
     } catch (error: any) {
-      if (error.message === 'EJE_NOT_FOUND') {
-        return reply.code(404).send(notFound('Eje', ejeId));
-      }
-      console.error('Error getting eje:', error);
-      return reply.code(500).send(internalError('Failed to retrieve eje'));
+      return handleEjeError(error, reply);
     }
   });
 
@@ -235,15 +236,11 @@ export default async function ejeRoutes(app: FastifyInstance) {
     }
 
     try {
-      const ejeService = req.diScope.resolve<EjeService>('ejeService');
-      const eje = await ejeService.getEjeWithLineas(paramValidation.data.ejeId);
+      const getEjeWithLineasQuery = req.diScope.resolve<GetEjeWithLineasQuery>('getEjeWithLineasQuery');
+      const eje = await getEjeWithLineasQuery.execute(paramValidation.data.ejeId);
       return reply.send(ok(eje));
     } catch (error: any) {
-      if (error.message === 'EJE_NOT_FOUND') {
-        return reply.code(404).send(notFound('Eje', ejeId));
-      }
-      console.error('Error getting eje with lineas:', error);
-      return reply.code(500).send(internalError('Failed to retrieve eje with lineas'));
+      return handleEjeError(error, reply);
     }
   });
 
@@ -311,16 +308,14 @@ export default async function ejeRoutes(app: FastifyInstance) {
 
       try {
         const userId = req.user?.sub;
-        const ejeService = req.diScope.resolve<EjeService>('ejeService');
-        const eje = await ejeService.createEjeItem(
-          parsed.data.nombre,
-          userId,
-          tx
-        );
+        const createEjeCommand = req.diScope.resolve<CreateEjeCommand>('createEjeCommand');
+        const eje = await createEjeCommand.execute({
+          nombre: parsed.data.nombre,
+          userId
+        }, tx);
         return reply.code(201).send(ok(eje));
       } catch (error: any) {
-        console.error('Error creating eje:', error);
-        return reply.code(500).send(internalError('Failed to create eje'));
+        return handleEjeError(error, reply);
       }
     });
   });
@@ -417,20 +412,15 @@ export default async function ejeRoutes(app: FastifyInstance) {
 
       try {
         const userId = req.user?.sub;
-        const ejeService = req.diScope.resolve<EjeService>('ejeService');
-        const eje = await ejeService.updateEjeItem(
-          paramValidation.data.ejeId,
-          parsed.data.nombre,
-          userId,
-          tx
-        );
+        const updateEjeCommand = req.diScope.resolve<UpdateEjeCommand>('updateEjeCommand');
+        const eje = await updateEjeCommand.execute({
+          ejeId: paramValidation.data.ejeId,
+          nombre: parsed.data.nombre,
+          userId
+        }, tx);
         return reply.send(ok(eje));
       } catch (error: any) {
-        if (error.message === 'EJE_NOT_FOUND') {
-          return reply.code(404).send(notFound('Eje', ejeId));
-        }
-        console.error('Error updating eje:', error);
-        return reply.code(500).send(internalError('Failed to update eje'));
+        return handleEjeError(error, reply);
       }
     });
   });
@@ -513,15 +503,13 @@ export default async function ejeRoutes(app: FastifyInstance) {
       }
 
       try {
-        const ejeService = req.diScope.resolve<EjeService>('ejeService');
-        const deletedId = await ejeService.deleteEjeItem(paramValidation.data.ejeId, tx);
+        const deleteEjeCommand = req.diScope.resolve<DeleteEjeCommand>('deleteEjeCommand');
+        const deletedId = await deleteEjeCommand.execute({
+          ejeId: paramValidation.data.ejeId
+        }, tx);
         return reply.send(ok({ id: deletedId }));
       } catch (error: any) {
-        if (error.message === 'EJE_NOT_FOUND') {
-          return reply.code(404).send(notFound('Eje', ejeId));
-        }
-        console.error('Error deleting eje:', error);
-        return reply.code(500).send(internalError('Failed to delete eje'));
+        return handleEjeError(error, reply);
       }
     });
   });

@@ -1,9 +1,15 @@
 import { FastifyInstance } from 'fastify';
 import { requireAuth, requireRole } from '../../auth/auth.middleware.js';
 import { CreateIndicadorAnualSchema, UpdateIndicadorAnualSchema, IndicadorAnualIdParamSchema, IndicadorIdParamSchema, AnioParamSchema } from './indicador-anual.schemas.js';
-import { IndicadorAnualService } from './indicador-anual.service.js';
-import { ok, validationError, notFound, internalError } from '../../../utils/http.js';
+import { ok, validationError } from '../../../utils/http.js';
 import { withDbContext } from '../../../db/context.js';
+import { handleIndicadorAnualError } from './infrastructure/errorHandler.js';
+import { GetIndicadorAnualByIdQuery } from './application/queries/GetIndicadorAnualByIdQuery.js';
+import { GetIndicadoresAnualesByIndicadorQuery } from './application/queries/GetIndicadoresAnualesByIndicadorQuery.js';
+import { GetIndicadoresAnualesByAnioQuery } from './application/queries/GetIndicadoresAnualesByAnioQuery.js';
+import { CreateIndicadorAnualCommand } from './application/commands/CreateIndicadorAnualCommand.js';
+import { UpdateIndicadorAnualCommand } from './application/commands/UpdateIndicadorAnualCommand.js';
+import { DeleteIndicadorAnualCommand } from './application/commands/DeleteIndicadorAnualCommand.js';
 
 export default async function indicadorAnualRoutes(app: FastifyInstance) {
 
@@ -102,12 +108,11 @@ export default async function indicadorAnualRoutes(app: FastifyInstance) {
     }
 
     try {
-      const indicadorAnualService = req.diScope.resolve<IndicadorAnualService>('indicadorAnualService');
-      const indicadoresAnuales = await indicadorAnualService.getIndicadoresAnualesByIndicador(paramValidation.data.indicadorId);
+      const getIndicadoresAnualesByIndicadorQuery = req.diScope.resolve<GetIndicadoresAnualesByIndicadorQuery>('getIndicadoresAnualesByIndicadorQuery');
+      const indicadoresAnuales = await getIndicadoresAnualesByIndicadorQuery.execute({ indicadorId: paramValidation.data.indicadorId });
       return reply.send(ok(indicadoresAnuales));
     } catch (error: any) {
-      console.error('Error listing indicadores anuales by indicador:', error);
-      return reply.code(500).send(internalError('Failed to retrieve indicadores anuales'));
+      return handleIndicadorAnualError(error, reply);
     }
   });
 
@@ -206,12 +211,11 @@ export default async function indicadorAnualRoutes(app: FastifyInstance) {
     }
 
     try {
-      const indicadorAnualService = req.diScope.resolve<IndicadorAnualService>('indicadorAnualService');
-      const indicadoresAnuales = await indicadorAnualService.getIndicadoresAnualesByAnio(paramValidation.data.anio);
+      const getIndicadoresAnualesByAnioQuery = req.diScope.resolve<GetIndicadoresAnualesByAnioQuery>('getIndicadoresAnualesByAnioQuery');
+      const indicadoresAnuales = await getIndicadoresAnualesByAnioQuery.execute({ anio: paramValidation.data.anio });
       return reply.send(ok(indicadoresAnuales));
     } catch (error: any) {
-      console.error('Error listing indicadores anuales by anio:', error);
-      return reply.code(500).send(internalError('Failed to retrieve indicadores anuales'));
+      return handleIndicadorAnualError(error, reply);
     }
   });
 
@@ -320,15 +324,11 @@ export default async function indicadorAnualRoutes(app: FastifyInstance) {
     }
 
     try {
-      const indicadorAnualService = req.diScope.resolve<IndicadorAnualService>('indicadorAnualService');
-      const indicadorAnual = await indicadorAnualService.getIndicadorAnualById(paramValidation.data.indicadorAnualId);
+      const getIndicadorAnualByIdQuery = req.diScope.resolve<GetIndicadorAnualByIdQuery>('getIndicadorAnualByIdQuery');
+      const indicadorAnual = await getIndicadorAnualByIdQuery.execute({ indicadorAnualId: paramValidation.data.indicadorAnualId });
       return reply.send(ok(indicadorAnual));
     } catch (error: any) {
-      if (error.message === 'INDICADOR_ANUAL_NOT_FOUND') {
-        return reply.code(404).send(notFound('IndicadorAnual', indicadorAnualId));
-      }
-      console.error('Error getting indicador anual:', error);
-      return reply.code(500).send(internalError('Failed to retrieve indicador anual'));
+      return handleIndicadorAnualError(error, reply);
     }
   });
 
@@ -426,34 +426,29 @@ export default async function indicadorAnualRoutes(app: FastifyInstance) {
 
       try {
         const userId = req.user?.sub;
-        const indicadorAnualService = req.diScope.resolve<IndicadorAnualService>('indicadorAnualService');
-        const indicadorAnual = await indicadorAnualService.createIndicadorAnualItem(
-          parsed.data.idIndicador,
-          parsed.data.anio,
-          parsed.data.enero,
-          parsed.data.febrero,
-          parsed.data.marzo,
-          parsed.data.abril,
-          parsed.data.mayo,
-          parsed.data.junio,
-          parsed.data.julio,
-          parsed.data.agosto,
-          parsed.data.septiembre,
-          parsed.data.octubre,
-          parsed.data.noviembre,
-          parsed.data.diciembre,
-          parsed.data.metaAnual,
-          parsed.data.observaciones,
-          userId,
-          tx
-        );
+        const createIndicadorAnualCommand = req.diScope.resolve<CreateIndicadorAnualCommand>('createIndicadorAnualCommand');
+        const indicadorAnual = await createIndicadorAnualCommand.execute({
+          idIndicador: parsed.data.idIndicador,
+          anio: parsed.data.anio,
+          enero: parsed.data.enero,
+          febrero: parsed.data.febrero,
+          marzo: parsed.data.marzo,
+          abril: parsed.data.abril,
+          mayo: parsed.data.mayo,
+          junio: parsed.data.junio,
+          julio: parsed.data.julio,
+          agosto: parsed.data.agosto,
+          septiembre: parsed.data.septiembre,
+          octubre: parsed.data.octubre,
+          noviembre: parsed.data.noviembre,
+          diciembre: parsed.data.diciembre,
+          metaAnual: parsed.data.metaAnual,
+          observaciones: parsed.data.observaciones,
+          userId
+        }, tx);
         return reply.code(201).send(ok(indicadorAnual));
       } catch (error: any) {
-        if (error.message === 'INDICADOR_NOT_FOUND') {
-          return reply.code(400).send({ ok: false, error: { code: 'BAD_REQUEST', message: 'Indicador not found' } });
-        }
-        console.error('Error creating indicador anual:', error);
-        return reply.code(500).send(internalError('Failed to create indicador anual'));
+        return handleIndicadorAnualError(error, reply);
       }
     });
   });
@@ -577,33 +572,28 @@ export default async function indicadorAnualRoutes(app: FastifyInstance) {
 
       try {
         const userId = req.user?.sub;
-        const indicadorAnualService = req.diScope.resolve<IndicadorAnualService>('indicadorAnualService');
-        const indicadorAnual = await indicadorAnualService.updateIndicadorAnualItem(
-          paramValidation.data.indicadorAnualId,
-          parsed.data.enero,
-          parsed.data.febrero,
-          parsed.data.marzo,
-          parsed.data.abril,
-          parsed.data.mayo,
-          parsed.data.junio,
-          parsed.data.julio,
-          parsed.data.agosto,
-          parsed.data.septiembre,
-          parsed.data.octubre,
-          parsed.data.noviembre,
-          parsed.data.diciembre,
-          parsed.data.metaAnual,
-          parsed.data.observaciones,
-          userId,
-          tx
-        );
+        const updateIndicadorAnualCommand = req.diScope.resolve<UpdateIndicadorAnualCommand>('updateIndicadorAnualCommand');
+        const indicadorAnual = await updateIndicadorAnualCommand.execute({
+          indicadorAnualId: paramValidation.data.indicadorAnualId,
+          enero: parsed.data.enero,
+          febrero: parsed.data.febrero,
+          marzo: parsed.data.marzo,
+          abril: parsed.data.abril,
+          mayo: parsed.data.mayo,
+          junio: parsed.data.junio,
+          julio: parsed.data.julio,
+          agosto: parsed.data.agosto,
+          septiembre: parsed.data.septiembre,
+          octubre: parsed.data.octubre,
+          noviembre: parsed.data.noviembre,
+          diciembre: parsed.data.diciembre,
+          metaAnual: parsed.data.metaAnual,
+          observaciones: parsed.data.observaciones,
+          userId
+        }, tx);
         return reply.send(ok(indicadorAnual));
       } catch (error: any) {
-        if (error.message === 'INDICADOR_ANUAL_NOT_FOUND') {
-          return reply.code(404).send(notFound('IndicadorAnual', indicadorAnualId));
-        }
-        console.error('Error updating indicador anual:', error);
-        return reply.code(500).send(internalError('Failed to update indicador anual'));
+        return handleIndicadorAnualError(error, reply);
       }
     });
   });
@@ -686,15 +676,11 @@ export default async function indicadorAnualRoutes(app: FastifyInstance) {
       }
 
       try {
-        const indicadorAnualService = req.diScope.resolve<IndicadorAnualService>('indicadorAnualService');
-        const deletedId = await indicadorAnualService.deleteIndicadorAnualItem(paramValidation.data.indicadorAnualId, tx);
+        const deleteIndicadorAnualCommand = req.diScope.resolve<DeleteIndicadorAnualCommand>('deleteIndicadorAnualCommand');
+        const deletedId = await deleteIndicadorAnualCommand.execute({ indicadorAnualId: paramValidation.data.indicadorAnualId }, tx);
         return reply.send(ok({ id: deletedId }));
       } catch (error: any) {
-        if (error.message === 'INDICADOR_ANUAL_NOT_FOUND') {
-          return reply.code(404).send(notFound('IndicadorAnual', indicadorAnualId));
-        }
-        console.error('Error deleting indicador anual:', error);
-        return reply.code(500).send(internalError('Failed to delete indicador anual'));
+        return handleIndicadorAnualError(error, reply);
       }
     });
   });

@@ -1,9 +1,15 @@
 import { FastifyInstance } from 'fastify';
 import { requireAuth, requireRole } from '../../auth/auth.middleware.js';
-import { CreateUnidadMedidaSchema, UpdateUnidadMedidaSchema, UnidadMedidaIdParamSchema } from './unidad-medida.schemas.js';
-import { UnidadMedidaService } from './unidad-medida.service.js';
-import { ok, validationError, notFound, internalError } from '../../../utils/http.js';
+import { CreateUnidadMedidaSchema, UpdateUnidadMedidaSchema, UnidadMedidaIdParamSchema, CategoriaParamSchema } from './unidad-medida.schemas.js';
+import { ok, validationError } from '../../../utils/http.js';
 import { withDbContext } from '../../../db/context.js';
+import { handleUnidadMedidaError } from './infrastructure/errorHandler.js';
+import { GetAllUnidadesMedidaQuery } from './application/queries/GetAllUnidadesMedidaQuery.js';
+import { GetUnidadMedidaByIdQuery } from './application/queries/GetUnidadMedidaByIdQuery.js';
+import { GetUnidadesMedidaByCategoriaQuery } from './application/queries/GetUnidadesMedidaByCategoriaQuery.js';
+import { CreateUnidadMedidaCommand } from './application/commands/CreateUnidadMedidaCommand.js';
+import { UpdateUnidadMedidaCommand } from './application/commands/UpdateUnidadMedidaCommand.js';
+import { DeleteUnidadMedidaCommand } from './application/commands/DeleteUnidadMedidaCommand.js';
 
 export default async function unidadMedidaRoutes(app: FastifyInstance) {
 
@@ -51,12 +57,11 @@ export default async function unidadMedidaRoutes(app: FastifyInstance) {
     }
   }, async (req, reply) => {
     try {
-      const unidadMedidaService = req.diScope.resolve<UnidadMedidaService>('unidadMedidaService');
-      const unidadesMedida = await unidadMedidaService.getAllUnidadesMedida();
+      const getAllUnidadesMedidaQuery = req.diScope.resolve<GetAllUnidadesMedidaQuery>('getAllUnidadesMedidaQuery');
+      const unidadesMedida = await getAllUnidadesMedidaQuery.execute();
       return reply.send(ok(unidadesMedida));
     } catch (error: any) {
-      console.error('Error listing unidades-medida:', error);
-      return reply.code(500).send(internalError('Failed to retrieve unidades-medida'));
+      return handleUnidadMedidaError(error, reply);
     }
   });
 
@@ -128,13 +133,17 @@ export default async function unidadMedidaRoutes(app: FastifyInstance) {
   }, async (req, reply) => {
     const { categoria } = req.params as { categoria: string };
 
+    const paramValidation = CategoriaParamSchema.safeParse({ categoria });
+    if (!paramValidation.success) {
+      return reply.code(400).send(validationError(paramValidation.error.issues));
+    }
+
     try {
-      const unidadMedidaService = req.diScope.resolve<UnidadMedidaService>('unidadMedidaService');
-      const unidadesMedida = await unidadMedidaService.getUnidadesMedidaByCategoria(categoria);
+      const getUnidadesMedidaByCategoriaQuery = req.diScope.resolve<GetUnidadesMedidaByCategoriaQuery>('getUnidadesMedidaByCategoriaQuery');
+      const unidadesMedida = await getUnidadesMedidaByCategoriaQuery.execute(paramValidation.data.categoria);
       return reply.send(ok(unidadesMedida));
     } catch (error: any) {
-      console.error('Error listing unidades-medida by categoria:', error);
-      return reply.code(500).send(internalError('Failed to retrieve unidades-medida'));
+      return handleUnidadMedidaError(error, reply);
     }
   });
 
@@ -220,15 +229,11 @@ export default async function unidadMedidaRoutes(app: FastifyInstance) {
     }
 
     try {
-      const unidadMedidaService = req.diScope.resolve<UnidadMedidaService>('unidadMedidaService');
-      const unidadMedida = await unidadMedidaService.getUnidadMedidaById(paramValidation.data.unidadMedidaId);
+      const getUnidadMedidaByIdQuery = req.diScope.resolve<GetUnidadMedidaByIdQuery>('getUnidadMedidaByIdQuery');
+      const unidadMedida = await getUnidadMedidaByIdQuery.execute(paramValidation.data.unidadMedidaId);
       return reply.send(ok(unidadMedida));
     } catch (error: any) {
-      if (error.message === 'UNIDAD_MEDIDA_NOT_FOUND') {
-        return reply.code(404).send(notFound('UnidadMedida', unidadMedidaId));
-      }
-      console.error('Error getting unidad-medida:', error);
-      return reply.code(500).send(internalError('Failed to retrieve unidad-medida'));
+      return handleUnidadMedidaError(error, reply);
     }
   });
 
@@ -304,20 +309,18 @@ export default async function unidadMedidaRoutes(app: FastifyInstance) {
 
       try {
         const userId = req.user?.sub;
-        const unidadMedidaService = req.diScope.resolve<UnidadMedidaService>('unidadMedidaService');
-        const unidadMedida = await unidadMedidaService.createUnidadMedidaItem(
-          parsed.data.nombre,
-          parsed.data.simbolo,
-          parsed.data.descripcion,
-          parsed.data.categoria,
-          parsed.data.esActiva,
-          userId,
-          tx
-        );
+        const createUnidadMedidaCommand = req.diScope.resolve<CreateUnidadMedidaCommand>('createUnidadMedidaCommand');
+        const unidadMedida = await createUnidadMedidaCommand.execute({
+          nombre: parsed.data.nombre,
+          simbolo: parsed.data.simbolo,
+          descripcion: parsed.data.descripcion,
+          categoria: parsed.data.categoria,
+          esActiva: parsed.data.esActiva,
+          userId
+        }, tx);
         return reply.code(201).send(ok(unidadMedida));
       } catch (error: any) {
-        console.error('Error creating unidad-medida:', error);
-        return reply.code(500).send(internalError('Failed to create unidad-medida'));
+        return handleUnidadMedidaError(error, reply);
       }
     });
   });
@@ -421,24 +424,19 @@ export default async function unidadMedidaRoutes(app: FastifyInstance) {
 
       try {
         const userId = req.user?.sub;
-        const unidadMedidaService = req.diScope.resolve<UnidadMedidaService>('unidadMedidaService');
-        const unidadMedida = await unidadMedidaService.updateUnidadMedidaItem(
-          paramValidation.data.unidadMedidaId,
-          parsed.data.nombre,
-          parsed.data.simbolo,
-          parsed.data.descripcion,
-          parsed.data.categoria,
-          parsed.data.esActiva,
-          userId,
-          tx
-        );
+        const updateUnidadMedidaCommand = req.diScope.resolve<UpdateUnidadMedidaCommand>('updateUnidadMedidaCommand');
+        const unidadMedida = await updateUnidadMedidaCommand.execute({
+          unidadMedidaId: paramValidation.data.unidadMedidaId,
+          nombre: parsed.data.nombre,
+          simbolo: parsed.data.simbolo,
+          descripcion: parsed.data.descripcion,
+          categoria: parsed.data.categoria,
+          esActiva: parsed.data.esActiva,
+          userId
+        }, tx);
         return reply.send(ok(unidadMedida));
       } catch (error: any) {
-        if (error.message === 'UNIDAD_MEDIDA_NOT_FOUND') {
-          return reply.code(404).send(notFound('UnidadMedida', unidadMedidaId));
-        }
-        console.error('Error updating unidad-medida:', error);
-        return reply.code(500).send(internalError('Failed to update unidad-medida'));
+        return handleUnidadMedidaError(error, reply);
       }
     });
   });
@@ -521,15 +519,13 @@ export default async function unidadMedidaRoutes(app: FastifyInstance) {
       }
 
       try {
-        const unidadMedidaService = req.diScope.resolve<UnidadMedidaService>('unidadMedidaService');
-        const deletedId = await unidadMedidaService.deleteUnidadMedidaItem(paramValidation.data.unidadMedidaId, tx);
+        const deleteUnidadMedidaCommand = req.diScope.resolve<DeleteUnidadMedidaCommand>('deleteUnidadMedidaCommand');
+        const deletedId = await deleteUnidadMedidaCommand.execute({
+          unidadMedidaId: paramValidation.data.unidadMedidaId
+        }, tx);
         return reply.send(ok({ id: deletedId }));
       } catch (error: any) {
-        if (error.message === 'UNIDAD_MEDIDA_NOT_FOUND') {
-          return reply.code(404).send(notFound('UnidadMedida', unidadMedidaId));
-        }
-        console.error('Error deleting unidad-medida:', error);
-        return reply.code(500).send(internalError('Failed to delete unidad-medida'));
+        return handleUnidadMedidaError(error, reply);
       }
     });
   });

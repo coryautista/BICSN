@@ -17,7 +17,8 @@ import {
   Organica1InvalidFechaError,
   Organica1InUseError,
   Organica1ParentNotFoundError,
-  Organica1PermissionError
+  Organica1PermissionError,
+  Organica1DeletionError
 } from '../domain/errors.js';
 
 const logger = pino({
@@ -152,6 +153,14 @@ export function handleOrganica1Error(error: any, reply: FastifyReply): FastifyRe
       operation: error.details?.operation
     }, 'Permiso denegado para operación en organica1');
     return reply.code(403).send(fail('ORGANICA1_PERMISSION_DENIED', 'No tiene permisos para realizar esta operación'));
+  }
+
+  if (error instanceof Organica1DeletionError) {
+    logger.error({
+      ...logContext,
+      details: error.details
+    }, 'Error en eliminación de organica1');
+    return reply.code(500).send(fail('ORGANICA1_DELETION_ERROR', 'Error interno en eliminación de organica1'));
   }
 
   // Si es un error del dominio organica1 genérico, manejarlo

@@ -1,9 +1,15 @@
 import { FastifyInstance } from 'fastify';
 import { requireAuth, requireRole } from '../../auth/auth.middleware.js';
-import { CreateDimensionSchema, UpdateDimensionSchema, DimensionIdParamSchema } from './dimension.schemas.js';
-import { DimensionService } from './dimension.service.js';
-import { ok, validationError, notFound, internalError } from '../../../utils/http.js';
+import { CreateDimensionSchema, UpdateDimensionSchema, DimensionIdParamSchema, TipoDimensionParamSchema } from './dimension.schemas.js';
+import { ok, validationError } from '../../../utils/http.js';
 import { withDbContext } from '../../../db/context.js';
+import { handleDimensionError } from './infrastructure/errorHandler.js';
+import { GetAllDimensionesQuery } from './application/queries/GetAllDimensionesQuery.js';
+import { GetDimensionByIdQuery } from './application/queries/GetDimensionByIdQuery.js';
+import { GetDimensionesByTipoQuery } from './application/queries/GetDimensionesByTipoQuery.js';
+import { CreateDimensionCommand } from './application/commands/CreateDimensionCommand.js';
+import { UpdateDimensionCommand } from './application/commands/UpdateDimensionCommand.js';
+import { DeleteDimensionCommand } from './application/commands/DeleteDimensionCommand.js';
 
 export default async function dimensionRoutes(app: FastifyInstance) {
 
@@ -50,12 +56,11 @@ export default async function dimensionRoutes(app: FastifyInstance) {
     }
   }, async (req, reply) => {
     try {
-      const dimensionService = req.diScope.resolve<DimensionService>('dimensionService');
-      const dimensiones = await dimensionService.getAllDimensiones();
+      const getAllDimensionesQuery = req.diScope.resolve<GetAllDimensionesQuery>('getAllDimensionesQuery');
+      const dimensiones = await getAllDimensionesQuery.execute();
       return reply.send(ok(dimensiones));
     } catch (error: any) {
-      console.error('Error listing dimensiones:', error);
-      return reply.code(500).send(internalError('Failed to retrieve dimensiones'));
+      return handleDimensionError(error, reply);
     }
   });
 
@@ -126,13 +131,17 @@ export default async function dimensionRoutes(app: FastifyInstance) {
   }, async (req, reply) => {
     const { tipoDimension } = req.params as { tipoDimension: string };
 
+    const paramValidation = TipoDimensionParamSchema.safeParse({ tipoDimension });
+    if (!paramValidation.success) {
+      return reply.code(400).send(validationError(paramValidation.error.issues));
+    }
+
     try {
-      const dimensionService = req.diScope.resolve<DimensionService>('dimensionService');
-      const dimensiones = await dimensionService.getDimensionesByTipo(tipoDimension);
+      const getDimensionesByTipoQuery = req.diScope.resolve<GetDimensionesByTipoQuery>('getDimensionesByTipoQuery');
+      const dimensiones = await getDimensionesByTipoQuery.execute(paramValidation.data.tipoDimension);
       return reply.send(ok(dimensiones));
     } catch (error: any) {
-      console.error('Error listing dimensiones by tipo:', error);
-      return reply.code(500).send(internalError('Failed to retrieve dimensiones'));
+      return handleDimensionError(error, reply);
     }
   });
 
@@ -217,15 +226,11 @@ export default async function dimensionRoutes(app: FastifyInstance) {
     }
 
     try {
-      const dimensionService = req.diScope.resolve<DimensionService>('dimensionService');
-      const dimension = await dimensionService.getDimensionById(paramValidation.data.dimensionId);
+      const getDimensionByIdQuery = req.diScope.resolve<GetDimensionByIdQuery>('getDimensionByIdQuery');
+      const dimension = await getDimensionByIdQuery.execute(paramValidation.data.dimensionId);
       return reply.send(ok(dimension));
     } catch (error: any) {
-      if (error.message === 'DIMENSION_NOT_FOUND') {
-        return reply.code(404).send(notFound('Dimension', dimensionId));
-      }
-      console.error('Error getting dimension:', error);
-      return reply.code(500).send(internalError('Failed to retrieve dimension'));
+      return handleDimensionError(error, reply);
     }
   });
 
@@ -299,19 +304,17 @@ export default async function dimensionRoutes(app: FastifyInstance) {
 
       try {
         const userId = req.user?.sub;
-        const dimensionService = req.diScope.resolve<DimensionService>('dimensionService');
-        const dimension = await dimensionService.createDimensionItem(
-          parsed.data.nombre,
-          parsed.data.descripcion,
-          parsed.data.tipoDimension,
-          parsed.data.esActiva,
-          userId,
-          tx
-        );
+        const createDimensionCommand = req.diScope.resolve<CreateDimensionCommand>('createDimensionCommand');
+        const dimension = await createDimensionCommand.execute({
+          nombre: parsed.data.nombre,
+          descripcion: parsed.data.descripcion,
+          tipoDimension: parsed.data.tipoDimension,
+          esActiva: parsed.data.esActiva,
+          userId
+        }, tx);
         return reply.code(201).send(ok(dimension));
       } catch (error: any) {
-        console.error('Error creating dimension:', error);
-        return reply.code(500).send(internalError('Failed to create dimension'));
+        return handleDimensionError(error, reply);
       }
     });
   });
@@ -413,23 +416,18 @@ export default async function dimensionRoutes(app: FastifyInstance) {
 
       try {
         const userId = req.user?.sub;
-        const dimensionService = req.diScope.resolve<DimensionService>('dimensionService');
-        const dimension = await dimensionService.updateDimensionItem(
-          paramValidation.data.dimensionId,
-          parsed.data.nombre,
-          parsed.data.descripcion,
-          parsed.data.tipoDimension,
-          parsed.data.esActiva,
-          userId,
-          tx
-        );
+        const updateDimensionCommand = req.diScope.resolve<UpdateDimensionCommand>('updateDimensionCommand');
+        const dimension = await updateDimensionCommand.execute({
+          dimensionId: paramValidation.data.dimensionId,
+          nombre: parsed.data.nombre,
+          descripcion: parsed.data.descripcion,
+          tipoDimension: parsed.data.tipoDimension,
+          esActiva: parsed.data.esActiva,
+          userId
+        }, tx);
         return reply.send(ok(dimension));
       } catch (error: any) {
-        if (error.message === 'DIMENSION_NOT_FOUND') {
-          return reply.code(404).send(notFound('Dimension', dimensionId));
-        }
-        console.error('Error updating dimension:', error);
-        return reply.code(500).send(internalError('Failed to update dimension'));
+        return handleDimensionError(error, reply);
       }
     });
   });
@@ -512,15 +510,13 @@ export default async function dimensionRoutes(app: FastifyInstance) {
       }
 
       try {
-        const dimensionService = req.diScope.resolve<DimensionService>('dimensionService');
-        const deletedId = await dimensionService.deleteDimensionItem(paramValidation.data.dimensionId, tx);
+        const deleteDimensionCommand = req.diScope.resolve<DeleteDimensionCommand>('deleteDimensionCommand');
+        const deletedId = await deleteDimensionCommand.execute({
+          dimensionId: paramValidation.data.dimensionId
+        }, tx);
         return reply.send(ok({ id: deletedId }));
       } catch (error: any) {
-        if (error.message === 'DIMENSION_NOT_FOUND') {
-          return reply.code(404).send(notFound('Dimension', dimensionId));
-        }
-        console.error('Error deleting dimension:', error);
-        return reply.code(500).send(internalError('Failed to delete dimension'));
+        return handleDimensionError(error, reply);
       }
     });
   });

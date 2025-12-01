@@ -5,6 +5,7 @@ docs
 scripts
 temp
 database
+archivosTmp
 *.log
 npm-debug.log*
 yarn-debug.log*
