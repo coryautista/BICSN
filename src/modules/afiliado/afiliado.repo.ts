@@ -1297,6 +1297,384 @@ export async function actualizarBitacoraAfectacionOrg(
   };
 }
 
+// Actualizar BitacoraAfectacionOrg de "APLICAR" a "TERMINADO" para la orgánica del usuario
+export async function actualizarBitacoraAfectacionOrgTerminado(
+  org0: string,
+  org1: string,
+  usuarioId: string,
+  mensaje?: string
+): Promise<{ actualizado: boolean; registrosAfectados: number }> {
+  const logContext = {
+    operation: 'actualizarBitacoraAfectacionOrgTerminado',
+    org0,
+    org1,
+    usuarioId
+  };
+
+  logger.info(logContext, 'Buscando registro más reciente con Accion=APLICAR para actualizar a TERMINADO');
+  console.log(`[BITACORA] Buscando registro más reciente con Accion='APLICAR' para orgánica ${org0}/${org1}`);
+
+  const p = await getPool();
+  
+  // Buscar el registro más reciente con accion = "APLICAR"
+  const r = await p.request()
+    .input('org0', sql.VarChar(30), org0)
+    .input('org1', sql.VarChar(30), org1)
+    .query(`
+      SELECT TOP 1 Id, Entidad, Anio, Quincena, Accion, Org0, Org1, CreatedAt
+      FROM afec.BitacoraAfectacionOrg
+      WHERE Org0 = @org0
+        AND Org1 = @org1
+        AND Accion = 'APLICAR'
+        AND Entidad = 'AFILIADOS'
+      ORDER BY Anio DESC, Quincena DESC, CreatedAt DESC
+    `);
+
+  if (r.recordset.length === 0) {
+    logger.warn(logContext, 'No se encontró registro "APLICAR" en BitacoraAfectacionOrg');
+    console.log(`[BITACORA] ⚠️  No se encontró registro "APLICAR" en BitacoraAfectacionOrg para orgánica ${org0}/${org1}`);
+    return { actualizado: false, registrosAfectados: 0 };
+  }
+
+  const registro = r.recordset[0];
+  logger.info({
+    ...logContext,
+    registroId: registro.Id,
+    anio: registro.Anio,
+    quincena: registro.Quincena,
+    createdAt: registro.CreatedAt
+  }, 'Registro encontrado, procediendo a actualizar a TERMINADO');
+  console.log(`[BITACORA] ✅ Registro encontrado - ID: ${registro.Id}, Anio: ${registro.Anio}, Quincena: ${registro.Quincena}`);
+  
+  // Actualizar el registro de "APLICAR" a "TERMINADO"
+  const updateResult = await p.request()
+    .input('id', sql.BigInt, registro.Id)
+    .input('usuarioId', sql.NVarChar(50), usuarioId)
+    .input('mensaje', sql.NVarChar(4000), mensaje || 'Proceso de aplicación QNA completado - Stored procedures ejecutados exitosamente')
+    .query(`
+      UPDATE afec.BitacoraAfectacionOrg
+      SET Accion = 'TERMINADO',
+          ModifiedAt = SYSUTCDATETIME(),
+          Usuario = @usuarioId,
+          Resultado = 'OK',
+          Mensaje = @mensaje
+      OUTPUT INSERTED.*
+      WHERE Id = @id
+    `);
+
+  const registrosAfectados = updateResult.rowsAffected[0] || 0;
+  logger.info({
+    ...logContext,
+    registrosAfectados,
+    registroId: registro.Id
+  }, 'BitacoraAfectacionOrg actualizada exitosamente a TERMINADO');
+  console.log(`[BITACORA] ✅ Actualizado BitacoraAfectacionOrg: ${registrosAfectados} registro(s) cambiados de "APLICAR" a "TERMINADO"`);
+  
+  return {
+    actualizado: registrosAfectados > 0,
+    registrosAfectados
+  };
+}
+
+// Obtener el último registro de BitacoraAfectacionOrg por orgánica (sin filtrar por Accion)
+export async function getUltimaBitacoraAfectacionOrgPorOrganica(
+  org0: string,
+  org1: string
+): Promise<any | null> {
+  const logContext = {
+    operation: 'getUltimaBitacoraAfectacionOrgPorOrganica',
+    org0,
+    org1
+  };
+
+  const startTime = Date.now();
+  logger.info(logContext, 'Buscando último registro de BitacoraAfectacionOrg');
+  console.log(`[BITACORA] Buscando último registro de BitacoraAfectacionOrg para orgánica ${org0}/${org1}`);
+
+  const p = await getPool();
+  
+  try {
+    const queryStart = Date.now();
+    const r = await p.request()
+      .input('org0', sql.VarChar(30), org0)
+      .input('org1', sql.VarChar(30), org1)
+      .query(`
+        SELECT TOP 1
+          AfectacionId as Id,
+          OrgNivel,
+          Org0,
+          Org1,
+          Org2,
+          Org3,
+          Entidad,
+          EntidadId,
+          Anio,
+          Quincena,
+          Accion,
+          Resultado,
+          Mensaje,
+          Usuario,
+          UserId,
+          AppName,
+          Ip,
+          UserAgent,
+          RequestId,
+          CreatedAt,
+          ModifiedAt
+        FROM afec.BitacoraAfectacionOrg
+        WHERE Org0 = @org0
+          AND Org1 = @org1
+          AND Entidad = 'AFILIADOS'
+        ORDER BY Anio DESC, Quincena DESC, CreatedAt DESC
+      `);
+
+    const queryTime = Date.now() - queryStart;
+
+    if (r.recordset.length === 0) {
+      logger.warn({
+        ...logContext,
+        queryTimeMs: queryTime,
+        elapsedMs: Date.now() - startTime
+      }, 'No se encontró registro en BitacoraAfectacionOrg');
+      console.log(`[BITACORA] ⚠️  No se encontró registro en BitacoraAfectacionOrg para orgánica ${org0}/${org1} (${queryTime}ms)`);
+      return null;
+    }
+
+    const registro = r.recordset[0];
+    logger.info({
+      ...logContext,
+      registroId: registro.Id,
+      accion: registro.Accion,
+      anio: registro.Anio,
+      quincena: registro.Quincena,
+      resultado: registro.Resultado,
+      queryTimeMs: queryTime,
+      elapsedMs: Date.now() - startTime
+    }, 'Registro encontrado en BitacoraAfectacionOrg');
+    console.log(`[BITACORA] ✅ Registro encontrado - ID: ${registro.Id}, Accion: ${registro.Accion}, Anio: ${registro.Anio}, Quincena: ${registro.Quincena} (${queryTime}ms)`);
+
+    // Mapear el registro a un formato consistente
+    return {
+      id: registro.Id,
+      orgNivel: registro.OrgNivel,
+      org0: registro.Org0,
+      org1: registro.Org1,
+      org2: registro.Org2,
+      org3: registro.Org3,
+      entidad: registro.Entidad,
+      entidadId: registro.EntidadId,
+      anio: registro.Anio,
+      quincena: registro.Quincena,
+      accion: registro.Accion,
+      resultado: registro.Resultado,
+      mensaje: registro.Mensaje,
+      usuario: registro.Usuario,
+      userId: registro.UserId,
+      appName: registro.AppName,
+      ip: registro.Ip,
+      userAgent: registro.UserAgent,
+      requestId: registro.RequestId,
+      createdAt: registro.CreatedAt?.toISOString() || null,
+      modifiedAt: registro.ModifiedAt?.toISOString() || null
+    };
+  } catch (error: any) {
+    const queryTime = Date.now() - startTime;
+    logger.error({
+      ...logContext,
+      error: {
+        message: error.message || String(error),
+        stack: error.stack,
+        name: error.name,
+        code: error.code
+      },
+      queryTimeMs: queryTime,
+      elapsedMs: Date.now() - startTime
+    }, 'Error consultando BitacoraAfectacionOrg');
+    console.error(`[BITACORA] ❌ Error consultando BitacoraAfectacionOrg: ${error.message || String(error)} (${queryTime}ms)`);
+    throw error;
+  }
+}
+
+// Ejecutar stored procedure AP_P_APLICAR en Firebird
+export async function ejecutarAP_P_APLICAR(
+  org0: string,
+  org1: string,
+  quincenaC: string,
+  quincenaA: string,
+  tipo: string
+): Promise<void> {
+  const logContext = {
+    operation: 'ejecutarAP_P_APLICAR',
+    org0,
+    org1,
+    quincenaC,
+    quincenaA,
+    tipo
+  };
+
+  const startTime = Date.now();
+  logger.info(logContext, 'Iniciando ejecución de AP_P_APLICAR');
+  console.log(`[AP_P_APLICAR] Iniciando ejecución con parámetros: org0=${org0}, org1=${org1}, quincenaC=${quincenaC}, quincenaA=${quincenaA}, tipo=${tipo}`);
+
+  return executeSerializedQuery((db) => {
+    return new Promise<void>((resolve, reject) => {
+      try {
+        // En Firebird, los stored procedures se ejecutan usando SELECT ... FROM PROCEDURE_NAME(...)
+        // AP_P_APLICAR no retorna resultados, pero aún así se ejecuta con SELECT
+        const sql = `SELECT * FROM AP_P_APLICAR(?, ?, ?, ?, ?)`;
+
+        const params = [org0, org1, quincenaC, quincenaA, tipo];
+
+        const timeoutId = setTimeout(() => {
+          logger.error({
+            ...logContext,
+            timeoutMs: 30000
+          }, 'Timeout ejecutando AP_P_APLICAR');
+          reject(new Error('Tiempo de espera agotado en ejecución de AP_P_APLICAR (30s)'));
+        }, 30000); // 30 segundos de timeout
+
+        logger.debug({
+          ...logContext,
+          sql,
+          params
+        }, 'Ejecutando AP_P_APLICAR en Firebird');
+
+        db.query(sql, params, (err: any, result: any) => {
+          clearTimeout(timeoutId);
+          const duration = Date.now() - startTime;
+
+          if (err) {
+            logger.error({
+              ...logContext,
+              error: {
+                message: err.message || String(err),
+                code: err.code,
+                name: err.name,
+                stack: err.stack
+              },
+              duracionMs: duration
+            }, 'Error ejecutando AP_P_APLICAR');
+            console.error(`[AP_P_APLICAR] ❌ Error ejecutando stored procedure: ${err.message || String(err)}`);
+            reject(new Error(`Error al ejecutar AP_P_APLICAR: ${err.message || String(err)}`));
+            return;
+          }
+
+          logger.info({
+            ...logContext,
+            duracionMs: duration,
+            resultado: result ? (Array.isArray(result) ? result.length : 1) : 0
+          }, 'AP_P_APLICAR ejecutado exitosamente');
+          console.log(`[AP_P_APLICAR] ✅ Ejecutado exitosamente en ${duration}ms`);
+          resolve();
+        });
+      } catch (error: any) {
+        const duration = Date.now() - startTime;
+        logger.error({
+          ...logContext,
+          error: {
+            message: error.message,
+            stack: error.stack,
+            name: error.name
+          },
+          duracionMs: duration
+        }, 'Error síncrono ejecutando AP_P_APLICAR');
+        console.error(`[AP_P_APLICAR] ❌ Error síncrono: ${error.message}`);
+        reject(error);
+      }
+    });
+  });
+}
+
+// Ejecutar stored procedure AP_D_ENVIO_LAYOUT en Firebird
+export async function ejecutarAP_D_ENVIO_LAYOUT(
+  quincena: string,
+  org0: string,
+  org1: string,
+  org2: string,
+  org3: string
+): Promise<void> {
+  const logContext = {
+    operation: 'ejecutarAP_D_ENVIO_LAYOUT',
+    quincena,
+    org0,
+    org1,
+    org2,
+    org3
+  };
+
+  const startTime = Date.now();
+  logger.info(logContext, 'Iniciando ejecución de AP_D_ENVIO_LAYOUT');
+  console.log(`[AP_D_ENVIO_LAYOUT] Iniciando ejecución con parámetros: quincena=${quincena}, org0=${org0}, org1=${org1}, org2=${org2}, org3=${org3}`);
+
+  return executeSerializedQuery((db) => {
+    return new Promise<void>((resolve, reject) => {
+      try {
+        // En Firebird, los stored procedures se ejecutan usando SELECT ... FROM PROCEDURE_NAME(...)
+        // AP_D_ENVIO_LAYOUT no retorna resultados, pero aún así se ejecuta con SELECT
+        const sql = `SELECT * FROM AP_D_ENVIO_LAYOUT(?, ?, ?, ?, ?)`;
+
+        const params = [quincena, org0, org1, org2, org3];
+
+        const timeoutId = setTimeout(() => {
+          logger.error({
+            ...logContext,
+            timeoutMs: 30000
+          }, 'Timeout ejecutando AP_D_ENVIO_LAYOUT');
+          reject(new Error('Tiempo de espera agotado en ejecución de AP_D_ENVIO_LAYOUT (30s)'));
+        }, 30000); // 30 segundos de timeout
+
+        logger.debug({
+          ...logContext,
+          sql,
+          params
+        }, 'Ejecutando AP_D_ENVIO_LAYOUT en Firebird');
+
+        db.query(sql, params, (err: any, result: any) => {
+          clearTimeout(timeoutId);
+          const duration = Date.now() - startTime;
+
+          if (err) {
+            logger.error({
+              ...logContext,
+              error: {
+                message: err.message || String(err),
+                code: err.code,
+                name: err.name,
+                stack: err.stack
+              },
+              duracionMs: duration
+            }, 'Error ejecutando AP_D_ENVIO_LAYOUT');
+            console.error(`[AP_D_ENVIO_LAYOUT] ❌ Error ejecutando stored procedure: ${err.message || String(err)}`);
+            reject(new Error(`Error al ejecutar AP_D_ENVIO_LAYOUT: ${err.message || String(err)}`));
+            return;
+          }
+
+          logger.info({
+            ...logContext,
+            duracionMs: duration,
+            resultado: result ? (Array.isArray(result) ? result.length : 1) : 0
+          }, 'AP_D_ENVIO_LAYOUT ejecutado exitosamente');
+          console.log(`[AP_D_ENVIO_LAYOUT] ✅ Ejecutado exitosamente en ${duration}ms`);
+          resolve();
+        });
+      } catch (error: any) {
+        const duration = Date.now() - startTime;
+        logger.error({
+          ...logContext,
+          error: {
+            message: error.message,
+            stack: error.stack,
+            name: error.name
+          },
+          duracionMs: duration
+        }, 'Error síncrono ejecutando AP_D_ENVIO_LAYOUT');
+        console.error(`[AP_D_ENVIO_LAYOUT] ❌ Error síncrono: ${error.message}`);
+        reject(error);
+      }
+    });
+  });
+}
+
 // Función principal para aplicar BDIsspea que ejecuta todas las operaciones
 export async function aplicarBDIsspea(
   afiliadoId: number,

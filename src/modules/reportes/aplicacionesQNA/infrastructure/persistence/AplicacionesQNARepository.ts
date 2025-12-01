@@ -1,5 +1,6 @@
 import { executeSerializedQuery } from '../../../../../db/firebird.js';
-import { IAplicacionesQNARepository } from '../../domain/repositories/IAplicacionesQNARepository.js';
+import { getPool, sql } from '../../../../../db/mssql.js';
+import { IAplicacionesQNARepository, PeriodoTrabajo } from '../../domain/repositories/IAplicacionesQNARepository.js';
 import { MovimientoQuincenal } from '../../domain/entities/MovimientoQuincenal.js';
 import { AplicacionAportaciones } from '../../domain/entities/AplicacionAportaciones.js';
 import { AplicacionPCP } from '../../domain/entities/AplicacionPCP.js';
@@ -954,6 +955,173 @@ export class AplicacionesQNARepository implements IAplicacionesQNARepository {
         }
       });
     });
+  }
+
+  /**
+   * Obtiene el período de trabajo desde BitacoraAfectacionOrg
+   * Incluye quincena, año, período formateado y fechas de inicio y fin de la quincena
+   */
+  async obtenerPeriodoTrabajo(org0: string, org1: string): Promise<PeriodoTrabajo> {
+    const logContext = {
+      operation: 'obtenerPeriodoTrabajo',
+      org0,
+      org1
+    };
+
+    logger.info(logContext, 'Iniciando consulta de período de trabajo');
+
+    try {
+      // Validar parámetros
+      if (!org0 || org0.trim().length === 0) {
+        throw new AplicacionesQNAError(
+          'Clave orgánica 0 es requerida para obtener el período',
+          AplicacionesQNAErrorCode.INVALID_PARAMETERS,
+          400
+        );
+      }
+
+      if (!org1 || org1.trim().length === 0) {
+        throw new AplicacionesQNAError(
+          'Clave orgánica 1 es requerida para obtener el período',
+          AplicacionesQNAErrorCode.INVALID_PARAMETERS,
+          400
+        );
+      }
+
+      // Normalizar org0 y org1 a 2 caracteres
+      const org0Normalized = typeof org0 === 'string'
+        ? org0.padStart(2, '0').substring(0, 2)
+        : String(org0).padStart(2, '0').substring(0, 2);
+
+      const org1Normalized = typeof org1 === 'string'
+        ? org1.padStart(2, '0').substring(0, 2)
+        : String(org1).padStart(2, '0').substring(0, 2);
+
+      const p = await getPool();
+
+      const result = await p.request()
+        .input('Org0', sql.Char(2), org0Normalized)
+        .input('Org1', sql.Char(2), org1Normalized)
+        .query(`
+          SELECT TOP 1 Quincena, Anio
+          FROM afec.BitacoraAfectacionOrg
+          WHERE Org0 = @Org0
+            AND Org1 = @Org1
+            AND Accion = 'APLICAR'
+          ORDER BY Anio DESC, Quincena DESC, CreatedAt DESC
+        `);
+
+      if (result.recordset.length === 0) {
+        logger.warn({ ...logContext, org0Normalized, org1Normalized }, 'No se encontró período de trabajo');
+        throw new AplicacionesQNAError(
+          `No se encontró período de trabajo para las claves orgánicas ${org0Normalized}/${org1Normalized}. Verifique que exista un registro con Accion='APLICAR' en BitacoraAfectacionOrg`,
+          AplicacionesQNAErrorCode.NOT_FOUND,
+          404
+        );
+      }
+
+      const registro = result.recordset[0];
+      const quincena = registro.Quincena;
+      const anio = registro.Anio;
+
+      // Validar que quincena y año sean válidos
+      if (!quincena || quincena < 1 || quincena > 24) {
+        throw new AplicacionesQNAError(
+          `Quincena inválida: ${quincena}. Debe estar entre 1 y 24`,
+          AplicacionesQNAErrorCode.INVALID_PARAMETERS,
+          400
+        );
+      }
+
+      if (!anio || anio < 2000 || anio > 2100) {
+        throw new AplicacionesQNAError(
+          `Año inválido: ${anio}. Debe estar entre 2000 y 2100`,
+          AplicacionesQNAErrorCode.INVALID_PARAMETERS,
+          400
+        );
+      }
+
+      // Formatear período: quincena (2 dígitos) + año (2 últimos dígitos)
+      const quincenaStr = String(quincena).padStart(2, '0');
+      const anioStr = String(anio).slice(-2);
+      const periodo = quincenaStr + anioStr;
+
+      // Calcular fechas de inicio y fin de la quincena
+      const { fechaInicio, fechaFin } = this.calcularFechasQuincena(quincena, anio);
+
+      logger.info({
+        ...logContext,
+        periodo,
+        quincena,
+        anio,
+        fechaInicio,
+        fechaFin
+      }, 'Período obtenido exitosamente');
+
+      return {
+        periodo,
+        quincena,
+        anio,
+        fechaInicio,
+        fechaFin
+      };
+    } catch (error) {
+      if (error instanceof AplicacionesQNAError) {
+        throw error;
+      }
+      logger.error({
+        ...logContext,
+        error: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined
+      }, 'Error al obtener período de trabajo');
+      throw new AplicacionesQNAError(
+        `Error al obtener el período de trabajo para ${org0}/${org1}: ${error instanceof Error ? error.message : 'Error desconocido'}`,
+        AplicacionesQNAErrorCode.DATABASE_ERROR,
+        500
+      );
+    }
+  }
+
+  /**
+   * Calcula las fechas de inicio y fin de una quincena
+   * @param quincena Número de quincena (1-24)
+   * @param anio Año (2000-2100)
+   * @returns Objeto con fechaInicio y fechaFin en formato YYYY-MM-DD
+   */
+  private calcularFechasQuincena(quincena: number, anio: number): { fechaInicio: string; fechaFin: string } {
+    // Calcular el mes: Math.ceil(quincena / 2)
+    // Quincena 1-2 = mes 1 (enero), quincena 3-4 = mes 2 (febrero), etc.
+    const mes = Math.ceil(quincena / 2);
+
+    // Determinar si es quincena impar (primera quincena del mes) o par (segunda quincena del mes)
+    const esQuincenaImpar = quincena % 2 === 1;
+
+    let fechaInicio: Date;
+    let fechaFin: Date;
+
+    if (esQuincenaImpar) {
+      // Primera quincena: días 1-15
+      fechaInicio = new Date(anio, mes - 1, 1);
+      fechaFin = new Date(anio, mes - 1, 15);
+    } else {
+      // Segunda quincena: días 16-fin del mes
+      fechaInicio = new Date(anio, mes - 1, 16);
+      // Último día del mes: día 0 del mes siguiente
+      fechaFin = new Date(anio, mes, 0);
+    }
+
+    // Formatear a YYYY-MM-DD
+    const formatoFecha = (fecha: Date): string => {
+      const year = fecha.getFullYear();
+      const month = String(fecha.getMonth() + 1).padStart(2, '0');
+      const day = String(fecha.getDate()).padStart(2, '0');
+      return `${year}-${month}-${day}`;
+    };
+
+    return {
+      fechaInicio: formatoFecha(fechaInicio),
+      fechaFin: formatoFecha(fechaFin)
+    };
   }
 }
 

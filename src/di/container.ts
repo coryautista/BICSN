@@ -62,6 +62,7 @@ import { UpdateAfiliadoCommand } from '../modules/afiliado/application/commands/
 import { DeleteAfiliadoCommand } from '../modules/afiliado/application/commands/DeleteAfiliadoCommand.js';
 import { CreateCompleteAfiliadoCommand } from '../modules/afiliado/application/commands/CreateCompleteAfiliadoCommand.js';
 import { AplicarBDIsspeaLoteCommand } from '../modules/afiliado/application/commands/AplicarBDIsspeaLoteCommand.js';
+import { AplicarBDIssspeaQNACommand } from '../modules/afiliado/application/commands/AplicarBDIssspeaQNACommand.js';
 
 // AfiliadoOrg Module
 import { AfiliadoOrgRepository } from '../modules/afiliadoOrg/infrastructure/persistence/AfiliadoOrgRepository.js';
@@ -408,6 +409,8 @@ import { GetPersonnelMovementsQuery } from '../modules/reportes/application/quer
 // AplicacionesQNA Module
 import { AplicacionesQNARepository } from '../modules/reportes/aplicacionesQNA/infrastructure/persistence/AplicacionesQNARepository.js';
 import { GetMovimientosQuincenalesQuery as GetAplicacionesQNAMovimientosQuincenalesQuery } from '../modules/reportes/aplicacionesQNA/application/queries/GetMovimientosQuincenalesQuery.js';
+import { LineaCapturaService } from '../modules/reportes/aplicacionesQNA/domain/services/LineaCapturaService.js';
+import { GenerateLineaCapturaQuery } from '../modules/reportes/aplicacionesQNA/application/queries/GenerateLineaCapturaQuery.js';
 import { GetAplicacionAportacionesQuery } from '../modules/reportes/aplicacionesQNA/application/queries/GetAplicacionAportacionesQuery.js';
 import { GetAplicacionPCPQuery } from '../modules/reportes/aplicacionesQNA/application/queries/GetAplicacionPCPQuery.js';
 import { GetAplicacionPMPQuery } from '../modules/reportes/aplicacionesQNA/application/queries/GetAplicacionPMPQuery.js';
@@ -553,6 +556,7 @@ container.register({
   deleteAfiliadoCommand: asClass(DeleteAfiliadoCommand).scoped(),
   createCompleteAfiliadoCommand: asClass(CreateCompleteAfiliadoCommand).scoped(),
   aplicarBDIsspeaLoteCommand: asClass(AplicarBDIsspeaLoteCommand).scoped(),
+  aplicarBDIssspeaQNACommand: asClass(AplicarBDIssspeaQNACommand).scoped(),
   
   // ============================================================================
   // AFILIADO ORG MODULE
@@ -1071,6 +1075,9 @@ container.register({
   // Repositories (Scoped)
   aplicacionesQNARepo: asClass(AplicacionesQNARepository).scoped(),
   
+  // Services (Scoped)
+  lineaCapturaService: asClass(LineaCapturaService).scoped(),
+  
   // Queries (Scoped)
   getAplicacionesQNAMovimientosQuincenalesQuery: asClass(GetAplicacionesQNAMovimientosQuincenalesQuery).scoped(),
   getAplicacionAportacionesQuery: asClass(GetAplicacionAportacionesQuery).scoped(),
@@ -1078,6 +1085,7 @@ container.register({
   getAplicacionPMPQuery: asClass(GetAplicacionPMPQuery).scoped(),
   getAplicacionHIPQuery: asClass(GetAplicacionHIPQuery).scoped(),
   getConcentradoQuery: asClass(GetConcentradoQuery).scoped(),
+  generateLineaCapturaQuery: asClass(GenerateLineaCapturaQuery).scoped(),
   
   // ============================================================================
   // CAIR MODULE (Submódulo de Reportes)

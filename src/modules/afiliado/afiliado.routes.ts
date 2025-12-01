@@ -14,6 +14,7 @@ import { UpdateAfiliadoCommand } from './application/commands/UpdateAfiliadoComm
 import { DeleteAfiliadoCommand } from './application/commands/DeleteAfiliadoCommand.js';
 import { CreateCompleteAfiliadoCommand } from './application/commands/CreateCompleteAfiliadoCommand.js';
 import { AplicarBDIsspeaLoteCommand } from './application/commands/AplicarBDIsspeaLoteCommand.js';
+import { AplicarBDIssspeaQNACommand } from './application/commands/AplicarBDIssspeaQNACommand.js';
 import { handleAfiliadoError } from './infrastructure/errorHandler.js';
 import { 
   prepararLogEjecucionDPEditaEntidad, 
@@ -25,6 +26,12 @@ import {
 import { getMovimientosByAfiliadoId } from '../movimiento/movimiento.repo.js';
 import { getPool } from '../../db/mssql.js';
 import sql from 'mssql';
+import pino from 'pino';
+
+const logger = pino({
+  name: 'afiliado-routes',
+  level: process.env.LOG_LEVEL || 'info'
+});
 
 // Routes for Afiliado CRUD operations
 export default async function afiliadoRoutes(app: FastifyInstance) {
@@ -3938,6 +3945,242 @@ export default async function afiliadoRoutes(app: FastifyInstance) {
       }));
     } catch (error: any) {
       return handleAfiliadoError(error, reply, { operation: 'aplicarBDIsspeaLote', user: req.user?.sub });
+    }
+  });
+
+  // Aplicar BDISSPEA QNA - Ejecutar stored procedures de Firebird para aplicar QNA
+  app.post('/afiliado/aplicar-bdisssspea-qna', {
+    preHandler: [requireAuth],
+    schema: {
+      description: 'Ejecutar stored procedures de Firebird para aplicar BDIssspea QNA. Ejecuta: 1) AP_G_APLICADO_TIPO para obtener quincena, 2) AP_P_APLICAR con tipo C, 3) AP_P_APLICAR con tipo F, 4) AP_D_ENVIO_LAYOUT, 5) Actualizar BitacoraAfectacionOrg a TERMINADO',
+      tags: ['afiliado'],
+      security: [{ bearerAuth: [] }],
+      querystring: {
+        type: 'object',
+        properties: {
+          org0: { type: 'string', description: 'Orgánica nivel 0 (opcional, se usa del token si no se proporciona)' },
+          org1: { type: 'string', description: 'Orgánica nivel 1 (opcional, se usa del token si no se proporciona)' }
+        }
+      },
+      response: {
+        200: {
+          type: 'object',
+          properties: {
+            ok: { type: 'boolean' },
+            data: {
+              type: 'object',
+              properties: {
+                exito: { type: 'boolean' },
+                quincena: { type: 'string' },
+                quincenaNumero: { type: 'number' },
+                anio: { type: 'number' },
+                ejecuciones: {
+                  type: 'object',
+                  properties: {
+                    obtenerQuincena: {
+                      type: 'object',
+                      properties: {
+                        exito: { type: 'boolean' },
+                        duracionMs: { type: 'number' },
+                        error: { type: 'string', nullable: true }
+                      }
+                    },
+                    aplicarC: {
+                      type: 'object',
+                      properties: {
+                        exito: { type: 'boolean' },
+                        duracionMs: { type: 'number' },
+                        error: { type: 'string', nullable: true }
+                      }
+                    },
+                    aplicarF: {
+                      type: 'object',
+                      properties: {
+                        exito: { type: 'boolean' },
+                        duracionMs: { type: 'number' },
+                        error: { type: 'string', nullable: true }
+                      }
+                    },
+                    envioLayout: {
+                      type: 'object',
+                      properties: {
+                        exito: { type: 'boolean' },
+                        duracionMs: { type: 'number' },
+                        error: { type: 'string', nullable: true }
+                      }
+                    },
+                    actualizarBitacora: {
+                      type: 'object',
+                      properties: {
+                        exito: { type: 'boolean' },
+                        duracionMs: { type: 'number' },
+                        error: { type: 'string', nullable: true }
+                      }
+                    }
+                  }
+                },
+                bitacoraActualizada: { type: 'boolean' },
+                mensaje: { type: 'string' },
+                tiempoTotalMs: { type: 'number' }
+              }
+            }
+          }
+        },
+        400: { type: 'object' },
+        500: { type: 'object' }
+      }
+    }
+  }, async (req, reply) => {
+    try {
+      // Obtener orgánica del usuario autenticado o de query params
+      const query = req.query as { org0?: string; org1?: string };
+      let userOrg0 = query.org0 || req.user?.idOrganica0 || '';
+      let userOrg1 = query.org1 || req.user?.idOrganica1 || '';
+
+      // Normalizar orgánicas (padding a 2 dígitos)
+      if (userOrg0) {
+        userOrg0 = String(userOrg0).padStart(2, '0');
+      }
+      if (userOrg1) {
+        userOrg1 = String(userOrg1).padStart(2, '0');
+      }
+
+      if (!userOrg0 || !userOrg1) {
+        return reply.code(400).send(fail('USER_ORGANICA_NOT_FOUND: Usuario no tiene orgánica configurada y no se proporcionó en query params'));
+      }
+
+      // Resolver Command desde DI
+      const aplicarBDIssspeaQNACommand = req.diScope.resolve<AplicarBDIssspeaQNACommand>('aplicarBDIssspeaQNACommand');
+      
+      // Ejecutar Command
+      const resultado = await aplicarBDIssspeaQNACommand.execute({
+        org0: userOrg0,
+        org1: userOrg1,
+        usuarioId: req.user?.sub || 'unknown'
+      });
+
+      // Retornar resultado completo (incluye campo 'exito' para indicar si fue exitoso)
+      // Si no fue exitoso, el código de estado será 200 pero el cliente puede verificar resultado.exito
+      return reply.send(ok(resultado));
+    } catch (error: any) {
+      return handleAfiliadoError(error, reply, { operation: 'aplicarBDIssspeaQNA', user: req.user?.sub });
+    }
+  });
+
+  // Obtener la acción actual de BitacoraAfectacionOrg para la orgánica del usuario
+  app.get('/afiliado/bitacora-accion', {
+    preHandler: [requireAuth],
+    schema: {
+      description: 'Obtener el registro completo más reciente de BitacoraAfectacionOrg para la orgánica del usuario (Entidad=AFILIADOS). Permite conocer en qué acción se encuentra actualmente el proceso.',
+      tags: ['afiliado'],
+      security: [{ bearerAuth: [] }],
+      querystring: {
+        type: 'object',
+        properties: {
+          org0: { type: 'string', description: 'Orgánica nivel 0 (opcional, se usa del token si no se proporciona)' },
+          org1: { type: 'string', description: 'Orgánica nivel 1 (opcional, se usa del token si no se proporciona)' }
+        }
+      },
+      response: {
+        200: {
+          type: 'object',
+          properties: {
+            ok: { type: 'boolean' },
+            data: {
+              type: 'object',
+              properties: {
+                bitacora: {
+                  type: 'object',
+                  properties: {
+                    id: { type: 'number' },
+                    orgNivel: { type: 'number' },
+                    org0: { type: 'string' },
+                    org1: { type: 'string', nullable: true },
+                    org2: { type: 'string', nullable: true },
+                    org3: { type: 'string', nullable: true },
+                    entidad: { type: 'string' },
+                    entidadId: { type: 'number', nullable: true },
+                    anio: { type: 'number' },
+                    quincena: { type: 'number' },
+                    accion: { type: 'string' },
+                    resultado: { type: 'string', nullable: true },
+                    mensaje: { type: 'string', nullable: true },
+                    usuario: { type: 'string', nullable: true },
+                    userId: { type: 'number', nullable: true },
+                    appName: { type: 'string', nullable: true },
+                    ip: { type: 'string', nullable: true },
+                    userAgent: { type: 'string', nullable: true },
+                    requestId: { type: 'string', nullable: true },
+                    createdAt: { type: 'string', nullable: true },
+                    modifiedAt: { type: 'string', nullable: true }
+                  }
+                }
+              }
+            }
+          }
+        },
+        400: { type: 'object' },
+        404: { type: 'object' },
+        500: { type: 'object' }
+      }
+    }
+  }, async (req, reply) => {
+    try {
+      // Obtener orgánica del usuario autenticado o de query params
+      const query = req.query as { org0?: string; org1?: string };
+      let userOrg0 = query.org0 || req.user?.idOrganica0 || '';
+      let userOrg1 = query.org1 || req.user?.idOrganica1 || '';
+
+      // Normalizar orgánicas (padding a 2 dígitos)
+      if (userOrg0) {
+        userOrg0 = String(userOrg0).padStart(2, '0');
+      }
+      if (userOrg1) {
+        userOrg1 = String(userOrg1).padStart(2, '0');
+      }
+
+      if (!userOrg0 || !userOrg1) {
+        return reply.code(400).send(fail('USER_ORGANICA_NOT_FOUND: Usuario no tiene orgánica configurada y no se proporcionó en query params'));
+      }
+
+      logger.info({
+        operation: 'getBitacoraAccionAfiliado',
+        org0: userOrg0,
+        org1: userOrg1,
+        usuarioId: req.user?.sub
+      }, 'Consultando BitacoraAfectacionOrg para obtener acción actual');
+      console.log(`[BITACORA_ACCION] Consultando BitacoraAfectacionOrg para orgánica ${userOrg0}/${userOrg1}`);
+
+      // Importar función del repositorio
+      const { getUltimaBitacoraAfectacionOrgPorOrganica } = await import('./afiliado.repo.js');
+      
+      // Obtener el último registro
+      const bitacora = await getUltimaBitacoraAfectacionOrgPorOrganica(userOrg0, userOrg1);
+
+      if (!bitacora) {
+        logger.warn({
+          operation: 'getBitacoraAccionAfiliado',
+          org0: userOrg0,
+          org1: userOrg1,
+          usuarioId: req.user?.sub
+        }, 'No se encontró registro en BitacoraAfectacionOrg');
+        return reply.code(404).send(fail('BITACORA_NOT_FOUND: No se encontró registro en BitacoraAfectacionOrg para la orgánica especificada'));
+      }
+
+      logger.info({
+        operation: 'getBitacoraAccionAfiliado',
+        org0: userOrg0,
+        org1: userOrg1,
+        accion: bitacora.accion,
+        anio: bitacora.anio,
+        quincena: bitacora.quincena,
+        usuarioId: req.user?.sub
+      }, 'Registro de BitacoraAfectacionOrg obtenido exitosamente');
+      console.log(`[BITACORA_ACCION] ✅ Registro obtenido - Accion: ${bitacora.accion}, Anio: ${bitacora.anio}, Quincena: ${bitacora.quincena}`);
+
+      return reply.send(ok({ bitacora }));
+    } catch (error: any) {
+      return handleAfiliadoError(error, reply, { operation: 'getBitacoraAccionAfiliado', user: req.user?.sub });
     }
   });
 

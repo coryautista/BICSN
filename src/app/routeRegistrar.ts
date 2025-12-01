@@ -39,6 +39,8 @@ import expedienteRoutes from '../modules/expediente/expediente.routes.js';
 import usuariosRoutes from '../modules/usuarios/usuarios.routes.js';
 import userRoleRoutes from '../modules/userRole/userRole.routes.js';
 import { reportesRoutes } from '../modules/reportes/reportes.routes.js';
+import { aplicacionesQNARoutes } from '../modules/reportes/aplicacionesQNA/aplicacionesQNA.routes.js';
+import { lineaCapturaRoutes } from '../modules/reportes/aplicacionesQNA/lineaCaptura.routes.js';
 import afectacionOrgRoutes from '../modules/afectacionOrg/afectacionOrg.routes.js';
 import organicaCascadeRoutes from '../modules/organicaCascade/organicaCascade.routes.js';
 import aportacionesFondosRoutes from '../modules/aportacionesFondos/aportacionesFondos.routes.js';
@@ -292,6 +294,20 @@ const ROUTE_CONFIGS: RouteConfig[] = [
     plugin: aportacionesFondosRoutes,
     prefix: '/v1',
     options: { group: ROUTE_GROUPS.AFILIADOS }
+  },
+  
+  // Aplicaciones QNA (direct routing - also available under /reportes)
+  {
+    plugin: aplicacionesQNARoutes,
+    prefix: '/v1/aplicaciones-qna',
+    options: { group: ROUTE_GROUPS.REPORTES }
+  },
+  
+  // Línea de Captura (solo disponible en /v1/aplicaciones-qna, no en /reportes)
+  {
+    plugin: lineaCapturaRoutes,
+    prefix: '/v1/aplicaciones-qna',
+    options: { group: ROUTE_GROUPS.REPORTES }
   },
   
   // Reports (special routing)

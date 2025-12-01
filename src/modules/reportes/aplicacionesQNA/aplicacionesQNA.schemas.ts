@@ -44,6 +44,13 @@ export const ConcentradoParamsSchema = z.object({
   periodo: z.string().min(1).max(20).describe('Período en formato específico (ej: "2125")')
 });
 
+// Schema para parámetros de Línea de Captura
+export const LineaCapturaParamsSchema = z.object({
+  importe: z.number().positive().describe('Importe total con centavos (ej: 1000.00)'),
+  idOrg0: z.string().regex(/^[0-9]{1,2}$/).optional().describe('Clave orgánica nivel 0 (1-2 caracteres numéricos, opcional - se usa del token si no se proporciona)'),
+  idOrg1: z.string().regex(/^[0-9]{1,2}$/).optional().describe('Clave orgánica nivel 1 (1-2 caracteres numéricos, opcional - se usa del token si no se proporciona)')
+});
+
 // Schemas para respuestas
 export const MovimientoQuincenalSchema = z.object({
   interno: z.number(),
@@ -257,6 +264,20 @@ export const ConcentradoResponseSchema = z.object({
   timestamp: z.string().optional()
 });
 
+export const LineaCapturaResponseSchema = z.object({
+  success: z.boolean(),
+  data: z.object({
+    lineaCaptura: z.string().length(11).describe('Línea de captura de 11 caracteres: pos 1-4 referencia, pos 5-8 fecha condensada, pos 9 monto condensado, pos 10-11 dígito verificador'),
+    referencia4: z.string().length(4).describe('Referencia base (posiciones 1-4)'),
+    fechaLimite: z.string().describe('Fecha límite de pago en formato YYYY-MM-DD'),
+    importe: z.number().describe('Importe total con centavos'),
+    fechaCondensada: z.string().length(4).describe('Fecha condensada (posiciones 5-8)'),
+    montoCondensado: z.number().min(0).max(9).describe('Monto condensado (posición 9)'),
+    digitoVerificador: z.string().length(2).describe('Dígito verificador Base 97 (posiciones 10-11)')
+  }),
+  timestamp: z.string().optional()
+});
+
 export const ErrorResponseSchema = z.object({
   success: z.literal(false),
   error: z.object({
@@ -273,4 +294,5 @@ export type AplicacionPCPParams = z.infer<typeof AplicacionPCPParamsSchema>;
 export type AplicacionPMPParams = z.infer<typeof AplicacionPMPParamsSchema>;
 export type AplicacionHIPParams = z.infer<typeof AplicacionHIPParamsSchema>;
 export type ConcentradoParams = z.infer<typeof ConcentradoParamsSchema>;
+export type LineaCapturaParams = z.infer<typeof LineaCapturaParamsSchema>;
 

@@ -15,6 +15,7 @@ import { GetAplicacionPCPQuery } from './application/queries/GetAplicacionPCPQue
 import { GetAplicacionPMPQuery } from './application/queries/GetAplicacionPMPQuery.js';
 import { GetAplicacionHIPQuery } from './application/queries/GetAplicacionHIPQuery.js';
 import { GetConcentradoQuery } from './application/queries/GetConcentradoQuery.js';
+import { IAplicacionesQNARepository } from './domain/repositories/IAplicacionesQNARepository.js';
 
 export async function aplicacionesQNARoutes(fastify: FastifyInstance) {
   // GET /reportes/aplicaciones-qna/movimientos - HISTORIAL_MOVIMIENTOS_QUIN_IND
@@ -540,6 +541,125 @@ export async function aplicacionesQNARoutes(fastify: FastifyInstance) {
       
       // NO usar reply.send() - esto evita el procesamiento asíncrono de Fastify
 
+    } catch (error) {
+      return handleAplicacionesQNAError(error, reply);
+    }
+  });
+
+  // GET /aplicaciones-qna/periodo-trabajo - Obtiene período de trabajo desde BitacoraAfectacionOrg
+  fastify.get('/periodo-trabajo', {
+    preHandler: [requireAuth],
+    schema: {
+      description: 'Obtiene el período de trabajo desde BitacoraAfectacionOrg usando org0 y org1 del token o parámetros opcionales. Incluye quincena, año, período formateado y fechas de inicio y fin de la quincena',
+      summary: 'Período de trabajo',
+      tags: ['reportes', 'aplicaciones-qna'],
+      security: [{ bearerAuth: [] }],
+      querystring: {
+        type: 'object',
+        properties: {
+          org0: {
+            type: 'string',
+            pattern: '^[0-9]{1,2}$',
+            description: 'Clave orgánica nivel 0 (1-2 caracteres numéricos, opcional - se usa del token si no se proporciona)'
+          },
+          org1: {
+            type: 'string',
+            pattern: '^[0-9]{1,2}$',
+            description: 'Clave orgánica nivel 1 (1-2 caracteres numéricos, opcional - se usa del token si no se proporciona)'
+          }
+        },
+        required: []
+      },
+      response: {
+        200: {
+          description: 'Período de trabajo obtenido exitosamente',
+          type: 'object',
+          properties: {
+            success: { type: 'boolean' },
+            data: {
+              type: 'object',
+              properties: {
+                periodo: { type: 'string', description: 'Período en formato QQAA (ej: "1925")' },
+                quincena: { type: 'number', description: 'Número de quincena (1-24)' },
+                anio: { type: 'number', description: 'Año completo (ej: 2025)' },
+                org0: { type: 'string', description: 'Clave orgánica nivel 0 utilizada' },
+                org1: { type: 'string', description: 'Clave orgánica nivel 1 utilizada' },
+                fechaInicio: { type: 'string', format: 'date', description: 'Fecha de inicio de la quincena (YYYY-MM-DD)' },
+                fechaFin: { type: 'string', format: 'date', description: 'Fecha de fin de la quincena (YYYY-MM-DD)' }
+              }
+            },
+            timestamp: { type: 'string' }
+          }
+        },
+        400: { type: 'object' },
+        401: { type: 'object' },
+        404: { type: 'object' },
+        500: { type: 'object' }
+      }
+    }
+  }, async (request, reply) => {
+    try {
+      const user = (request as any).user;
+      const query = request.query as { org0?: string; org1?: string };
+
+      // Obtener org0 y org1: primero de query params, si no del token
+      let org0: string | undefined = query.org0;
+      let org1: string | undefined = query.org1;
+
+      // Si no vienen en query, obtener del token
+      if (!org0 && user?.idOrganica0) {
+        const idOrg0 = user.idOrganica0;
+        org0 = typeof idOrg0 === 'string' 
+          ? idOrg0.padStart(2, '0').substring(0, 2)
+          : String(idOrg0).padStart(2, '0').substring(0, 2);
+      }
+
+      if (!org1 && user?.idOrganica1) {
+        const idOrg1 = user.idOrganica1;
+        org1 = typeof idOrg1 === 'string'
+          ? idOrg1.padStart(2, '0').substring(0, 2)
+          : String(idOrg1).padStart(2, '0').substring(0, 2);
+      }
+
+      // Normalizar org0 y org1 si vienen de query params
+      if (org0) {
+        org0 = typeof org0 === 'string'
+          ? org0.padStart(2, '0').substring(0, 2)
+          : String(org0).padStart(2, '0').substring(0, 2);
+      }
+
+      if (org1) {
+        org1 = typeof org1 === 'string'
+          ? org1.padStart(2, '0').substring(0, 2)
+          : String(org1).padStart(2, '0').substring(0, 2);
+      }
+
+      // Validar que existan org0 y org1
+      if (!org0 || !org1) {
+        return reply.code(400).send({
+          success: false,
+          error: {
+            code: 'MISSING_ORGANICA_KEYS',
+            message: 'org0 y org1 son requeridos. Deben proporcionarse en query string o estar disponibles en el token del usuario.',
+            timestamp: new Date().toISOString()
+          }
+        });
+      }
+
+      // Obtener repository y ejecutar consulta
+      const repository = request.diScope.resolve<IAplicacionesQNARepository>('aplicacionesQNARepo');
+      const periodoData = await repository.obtenerPeriodoTrabajo(org0, org1);
+
+      // Retornar respuesta con org0 y org1 utilizados
+      return reply.send({
+        success: true,
+        data: {
+          ...periodoData,
+          org0,
+          org1
+        },
+        timestamp: new Date().toISOString()
+      });
     } catch (error) {
       return handleAplicacionesQNAError(error, reply);
     }
