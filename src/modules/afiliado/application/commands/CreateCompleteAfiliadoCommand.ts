@@ -537,26 +537,55 @@ export class CreateCompleteAfiliadoCommand {
 
     if (needsRegistration) {
       try {
-        const registerRequest = p.request()
-          .input('Entidad', sql.NVarChar(128), 'AFILIADOS')
-          .input('Anio', sql.SmallInt, anio)
-          .input('Quincena', sql.TinyInt, quincena)
-          .input('OrgNivel', sql.TinyInt, orgNivel)
+        // Validar si ya existe un registro con Accion = 'Aplicar' para la misma orgánica
+        const checkDuplicateRequest = p.request()
           .input('Org0', sql.Char(2), org0)
-          .input('Org1', sql.Char(2), org1 || null)
-          .input('Org2', sql.Char(2), org2 || null)
-          .input('Org3', sql.Char(2), org3 || null)
-          .input('Accion', sql.VarChar(20), 'Aplicar')
-          .input('Resultado', sql.VarChar(10), 'OK')
-          .input('Mensaje', sql.NVarChar(4000), `Quincena ${quincena}/${anio} creada automáticamente para afiliación`)
-          .input('Usuario', sql.NVarChar(100), userId ? `Usuario_${userId}` : 'Sistema')
-          .input('AppName', sql.NVarChar(100), 'BICSN_Afiliados')
-          .input('Ip', sql.NVarChar(64), 'localhost');
+          .input('Org1', sql.Char(2), org1 || null);
 
-        await registerRequest.execute('afec.usp_RegistrarAfectacionOrg');
-        logger.info({
-          org0, org1, org2, org3, quincena, anio, userId
-        }, 'Quincena registrada exitosamente en BitacoraAfectacionOrg');
+        const duplicateCheck = await checkDuplicateRequest.query(`
+          SELECT TOP 1 Quincena, Anio, Accion, CreatedAt
+          FROM afec.BitacoraAfectacionOrg
+          WHERE Org0 = @Org0
+            AND Org1 = @Org1
+            AND Accion = 'Aplicar'
+            AND Entidad = 'AFILIADOS'
+          ORDER BY CreatedAt DESC
+        `);
+
+        if (duplicateCheck.recordset.length > 0) {
+          const existingRecord = duplicateCheck.recordset[0];
+          logger.info({
+            org0, org1, org2, org3,
+            existingQuincena: existingRecord.Quincena,
+            existingAnio: existingRecord.Anio,
+            existingCreatedAt: existingRecord.CreatedAt
+          }, `Ya existe un registro con Accion = 'Aplicar' para orgánica ${org0}/${org1 || 'NULL'}. Usando quincena existente`);
+          // Continuar como si se hubiera registrado exitosamente, usando los valores del registro existente
+          quincena = existingRecord.Quincena;
+          anio = existingRecord.Anio;
+        } else {
+          // No existe registro duplicado, proceder con el registro normal
+          const registerRequest = p.request()
+            .input('Entidad', sql.NVarChar(128), 'AFILIADOS')
+            .input('Anio', sql.SmallInt, anio)
+            .input('Quincena', sql.TinyInt, quincena)
+            .input('OrgNivel', sql.TinyInt, orgNivel)
+            .input('Org0', sql.Char(2), org0)
+            .input('Org1', sql.Char(2), org1 || null)
+            .input('Org2', sql.Char(2), org2 || null)
+            .input('Org3', sql.Char(2), org3 || null)
+            .input('Accion', sql.VarChar(20), 'Aplicar')
+            .input('Resultado', sql.VarChar(10), 'OK')
+            .input('Mensaje', sql.NVarChar(4000), `Quincena ${quincena}/${anio} creada automáticamente para afiliación`)
+            .input('Usuario', sql.NVarChar(100), userId ? `Usuario_${userId}` : 'Sistema')
+            .input('AppName', sql.NVarChar(100), 'BICSN_Afiliados')
+            .input('Ip', sql.NVarChar(64), 'localhost');
+
+          await registerRequest.execute('afec.usp_RegistrarAfectacionOrg');
+          logger.info({
+            org0, org1, org2, org3, quincena, anio, userId
+          }, 'Quincena registrada exitosamente en BitacoraAfectacionOrg');
+        }
       } catch (error: any) {
         const errorMessage = error instanceof Error ? error.message : 'Error desconocido';
         logger.warn({

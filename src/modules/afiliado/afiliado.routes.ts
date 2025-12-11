@@ -1,6 +1,6 @@
 import { FastifyInstance } from 'fastify';
 import { requireAuth, requireRole } from '../auth/auth.middleware.js';
-import { CreateAfiliadoSchema, UpdateAfiliadoSchema, CreateAfiliadoAfiliadoOrgMovimientoSchema, CreateCambioSueldoSchema, CreateBajaPermanenteSchema, CreateBajaSuspensionSchema, CreateBajaTerminaSuspensionSchema, CreateBajaTerminaSuspensionYBajaSchema, AplicarBDIsspeaLoteSchema } from './afiliado.schemas.js';
+import { CreateAfiliadoSchema, UpdateAfiliadoSchema, CreateAfiliadoAfiliadoOrgMovimientoSchema, CreateCambioSueldoSchema, CreateBajaPermanenteSchema, CreateBajaSuspensionSchema, CreateBajaTerminaSuspensionSchema, CreateBajaTerminaSuspensionYBajaSchema, AplicarBDIsspeaLoteSchema, UpdateBitacoraAfectacionOrgTerminadoSchema } from './afiliado.schemas.js';
 import {
   createAfiliadoAfiliadoOrgMovimientoService
 } from './afiliado.service.js';
@@ -15,6 +15,7 @@ import { DeleteAfiliadoCommand } from './application/commands/DeleteAfiliadoComm
 import { CreateCompleteAfiliadoCommand } from './application/commands/CreateCompleteAfiliadoCommand.js';
 import { AplicarBDIsspeaLoteCommand } from './application/commands/AplicarBDIsspeaLoteCommand.js';
 import { AplicarBDIssspeaQNACommand } from './application/commands/AplicarBDIssspeaQNACommand.js';
+import { UpdateBitacoraAfectacionOrgTerminadoCommand } from './application/commands/UpdateBitacoraAfectacionOrgTerminadoCommand.js';
 import { handleAfiliadoError } from './infrastructure/errorHandler.js';
 import { 
   prepararLogEjecucionDPEditaEntidad, 
@@ -721,6 +722,111 @@ export default async function afiliadoRoutes(app: FastifyInstance) {
       return reply.send(ok(record));
     } catch (error: any) {
       return handleAfiliadoError(error, reply, { operation: 'getAfiliadoById', user: req.user?.sub, afiliadoId: (req.params as any)?.id });
+    }
+  });
+
+  // GET /afiliado/bitacora-afectacion/:afectacionId/terminado - Actualizar BitacoraAfectacionOrg a TERMINADO
+  app.get('/afiliado/bitacora-afectacion/:afectacionId/terminado', {
+    preHandler: [requireAuth],
+    schema: {
+      description: 'Actualizar el campo Accion a "TERMINADO" en BitacoraAfectacionOrg usando AfectacionId como parámetro',
+      tags: ['afiliado'],
+      security: [{ bearerAuth: [] }],
+      params: {
+        type: 'object',
+        required: ['afectacionId'],
+        properties: {
+          afectacionId: {
+            type: 'number',
+            description: 'ID de la afectación (llave primaria)'
+          }
+        }
+      },
+      response: {
+        200: {
+          type: 'object',
+          properties: {
+            ok: { type: 'boolean' },
+            data: {
+              type: 'object',
+              properties: {
+                actualizado: { type: 'boolean' },
+                registrosAfectados: { type: 'number' }
+              }
+            }
+          }
+        },
+        400: {
+          type: 'object',
+          properties: {
+            ok: { type: 'boolean' },
+            error: {
+              type: 'object',
+              properties: {
+                code: { type: 'string' },
+                message: { type: 'string' }
+              }
+            }
+          }
+        },
+        404: {
+          type: 'object',
+          properties: {
+            ok: { type: 'boolean' },
+            error: {
+              type: 'object',
+              properties: {
+                code: { type: 'string' },
+                message: { type: 'string' }
+              }
+            }
+          }
+        },
+        500: {
+          type: 'object',
+          properties: {
+            ok: { type: 'boolean' },
+            error: {
+              type: 'object',
+              properties: {
+                code: { type: 'string' },
+                message: { type: 'string' }
+              }
+            }
+          }
+        }
+      }
+    }
+  }, async (req, reply) => {
+    try {
+      const { afectacionId } = req.params as { afectacionId: number };
+
+      // Validar parámetro AfectacionId
+      if (!afectacionId || afectacionId <= 0) {
+        return reply.code(400).send({
+          ok: false,
+          error: {
+            code: 'VALIDATION_ERROR',
+            message: 'El AfectacionId debe ser un número positivo'
+          }
+        });
+      }
+
+      const updateBitacoraCommand = req.diScope.resolve<UpdateBitacoraAfectacionOrgTerminadoCommand>('updateBitacoraAfectacionOrgTerminadoCommand');
+      const result = await updateBitacoraCommand.execute(afectacionId);
+      return reply.send(ok(result));
+    } catch (error: any) {
+      // Si el error es "No se encontró registro", retornar 404
+      if (error.message && error.message.includes('No se encontró')) {
+        return reply.code(404).send({
+          ok: false,
+          error: {
+            code: 'NOT_FOUND',
+            message: error.message || 'No se encontró registro con el AfectacionId proporcionado'
+          }
+        });
+      }
+      return handleAfiliadoError(error, reply, { operation: 'updateBitacoraAfectacionOrgTerminado', user: req.user?.sub, afectacionId: (req.params as any)?.afectacionId });
     }
   });
 
@@ -3927,14 +4033,64 @@ export default async function afiliadoRoutes(app: FastifyInstance) {
         userAgent: req.headers['user-agent']
       });
 
+      // Generar resumen de errores únicos
+      const erroresUnicos = new Map<string, { cveError: number; nomError: string; cantidad: number }>();
+      if (resultado.detallesMigracion) {
+        resultado.detallesMigracion.forEach((detalle: any) => {
+          if (!detalle.exito && detalle.nomError) {
+            const clave = `${detalle.cveError || 'N/A'}-${detalle.nomError}`;
+            if (erroresUnicos.has(clave)) {
+              erroresUnicos.get(clave)!.cantidad++;
+            } else {
+              erroresUnicos.set(clave, {
+                cveError: detalle.cveError || 0,
+                nomError: detalle.nomError,
+                cantidad: 1
+              });
+            }
+          }
+        });
+      }
+
+      // Agregar errores de afiliados que fallaron por otras razones
+      if (resultado.afiliadosProcesados) {
+        resultado.afiliadosProcesados.forEach((afiliado: any) => {
+          if (!afiliado.exito && afiliado.mensaje && !afiliado.movimientos?.some((m: any) => !m.exito)) {
+            const clave = `GENERAL-${afiliado.mensaje}`;
+            if (erroresUnicos.has(clave)) {
+              erroresUnicos.get(clave)!.cantidad++;
+            } else {
+              erroresUnicos.set(clave, {
+                cveError: 0,
+                nomError: afiliado.mensaje,
+                cantidad: 1
+              });
+            }
+          }
+        });
+      }
+
+      const erroresResumidos = Array.from(erroresUnicos.values());
+
+      // Construir mensaje mejorado
+      let mensaje = `Proceso de aplicación a BDIsspea completado. ${resultado.afiliadosCambiadosEstado} afiliados cambiados a estado 7.`;
+      if (resultado.afiliadosFallidos > 0) {
+        mensaje += ` ${resultado.afiliadosFallidos} afiliados fallaron.`;
+        if (erroresResumidos.length > 0) {
+          mensaje += ` Errores encontrados: ${erroresResumidos.map(e => e.nomError).join('; ')}.`;
+        }
+      }
+
       return reply.send(ok({
-        message: `Proceso de aplicación a BDIsspea completado. ${resultado.afiliadosCambiadosEstado} afiliados cambiados a estado 7.`,
+        message: mensaje,
         afiliadosProcesados: resultado.afiliadosProcesados,
         afiliadosCambiadosEstado: resultado.afiliadosCambiadosEstado,
         afiliadosFallidos: resultado.afiliadosFallidos,
         afiliadosCompletos: resultado.afiliadosCompletos,
         bitacoraActualizada: resultado.bitacoraActualizada,
         resumen: resultado.resumen,
+        detallesMigracion: resultado.detallesMigracion || [],
+        errores: erroresResumidos,
         detalles: {
           organica: `${userOrg0}/${userOrg1}`,
           estadosOrigen: [2, 3],

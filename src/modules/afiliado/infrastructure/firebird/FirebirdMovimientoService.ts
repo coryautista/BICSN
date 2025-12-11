@@ -1875,11 +1875,28 @@ export async function migrarMovimientoAFirebird(
       };
     }
 
-    // 7. Construir datos completos con nuevo formato
+    // 7. Normalizar orgánicas (eliminar espacios y asegurar formato correcto)
+    // Usar las orgánicas pasadas como parámetro en lugar de las de la BD
+    // Firebird espera orgánicas de 2 caracteres sin espacios
+    const org0Normalizada = (org0 || datosParciales.org0 || '').trim().substring(0, 2).padStart(2, '0');
+    const org1Normalizada = (org1 || datosParciales.org1 || '').trim().substring(0, 2).padStart(2, '0');
+    
+    logger.debug({
+      operation: 'migrarMovimientoAFirebird',
+      step: 'normalizarOrganicas',
+      org0Original: org0,
+      org1Original: org1,
+      org0BD: datosParciales.org0,
+      org1BD: datosParciales.org1,
+      org0Normalizada,
+      org1Normalizada
+    }, 'Orgánicas normalizadas para Firebird');
+
+    // 8. Construir datos completos con nuevo formato
     const datosCompletos: DatosMovimientoFirebird = {
       interno,
-      org0: datosParciales.org0 ?? '',
-      org1: datosParciales.org1 ?? '',
+      org0: org0Normalizada,
+      org1: org1Normalizada,
       org2: datosParciales.org2 || null,
       org3: datosParciales.org3 || null,
       sueldo: datosParciales.sueldo ?? 0,
@@ -1893,7 +1910,7 @@ export async function migrarMovimientoAFirebird(
       porc
     };
 
-    // 8. Ejecutar stored procedure
+    // 9. Ejecutar stored procedure
     let resultado;
     try {
       resultado = await ejecutarDPEditaEntidad(datosCompletos);
@@ -2023,14 +2040,19 @@ export async function migrarMovimientoAFirebird(
           interno: datosCompletos.interno,
           org0: datosCompletos.org0,
           org1: datosCompletos.org1,
+          org2: datosCompletos.org2 || '',
+          org3: datosCompletos.org3 || '',
           sueldo: datosCompletos.sueldo,
+          op: datosCompletos.op,
           q: datosCompletos.q,
+          retroactivas: datosCompletos.retroactivas,
           periodo: datosCompletos.periodo,
           movimiento: datosCompletos.movimiento,
           fecha: datosCompletos.fecha,
           bc: datosCompletos.bc,
           porc: datosCompletos.porc
         },
+        sqlCompleto: `SELECT CVE_ERROR, NOM_ERROR FROM DP_EDITA_ENTIDAD(${datosCompletos.interno}, '${datosCompletos.org0}', '${datosCompletos.org1}', '${datosCompletos.org2 || ''}', '${datosCompletos.org3 || ''}', ${datosCompletos.sueldo}, ${datosCompletos.op}, ${datosCompletos.q}, ${datosCompletos.retroactivas}, '${datosCompletos.periodo}', '${datosCompletos.movimiento}', '${datosCompletos.fecha}', '${datosCompletos.bc}', ${datosCompletos.porc})`,
         datosAfiliado: afiliado ? {
           id: afiliado.id,
           folio: afiliado.folio,

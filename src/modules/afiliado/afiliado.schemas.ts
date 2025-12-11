@@ -281,3 +281,8 @@ export const AplicarBDIsspeaLoteSchema = z.object({
   motivo: z.string().max(500, 'El motivo no debe exceder 500 caracteres').optional(),
   observaciones: z.string().max(1000, 'Las observaciones no deben exceder 1000 caracteres').optional()
 });
+
+// Schema para actualizar BitacoraAfectacionOrg a TERMINADO
+export const UpdateBitacoraAfectacionOrgTerminadoSchema = z.object({
+  afectacionId: z.number().int().positive('El AfectacionId debe ser un número entero positivo')
+});
