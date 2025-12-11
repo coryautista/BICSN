@@ -63,6 +63,7 @@ import { DeleteAfiliadoCommand } from '../modules/afiliado/application/commands/
 import { CreateCompleteAfiliadoCommand } from '../modules/afiliado/application/commands/CreateCompleteAfiliadoCommand.js';
 import { AplicarBDIsspeaLoteCommand } from '../modules/afiliado/application/commands/AplicarBDIsspeaLoteCommand.js';
 import { AplicarBDIssspeaQNACommand } from '../modules/afiliado/application/commands/AplicarBDIssspeaQNACommand.js';
+import { UpdateBitacoraAfectacionOrgTerminadoCommand } from '../modules/afiliado/application/commands/UpdateBitacoraAfectacionOrgTerminadoCommand.js';
 
 // AfiliadoOrg Module
 import { AfiliadoOrgRepository } from '../modules/afiliadoOrg/infrastructure/persistence/AfiliadoOrgRepository.js';
@@ -557,6 +558,7 @@ container.register({
   createCompleteAfiliadoCommand: asClass(CreateCompleteAfiliadoCommand).scoped(),
   aplicarBDIsspeaLoteCommand: asClass(AplicarBDIsspeaLoteCommand).scoped(),
   aplicarBDIssspeaQNACommand: asClass(AplicarBDIssspeaQNACommand).scoped(),
+  updateBitacoraAfectacionOrgTerminadoCommand: asClass(UpdateBitacoraAfectacionOrgTerminadoCommand).scoped(),
   
   // ============================================================================
   // AFILIADO ORG MODULE

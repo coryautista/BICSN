@@ -84,6 +84,9 @@ async function buildApp() {
       'https://tu-front-dev.example',   // front en https si aplica
       'http://187.233.212.215:4000',    // IP externa para docs
       'http://187.233.212.215:3000',    // IP externa para frontend
+      'http://187.233.240.171:3000',    // IP externa para frontend
+      'http://10.20.1.90:3000',         // IP interna para frontend
+      'http://10.20.1.90:3001',         // IP interna para frontend
       /^http:\/\/187\.233\.212\.215:\d+$/, // Regex para cualquier puerto en esa IP
       /^http:\/\/localhost:\d+$/        // localhost con cualquier puerto
     ],
@@ -107,7 +110,7 @@ async function buildApp() {
           description: 'Servidor de desarrollo'
         },
         {
-          url: 'http://187.233.212.215:4000/v1',
+          url: 'http://187.233.240.171:4000/v1',
           description: 'Servidor de producción'
         }
       ],

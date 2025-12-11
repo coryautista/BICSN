@@ -241,24 +241,48 @@ export async function getQuincenaAplicacion(
   // Si se necesita registrar una nueva quincena, hacerlo en las 3 tablas
   if (needsRegistration) {
     try {
-      const registerRequest = p.request()
-        .input('Entidad', sql.NVarChar(128), 'AFILIADOS')
-        .input('Anio', sql.SmallInt, anio)
-        .input('Quincena', sql.TinyInt, quincena)
-        .input('OrgNivel', sql.TinyInt, orgNivel)
+      // Validar si ya existe un registro con Accion = 'Aplicar' para la misma orgánica
+      const checkDuplicateRequest = p.request()
         .input('Org0', sql.Char(2), org0)
-        .input('Org1', sql.Char(2), org1 || null)
-        .input('Org2', sql.Char(2), org2 || null)
-        .input('Org3', sql.Char(2), org3 || null)
-        .input('Accion', sql.VarChar(20), 'Aplicar')
-        .input('Resultado', sql.VarChar(10), 'OK')
-        .input('Mensaje', sql.NVarChar(4000), `Quincena ${quincena}/${anio} creada automáticamente para afiliación`)
-        .input('Usuario', sql.NVarChar(100), userId ? `Usuario_${userId}` : 'Sistema')
-        .input('AppName', sql.NVarChar(100), 'BICSN_Afiliados')
-        .input('Ip', sql.NVarChar(64), 'localhost');
+        .input('Org1', sql.Char(2), org1 || null);
 
-      await registerRequest.execute('afec.usp_RegistrarAfectacionOrg');
-      console.log(`Quincena ${quincena}/${anio} registrada exitosamente en BitacoraAfectacionOrg, EstadoAfectacionOrg y ProgresoUsuarioOrg`);
+      const duplicateCheck = await checkDuplicateRequest.query(`
+        SELECT TOP 1 Quincena, Anio, Accion, CreatedAt
+        FROM afec.BitacoraAfectacionOrg
+        WHERE Org0 = @Org0
+          AND Org1 = @Org1
+          AND Accion = 'Aplicar'
+          AND Entidad = 'AFILIADOS'
+        ORDER BY CreatedAt DESC
+      `);
+
+      if (duplicateCheck.recordset.length > 0) {
+        const existingRecord = duplicateCheck.recordset[0];
+        console.log(`Ya existe un registro con Accion = 'Aplicar' para orgánica ${org0}/${org1 || 'NULL'}. Usando quincena existente: ${existingRecord.Quincena}/${existingRecord.Anio}. Registro creado: ${existingRecord.CreatedAt}`);
+        // Continuar como si se hubiera registrado exitosamente, usando los valores del registro existente
+        quincena = existingRecord.Quincena;
+        anio = existingRecord.Anio;
+      } else {
+        // No existe registro duplicado, proceder con el registro normal
+        const registerRequest = p.request()
+          .input('Entidad', sql.NVarChar(128), 'AFILIADOS')
+          .input('Anio', sql.SmallInt, anio)
+          .input('Quincena', sql.TinyInt, quincena)
+          .input('OrgNivel', sql.TinyInt, orgNivel)
+          .input('Org0', sql.Char(2), org0)
+          .input('Org1', sql.Char(2), org1 || null)
+          .input('Org2', sql.Char(2), org2 || null)
+          .input('Org3', sql.Char(2), org3 || null)
+          .input('Accion', sql.VarChar(20), 'Aplicar')
+          .input('Resultado', sql.VarChar(10), 'OK')
+          .input('Mensaje', sql.NVarChar(4000), `Quincena ${quincena}/${anio} creada automáticamente para afiliación`)
+          .input('Usuario', sql.NVarChar(100), userId ? `Usuario_${userId}` : 'Sistema')
+          .input('AppName', sql.NVarChar(100), 'BICSN_Afiliados')
+          .input('Ip', sql.NVarChar(64), 'localhost');
+
+        await registerRequest.execute('afec.usp_RegistrarAfectacionOrg');
+        console.log(`Quincena ${quincena}/${anio} registrada exitosamente en BitacoraAfectacionOrg, EstadoAfectacionOrg y ProgresoUsuarioOrg`);
+      }
     } catch (error: any) {
       console.error(`Error al registrar quincena en afec: ${error.message}`);
       // No fallar la transacción por esto, solo loguearlo
@@ -969,7 +993,6 @@ export async function cambiarStatusAfiliadosLote(
   ipAddress?: string,
   userAgent?: string
 ): Promise<any[]> {
-  const p = await getPool();
   const results: any[] = [];
 
   for (const afiliadoId of afiliadoIds) {
@@ -1115,7 +1138,6 @@ export async function aprobarAfiliadosLote(
   ipAddress?: string,
   userAgent?: string
 ): Promise<any[]> {
-  const p = await getPool();
   const results: any[] = [];
 
   for (const afiliadoId of afiliadoIds) {
@@ -1376,6 +1398,57 @@ export async function actualizarBitacoraAfectacionOrgTerminado(
   };
 }
 
+// Actualizar BitacoraAfectacionOrg a TERMINADO por AfectacionId (solo actualiza Accion)
+export async function actualizarBitacoraAfectacionOrgTerminadoPorAfectacionId(
+  afectacionId: number
+): Promise<{ actualizado: boolean; registrosAfectados: number }> {
+  const logContext = {
+    operation: 'actualizarBitacoraAfectacionOrgTerminadoPorAfectacionId',
+    afectacionId
+  };
+
+  logger.info(logContext, 'Actualizando BitacoraAfectacionOrg a TERMINADO por AfectacionId');
+  console.log(`[BITACORA] Actualizando BitacoraAfectacionOrg AfectacionId=${afectacionId} a TERMINADO`);
+
+  const p = await getPool();
+  
+  // Verificar que el registro existe
+  const checkResult = await p.request()
+    .input('afectacionId', sql.BigInt, afectacionId)
+    .query(`
+      SELECT AfectacionId, Accion
+      FROM afec.BitacoraAfectacionOrg
+      WHERE AfectacionId = @afectacionId
+    `);
+
+  if (checkResult.recordset.length === 0) {
+    logger.warn(logContext, 'No se encontró registro con el AfectacionId proporcionado');
+    console.log(`[BITACORA] ⚠️  No se encontró registro con AfectacionId=${afectacionId}`);
+    return { actualizado: false, registrosAfectados: 0 };
+  }
+
+  // Actualizar solo el campo Accion
+  const updateResult = await p.request()
+    .input('afectacionId', sql.BigInt, afectacionId)
+    .query(`
+      UPDATE afec.BitacoraAfectacionOrg
+      SET Accion = 'TERMINADO'
+      WHERE AfectacionId = @afectacionId
+    `);
+
+  const registrosAfectados = updateResult.rowsAffected[0] || 0;
+  logger.info({
+    ...logContext,
+    registrosAfectados
+  }, 'BitacoraAfectacionOrg actualizada exitosamente a TERMINADO');
+  console.log(`[BITACORA] ✅ Actualizado BitacoraAfectacionOrg AfectacionId=${afectacionId}: ${registrosAfectados} registro(s) actualizado(s) a TERMINADO`);
+  
+  return {
+    actualizado: registrosAfectados > 0,
+    registrosAfectados
+  };
+}
+
 // Obtener el último registro de BitacoraAfectacionOrg por orgánica (sin filtrar por Accion)
 export async function getUltimaBitacoraAfectacionOrgPorOrganica(
   org0: string,
@@ -1519,9 +1592,9 @@ export async function ejecutarAP_P_APLICAR(
   return executeSerializedQuery((db) => {
     return new Promise<void>((resolve, reject) => {
       try {
-        // En Firebird, los stored procedures se ejecutan usando SELECT ... FROM PROCEDURE_NAME(...)
-        // AP_P_APLICAR no retorna resultados, pero aún así se ejecuta con SELECT
-        const sql = `SELECT * FROM AP_P_APLICAR(?, ?, ?, ?, ?)`;
+        // En Firebird, los stored procedures ejecutables (sin SUSPEND) se ejecutan con EXECUTE PROCEDURE
+        // AP_P_APLICAR es un stored procedure ejecutable que no retorna resultados
+        const sql = `EXECUTE PROCEDURE AP_P_APLICAR(?, ?, ?, ?, ?)`;
 
         const params = [org0, org1, quincenaC, quincenaA, tipo];
 
@@ -1609,9 +1682,9 @@ export async function ejecutarAP_D_ENVIO_LAYOUT(
   return executeSerializedQuery((db) => {
     return new Promise<void>((resolve, reject) => {
       try {
-        // En Firebird, los stored procedures se ejecutan usando SELECT ... FROM PROCEDURE_NAME(...)
-        // AP_D_ENVIO_LAYOUT no retorna resultados, pero aún así se ejecuta con SELECT
-        const sql = `SELECT * FROM AP_D_ENVIO_LAYOUT(?, ?, ?, ?, ?)`;
+        // En Firebird, los stored procedures ejecutables (sin SUSPEND) se ejecutan con EXECUTE PROCEDURE
+        // AP_D_ENVIO_LAYOUT es un stored procedure ejecutable que no retorna resultados
+        const sql = `EXECUTE PROCEDURE AP_D_ENVIO_LAYOUT(?, ?, ?, ?, ?)`;
 
         const params = [quincena, org0, org1, org2, org3];
 
@@ -1849,6 +1922,7 @@ export async function aplicarBDIsspeaLote(
   const resultadosProcesamiento: any[] = [];
   const movimientosMigrados: any[] = [];
   const detallesMigracion: any[] = [];
+  const internosNuevos: number[] = []; // INTERNOs obtenidos nuevos (cuando el valor anterior era 0 o null)
 
   // FASE 1: Obtener afiliados elegibles (SIN transacción para evitar bloqueos)
   console.log(`\n${'─'.repeat(80)}`);
@@ -1966,12 +2040,27 @@ export async function aplicarBDIsspeaLote(
         const progresoStr = `[${contadorAfiliados}/${afiliadosParaProcesar.length}]`;
         const nombreCompleto = `${afiliado.nombre || ''} ${afiliado.apellidoPaterno || ''} ${afiliado.apellidoMaterno || ''}`.trim();
         
+        // Obtener INTERNO actual del afiliado antes del procesamiento para verificar si era 0 o null
+        let internoAnterior: number | null = null;
+        try {
+          const afiliadoCompletoAntes = await getAfiliadoById(afiliado.id);
+          internoAnterior = afiliadoCompletoAntes?.interno || null;
+        } catch (error: any) {
+          logger.warn({
+            operation: 'aplicarBDIsspeaLote',
+            step: 'obtenerInternoAnterior',
+            afiliadoId: afiliado.id,
+            error: error.message
+          }, 'No se pudo obtener INTERNO anterior del afiliado');
+        }
+        
         console.log(`\n${'·'.repeat(60)}`);
         console.log(`👤 ${progresoStr} Procesando afiliado`);
         console.log(`   ID: ${afiliado.id}`);
         console.log(`   Folio: ${afiliado.folio || 'N/A'}`);
         console.log(`   Nombre: ${nombreCompleto}`);
         console.log(`   Estado actual: ${afiliado.statusActual}`);
+        console.log(`   INTERNO anterior: ${internoAnterior || 'N/A'}`);
         console.log(`   Tiempo transcurrido: ${Math.round((Date.now() - startTime) / 1000)}s`);
         
         logger.info({
@@ -2215,11 +2304,29 @@ export async function aplicarBDIsspeaLote(
           console.log(`\n   ❌ Resultado: FALLIDO (${movimientosFallidos} movimiento(s) fallaron)`);
           console.log(`      Tiempo procesamiento: ${afiliadoTime}ms`);
           
+          // Construir mensaje detallado con errores específicos de Firebird
+          const erroresDetallados = resultadosMovimientos
+            .filter(r => !r.exito)
+            .map(r => {
+              if (r.cveError && r.nomError) {
+                return `Error ${r.cveError}: ${r.nomError}`;
+              } else if (r.nomError) {
+                return r.nomError;
+              } else {
+                return 'Error desconocido';
+              }
+            });
+          
+          const mensajeError = erroresDetallados.length > 0
+            ? `Algunos movimientos fallaron en la migración a Firebird. Errores: ${erroresDetallados.join('; ')}`
+            : 'Algunos movimientos fallaron en la migración a Firebird';
+          
           logger.warn({
             operation: 'aplicarBDIsspeaLote',
             step: 'afiliadoConMovimientosFallidos',
             afiliadoId: afiliado.id,
             movimientosFallidos,
+            erroresDetallados,
             processingTimeMs: afiliadoTime,
             elapsedMs: Date.now() - startTime
           }, `Afiliado con movimientos fallidos - no se cambiará estado`);
@@ -2231,8 +2338,9 @@ export async function aplicarBDIsspeaLote(
             estadoAnterior: afiliado.statusActual,
             estadoNuevo: null,
             exito: false,
-            mensaje: 'Algunos movimientos fallaron en la migración a Firebird',
-            movimientos: resultadosMovimientos
+            mensaje: mensajeError,
+            movimientos: resultadosMovimientos,
+            errores: erroresDetallados
           });
           continue;
         }
@@ -2390,6 +2498,34 @@ export async function aplicarBDIsspeaLote(
         // Si llegamos aquí, todo fue exitoso
         movimientosMigrados.push(...resultadosMovimientos);
 
+        // Verificar si se obtuvo un INTERNO nuevo (cuando el anterior era 0 o null)
+        try {
+          const afiliadoCompletoDespues = await getAfiliadoById(afiliado.id);
+          const internoNuevo = afiliadoCompletoDespues?.interno || null;
+          
+          // Solo agregar si el INTERNO anterior era 0 o null y ahora tiene un valor
+          if ((internoAnterior === null || internoAnterior === 0) && internoNuevo && internoNuevo > 0) {
+            if (!internosNuevos.includes(internoNuevo)) {
+              internosNuevos.push(internoNuevo);
+              logger.info({
+                operation: 'aplicarBDIsspeaLote',
+                step: 'internoNuevoRegistrado',
+                afiliadoId: afiliado.id,
+                internoAnterior,
+                internoNuevo
+              }, `INTERNO nuevo registrado: ${internoNuevo} (anterior: ${internoAnterior || 'null'})`);
+              console.log(`      📝 INTERNO nuevo registrado: ${internoNuevo} (anterior: ${internoAnterior || 'null'})`);
+            }
+          }
+        } catch (error: any) {
+          logger.warn({
+            operation: 'aplicarBDIsspeaLote',
+            step: 'verificarInternoNuevo',
+            afiliadoId: afiliado.id,
+            error: error.message
+          }, 'No se pudo verificar INTERNO nuevo del afiliado');
+        }
+
         resultadosProcesamiento.push({
           afiliadoId: afiliado.id,
           folio: afiliado.folio,
@@ -2454,7 +2590,12 @@ export async function aplicarBDIsspeaLote(
           estadoNuevo: null,
           exito: false,
           mensaje: `Error al procesar afiliado: ${error.message}`,
-          movimientos: []
+          movimientos: [],
+          error: {
+            message: error.message,
+            code: error.code,
+            name: error.name
+          }
         });
       }
     }
@@ -2530,6 +2671,20 @@ export async function aplicarBDIsspeaLote(
       const txTime = Date.now() - txStart;
       console.log(`      Transacción iniciada en ${txTime}ms`);
 
+      // Construir mensaje con INTERNOs nuevos si los hay
+      let mensajeBitacora = `Todos los afiliados procesados exitosamente - ${afiliadosExitosos} afiliados aplicados a Movimientos BDIsspea`;
+      if (internosNuevos.length > 0) {
+        const internosStr = internosNuevos.join(', ');
+        mensajeBitacora += `. INTERNOs nuevos registrados: [${internosStr}]`;
+        logger.info({
+          operation: 'aplicarBDIsspeaLote',
+          step: 'internosNuevosEnBitacora',
+          internosNuevos: internosNuevos.length,
+          internos: internosNuevos
+        }, `Incluyendo ${internosNuevos.length} INTERNO(s) nuevo(s) en mensaje de bitácora`);
+        console.log(`      📝 INTERNOs nuevos a registrar en bitácora: [${internosStr}]`);
+      }
+
       // Actualizar BitacoraAfectacionOrg como "APLICAR"
       const bitacoraStart = Date.now();
       const sqlBitacora = `
@@ -2538,7 +2693,7 @@ export async function aplicarBDIsspeaLote(
             bao.ModifiedAt = SYSUTCDATETIME(),
             bao.Usuario = '${usuarioId}',
             bao.Resultado = 'OK',
-            bao.Mensaje = 'Todos los afiliados procesados exitosamente - ${afiliadosExitosos} afiliados aplicados a Movimientos BDIsspea'
+            bao.Mensaje = '${mensajeBitacora.replace(/'/g, "''")}'
         FROM afec.BitacoraAfectacionOrg bao
         WHERE bao.Org0 = '${org0}'
           AND bao.Org1 = '${org1}'
@@ -2550,7 +2705,7 @@ export async function aplicarBDIsspeaLote(
         .input('org0', sql.VarChar(30), org0)
         .input('org1', sql.VarChar(30), org1)
         .input('usuarioId', sql.NVarChar(50), usuarioId)
-        .input('mensaje', sql.NVarChar(4000), `Todos los afiliados procesados exitosamente - ${afiliadosExitosos} afiliados aplicados a BDIsspea`)
+        .input('mensaje', sql.NVarChar(4000), mensajeBitacora)
         .query(`
           UPDATE TOP (1) bao
           SET bao.Accion = 'APLICAR',

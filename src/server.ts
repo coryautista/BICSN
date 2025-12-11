@@ -89,6 +89,28 @@ async function buildApp() {
     strictBooleanEnforced: true,
     container 
   });
+
+  // Hook global para asegurar charset=utf-8 en todas las respuestas JSON
+  app.addHook('onSend', async (request, reply, payload) => {
+    // Obtener el content-type actual
+    const contentType = reply.getHeader('content-type');
+    
+    // Si es una respuesta JSON (o no tiene content-type definido y el payload es un objeto/array)
+    const isJsonResponse = 
+      (typeof contentType === 'string' && contentType.includes('application/json')) ||
+      (!contentType && (typeof payload === 'object' || Array.isArray(payload)));
+    
+    if (isJsonResponse) {
+      // Si no tiene charset o no es exactamente 'application/json; charset=utf-8', actualizarlo
+      if (!contentType || 
+          (typeof contentType === 'string' && 
+           (!contentType.includes('charset=utf-8') && !contentType.includes('charset=UTF-8')))) {
+        reply.header('Content-Type', 'application/json; charset=utf-8');
+      }
+    }
+    
+    return payload;
+  });
   
   await app.register(helmet, {
     contentSecurityPolicy: false,  // Deshabilitado para permitir Swagger UI
@@ -103,9 +125,13 @@ async function buildApp() {
       'https://tu-front-dev.example',   // front en https si aplica
       'http://187.233.212.215:4000',    // IP externa para docs
       'http://187.233.212.215:3000',    // IP externa para frontend
+      'http://187.233.240.171:3000',    // IP externa para frontend
       'http://10.20.1.90:3000', 
+      'http://10.20.1.90:3001',         // IP interna para frontend
+      'http://10.20.1.90:3002',         // IP interna para frontend
       'http://187.233.247.69:3000', 
       'http://187.233.247.69:4000',       // IP interna frontend
+      'http://187.233.234.212:3000',           // IP externa adicional
       /^http:\/\/187\.233\.212\.215:\d+$/, // Regex para cualquier puerto en esa IP
       /^http:\/\/localhost:\d+$/        // localhost con cualquier puerto
     ],
@@ -130,7 +156,9 @@ async function buildApp() {
           description: 'Servidor de desarrollo'
         },
         {
-          url: 'http://187.233.247.69:4000/v1',
+          //url: 'http://187.233.247.69:4000/v1',
+          //url: 'http://187.233.234.212:4000/v1',
+          url: 'http://187.233.240.171:4000/v1',
           description: 'Servidor de producción'
         }
       ],
