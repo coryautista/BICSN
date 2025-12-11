@@ -582,6 +582,7 @@ export async function aplicacionesQNARoutes(fastify: FastifyInstance) {
                 periodo: { type: 'string', description: 'Período en formato QQAA (ej: "1925")' },
                 quincena: { type: 'number', description: 'Número de quincena (1-24)' },
                 anio: { type: 'number', description: 'Año completo (ej: 2025)' },
+                accion: { type: 'string', description: 'Acción del registro en BitacoraAfectacionOrg (APLICAR o TERMINADO)' },
                 org0: { type: 'string', description: 'Clave orgánica nivel 0 utilizada' },
                 org1: { type: 'string', description: 'Clave orgánica nivel 1 utilizada' },
                 fechaInicio: { type: 'string', format: 'date', description: 'Fecha de inicio de la quincena (YYYY-MM-DD)' },

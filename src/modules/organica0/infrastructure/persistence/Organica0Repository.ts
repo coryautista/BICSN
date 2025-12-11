@@ -1,4 +1,4 @@
-import { executeSerializedQuery } from '../../../../db/firebird.js';
+import { executeSerializedQuery, decodeFirebirdObject } from '../../../../db/firebird.js';
 import { IOrganica0Repository } from '../../domain/repositories/IOrganica0Repository.js';
 import { Organica0, CreateOrganica0Data, UpdateOrganica0Data } from '../../domain/entities/Organica0.js';
 import pino from 'pino';
@@ -24,14 +24,15 @@ export class Organica0Repository implements IOrganica0Repository {
             resolve(undefined);
             return;
           }
-          const row = result[0];
+          // Decodificar resultado de Firebird antes de mapear
+          const decodedRow = decodeFirebirdObject(result[0]);
           resolve({
-            claveOrganica: row.CLAVE_ORGANICA,
-            nombreOrganica: row.NOMBRE_ORGANICA,
-            usuario: row.USUARIO,
-            fechaRegistro: new Date(row.FECHA_REGISTRO),
-            fechaFin: row.FECHA_FIN ? new Date(row.FECHA_FIN) : undefined,
-            estatus: row.ESTATUS
+            claveOrganica: decodedRow.CLAVE_ORGANICA,
+            nombreOrganica: decodedRow.NOMBRE_ORGANICA,
+            usuario: decodedRow.USUARIO,
+            fechaRegistro: new Date(decodedRow.FECHA_REGISTRO),
+            fechaFin: decodedRow.FECHA_FIN ? new Date(decodedRow.FECHA_FIN) : undefined,
+            estatus: decodedRow.ESTATUS
           });
         }
       );
@@ -58,7 +59,9 @@ export class Organica0Repository implements IOrganica0Repository {
             return;
           }
           logger.debug(`Query returned ${result.length} rows`);
-          const records = result.map((row: any) => ({
+          // Decodificar resultados de Firebird antes de mapear
+          const decodedResult = result.map((row: any) => decodeFirebirdObject(row));
+          const records = decodedResult.map((row: any) => ({
             claveOrganica: row.CLAVE_ORGANICA,
             nombreOrganica: row.NOMBRE_ORGANICA,
             usuario: row.USUARIO,

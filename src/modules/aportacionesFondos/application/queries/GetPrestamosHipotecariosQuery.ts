@@ -47,11 +47,11 @@ export class GetPrestamosHipotecariosQuery {
 
       // Obtener período de aplicación desde BitacoraAfectacionOrg
       console.log('[APORTACIONES_FONDOS] [PRESTAMOS_HIPOTECARIOS] Obteniendo período de aplicación', { ...logContext, org0: claves.clave0, org1: claves.clave1 });
-      const periodo = await this.aportacionFondoRepo.obtenerPeriodoAplicacion(
+      const { periodo, accion } = await this.aportacionFondoRepo.obtenerPeriodoAplicacion(
         claves.clave0,
         claves.clave1
       );
-      console.log('[APORTACIONES_FONDOS] [PRESTAMOS_HIPOTECARIOS] Período obtenido', { ...logContext, periodo });
+      console.log('[APORTACIONES_FONDOS] [PRESTAMOS_HIPOTECARIOS] Período obtenido', { ...logContext, periodo, accion });
 
       // Obtener préstamos hipotecarios ejecutando procedimiento AP_S_HIP_QNA o AP_S_COMP_QNA
       console.log(`[APORTACIONES_FONDOS] [PRESTAMOS_HIPOTECARIOS] Ejecutando procedimiento ${procedimiento}`, { ...logContext, periodo });
@@ -66,6 +66,7 @@ export class GetPrestamosHipotecariosQuery {
       console.log('[APORTACIONES_FONDOS] [PRESTAMOS_HIPOTECARIOS] Consulta completada exitosamente', {
         ...logContext,
         periodo,
+        accion,
         totalPrestamos: prestamos.length,
         duracionMs: duration
       });
@@ -74,6 +75,7 @@ export class GetPrestamosHipotecariosQuery {
         clave_organica_0: claves.clave0,
         clave_organica_1: claves.clave1,
         periodo,
+        accion,
         computadora_antigua: computadoraAntigua,
         prestamos
       };

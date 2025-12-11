@@ -1,7 +1,7 @@
 import { Database } from 'node-firebird';
 import { AfiliadoPersonal } from '../../domain/entities/AfiliadoPersonal.js';
 import { IAfiliadoPersonalRepository } from '../../domain/repositories/IAfiliadoPersonalRepository.js';
-import { executeSerializedQuery } from '../../../../db/firebird.js';
+import { executeSerializedQuery, decodeFirebirdObject } from '../../../../db/firebird.js';
 import pino from 'pino';
 
 const logger = pino({
@@ -144,7 +144,10 @@ export class AfiliadoPersonalRepository implements IAfiliadoPersonalRepository {
             const records = Array.isArray(result) ? result : [];
             logger.debug({ ...logContext, recordCount: records.length }, 'Registros obtenidos de Firebird');
 
-            const mappedRecords = records.map((row: any) => this.mapRowToEntity(row));
+            // Aplicar decodificación de caracteres especiales (WIN1252 -> UTF-8) antes de mapear
+            const decodedRecords = records.map((row: any) => decodeFirebirdObject(row));
+            
+            const mappedRecords = decodedRecords.map((row: any) => this.mapRowToEntity(row));
             logger.info({ ...logContext, recordCount: mappedRecords.length }, 'Consulta obtenerPlantilla completada exitosamente');
             resolve(mappedRecords);
           } catch (mapError: any) {
@@ -286,7 +289,10 @@ export class AfiliadoPersonalRepository implements IAfiliadoPersonalRepository {
             const records = Array.isArray(result) ? result : [];
             logger.debug({ ...logContext, recordCount: records.length }, 'Registros obtenidos de Firebird');
 
-            const mappedRecords = records.map((row: any) => this.mapRowToEntity(row));
+            // Aplicar decodificación de caracteres especiales (WIN1252 -> UTF-8) antes de mapear
+            const decodedRecords = records.map((row: any) => decodeFirebirdObject(row));
+            
+            const mappedRecords = decodedRecords.map((row: any) => this.mapRowToEntity(row));
             logger.info({ ...logContext, recordCount: mappedRecords.length }, 'Búsqueda histórica completada exitosamente');
             resolve(mappedRecords);
           } catch (mapError: any) {

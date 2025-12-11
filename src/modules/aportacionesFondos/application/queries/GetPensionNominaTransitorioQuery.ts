@@ -44,17 +44,17 @@ export class GetPensionNominaTransitorioQuery {
       // Obtener quincena y año desde BitacoraAfectacionOrg usando org0 y org1 del token
       // Para pensionados, usamos las claves orgánicas del usuario para obtener el período
       console.log('[APORTACIONES_FONDOS] [PENSION_NOMINA_TRANSITORIO] Obteniendo quincena y año', { ...logContext, org0: userClave0, org1: userClave1 });
-      const { quincena, anio } = await this.aportacionFondoRepo.obtenerQuincenaYAnio(
+      const { quincena, anio, accion } = await this.aportacionFondoRepo.obtenerQuincenaYAnio(
         userClave0,
         userClave1
       );
-      console.log('[APORTACIONES_FONDOS] [PENSION_NOMINA_TRANSITORIO] Quincena y año obtenidos', { ...logContext, quincena, anio });
+      console.log('[APORTACIONES_FONDOS] [PENSION_NOMINA_TRANSITORIO] Quincena y año obtenidos', { ...logContext, quincena, anio, accion });
 
       // Calcular período: quincena con padding de 2 dígitos + dos últimos dígitos del año (SIN restar 1)
       const quincenaStr = String(quincena).padStart(2, '0');
       const anioStr = String(anio).slice(-2);
       const periodo = quincenaStr + anioStr;
-      console.log('[APORTACIONES_FONDOS] [PENSION_NOMINA_TRANSITORIO] Período calculado', { ...logContext, periodo, quincena, anio });
+      console.log('[APORTACIONES_FONDOS] [PENSION_NOMINA_TRANSITORIO] Período calculado', { ...logContext, periodo, quincena, anio, accion });
 
       // Para pensionados: org0='04' y org1='60' son hardcodeados, org2 y org3 vienen del token
       const org0Pension = '04';
@@ -83,6 +83,7 @@ export class GetPensionNominaTransitorioQuery {
       console.log('[APORTACIONES_FONDOS] [PENSION_NOMINA_TRANSITORIO] Consulta completada exitosamente', {
         ...logContext,
         periodo,
+        accion,
         totalRegistros: registros.length,
         duracionMs: duration
       });
@@ -92,6 +93,7 @@ export class GetPensionNominaTransitorioQuery {
         clave_organica_0: userClave0,
         clave_organica_1: userClave1,
         periodo,
+        accion,
         registros
       };
     } catch (error: any) {

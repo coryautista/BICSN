@@ -42,6 +42,7 @@ export interface PrestamosHipotecariosResponse {
   clave_organica_0: string;
   clave_organica_1: string;
   periodo: string;
+  accion: string;
   computadora_antigua: boolean;
   prestamos: PrestamoHipotecario[];
 }

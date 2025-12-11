@@ -8,7 +8,7 @@ import { PensionNominaTransitorio } from '../../domain/entities/PensionNominaTra
 import { AportacionFondoDomainError, AportacionFondoError, AportacionFondoErrorMessages } from '../../domain/errors.js';
 import { getOrgPersonalByClavesOrganicas } from '../../../orgPersonal/orgPersonal.repo.js';
 import { getPool, sql } from '../../../../db/mssql.js';
-import { executeSerializedQuery } from '../../../../db/firebird.js';
+import { executeSerializedQuery, decodeFirebirdObject } from '../../../../db/firebird.js';
 
 export class AportacionFondoRepository implements IAportacionFondoRepository {
   async obtenerAportacionesIndividuales(
@@ -209,7 +209,7 @@ export class AportacionFondoRepository implements IAportacionFondoRepository {
    * Formato: Quincena (2 dígitos) + Año (2 últimos dígitos)
    * Ejemplo: '0125' (quincena 01, año 2025)
    */
-  async obtenerPeriodoAplicacion(org0: string, org1: string): Promise<string> {
+  async obtenerPeriodoAplicacion(org0: string, org1: string): Promise<{ periodo: string; accion: string }> {
     const logContext = { org0, org1 };
     
     try {
@@ -249,18 +249,18 @@ export class AportacionFondoRepository implements IAportacionFondoRepository {
         .input('Org0', sql.Char(2), org0)
         .input('Org1', sql.Char(2), org1)
         .query(`
-          SELECT TOP 1 Quincena, Anio, CreatedAt
+          SELECT TOP 1 Quincena, Anio, CreatedAt, Accion
           FROM afec.BitacoraAfectacionOrg
           WHERE Org0 = @Org0
             AND Org1 = @Org1
-            AND Accion = 'APLICAR'
+            AND (Accion = 'APLICAR' OR Accion = 'TERMINADO')
           ORDER BY Anio DESC, Quincena DESC, CreatedAt DESC
         `);
 
       if (result.recordset.length === 0) {
         console.warn('[APORTACIONES_FONDOS] [PERIODO] No se encontró período de aplicación', logContext);
         throw new AportacionFondoDomainError(
-          `No se encontró período de aplicación para las claves orgánicas ${org0}/${org1}. Verifique que exista un registro con Accion='APLICAR' en BitacoraAfectacionOrg`,
+          `No se encontró período de aplicación para las claves orgánicas ${org0}/${org1}. Verifique que exista un registro con Accion='APLICAR' o Accion='TERMINADO' en BitacoraAfectacionOrg`,
           AportacionFondoError.PERIODO_NO_ENCONTRADO
         );
       }
@@ -269,6 +269,7 @@ export class AportacionFondoRepository implements IAportacionFondoRepository {
       const quincena = registro.Quincena;
       const anio = registro.Anio;
       const createdAt = registro.CreatedAt;
+      const accion = registro.Accion;
 
       // Validar que quincena y año sean válidos
       if (!quincena || quincena < 1 || quincena > 24) {
@@ -295,10 +296,11 @@ export class AportacionFondoRepository implements IAportacionFondoRepository {
         periodo,
         quincena,
         anio,
+        accion,
         createdAt: createdAt ? new Date(createdAt).toISOString() : null
       });
       
-      return periodo;
+      return { periodo, accion };
     } catch (error) {
       if (error instanceof AportacionFondoDomainError) {
         throw error;
@@ -415,9 +417,12 @@ export class AportacionFondoRepository implements IAportacionFondoRepository {
               return;
             }
 
+            // Decodificar resultados de Firebird antes de mapear
+            const decodedResult = result.map((row: any) => decodeFirebirdObject(row));
+            
             // Mapear resultados a entidad Prestamo
-            console.log('[APORTACIONES_FONDOS] [AP_S_PCP] Mapeando resultados', { ...logContext, totalRegistros: result.length });
-            const prestamos: Prestamo[] = result.map((row: any, index: number) => {
+            console.log('[APORTACIONES_FONDOS] [AP_S_PCP] Mapeando resultados', { ...logContext, totalRegistros: decodedResult.length });
+            const prestamos: Prestamo[] = decodedResult.map((row: any, index: number) => {
               try {
                 return {
                   interno: row.INTERNO || 0,
@@ -657,9 +662,12 @@ export class AportacionFondoRepository implements IAportacionFondoRepository {
               return;
             }
 
+            // Decodificar resultados de Firebird antes de mapear
+            const decodedResult = result.map((row: any) => decodeFirebirdObject(row));
+            
             // Mapear resultados a entidad PrestamoMedianoPlazo
-            console.log('[APORTACIONES_FONDOS] [AP_S_VIV] Mapeando resultados', { ...logContext, totalRegistros: result.length });
-            const prestamos: PrestamoMedianoPlazo[] = result.map((row: any, index: number) => {
+            console.log('[APORTACIONES_FONDOS] [AP_S_VIV] Mapeando resultados', { ...logContext, totalRegistros: decodedResult.length });
+            const prestamos: PrestamoMedianoPlazo[] = decodedResult.map((row: any, index: number) => {
               try {
                 return {
                   interno: row.INTERNO || 0,
@@ -866,9 +874,12 @@ export class AportacionFondoRepository implements IAportacionFondoRepository {
               return;
             }
 
+            // Decodificar resultados de Firebird antes de mapear
+            const decodedResult = result.map((row: any) => decodeFirebirdObject(row));
+            
             // Mapear resultados a entidad PrestamoHipotecario
-            console.log(`[APORTACIONES_FONDOS] [HIPOTECARIOS] Mapeando resultados`, { ...logContext, totalRegistros: result.length });
-            const prestamos: PrestamoHipotecario[] = result.map((row: any, index: number) => {
+            console.log(`[APORTACIONES_FONDOS] [HIPOTECARIOS] Mapeando resultados`, { ...logContext, totalRegistros: decodedResult.length });
+            const prestamos: PrestamoHipotecario[] = decodedResult.map((row: any, index: number) => {
               try {
                 return {
                   interno: row.INTERNO || 0,
@@ -963,6 +974,11 @@ export class AportacionFondoRepository implements IAportacionFondoRepository {
     claveOrganica0: string,
     claveOrganica1: string
   ): Promise<any[]> {
+    const startTime = Date.now();
+    const logContext = { claveOrganica0, claveOrganica1 };
+    
+    console.log('[APORTACIONES_FONDOS] [obtenerOrgPersonalConNombre] Iniciando consulta', logContext);
+    
     const sql = `
       SELECT
         o.INTERNO,
@@ -996,37 +1012,78 @@ export class AportacionFondoRepository implements IAportacionFondoRepository {
 
     return executeSerializedQuery((db) => {
       return new Promise<any[]>((resolve, reject) => {
+        console.log('[APORTACIONES_FONDOS] [obtenerOrgPersonalConNombre] Dentro de executeSerializedQuery', logContext);
+        
         if (!db || typeof db.query !== 'function') {
+          console.error('[APORTACIONES_FONDOS] [obtenerOrgPersonalConNombre] Conexión Firebird no disponible', logContext);
           reject(new Error('Firebird connection not available'));
           return;
         }
 
+        let timeoutTriggered = false;
         const timeoutId = setTimeout(() => {
-          reject(new Error('Firebird query timeout'));
+          timeoutTriggered = true;
+          const elapsed = Date.now() - startTime;
+          console.error('[APORTACIONES_FONDOS] [obtenerOrgPersonalConNombre] TIMEOUT después de 30 segundos', {
+            ...logContext,
+            elapsedMs: elapsed
+          });
+          reject(new Error(`Firebird query timeout después de ${elapsed}ms`));
         }, 30000);
 
+        console.log('[APORTACIONES_FONDOS] [obtenerOrgPersonalConNombre] Ejecutando query SQL', {
+          ...logContext,
+          sql: sql.substring(0, 200) + '...'
+        });
+
         db.query(sql, [claveOrganica0, claveOrganica1], (err: any, result: any) => {
+          const elapsed = Date.now() - startTime;
+          
+          if (timeoutTriggered) {
+            console.warn('[APORTACIONES_FONDOS] [obtenerOrgPersonalConNombre] Callback recibido después del timeout', {
+              ...logContext,
+              elapsedMs: elapsed
+            });
+            return; // Ya se rechazó la promesa, no hacer nada más
+          }
+          
           clearTimeout(timeoutId);
 
           if (err) {
+            console.error('[APORTACIONES_FONDOS] [obtenerOrgPersonalConNombre] Error en query', {
+              ...logContext,
+              error: err.message || String(err),
+              errorCode: err.code,
+              elapsedMs: elapsed
+            });
             reject(err);
             return;
           }
 
+          console.log('[APORTACIONES_FONDOS] [obtenerOrgPersonalConNombre] Query completada exitosamente', {
+            ...logContext,
+            resultLength: result ? (Array.isArray(result) ? result.length : 1) : 0,
+            elapsedMs: elapsed
+          });
+
           if (!result) {
+            console.warn('[APORTACIONES_FONDOS] [obtenerOrgPersonalConNombre] Resultado nulo', logContext);
             resolve([]);
             return;
           }
 
           const records = Array.isArray(result) ? result : [];
           
+          // Decodificar resultados de Firebird antes de mapear
+          const decodedRecords = records.map((row: any) => decodeFirebirdObject(row));
+          
           // Debug: verificar estructura del primer resultado
-          if (records.length > 0) {
-            console.log('[APORTACIONES_FONDOS] [DEBUG] Primer row keys:', Object.keys(records[0]));
-            console.log('[APORTACIONES_FONDOS] [DEBUG] Primer row completo:', JSON.stringify(records[0], null, 2));
+          if (decodedRecords.length > 0) {
+            console.log('[APORTACIONES_FONDOS] [DEBUG] Primer row keys:', Object.keys(decodedRecords[0]));
+            console.log('[APORTACIONES_FONDOS] [DEBUG] Primer row completo:', JSON.stringify(decodedRecords[0], null, 2));
           }
           
-          const mappedRecords = records.map((row: any, index: number) => {
+          const mappedRecords = decodedRecords.map((row: any, index: number) => {
             // Firebird retorna columnas en mayúsculas
             // Usar el alias NOMBRE_EMPLEADO que creamos en la consulta SQL
             let nombreValue = null;
@@ -1178,7 +1235,7 @@ export class AportacionFondoRepository implements IAportacionFondoRepository {
   /**
    * Obtiene quincena y año desde BitacoraAfectacionOrg
    */
-  async obtenerQuincenaYAnio(org0: string, org1: string): Promise<{ quincena: number; anio: number }> {
+  async obtenerQuincenaYAnio(org0: string, org1: string): Promise<{ quincena: number; anio: number; accion: string }> {
     const logContext = { org0, org1 };
     
     try {
@@ -1218,18 +1275,18 @@ export class AportacionFondoRepository implements IAportacionFondoRepository {
         .input('Org0', sql.Char(2), org0)
         .input('Org1', sql.Char(2), org1)
         .query(`
-          SELECT TOP 1 Quincena, Anio, CreatedAt
+          SELECT TOP 1 Quincena, Anio, CreatedAt, Accion
           FROM afec.BitacoraAfectacionOrg
           WHERE Org0 = @Org0
             AND Org1 = @Org1
-            AND Accion = 'APLICAR'
+            AND (Accion = 'APLICAR' OR Accion = 'TERMINADO')
           ORDER BY Anio DESC, Quincena DESC, CreatedAt DESC
         `);
 
       if (result.recordset.length === 0) {
         console.warn('[APORTACIONES_FONDOS] [QUINCENA_ANIO] No se encontró registro en BitacoraAfectacionOrg', logContext);
         throw new AportacionFondoDomainError(
-          `No se encontró registro con Accion='APLICAR' para las claves orgánicas ${org0}/${org1} en BitacoraAfectacionOrg`,
+          `No se encontró registro con Accion='APLICAR' o Accion='TERMINADO' para las claves orgánicas ${org0}/${org1} en BitacoraAfectacionOrg`,
           AportacionFondoError.PERIODO_NO_ENCONTRADO
         );
       }
@@ -1237,6 +1294,7 @@ export class AportacionFondoRepository implements IAportacionFondoRepository {
       const registro = result.recordset[0];
       const quincena = registro.Quincena;
       const anio = registro.Anio;
+      const accion = registro.Accion;
 
       // Validar que quincena y año sean válidos
       if (!quincena || quincena < 1 || quincena > 24) {
@@ -1256,10 +1314,11 @@ export class AportacionFondoRepository implements IAportacionFondoRepository {
       console.log('[APORTACIONES_FONDOS] [QUINCENA_ANIO] Quincena y año obtenidos exitosamente', {
         ...logContext,
         quincena,
-        anio
+        anio,
+        accion
       });
-      
-      return { quincena, anio };
+
+      return { quincena, anio, accion };
     } catch (error) {
       if (error instanceof AportacionFondoDomainError) {
         throw error;
@@ -1415,8 +1474,11 @@ export class AportacionFondoRepository implements IAportacionFondoRepository {
                 return;
               }
 
+              // Decodificar resultados de Firebird antes de mapear
+              const decodedResult = resultArray.map((row: any) => decodeFirebirdObject(row));
+              
               // Mapear resultados a entidad AportacionGuarderia
-              const aportaciones: AportacionGuarderia[] = resultArray.map((row: any) => ({
+              const aportaciones: AportacionGuarderia[] = decodedResult.map((row: any) => ({
                 titular_nombre: row.TITULAR_NOMBRE || null,
                 titular_no_empleado: row.TITULAR_NO_EMPLEADO || null,
                 titular_monto: row.TITULAR_MONTO !== null && row.TITULAR_MONTO !== undefined ? Number(row.TITULAR_MONTO) : null,
@@ -1676,8 +1738,11 @@ export class AportacionFondoRepository implements IAportacionFondoRepository {
                 return;
               }
 
+              // Decodificar resultados de Firebird antes de mapear
+              const decodedResult = resultArray.map((row: any) => decodeFirebirdObject(row));
+              
               // Mapear resultados a entidad PensionNominaTransitorio
-              const registros: PensionNominaTransitorio[] = resultArray.map((row: any) => ({
+              const registros: PensionNominaTransitorio[] = decodedResult.map((row: any) => ({
                 fpension: row.FPENSION !== null && row.FPENSION !== undefined ? Number(row.FPENSION) : null,
                 interno: row.INTERNO !== null && row.INTERNO !== undefined ? Number(row.INTERNO) : null,
                 nombres: row.NOMBRES || null,

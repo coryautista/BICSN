@@ -43,11 +43,11 @@ export class GetPrestamosMedianoPlazoQuery {
 
       // Obtener período de aplicación desde BitacoraAfectacionOrg
       console.log('[APORTACIONES_FONDOS] [PRESTAMOS_MEDIANO_PLAZO] Obteniendo período de aplicación', { ...logContext, org0: claves.clave0, org1: claves.clave1 });
-      const periodo = await this.aportacionFondoRepo.obtenerPeriodoAplicacion(
+      const { periodo, accion } = await this.aportacionFondoRepo.obtenerPeriodoAplicacion(
         claves.clave0,
         claves.clave1
       );
-      console.log('[APORTACIONES_FONDOS] [PRESTAMOS_MEDIANO_PLAZO] Período obtenido', { ...logContext, periodo });
+      console.log('[APORTACIONES_FONDOS] [PRESTAMOS_MEDIANO_PLAZO] Período obtenido', { ...logContext, periodo, accion });
 
       // Obtener préstamos a mediano plazo ejecutando procedimiento AP_S_VIV
       console.log('[APORTACIONES_FONDOS] [PRESTAMOS_MEDIANO_PLAZO] Ejecutando procedimiento AP_S_VIV', { ...logContext, periodo });
@@ -61,6 +61,7 @@ export class GetPrestamosMedianoPlazoQuery {
       console.log('[APORTACIONES_FONDOS] [PRESTAMOS_MEDIANO_PLAZO] Consulta completada exitosamente', {
         ...logContext,
         periodo,
+        accion,
         totalPrestamos: prestamos.length,
         duracionMs: duration
       });
@@ -69,6 +70,7 @@ export class GetPrestamosMedianoPlazoQuery {
         clave_organica_0: claves.clave0,
         clave_organica_1: claves.clave1,
         periodo,
+        accion,
         prestamos
       };
     } catch (error: any) {

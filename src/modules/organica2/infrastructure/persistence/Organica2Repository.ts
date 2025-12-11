@@ -1,4 +1,4 @@
-import { executeSerializedQuery } from '../../../../db/firebird.js';
+import { executeSerializedQuery, decodeFirebirdObject } from '../../../../db/firebird.js';
 import { IOrganica2Repository } from '../../domain/repositories/IOrganica2Repository.js';
 import { Organica2, CreateOrganica2Data, UpdateOrganica2Data } from '../../domain/entities/Organica2.js';
 
@@ -18,17 +18,18 @@ export class Organica2Repository implements IOrganica2Repository {
             resolve(undefined);
             return;
           }
-          const row = result[0];
+          // Decodificar resultado de Firebird antes de mapear
+          const decodedRow = decodeFirebirdObject(result[0]);
           resolve({
-            claveOrganica0: row.CLAVE_ORGANICA_0,
-            claveOrganica1: row.CLAVE_ORGANICA_1,
-            claveOrganica2: row.CLAVE_ORGANICA_2,
-            descripcion: row.DESCRIPCION,
-            titular: row.TITULAR,
-            fechaRegistro2: new Date(row.FECHA_REGISTRO_2),
-            fechaFin2: row.FECHA_FIN_2 ? new Date(row.FECHA_FIN_2) : undefined,
-            usuario: row.USUARIO,
-            estatus: row.ESTATUS
+            claveOrganica0: decodedRow.CLAVE_ORGANICA_0,
+            claveOrganica1: decodedRow.CLAVE_ORGANICA_1,
+            claveOrganica2: decodedRow.CLAVE_ORGANICA_2,
+            descripcion: decodedRow.DESCRIPCION,
+            titular: decodedRow.TITULAR,
+            fechaRegistro2: new Date(decodedRow.FECHA_REGISTRO_2),
+            fechaFin2: decodedRow.FECHA_FIN_2 ? new Date(decodedRow.FECHA_FIN_2) : undefined,
+            usuario: decodedRow.USUARIO,
+            estatus: decodedRow.ESTATUS
           });
         }
       );
@@ -47,7 +48,9 @@ export class Organica2Repository implements IOrganica2Repository {
             reject(err);
             return;
           }
-          const records = result.map((row: any) => ({
+          // Decodificar resultados de Firebird antes de mapear
+          const decodedResult = result.map((row: any) => decodeFirebirdObject(row));
+          const records = decodedResult.map((row: any) => ({
             claveOrganica0: row.CLAVE_ORGANICA_0,
             claveOrganica1: row.CLAVE_ORGANICA_1,
             claveOrganica2: row.CLAVE_ORGANICA_2,
@@ -76,7 +79,9 @@ export class Organica2Repository implements IOrganica2Repository {
             reject(err);
             return;
           }
-          const records = result.map((row: any) => ({
+          // Decodificar resultados de Firebird antes de mapear
+          const decodedResult = result.map((row: any) => decodeFirebirdObject(row));
+          const records = decodedResult.map((row: any) => ({
             claveOrganica0: row.CLAVE_ORGANICA_0,
             claveOrganica1: row.CLAVE_ORGANICA_1,
             claveOrganica2: row.CLAVE_ORGANICA_2,

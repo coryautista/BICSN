@@ -1,4 +1,4 @@
-import { executeSerializedQuery } from '../../../../db/firebird.js';
+import { executeSerializedQuery, decodeFirebirdObject } from '../../../../db/firebird.js';
 import { IOrganica1Repository } from '../../domain/repositories/IOrganica1Repository.js';
 import { Organica1, CreateOrganica1Data, UpdateOrganica1Data } from '../../domain/entities/Organica1.js';
 
@@ -18,28 +18,29 @@ export class Organica1Repository implements IOrganica1Repository {
             resolve(undefined);
             return;
           }
-          const row = result[0];
+          // Decodificar resultado de Firebird antes de mapear
+          const decodedRow = decodeFirebirdObject(result[0]);
           resolve({
-            claveOrganica0: row.CLAVE_ORGANICA_0,
-            claveOrganica1: row.CLAVE_ORGANICA_1,
-            descripcion: row.DESCRIPCION,
-            titular: row.TITULAR,
-            rfc: row.RFC,
-            imss: row.IMSS,
-            infonavit: row.INFONAVIT,
-            bancoSar: row.BANCO_SAR,
-            cuentaSar: row.CUENTA_SAR,
-            tipoEmpresaSar: row.TIPO_EMPRESA_SAR,
-            pcp: row.PCP,
-            ph: row.PH,
-            fv: row.FV,
-            fg: row.FG,
-            di: row.DI,
-            fechaRegistro1: new Date(row.FECHA_REGISTRO_1),
-            fechaFin1: row.FECHA_FIN_1 ? new Date(row.FECHA_FIN_1) : undefined,
-            usuario: row.USUARIO,
-            estatus: row.ESTATUS,
-            sar: row.SAR
+            claveOrganica0: decodedRow.CLAVE_ORGANICA_0,
+            claveOrganica1: decodedRow.CLAVE_ORGANICA_1,
+            descripcion: decodedRow.DESCRIPCION,
+            titular: decodedRow.TITULAR,
+            rfc: decodedRow.RFC,
+            imss: decodedRow.IMSS,
+            infonavit: decodedRow.INFONAVIT,
+            bancoSar: decodedRow.BANCO_SAR,
+            cuentaSar: decodedRow.CUENTA_SAR,
+            tipoEmpresaSar: decodedRow.TIPO_EMPRESA_SAR,
+            pcp: decodedRow.PCP,
+            ph: decodedRow.PH,
+            fv: decodedRow.FV,
+            fg: decodedRow.FG,
+            di: decodedRow.DI,
+            fechaRegistro1: new Date(decodedRow.FECHA_REGISTRO_1),
+            fechaFin1: decodedRow.FECHA_FIN_1 ? new Date(decodedRow.FECHA_FIN_1) : undefined,
+            usuario: decodedRow.USUARIO,
+            estatus: decodedRow.ESTATUS,
+            sar: decodedRow.SAR
           });
         }
       );
@@ -58,7 +59,9 @@ export class Organica1Repository implements IOrganica1Repository {
             reject(err);
             return;
           }
-          const records = result.map((row: any) => ({
+          // Decodificar resultados de Firebird antes de mapear
+          const decodedResult = result.map((row: any) => decodeFirebirdObject(row));
+          const records = decodedResult.map((row: any) => ({
             claveOrganica0: row.CLAVE_ORGANICA_0,
             claveOrganica1: row.CLAVE_ORGANICA_1,
             descripcion: row.DESCRIPCION,
@@ -98,7 +101,9 @@ export class Organica1Repository implements IOrganica1Repository {
             reject(err);
             return;
           }
-          const records = result.map((row: any) => ({
+          // Decodificar resultados de Firebird antes de mapear
+          const decodedResult = result.map((row: any) => decodeFirebirdObject(row));
+          const records = decodedResult.map((row: any) => ({
             claveOrganica0: row.CLAVE_ORGANICA_0,
             claveOrganica1: row.CLAVE_ORGANICA_1,
             descripcion: row.DESCRIPCION,

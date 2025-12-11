@@ -1,4 +1,4 @@
-import { executeSerializedQuery } from '../../../../../db/firebird.js';
+import { executeSerializedQuery, decodeFirebirdObject } from '../../../../../db/firebird.js';
 import { ICAIRRepository } from '../../domain/repositories/ICAIRRepository.js';
 import { EstadoCuentaCAIR } from '../../domain/entities/EstadoCuentaCAIR.js';
 import { CAIREntregado } from '../../domain/entities/CAIREntregado.js';
@@ -99,7 +99,10 @@ export class CAIRRepository implements ICAIRRepository {
 
               logger.info({ ...logContext, totalRegistros: result.length }, 'Mapeando resultados');
 
-              const estados: EstadoCuentaCAIR[] = result.map((row: any) => ({
+              // Decodificar resultados de Firebird antes de mapear
+              const decodedResult = result.map((row: any) => decodeFirebirdObject(row));
+
+              const estados: EstadoCuentaCAIR[] = decodedResult.map((row: any) => ({
                 org0: String(row.ORG0 || ''),
                 org1: String(row.ORG1 || ''),
                 periodo: String(row.PERIODO || ''),
@@ -260,7 +263,10 @@ export class CAIRRepository implements ICAIRRepository {
 
               logger.info({ ...logContext, totalRegistros: result.length }, 'Mapeando resultados');
 
-              const entregados: CAIREntregado[] = result.map((row: any) => ({
+              // Decodificar resultados de Firebird antes de mapear
+              const decodedResult = result.map((row: any) => decodeFirebirdObject(row));
+
+              const entregados: CAIREntregado[] = decodedResult.map((row: any) => ({
                 interno: row.INTERNO || 0,
                 nombre: String(row.NOMBRE || ''),
                 rfc: String(row.RFC || ''),

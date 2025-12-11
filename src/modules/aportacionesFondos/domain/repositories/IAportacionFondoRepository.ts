@@ -42,10 +42,10 @@ export interface IAportacionFondoRepository {
   ): Promise<PrestamoHipotecario[]>;
   
   // Obtener período de aplicación desde BitacoraAfectacionOrg
-  obtenerPeriodoAplicacion(org0: string, org1: string): Promise<string>;
+  obtenerPeriodoAplicacion(org0: string, org1: string): Promise<{ periodo: string; accion: string }>;
   
   // Obtener quincena y año desde BitacoraAfectacionOrg
-  obtenerQuincenaYAnio(org0: string, org1: string): Promise<{ quincena: number; anio: number }>;
+  obtenerQuincenaYAnio(org0: string, org1: string): Promise<{ quincena: number; anio: number; accion: string }>;
   
   // Obtener aportación guarderías ejecutando función EBI2_RECIBOS_IMPRIMIR
   obtenerAportacionGuarderias(

@@ -9,6 +9,7 @@ export interface PeriodoTrabajo {
   periodo: string;
   quincena: number;
   anio: number;
+  accion: string;
   fechaInicio: string; // YYYY-MM-DD
   fechaFin: string;    // YYYY-MM-DD
 }

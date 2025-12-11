@@ -43,17 +43,17 @@ export class GetAportacionGuarderiasQuery {
 
       // Obtener quincena y año desde BitacoraAfectacionOrg
       console.log('[APORTACIONES_FONDOS] [APORTACION_GUARDERIAS] Obteniendo quincena y año', { ...logContext, org0: claves.clave0, org1: claves.clave1 });
-      const { quincena, anio } = await this.aportacionFondoRepo.obtenerQuincenaYAnio(
+      const { quincena, anio, accion } = await this.aportacionFondoRepo.obtenerQuincenaYAnio(
         claves.clave0,
         claves.clave1
       );
-      console.log('[APORTACIONES_FONDOS] [APORTACION_GUARDERIAS] Quincena y año obtenidos', { ...logContext, quincena, anio });
+      console.log('[APORTACIONES_FONDOS] [APORTACION_GUARDERIAS] Quincena y año obtenidos', { ...logContext, quincena, anio, accion });
 
       // Calcular período: quincena con padding de 2 dígitos + dos últimos dígitos del año
       const quincenaStr = String(quincena).padStart(2, '0');
       const anioStr = String(anio).slice(-2);
       const periodo = quincenaStr + anioStr;
-      console.log('[APORTACIONES_FONDOS] [APORTACION_GUARDERIAS] Período calculado', { ...logContext, periodo, quincena, anio });
+      console.log('[APORTACIONES_FONDOS] [APORTACION_GUARDERIAS] Período calculado', { ...logContext, periodo, quincena, anio, accion });
 
       // Obtener aportaciones ejecutando función EBI2_RECIBOS_IMPRIMIR
       console.log('[APORTACIONES_FONDOS] [APORTACION_GUARDERIAS] Ejecutando función EBI2_RECIBOS_IMPRIMIR', { ...logContext, periodo });
@@ -67,6 +67,7 @@ export class GetAportacionGuarderiasQuery {
       console.log('[APORTACIONES_FONDOS] [APORTACION_GUARDERIAS] Consulta completada exitosamente', {
         ...logContext,
         periodo,
+        accion,
         totalAportaciones: aportaciones.length,
         duracionMs: duration
       });
@@ -75,6 +76,7 @@ export class GetAportacionGuarderiasQuery {
         clave_organica_0: claves.clave0,
         clave_organica_1: claves.clave1,
         periodo,
+        accion,
         aportaciones
       };
     } catch (error: any) {

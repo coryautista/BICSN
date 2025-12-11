@@ -1,4 +1,4 @@
-import { executeSerializedQuery } from '../../../../../db/firebird.js';
+import { executeSerializedQuery, decodeFirebirdObject } from '../../../../../db/firebird.js';
 import { IAfiliadosReportesRepository } from '../../domain/repositories/IAfiliadosReportesRepository.js';
 import { HistorialMovimientosQuin } from '../../domain/entities/HistorialMovimientosQuin.js';
 import { HistorialMovPromedioSdo } from '../../domain/entities/HistorialMovPromedioSdo.js';
@@ -105,12 +105,15 @@ export class AfiliadosReportesRepository implements IAfiliadosReportesRepository
 
               logger.info({ ...logContext, totalRegistros: result.length }, 'Mapeando resultados');
 
+              // Decodificar resultados de Firebird antes de mapear
+              const decodedResult = result.map((row: any) => decodeFirebirdObject(row));
+
               // Debug: Log del primer registro raw
-              if (result.length > 0) {
-                logger.info({ ...logContext, primerRegistro: result[0], keys: Object.keys(result[0]) }, 'Primer registro raw de Firebird');
+              if (decodedResult.length > 0) {
+                logger.info({ ...logContext, primerRegistro: decodedResult[0], keys: Object.keys(decodedResult[0]) }, 'Primer registro raw de Firebird');
               }
 
-              const historiales: HistorialMovimientosQuin[] = result.map((row: any) => ({
+              const historiales: HistorialMovimientosQuin[] = decodedResult.map((row: any) => ({
                 org0: String(row.ORG0 || ''),
                 org1: String(row.ORG1 || ''),
                 quincena: String(row.QUINCENA || ''),
@@ -259,12 +262,15 @@ export class AfiliadosReportesRepository implements IAfiliadosReportesRepository
 
               logger.info({ ...logContext, totalRegistros: result.length }, 'Mapeando resultados');
 
+              // Decodificar resultados de Firebird antes de mapear
+              const decodedResult = result.map((row: any) => decodeFirebirdObject(row));
+
               // Debug: Log del primer registro raw
-              if (result.length > 0) {
-                logger.info({ ...logContext, primerRegistro: result[0], keys: Object.keys(result[0]) }, 'Primer registro raw de Firebird');
+              if (decodedResult.length > 0) {
+                logger.info({ ...logContext, primerRegistro: decodedResult[0], keys: Object.keys(decodedResult[0]) }, 'Primer registro raw de Firebird');
               }
 
-              const promedios: HistorialMovPromedioSdo[] = result.map((row: any) => ({
+              const promedios: HistorialMovPromedioSdo[] = decodedResult.map((row: any) => ({
                 aportacion: Number(row.APORTACION || 0),
                 tsare: Number(row.TSARE || 0),
                 tFra: Number(row.TFRA || 0),

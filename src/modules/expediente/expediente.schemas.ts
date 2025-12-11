@@ -1,7 +1,7 @@
 import { z } from 'zod';
 
 // CURP validation regex based on the check constraint
-const curpRegex = /^[A-Z][A-Z][A-Z][A-Z][0-9][0-9][0-9][0-9][0-9][0-9][HM][A-Z][A-Z][A-Z][A-Z][A-Z][0-9][0-9]$/;
+const curpRegex = /^[A-Z]{4}[0-9]{6}[HM][A-Z]{5}[0-9A-Z][0-9]$/;
 
 // DocumentType schemas
 export const CreateDocumentTypeSchema = z.object({

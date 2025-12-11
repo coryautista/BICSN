@@ -290,6 +290,7 @@ export default async function aportacionesFondosRoutes(app: FastifyInstance) {
                 clave_organica_0: { type: 'string' },
                 clave_organica_1: { type: 'string' },
                 periodo: { type: 'string' },
+                accion: { type: 'string' },
                 prestamos: {
                   type: 'array',
                   items: {
@@ -439,6 +440,7 @@ export default async function aportacionesFondosRoutes(app: FastifyInstance) {
                 clave_organica_0: { type: 'string' },
                 clave_organica_1: { type: 'string' },
                 periodo: { type: 'string' },
+                accion: { type: 'string' },
                 prestamos: {
                   type: 'array',
                   items: {
@@ -597,6 +599,7 @@ export default async function aportacionesFondosRoutes(app: FastifyInstance) {
                 clave_organica_0: { type: 'string' },
                 clave_organica_1: { type: 'string' },
                 periodo: { type: 'string' },
+                accion: { type: 'string' },
                 computadora_antigua: { type: 'boolean' },
                 prestamos: {
                   type: 'array',
@@ -780,6 +783,7 @@ export default async function aportacionesFondosRoutes(app: FastifyInstance) {
                 clave_organica_0: { type: 'string' },
                 clave_organica_1: { type: 'string' },
                 periodo: { type: 'string' },
+                accion: { type: 'string' },
                 aportaciones: {
                   type: 'array',
                   items: {
@@ -932,6 +936,7 @@ export default async function aportacionesFondosRoutes(app: FastifyInstance) {
                 clave_organica_0: { type: 'string' },
                 clave_organica_1: { type: 'string' },
                 periodo: { type: 'string' },
+                accion: { type: 'string' },
                 registros: {
                   type: 'array',
                   items: {

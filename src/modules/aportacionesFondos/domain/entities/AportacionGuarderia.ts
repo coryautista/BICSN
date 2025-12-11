@@ -32,6 +32,7 @@ export interface AportacionGuarderiasResponse {
   clave_organica_0: string;
   clave_organica_1: string;
   periodo: string;
+  accion: string;
   aportaciones: AportacionGuarderia[];
 }
 

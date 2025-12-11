@@ -110,7 +110,10 @@ export class AplicacionesQNARepository implements IAplicacionesQNARepository {
 
               logger.info({ ...logContext, totalRegistros: result.length }, 'Mapeando resultados');
 
-              const movimientos: MovimientoQuincenal[] = result.map((row: any) => ({
+              // Decodificar resultados de Firebird antes de mapear
+              const decodedResult = result.map((row: any) => decodeFirebirdObject(row));
+
+              const movimientos: MovimientoQuincenal[] = decodedResult.map((row: any) => ({
                 interno: row.INTERNO || 0,
                 consecutivo: row.CONSECUTIVO || 0,
                 cveMovimiento: String(row.CVE_MOVIMIENTO || ''),
@@ -266,7 +269,10 @@ export class AplicacionesQNARepository implements IAplicacionesQNARepository {
 
               logger.info({ ...logContext, totalRegistros: result.length }, 'Mapeando resultados');
 
-              const aportaciones: AplicacionAportaciones[] = result.map((row: any) => ({
+              // Decodificar resultados de Firebird antes de mapear
+              const decodedResult = result.map((row: any) => decodeFirebirdObject(row));
+
+              const aportaciones: AplicacionAportaciones[] = decodedResult.map((row: any) => ({
                 interno: row.INTERNO || 0,
                 nombre: String(row.NOMBRE || ''),
                 sueldom: Number(row.SUELDOM || 0),
@@ -418,7 +424,10 @@ export class AplicacionesQNARepository implements IAplicacionesQNARepository {
 
               logger.info({ ...logContext, totalRegistros: result.length }, 'Mapeando resultados');
 
-              const prestamos: AplicacionPCP[] = result.map((row: any) => ({
+              // Decodificar resultados de Firebird antes de mapear
+              const decodedResult = result.map((row: any) => decodeFirebirdObject(row));
+
+              const prestamos: AplicacionPCP[] = decodedResult.map((row: any) => ({
                 interno: row.INTERNO || 0,
                 rfc: String(row.RFC || ''),
                 nombre: String(row.NOMBRE || ''),
@@ -565,7 +574,10 @@ export class AplicacionesQNARepository implements IAplicacionesQNARepository {
 
               logger.info({ ...logContext, totalRegistros: result.length }, 'Mapeando resultados');
 
-              const prestamos: AplicacionPMP[] = result.map((row: any) => ({
+              // Decodificar resultados de Firebird antes de mapear
+              const decodedResult = result.map((row: any) => decodeFirebirdObject(row));
+
+              const prestamos: AplicacionPMP[] = decodedResult.map((row: any) => ({
                 interno: row.INTERNO || 0,
                 rfc: String(row.RFC || ''),
                 nombre: String(row.NOMBRE || ''),
@@ -724,7 +736,10 @@ export class AplicacionesQNARepository implements IAplicacionesQNARepository {
 
               logger.info({ ...logContext, totalRegistros: result.length }, 'Mapeando resultados');
 
-              const prestamos: AplicacionHIP[] = result.map((row: any) => ({
+              // Decodificar resultados de Firebird antes de mapear
+              const decodedResult = result.map((row: any) => decodeFirebirdObject(row));
+
+              const prestamos: AplicacionHIP[] = decodedResult.map((row: any) => ({
                 interno: row.INTERNO || 0,
                 nombre: String(row.NOMBRE || ''),
                 noEmpleado: String(row.NOEMPLEADO || ''),
@@ -1003,18 +1018,18 @@ export class AplicacionesQNARepository implements IAplicacionesQNARepository {
         .input('Org0', sql.Char(2), org0Normalized)
         .input('Org1', sql.Char(2), org1Normalized)
         .query(`
-          SELECT TOP 1 Quincena, Anio
+          SELECT TOP 1 Quincena, Anio, Accion
           FROM afec.BitacoraAfectacionOrg
           WHERE Org0 = @Org0
             AND Org1 = @Org1
-            AND Accion = 'APLICAR'
+            AND (Accion = 'APLICAR' OR Accion = 'TERMINADO')
           ORDER BY Anio DESC, Quincena DESC, CreatedAt DESC
         `);
 
       if (result.recordset.length === 0) {
         logger.warn({ ...logContext, org0Normalized, org1Normalized }, 'No se encontró período de trabajo');
         throw new AplicacionesQNAError(
-          `No se encontró período de trabajo para las claves orgánicas ${org0Normalized}/${org1Normalized}. Verifique que exista un registro con Accion='APLICAR' en BitacoraAfectacionOrg`,
+          `No se encontró período de trabajo para las claves orgánicas ${org0Normalized}/${org1Normalized}. Verifique que exista un registro con Accion='APLICAR' o Accion='TERMINADO' en BitacoraAfectacionOrg`,
           AplicacionesQNAErrorCode.NOT_FOUND,
           404
         );
@@ -1023,6 +1038,7 @@ export class AplicacionesQNARepository implements IAplicacionesQNARepository {
       const registro = result.recordset[0];
       const quincena = registro.Quincena;
       const anio = registro.Anio;
+      const accion = registro.Accion;
 
       // Validar que quincena y año sean válidos
       if (!quincena || quincena < 1 || quincena > 24) {
@@ -1054,6 +1070,7 @@ export class AplicacionesQNARepository implements IAplicacionesQNARepository {
         periodo,
         quincena,
         anio,
+        accion,
         fechaInicio,
         fechaFin
       }, 'Período obtenido exitosamente');
@@ -1062,6 +1079,7 @@ export class AplicacionesQNARepository implements IAplicacionesQNARepository {
         periodo,
         quincena,
         anio,
+        accion,
         fechaInicio,
         fechaFin
       };
