@@ -7,7 +7,7 @@ export function handleOrganicaCascadeError(error: any, reply: FastifyReply): Fas
 
   // Si es un error del dominio organicaCascade, manejarlo específicamente
   if (error instanceof OrganicaCascadeError) {
-    return reply.status(error.statusCode).send({
+    return reply.code(error.statusCode).send({
       ok: false,
       error: {
         code: error.code,

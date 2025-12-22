@@ -3,6 +3,12 @@ import type { ConnectionPool } from 'mssql';
 import { IAuthRepository } from '../../domain/repositories/IAuthRepository.js';
 import { User, UserRole, CreateUserData } from '../../domain/entities/User.js';
 
+// Función helper para normalizar claves orgánicas a formato de 2 dígitos
+function normalizeClaveOrganica(value: string | number | null | undefined): string | null {
+  if (value === null || value === undefined) return null;
+  return String(value).trim().padStart(2, '0');
+}
+
 export class AuthRepository implements IAuthRepository {
   constructor(private mssqlPool: ConnectionPool) {}
 
@@ -73,8 +79,8 @@ export class AuthRepository implements IAuthRepository {
       .input('algo', sql.VarChar(20), data.passwordAlgo)
       .input('displayName', sql.NVarChar(255), data.displayName ?? null)
       .input('photoPath', sql.NVarChar(255), data.photoPath ?? null)
-      .input('idOrganica0', sql.NVarChar(2), data.idOrganica0?.toString() ?? null)
-      .input('idOrganica1', sql.NVarChar(2), data.idOrganica1?.toString() ?? null)
+      .input('idOrganica0', sql.NVarChar(2), normalizeClaveOrganica(data.idOrganica0))
+      .input('idOrganica1', sql.NVarChar(2), normalizeClaveOrganica(data.idOrganica1))
       .input('idOrganica2', sql.NVarChar(2), data.idOrganica2?.toString() ?? null)
       .input('idOrganica3', sql.NVarChar(2), data.idOrganica3?.toString() ?? null)
       .query(`

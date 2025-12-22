@@ -64,21 +64,14 @@ export async function CAIRRoutes(fastify: FastifyInstance) {
       const query = request.diScope.resolve<GetEstadoCuentaCAIRQuery>('getEstadoCuentaCAIRQuery');
       const estados = await query.execute(quincena, userId);
 
-      // SERIALIZACIÓN INMEDIATA Y MANUAL para evitar pérdida de datos
       const responseObject = {
         success: true,
         data: estados,
         timestamp: new Date().toISOString()
       };
 
-      const responseJson = JSON.stringify(responseObject);
-
-      reply.raw.writeHead(200, {
-        'Content-Type': 'application/json; charset=utf-8',
-        'Content-Length': Buffer.byteLength(responseJson, 'utf8')
-      });
-
-      reply.raw.end(responseJson);
+      // Usar reply.send() para que Fastify maneje automáticamente los headers de CORS
+      return reply.code(200).send(responseObject);
     } catch (error) {
       return handleCAIRError(error, reply);
     }
@@ -147,21 +140,14 @@ export async function CAIRRoutes(fastify: FastifyInstance) {
       const query = request.diScope.resolve<GetCAIREntregadoQuery>('getCAIREntregadoQuery');
       const entregados = await query.execute(fi, ff, tipo, userId);
 
-      // SERIALIZACIÓN INMEDIATA Y MANUAL para evitar pérdida de datos
       const responseObject = {
         success: true,
         data: entregados,
         timestamp: new Date().toISOString()
       };
 
-      const responseJson = JSON.stringify(responseObject);
-
-      reply.raw.writeHead(200, {
-        'Content-Type': 'application/json; charset=utf-8',
-        'Content-Length': Buffer.byteLength(responseJson, 'utf8')
-      });
-
-      reply.raw.end(responseJson);
+      // Usar reply.send() para que Fastify maneje automáticamente los headers de CORS
+      return reply.code(200).send(responseObject);
     } catch (error) {
       return handleCAIRError(error, reply);
     }

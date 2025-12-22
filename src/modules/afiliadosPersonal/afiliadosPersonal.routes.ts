@@ -115,17 +115,23 @@ export default async function afiliadosPersonalRoutes(app: FastifyInstance) {
       // Obtener las claves orgánicas del usuario desde el token JWT
       const user = req.user;
       if (!user || !user.idOrganica0 || !user.idOrganica1) {
-        throw new AfiliadosPersonalAccessDeniedError('Usuario no tiene permisos para acceder a esta información', { userId: user?.id });
+        throw new AfiliadosPersonalAccessDeniedError('Usuario no tiene permisos para acceder a esta información', { userId: user?.sub });
       }
 
-      const claveOrganica0 = user.idOrganica0.toString();
-      const claveOrganica1 = user.idOrganica1.toString();
+      // Normalizar claves orgánicas: deben tener 2 caracteres con padding de ceros a la izquierda
+      // Firebird espera formato "04" no "4"
+      const claveOrganica0 = user.idOrganica0.toString().trim().padStart(2, '0');
+      const claveOrganica1 = user.idOrganica1.toString().trim().padStart(2, '0');
 
       const records = await getPlantillaQuery.execute(claveOrganica0, claveOrganica1);
       
       // El mojibake se limpia automáticamente por el plugin mojibakeCleaner
       return reply.send(ok(records));
     } catch (error: any) {
+      console.error('[DEBUG obtenerPlantilla] Error en endpoint:', {
+        error: error.message,
+        stack: error.stack
+      });
       return handleAfiliadosPersonalError(error, reply);
     }
   });

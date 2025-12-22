@@ -58,6 +58,10 @@ async function buildApp() {
     requestTimeout: 120000, // 2 minutos para requests largos
     schemaErrorFormatter: (errors, dataVar) => {
       // Formatear errores de validación de esquema
+      
+      app.log.error(errors);
+      app.log.info(dataVar);
+      
       const validationMessages = errors.map((error) => {
         const field = error.instancePath?.replace('/', '') || error.params?.missingProperty || 'campo desconocido';
         const originalMessage = error.message || 'Valor inválido';
@@ -92,6 +96,27 @@ async function buildApp() {
 
   // Hook global para asegurar charset=utf-8 en todas las respuestas JSON
   app.addHook('onSend', async (request, reply, payload) => {
+    // Ignorar peticiones OPTIONS (preflight) - Fastify CORS las maneja automáticamente
+    // No debemos modificar el content-type de las respuestas OPTIONS
+    if (request.method === 'OPTIONS') {
+      return payload;
+    }
+    
+    // Log para diagnóstico en rutas PCP
+    if (request.url?.includes('/pcp')) {
+      const payloadPreview = typeof payload === 'string' 
+        ? payload.substring(0, 500) 
+        : JSON.stringify(payload).substring(0, 500);
+      
+      console.log('[SERVER HOOK] onSend para PCP:', {
+        url: request.url,
+        payloadType: typeof payload,
+        payloadLength: typeof payload === 'string' ? payload.length : 'N/A',
+        payloadPreview: payloadPreview,
+        contentType: reply.getHeader('content-type')
+      });
+    }
+    
     // Obtener el content-type actual
     const contentType = reply.getHeader('content-type');
     
@@ -200,7 +225,8 @@ async function setupApplication(app: FastifyInstance) {
   // error handler - debe estar antes de registrar rutas
   app.setErrorHandler((err: any, req: any, reply: any) => {
     app.log.error(err);
-    
+    app.log.info(req);
+    app.log.info(reply);
     // Handle Fastify validation errors
     if (err.validation || err.code === 'FST_ERR_VALIDATION') {
       // Formatear mensajes de validación más descriptivos en español

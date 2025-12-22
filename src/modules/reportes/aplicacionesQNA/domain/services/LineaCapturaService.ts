@@ -1,7 +1,7 @@
 import { AplicacionesQNAError, AplicacionesQNAErrorCode } from '../errors.js';
 
 /**
- * Servicio de dominio para generar líneas de captura SPEI de 11 posiciones
+ * Servicio de dominio para generar líneas de captura SPEI de 15 posiciones
  */
 export class LineaCapturaService {
   private readonly ANIO_BASE = 2014;
@@ -133,7 +133,7 @@ export class LineaCapturaService {
    *   4) DV = (suma MOD 97) + 1  -> rango 1–97
    *   5) Formatear a 2 dígitos (01–97)
    * 
-   * @param lineaSinDV Cadena sin el DV (en este caso posiciones 1–9)
+   * @param lineaSinDV Cadena sin el DV (puede ser de cualquier longitud)
    * @returns Dos dígitos numéricos
    */
   calcularDVBase97(lineaSinDV: string): string {
@@ -158,19 +158,21 @@ export class LineaCapturaService {
   }
 
   /**
-   * Genera la referencia SPEI de 11 posiciones para línea de captura.
+   * Genera la referencia SPEI de 15 posiciones para línea de captura.
    * 
    * Estructura:
    *   Pos  1–4 : referencia base (alfa-numérica, ej. '0101', '04A0')
-   *   Pos  5–8 : fecha condensada (año base 2014)
-   *   Pos  9   : monto condensado
-   *   Pos 10–11: dígito verificador Base 97
+   *   Pos  5–6 : mes (2 dígitos, con padding de ceros)
+   *   Pos  7–8 : año (2 dígitos, últimos 2 del año)
+   *   Pos  9–12: fecha condensada (año base 2014)
+   *   Pos 13   : monto condensado
+   *   Pos 14–15: dígito verificador Base 97
    * 
    * @param params Parámetros para generar la referencia
    * @param params.referencia4 Primeras 4 posiciones (alfa-numéricas)
    * @param params.fechaLimite Fecha límite de pago
    * @param params.importe Importe total con centavos
-   * @returns Referencia completa de 11 caracteres
+   * @returns Referencia completa de 15 caracteres
    */
   generarReferencia11(params: {
     referencia4: string;
@@ -200,22 +202,40 @@ export class LineaCapturaService {
     // Normalizamos a string y a mayúsculas (para soportar letras como 'A')
     const ref4 = referencia4.toString().toUpperCase();
 
+    // Normalizamos la fecha a objeto Date
+    const fecha = fechaLimite instanceof Date ? fechaLimite : new Date(fechaLimite);
+    
+    // Validamos que la fecha sea válida
+    if (Number.isNaN(fecha.getTime())) {
+      throw new AplicacionesQNAError(
+        'Fecha inválida para línea de captura',
+        AplicacionesQNAErrorCode.INVALID_PARAMETERS,
+        400
+      );
+    }
+
+    // Extraemos mes y año de 2 dígitos
+    const month = fecha.getMonth() + 1; // getMonth() es 0–11, por eso +1
+    const year = fecha.getFullYear();
+    const mes2 = month.toString().padStart(2, '0'); // Mes con padding de ceros (01-12)
+    const anio2 = year.toString().slice(-2); // Últimos 2 dígitos del año
+
     // Calculamos la fecha condensada de 4 dígitos
     const fechaCond = this.calcularFechaCondensada(fechaLimite, this.ANIO_BASE);
 
     // Calculamos el monto condensado (un solo dígito)
     const montoCond = this.calcularMontoCondensado(importe).toString();
 
-    // Construimos las primeras 9 posiciones: referencia4 + fechaCondensada + montoCondensado
-    const cuerpo9 = (ref4 + fechaCond + montoCond).toUpperCase();
+    // Construimos las primeras 13 posiciones: referencia4 + mes + año + fechaCondensada + montoCondensado
+    const cuerpo13 = (ref4 + mes2 + anio2 + fechaCond + montoCond).toUpperCase();
 
-    // Calculamos el DV Base 97 sobre las 9 posiciones
-    const dv97 = this.calcularDVBase97(cuerpo9);
+    // Calculamos el DV Base 97 sobre las 13 posiciones
+    const dv97 = this.calcularDVBase97(cuerpo13);
 
-    // Concatenamos todo: 4 + 4 + 1 + 2 = 11 caracteres
-    const referencia11 = cuerpo9 + dv97;
+    // Concatenamos todo: 4 + 2 + 2 + 4 + 1 + 2 = 15 caracteres
+    const referencia15 = cuerpo13 + dv97;
 
-    return referencia11;
+    return referencia15;
   }
 }
 

@@ -32,6 +32,12 @@ export class AfiliadoPersonalRepository implements IAfiliadoPersonalRepository {
 
     logger.debug(logContext, 'Iniciando consulta obtenerPlantilla');
 
+    // Asegurar que los parámetros sean strings y estén limpios
+    // Normalizar a 2 caracteres con padding de ceros a la izquierda (Firebird espera "04" no "4")
+    const clave0 = String(claveOrganica0).trim().padStart(2, '0');
+    const clave1 = String(claveOrganica1).trim().padStart(2, '0');
+    
+    // Query SQL con CAST explícito para asegurar comparación correcta
     const sql = `
       SELECT
         p.INTERNO,
@@ -86,26 +92,26 @@ export class AfiliadoPersonalRepository implements IAfiliadoPersonalRepository {
       INNER JOIN ORG_PERSONAL o
         ON o.INTERNO = p.INTERNO
        AND o.ACTIVO IN ('A', 'L')
-       AND o.CLAVE_ORGANICA_0 = ?
-       AND o.CLAVE_ORGANICA_1 = ?
+       AND CAST(o.CLAVE_ORGANICA_0 AS VARCHAR(20)) = ?
+       AND CAST(o.CLAVE_ORGANICA_1 AS VARCHAR(20)) = ?
        AND o.FECHA_MOV_ALT = (
              SELECT MAX(x.FECHA_MOV_ALT)
              FROM ORG_PERSONAL x
              WHERE x.INTERNO = p.INTERNO
-               AND x.CLAVE_ORGANICA_0 = ?
-               AND x.CLAVE_ORGANICA_1 = ?
+               AND CAST(x.CLAVE_ORGANICA_0 AS VARCHAR(20)) = ?
+               AND CAST(x.CLAVE_ORGANICA_1 AS VARCHAR(20)) = ?
            )
        AND o.ORGS = (
              SELECT MAX(x2.ORGS)
              FROM ORG_PERSONAL x2
              WHERE x2.INTERNO = p.INTERNO
-               AND x2.CLAVE_ORGANICA_0 = ?
-               AND x2.CLAVE_ORGANICA_1 = ?
+               AND CAST(x2.CLAVE_ORGANICA_0 AS VARCHAR(20)) = ?
+               AND CAST(x2.CLAVE_ORGANICA_1 AS VARCHAR(20)) = ?
                AND x2.FECHA_MOV_ALT = o.FECHA_MOV_ALT
            )
     `;
 
-    const params = [claveOrganica0, claveOrganica1, claveOrganica0, claveOrganica1, claveOrganica0, claveOrganica1];
+    const params = [clave0, clave1, clave0, clave1, clave0, clave1];
 
     logger.debug({ ...logContext, sql, params }, 'Ejecutando consulta SQL');
 

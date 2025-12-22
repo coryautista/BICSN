@@ -26,27 +26,21 @@ const logger = pino({
 export default async function afectacionOrgRoutes(app: FastifyInstance) {
   // Register affectation
   app.post('/afectacion-org/register', {
-    preHandler: [requireAuth],
+    preHandler: [
+      requireAuth,
+      async (req: any, reply: any) => {
+        // Normalizar body: asegurar que siempre sea un objeto
+        if (!req.body || typeof req.body !== 'object' || Array.isArray(req.body)) {
+          req.body = {};
+        }
+      }
+    ],
     schema: {
       description: 'Register an organizational affectation',
       tags: ['afectacion-org'],
       security: [{ bearerAuth: [] }],
-      body: {
-        type: 'object',
-        required: ['fecha'],
-        properties: {
-          fecha: { type: 'string', format: 'date' },
-          entidad: { type: 'string' },
-          orgNivel: { type: 'number', minimum: 0, maximum: 3 },
-          accion: { type: 'string' },
-          resultado: { type: 'string' },
-          mensaje: { type: 'string' },
-          org0: { type: 'string', minLength: 2, maxLength: 2 },
-          org1: { type: 'string', minLength: 2, maxLength: 2 },
-          org2: { type: 'string', minLength: 2, maxLength: 2 },
-          org3: { type: 'string', minLength: 2, maxLength: 2 }
-        }
-      },
+      // No validamos el body aquí, lo hacemos con Zod en el handler para mayor flexibilidad
+      body: false,
       response: {
         200: {
           type: 'object',
@@ -54,7 +48,13 @@ export default async function afectacionOrgRoutes(app: FastifyInstance) {
             data: {
               type: 'object',
               properties: {
-                success: { type: 'boolean' }
+                success: { type: 'boolean' },
+                afectacionId: { type: 'number' },
+                message: { type: 'string' },
+                quincena: { type: 'number', description: 'Número de quincena (1-24)' },
+                anio: { type: 'number', description: 'Año de la quincena' },
+                periodo: { type: 'string', description: 'Período de trabajo en formato QQAA (ej: 0225 para quincena 2 del año 2025)' },
+                accion: { type: 'string', description: 'Acción del registro (ej: APLICAR, TERMINADO)' }
               }
             }
           }
@@ -95,16 +95,51 @@ export default async function afectacionOrgRoutes(app: FastifyInstance) {
     const body = req.body as any;
     
     try {
-      // 1. Obtener fecha del body (requerido) y calcular anio y quincena
-      if (!body.fecha) {
-        return reply.code(400).send(validationError([{ message: 'fecha is required' }]));
+      // 1. Obtener org0, org1, org2, org3 del token si no están en el body (sin verificar orgNivel primero)
+      if (!body.org0 && user?.idOrganica0) {
+        const idOrg0 = user.idOrganica0;
+        body.org0 = typeof idOrg0 === 'string' ? idOrg0.padStart(2, '0') : idOrg0.toString().padStart(2, '0');
       }
       
-      const quincenaData = await afectacionOrgService.calculateQuincenaFromDate(body.fecha);
+      if (!body.org1 && user?.idOrganica1) {
+        const idOrg1 = user.idOrganica1;
+        body.org1 = typeof idOrg1 === 'string' ? idOrg1.padStart(2, '0') : idOrg1.toString().padStart(2, '0');
+      }
+      
+      if (!body.org2 && user?.idOrganica2) {
+        const idOrg2 = user.idOrganica2;
+        body.org2 = typeof idOrg2 === 'string' ? idOrg2.padStart(2, '0') : idOrg2.toString().padStart(2, '0');
+      }
+      
+      if (!body.org3 && user?.idOrganica3) {
+        const idOrg3 = user.idOrganica3;
+        body.org3 = typeof idOrg3 === 'string' ? idOrg3.padStart(2, '0') : idOrg3.toString().padStart(2, '0');
+      }
+      
+      // 2. Validar que org0 y org1 estén disponibles (del token o del body)
+      if (!body.org0 || !body.org1) {
+        return reply.code(400).send(validationError([{ 
+          message: 'org0 y org1 son requeridos. Deben estar en el body o disponibles en el token del usuario.' 
+        }]));
+      }
+      
+      // 3. Normalizar org2 y org3: si son null/undefined/vacío, usar "01" por defecto
+      const org2Final = (!body.org2 || (typeof body.org2 === 'string' && body.org2.trim() === '')) ? '01' : String(body.org2);
+      const org3Final = (!body.org3 || (typeof body.org3 === 'string' && body.org3.trim() === '')) ? '01' : String(body.org3);
+      
+      // 4. Obtener quincena y año desde Firebird AP_G_APLICADO_TIPO
+      const quincenaData = await afectacionOrgService.getQuincenaFromFirebird(
+        body.org0,
+        body.org1,
+        org2Final,
+        org3Final
+      );
       body.anio = quincenaData.anio;
       body.quincena = quincenaData.quincena;
+      body.org2 = org2Final;
+      body.org3 = org3Final;
       
-      // 2. Establecer valores por defecto si no están en el body
+      // 5. Establecer valores por defecto si no están en el body
       if (!body.entidad) {
         body.entidad = 'AFILIADOS';
       }
@@ -128,28 +163,7 @@ export default async function afectacionOrgRoutes(app: FastifyInstance) {
         body.appName = 'BICSN-API';
       }
       
-      // 4. Obtener org0, org1, org2, org3 del token si no están en el body (sin verificar orgNivel primero)
-      if (!body.org0 && user?.idOrganica0) {
-        const idOrg0 = user.idOrganica0;
-        body.org0 = typeof idOrg0 === 'string' ? idOrg0.padStart(2, '0') : idOrg0.toString().padStart(2, '0');
-      }
-      
-      if (!body.org1 && user?.idOrganica1) {
-        const idOrg1 = user.idOrganica1;
-        body.org1 = typeof idOrg1 === 'string' ? idOrg1.padStart(2, '0') : idOrg1.toString().padStart(2, '0');
-      }
-      
-      if (!body.org2 && user?.idOrganica2) {
-        const idOrg2 = user.idOrganica2;
-        body.org2 = typeof idOrg2 === 'string' ? idOrg2.padStart(2, '0') : idOrg2.toString().padStart(2, '0');
-      }
-      
-      if (!body.org3 && user?.idOrganica3) {
-        const idOrg3 = user.idOrganica3;
-        body.org3 = typeof idOrg3 === 'string' ? idOrg3.padStart(2, '0') : idOrg3.toString().padStart(2, '0');
-      }
-      
-      // 5. Determinar orgNivel basado en qué orgs están disponibles si no se proporcionó
+      // 6. Determinar orgNivel basado en qué orgs están disponibles si no se proporcionó
       if (body.orgNivel === undefined || body.orgNivel === null) {
         if (body.org3) {
           body.orgNivel = 3;
@@ -162,7 +176,7 @@ export default async function afectacionOrgRoutes(app: FastifyInstance) {
         }
       }
       
-      // 6. Normalizar todos los valores org a 2 caracteres con padding
+      // 7. Normalizar todos los valores org a 2 caracteres con padding
       if (body.org0) {
         body.org0 = typeof body.org0 === 'string' 
           ? body.org0.padStart(2, '0').substring(0, 2)
@@ -173,23 +187,13 @@ export default async function afectacionOrgRoutes(app: FastifyInstance) {
           ? body.org1.padStart(2, '0').substring(0, 2)
           : body.org1.toString().padStart(2, '0').substring(0, 2);
       }
-      if (body.org2) {
-        body.org2 = typeof body.org2 === 'string' 
-          ? body.org2.padStart(2, '0').substring(0, 2)
-          : body.org2.toString().padStart(2, '0').substring(0, 2);
-      }
-      if (body.org3) {
-        body.org3 = typeof body.org3 === 'string' 
-          ? body.org3.padStart(2, '0').substring(0, 2)
-          : body.org3.toString().padStart(2, '0').substring(0, 2);
-      }
-      
-      // 7. Validar que org0 esté disponible (del token o del body)
-      if (!body.org0) {
-        return reply.code(400).send(validationError([{ 
-          message: 'org0 is required. It must be provided in the body or available in the user token.' 
-        }]));
-      }
+      // org2 y org3 ya están normalizados arriba, pero asegurar formato de 2 caracteres
+      body.org2 = typeof body.org2 === 'string' 
+        ? body.org2.padStart(2, '0').substring(0, 2)
+        : body.org2.toString().padStart(2, '0').substring(0, 2);
+      body.org3 = typeof body.org3 === 'string' 
+        ? body.org3.padStart(2, '0').substring(0, 2)
+        : body.org3.toString().padStart(2, '0').substring(0, 2);
       
       // 8. Validar con Zod schema
       const parsed = RegisterAfectacionOrgSchema.safeParse(body);
@@ -202,9 +206,9 @@ export default async function afectacionOrgRoutes(app: FastifyInstance) {
       const result = await registrarAfectacionCommand.execute(parsed.data);
       return reply.send(ok(result));
     } catch (error: any) {
-      // Manejar errores de cálculo de quincena
-      if (error.message?.includes('fecha') || error.message?.includes('quincena') || error.message?.includes('InvalidDateForQuincenaError')) {
-        return handleAfectacionError(error, reply, { operation: 'register', fecha: body.fecha });
+      // Manejar errores de obtención de quincena desde Firebird
+      if (error.message?.includes('Firebird') || error.message?.includes('AP_G_APLICADO_TIPO') || error.message?.includes('quincena')) {
+        return handleAfectacionError(error, reply, { operation: 'register', org0: body.org0, org1: body.org1 });
       }
       return handleAfectacionError(error, reply, { operation: 'register', body });
     }

@@ -587,8 +587,7 @@ export default async function expedienteRoutes(app: FastifyInstance) {
 
       // Stream file and cleanup
       const fileStream = fs.createReadStream(tempFilePath);
-      reply.send(fileStream);
-
+      
       // Cleanup temp file after response
       fileStream.on('end', () => {
         try {
@@ -597,6 +596,9 @@ export default async function expedienteRoutes(app: FastifyInstance) {
           console.warn('Failed to cleanup temp file:', cleanupError);
         }
       });
+      
+      // Return the stream to ensure CORS headers are properly set
+      return reply.send(fileStream);
 
     } catch (error: any) {
       if (error.message === 'EXPEDIENTE_ARCHIVO_NOT_FOUND') {

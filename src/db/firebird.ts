@@ -2,6 +2,26 @@ import Firebird from 'node-firebird';
 import { env as config } from '../config/env.js';
 import iconv from 'iconv-lite';
 
+/**
+ * CONFIGURACIÓN DE CHARSET PARA FIREBIRD
+ * 
+ * Estrategia de encoding/decoding:
+ * - La base de datos Firebird está en WIN1252 (Windows-1252)
+ * - Configurar FIREBIRD_CHARSET=WIN1252 en .env para que node-firebird intente usar WIN1252
+ * - Sin embargo, node-firebird puede devolver Buffers sin decodificar correctamente
+ * - Por lo tanto, SIEMPRE decodificamos manualmente los Buffers usando iconv.decode(value, 'win1252')
+ * 
+ * Flujo de decodificación:
+ * 1. Si node-firebird devuelve un Buffer: decodificar con iconv.decode(buffer, 'win1252') -> UTF-8
+ * 2. Si node-firebird devuelve un string: puede tener mojibake residual, aplicar corrección conservadora
+ * 3. NO hacer reemplazos heurísticos agresivos (ej: convertir '?' a 'ñ' basándose en contexto)
+ * 
+ * Charsets soportados:
+ * - WIN1252: Recomendado para BD en español (Windows-1252)
+ * - ISO8859_1: Alternativa (ISO Latin-1)
+ * - UTF8: Si la BD está en UTF-8
+ * - NONE: Sin conversión automática, decodificar manualmente desde WIN1252
+ */
 const firebirdConfig: Firebird.Options & { charset?: string } = {
   host: config.firebird.host,
   port: config.firebird.port,
@@ -29,22 +49,14 @@ const hasMojibakeSequences = (text: string): boolean => {
   return MOJIBAKE_SEQUENCE_REGEX.test(text);
 };
 
-const countMojibakeSequences = (text: string): number => {
-  MOJIBAKE_SEQUENCE_REGEX.lastIndex = 0;
-  return (text.match(MOJIBAKE_SEQUENCE_REGEX) ?? []).length;
-};
-
-const tryDecodeFromLatin1 = (text: string): string => {
-  try {
-    return Buffer.from(text, 'latin1').toString('utf8');
-  } catch (_error) {
-    return text;
-  }
-};
 
 /**
- * Función para corregir todos los caracteres especiales del español
- * Corrige mojibake común: ´┐¢ -> Ñ, Ã± -> ñ, Ã¡ -> á, etc.
+ * Función conservadora para corregir mojibake común de caracteres españoles
+ * Solo corrige patrones de mojibake conocidos (UTF-8 mal interpretado como Latin1)
+ * NO hace reemplazos heurísticos agresivos que puedan convertir caracteres incorrectamente
+ * 
+ * Estrategia: La BD está en WIN1252, y con charset=WIN1252 en la conexión + iconv.decode,
+ * los caracteres deberían llegar correctamente. Esta función solo corrige mojibake residual.
  */
 function fixSpanishCharacters(text: string): string {
   if (!text || typeof text !== 'string') {
@@ -53,348 +65,143 @@ function fixSpanishCharacters(text: string): string {
 
   let corrected = text;
   
-  // SOLUCIÓN ULTRA SIMPLE: Reemplazar '´┐¢' por 'Ñ' directamente
-  // Buscar por códigos de caracteres: ' (180/0xB4) + ┐ (9488/0x2510) + ¢ (162/0xA2)
-  while (true) {
-    let found = false;
-    const chars = Array.from(corrected);
-    
-    for (let i = 0; i < chars.length - 2; i++) {
-      const c1 = chars[i].charCodeAt(0);
-      const c2 = chars[i + 1].charCodeAt(0);
-      const c3 = chars[i + 2].charCodeAt(0);
-      
-      // Detectar el mojibake '´┐¢' por códigos
-      if ((c1 === 180 || c1 === 0xB4) && (c2 === 9488 || c2 === 0x2510) && (c3 === 162 || c3 === 0xA2)) {
-        // Determinar mayúscula/minúscula por contexto
-        const before = i > 0 ? chars[i - 1] : '';
-        const after = i + 3 < chars.length ? chars[i + 3] : '';
-        const isUpper = (before && /[A-Z]/.test(before)) || (after && /[A-Z]/.test(after));
-        
-        corrected = corrected.substring(0, i) + (isUpper ? 'Ñ' : 'ñ') + corrected.substring(i + 3);
-        found = true;
-        break;
-      }
-    }
-    
-    if (!found) break; // Salir cuando no se encuentre más
-  }
+  // Reemplazar mojibake común usando regex para capturar los patrones completos
+  // UTF-8 mal interpretado como Latin1: 'Ã' seguido de un byte específico
   
-  // También reemplazo directo por string (por si acaso)
+  // Mojibake específico de tres caracteres '´┐¢' -> 'Ñ'
   corrected = corrected.replace(/´┐¢/g, 'Ñ');
   
-  // Otros reemplazos comunes de mojibake
-  if (hasMojibakeSequences(corrected)) {
-    const recoded = tryDecodeFromLatin1(corrected);
-    if (countMojibakeSequences(recoded) < countMojibakeSequences(corrected)) {
-      corrected = recoded;
-    }
-  }
-
-  const replacements: Record<string, string> = {
-    'Ã±': 'ñ',
-    'Ã‘': 'Ñ',
-    'Ã¡': 'á',
-    'Ã©': 'é',
-    'Ã­': 'í',
-    'Ã³': 'ó',
-    'Ãº': 'ú',
-    'Ã': 'Á',  // Ã (0xC3 0x81) -> Á
-    'Ã‰': 'É',  // Ã‰ (0xC3 0x89) -> É
-    'Ã': 'Í',  // Ã (0xC3 0x8D) -> Í
-    'Ã“': 'Ó',  // Ã“ (0xC3 0x93) -> Ó
-    'Ãš': 'Ú'   // Ãš (0xC3 0x9A) -> Ú
-  };
-
-  for (const [wrong, right] of Object.entries(replacements)) {
-    // Usar replaceAll para asegurar que se reemplacen todas las ocurrencias
-    corrected = corrected.split(wrong).join(right);
-  }
+  // CORRECCIÓN ESPECIAL: "ý" (U+00FD) a menudo aparece cuando "ó" (U+00F3) está mal decodificado
+  // Esto ocurre cuando WIN1252 se lee incorrectamente
+  // Reemplazar "ý" por "ó" en contextos donde tiene sentido (palabras españolas comunes)
+  corrected = corrected.replace(/ciýn/gi, 'ción');  // "Prescripciýn" -> "Prescripción"
+  corrected = corrected.replace(/siýn/gi, 'sión'); // "Pensiýn" -> "Pensión"
+  corrected = corrected.replace(/unciýn/gi, 'unción'); // "Defunciýn" -> "Defunción"
   
-  // Patrones específicos para apellidos comunes con Ñ usando el mojibake '´┐¢'
-  // Aplicar estos patrones incluso si ya se reemplazó '´┐¢' por 'Ñ' (por si acaso)
-  const mojibakePatterns = [
-    { pattern: /NU´┐¢EZ/gi, replacement: 'NUÑEZ' },
-    { pattern: /MU´┐¢OZ/gi, replacement: 'MUÑOZ' },
-    { pattern: /MU´┐¢IZ/gi, replacement: 'MUÑIZ' },
-    { pattern: /TISCARE´┐¢O/gi, replacement: 'TISCAREÑO' },
-    { pattern: /PI´┐¢A/gi, replacement: 'PIÑA' },
-    { pattern: /CASTA´┐¢EDA/gi, replacement: 'CASTAÑEDA' },
-    { pattern: /PE´┐¢ALOZA/gi, replacement: 'PEÑALOZA' },
-    { pattern: /([A-Z])U´┐¢([A-Z])/g, replacement: '$1UÑ$2' }, // Patrón genérico para XU´┐¢Y -> XUÑY
-    { pattern: /([A-Z])I´┐¢([A-Z])/g, replacement: '$1IÑ$2' }, // Patrón genérico para XI´┐¢Y -> XIÑY
-    { pattern: /([A-Z])A´┐¢([A-Z])/g, replacement: '$1AÑ$2' }  // Patrón genérico para XA´┐¢Y -> XAÑY
-  ];
-  
-  for (const { pattern, replacement } of mojibakePatterns) {
-    const beforePattern = corrected;
-    corrected = corrected.replace(pattern, replacement);
-    if (beforePattern !== corrected) {
-      // Log cuando se aplica un patrón
-      console.log(`   🔧 [fixSpanishCharacters] Patrón aplicado: "${beforePattern}" -> "${corrected}"`);
-    }
-  }
-
-  // Corrección heurística para '?' (U+003F) y carácter de reemplazo Unicode (U+FFFD, código 65533)
-  // que aparecen en medio de palabras (suelen representar Ñ/ñ)
-  const replacementChar = String.fromCharCode(0xFFFD); // U+FFFD
-  
-  // Primero intentar patrones específicos conocidos usando regex para capturar tanto '?' como U+FFFD
-  // Usar una clase de caracteres que capture ambos
-  const patterns = [
-    { pattern: /NU([?\uFFFD])EZ/gi, replacement: 'NUÑEZ' },
-    { pattern: /MU([?\uFFFD])OZ/gi, replacement: 'MUÑOZ' },
-    { pattern: /MU([?\uFFFD])IZ/gi, replacement: 'MUÑIZ' },
-    { pattern: /TISCARE([?\uFFFD])O/gi, replacement: 'TISCAREÑO' },
-    { pattern: /PI([?\uFFFD])A/gi, replacement: 'PIÑA' },
-    { pattern: /CASTA([?\uFFFD])EDA/gi, replacement: 'CASTAÑEDA' }
-  ];
-  
-  for (const { pattern, replacement } of patterns) {
-    corrected = corrected.replace(pattern, replacement);
-  }
-  
-  // También intentar reemplazos directos con el carácter U+FFFD (sin espacios)
-  corrected = corrected.replace(/NU\uFFFDEZ/g, 'NUÑEZ');
-  corrected = corrected.replace(/MU\uFFFDOZ/g, 'MUÑOZ');
-  corrected = corrected.replace(/MU\uFFFDIZ/g, 'MUÑIZ');
-  corrected = corrected.replace(/TISCARE\uFFFDO/g, 'TISCAREÑO');
-  corrected = corrected.replace(/PI\uFFFDA/g, 'PIÑA');
-  corrected = corrected.replace(/CASTA\uFFFDEDA/g, 'CASTAÑEDA');
-  
-  // Reemplazos directos sin espacios
-  corrected = corrected.replace('NU' + replacementChar + 'EZ', 'NUÑEZ');
-  corrected = corrected.replace('MU' + replacementChar + 'OZ', 'MUÑOZ');
-  corrected = corrected.replace('MU' + replacementChar + 'IZ', 'MUÑIZ');
-  corrected = corrected.replace('TISCARE' + replacementChar + 'O', 'TISCAREÑO');
-  corrected = corrected.replace('PI' + replacementChar + 'A', 'PIÑA');
-  corrected = corrected.replace('CASTA' + replacementChar + 'EDA', 'CASTAÑEDA');
-  
-  // Luego aplicar corrección genérica para cualquier '?' o U+FFFD entre letras
-  // Iterar sobre el string y reemplazar directamente
-  // Primero convertir a array para poder modificar mientras iteramos
-  const chars = Array.from(corrected);
-  for (let i = 0; i < chars.length; i++) {
-    const char = chars[i];
-    const charCode = char.charCodeAt(0);
-    const isProblemChar = char === '?' || charCode === 0xFFFD;
+  // CORRECCIÓN ESPECIAL: Carácter de reemplazo Unicode () - reemplazar solo cuando está presente
+  // Este carácter aparece cuando hay un error de decodificación
+  // IMPORTANTE: Solo reemplazar si el carácter de reemplazo está presente, no si ya está corregido
+  if (corrected.includes('\uFFFD') || corrected.includes('')) {
+    // Reemplazar el carácter de reemplazo por "ó" solo en contextos específicos
+    corrected = corrected.replace(/ci\uFFFDn/gi, 'ción');  // "Prescripci" -> "Prescripción"
+    corrected = corrected.replace(/si\uFFFDn/gi, 'sión'); // "Pensi" -> "Pensión"
+    corrected = corrected.replace(/unci\uFFFDn/gi, 'unción'); // "Defunci" -> "Defunción"
     
-    if (isProblemChar && i > 0 && i < chars.length - 1) {
-      const before = chars[i - 1];
-      const after = chars[i + 1];
-      const beforeIsLetter = /[A-Za-zÁÉÍÓÚÜÑáéíóúüñ]/.test(before);
-      const afterIsLetter = /[A-Za-zÁÉÍÓÚÜÑáéíóúüñ]/.test(after);
-      
-      if (beforeIsLetter && afterIsLetter) {
-        const isUpperCase = before === before.toUpperCase() && after === after.toUpperCase();
-        chars[i] = isUpperCase ? 'Ñ' : 'ñ';
-      }
-    }
+    // Si aún hay caracteres de reemplazo sin contexto, eliminarlos
+    corrected = corrected.replace(/\uFFFD/g, '');
   }
-  corrected = chars.join('');
+  
+  // Patrones de dos caracteres: 'Ã' + byte específico
+  // Minúsculas
+  corrected = corrected.replace(/Ã±/g, 'ñ');   // 0xC3 0xB1
+  corrected = corrected.replace(/Ã¡/g, 'á');   // 0xC3 0xA1
+  corrected = corrected.replace(/Ã©/g, 'é');   // 0xC3 0xA9
+  corrected = corrected.replace(/Ã­/g, 'í');   // 0xC3 0xAD
+  corrected = corrected.replace(/Ã³/g, 'ó');   // 0xC3 0xB3
+  corrected = corrected.replace(/Ãº/g, 'ú');   // 0xC3 0xBA
+  corrected = corrected.replace(/Ã¼/g, 'ü');   // 0xC3 0xBC
+  corrected = corrected.replace(/Ã§/g, 'ç');   // 0xC3 0xA7
+  
+  // Mayúsculas - usar regex para capturar 'Ã' seguido del byte correcto
+  corrected = corrected.replace(/Ã[\x91\u0091]/g, 'Ñ');  // 0xC3 0x91 -> Ñ
+  corrected = corrected.replace(/Ã[\x81\u0081]/g, 'Á');  // 0xC3 0x81 -> Á
+  corrected = corrected.replace(/Ã‰/g, 'É');             // 0xC3 0x89 -> É
+  corrected = corrected.replace(/Ã[\x8D\u008D]/g, 'Í');  // 0xC3 0x8D -> Í
+  corrected = corrected.replace(/Ã"/g, 'Ó');             // 0xC3 0x93 -> Ó
+  corrected = corrected.replace(/Ãš/g, 'Ú');             // 0xC3 0x9A -> Ú
+  corrected = corrected.replace(/Ãœ/g, 'Ü');             // 0xC3 0x9C -> Ü
+  corrected = corrected.replace(/Ã[\x87\u0087]/g, 'Ç'); // 0xC3 0x87 -> Ç
 
   return corrected;
 }
 
 /**
  * Función para decodificar correctamente strings de Firebird
- * Maneja todos los caracteres especiales del español (Ñ, ñ, acentos, etc.)
+ * Estrategia: La BD está en WIN1252. 
+ * 
+ * IMPORTANTE: node-firebird puede devolver datos de dos formas:
+ * 1. Como Buffer (datos crudos) - necesitamos decodificar manualmente con iconv
+ * 2. Como string (ya decodificado por node-firebird) - puede estar mal decodificado y necesitar corrección
+ * 
+ * Esta función:
+ * 1. Si es Buffer: SIEMPRE decodificar manualmente desde WIN1252 usando iconv (ignorar charset de node-firebird)
+ * 2. Si es string: verificar si tiene mojibake y corregirlo, o si parece estar bien decodificado, dejarlo tal cual
+ * 3. NO hace reemplazos heurísticos agresivos
  */
 function decodeFirebirdString(value: any, fieldName?: string): string | null {
   if (value === null || value === undefined) {
     return null;
   }
   
-  const isTextField = fieldName && (
-    fieldName.includes('NOMBRE') || 
-    fieldName.includes('APELLIDO') || 
-    fieldName.includes('FULLNAME') ||
-    fieldName.includes('LOCALIDAD') ||
-    fieldName.includes('MUNICIPIO') ||
-    fieldName.includes('ESTADO') ||
-    fieldName.includes('CALLE') ||
-    fieldName.includes('FRACCIONAMIENTO') ||
-    fieldName.includes('PAIS') ||
-    fieldName.includes('NACIONALIDAD')
-  );
-  
-  // Si es un Buffer, intentar diferentes estrategias de decodificación
+  // Si es un Buffer, SIEMPRE decodificar manualmente desde WIN1252
+  // No confiar en el charset configurado en node-firebird porque puede fallar
   if (Buffer.isBuffer(value)) {
-    if (isTextField) {
-      const hex = value.toString('hex').substring(0, 40);
-      console.log(`🔍 [DEBUG] Buffer en ${fieldName}`);
-      console.log(`   Hex (primeros 20 bytes): ${hex}`);
-    }
-    
-    // Estrategia 1: Decodificar según el charset configurado
-    // PROBLEMA: node-firebird puede no estar respetando el charset correctamente
-    // SOLUCIÓN: Usar NONE por defecto y hacer la conversión manual para evitar U+FFFD
     let decoded = '';
-    const charset = firebirdConfig.charset || 'NONE';
     
-    if (charset === 'NONE') {
-      // Con NONE, los datos vienen sin conversión - usar iconv-lite para convertir desde WIN1252
-      // Asumimos que la BD está en WIN1252 según el usuario
-      try {
-        decoded = iconv.decode(value, 'win1252');
-        if (isTextField) {
-          console.log(`   🔄 [NONE→WIN1252→UTF8] ${fieldName}: "${decoded}"`);
-        }
-      } catch (e) {
-        // Fallback: intentar como latin1 (similar a WIN1252)
-        try {
-          decoded = value.toString('latin1');
-          if (isTextField) {
-            console.log(`   📝 [NONE→latin1] ${fieldName}: "${decoded}"`);
-          }
-        } catch (e2) {
-          decoded = value.toString('utf8');
-        }
-      }
-    } else if (charset === 'WIN1252') {
-      // PROBLEMA: node-firebird puede no estar respetando WIN1252 correctamente
-      // SOLUCIÓN: Siempre hacer la conversión manual desde WIN1252 cuando vienen como Buffer
-      // Esto asegura que la conversión sea correcta independientemente de lo que haga node-firebird
-      try {
-        decoded = iconv.decode(value, 'win1252');
-        if (isTextField) {
-          console.log(`   🔄 [WIN1252→UTF8] ${fieldName}: "${decoded}"`);
-          console.log(`   ℹ️  Conversión manual desde WIN1252 (node-firebird puede no estar respetando el charset)`);
-        }
-      } catch (e) {
-        // Fallback: intentar como latin1 (similar a WIN1252)
-        try {
-          decoded = value.toString('latin1');
-          if (isTextField) {
-            console.log(`   📝 [WIN1252→latin1] ${fieldName}: "${decoded}"`);
-          }
-        } catch (e2) {
-          const fallback = value.toString('utf8');
-          console.warn(`   ⚠️  Error al convertir WIN1252 en ${fieldName}, usando UTF-8: ${e}`);
-          if (isTextField) {
-            console.log(`      Fallback UTF-8: "${fallback}"`);
-          }
-          decoded = fallback;
-        }
-      }
-    } else if (charset === 'ISO8859_1') {
-      // Usar iconv-lite para conversión precisa de ISO8859_1 a UTF-8
-      try {
-        const beforeConversion = value.toString('latin1'); // ISO8859_1 es similar a latin1
-        decoded = iconv.decode(value, 'iso8859-1');
-        if (isTextField) {
-          console.log(`   🔄 [ISO8859_1→UTF8] ${fieldName}:`);
-          console.log(`      Antes (raw): "${beforeConversion}"`);
-          console.log(`      Después (UTF-8): "${decoded}"`);
-        }
-      } catch (e) {
-        // Fallback a UTF-8 si falla la conversión
-        const fallback = value.toString('utf8');
-        console.warn(`   ⚠️  Error al convertir ISO8859_1 en ${fieldName}, usando UTF-8: ${e}`);
-        if (isTextField) {
-          console.log(`      Fallback UTF-8: "${fallback}"`);
-        }
-        decoded = fallback;
-      }
-    } else if (charset === 'UTF8') {
-      // Con UTF8, los datos ya deberían estar en UTF-8
-      decoded = value.toString('utf8');
-    } else {
-      // Para otros charsets, intentar UTF-8 como fallback
-      decoded = value.toString('utf8');
-    }
-    
-    // Si tiene '?' entre letras, intentar recodificar desde latin1
-    if (decoded.includes('?') && /[A-Za-z]\?[A-Za-z]/.test(decoded)) {
-      if (isTextField) {
-        console.log(`   ⚠️  Detectado '?' en contexto de letras, intentando recodificar...`);
-      }
+    try {
+      // SIEMPRE decodificar desde WIN1252 (la BD está en WIN1252)
+      decoded = iconv.decode(value, 'win1252');
       
+      // Verificar que no haya caracteres de reemplazo (U+FFFD)
+      if (decoded.includes('\uFFFD')) {
+        // Si hay caracteres de reemplazo, intentar como latin1
+        decoded = value.toString('latin1');
+      }
+    } catch (e) {
+      // Si falla iconv con WIN1252, intentar como latin1 (similar a WIN1252)
       try {
-        // Intentar recodificar: puede que el buffer esté en latin1/win1252
-        const latin1Decoded = value.toString('latin1');
-        const utf8FromLatin1 = Buffer.from(latin1Decoded, 'latin1').toString('utf8');
-        
-        // Si la recodificación eliminó los '?', usarla
-        if (!utf8FromLatin1.includes('?') || !/[A-Za-z]\?[A-Za-z]/.test(utf8FromLatin1)) {
-          decoded = utf8FromLatin1;
-          if (isTextField) {
-            console.log(`   ✅ Recodificación exitosa: ${utf8FromLatin1}`);
-          }
-        }
-      } catch (e) {
-        // Continuar con la decodificación original
+        decoded = value.toString('latin1');
+      } catch (e2) {
+        // Último recurso: UTF-8
+        decoded = value.toString('utf8');
       }
     }
     
-    // Aplicar correcciones de caracteres españoles
-    const corrected = fixSpanishCharacters(decoded);
-    
-    if (isTextField && decoded !== corrected) {
-      console.log(`   ✅ [Corrección] ${fieldName}: "${decoded}" -> "${corrected}"`);
-    } else if (isTextField && charset === 'WIN1252') {
-      // Mostrar que la conversión fue exitosa sin necesidad de corrección adicional
-      console.log(`   ✅ [WIN1252] Conversión exitosa sin correcciones adicionales`);
-    }
-    
-    return corrected;
+    // Aplicar corrección conservadora de mojibake residual (por si acaso)
+    return fixSpanishCharacters(decoded);
   }
   
-  // Si ya es un string, puede que node-firebird ya lo haya convertido
-  // PROBLEMA: Si node-firebird convierte incorrectamente desde WIN1252, genera mojibake como '´┐¢'
-  // SOLUCIÓN: SIEMPRE aplicar fixSpanishCharacters a campos de texto para corregir mojibake
+  // Si ya es un string, puede que node-firebird ya lo haya decodificado
+  // Pero puede estar mal decodificado (mojibake o caracteres incorrectos como "ý" en lugar de "ó")
   if (typeof value === 'string') {
-    const charset = firebirdConfig.charset || 'NONE';
+    // Si tiene el carácter de reemplazo Unicode (), NO intentar recodificar
+    // Solo aplicar correcciones específicas
+    if (value.includes('\uFFFD') || value.includes('')) {
+      // El carácter indica que hubo un error de decodificación
+      // No intentar recodificar, solo aplicar correcciones específicas
+      return fixSpanishCharacters(value);
+    }
     
-    // Si es un campo de texto, SIEMPRE aplicar correcciones
-    if (isTextField) {
-      // Verificar si tiene mojibake común (´┐¢, U+FFFD, '?' entre letras)
-      const hasMojibake = value.includes('´') || value.includes('┐') || value.includes('¢') || 
-                         value.includes('´┐¢') || hasMojibakeSequences(value);
-      const hasReplacementChar = value.includes(String.fromCharCode(0xFFFD));
-      const hasQuestionMark = value.includes('?') && /[A-Za-z]\?[A-Za-z]/.test(value);
-      
-      // REEMPLAZO DIRECTO: Reemplazar '´┐¢' por 'Ñ' ANTES de llamar a fixSpanishCharacters
-      let corrected = value;
-      
-      // Reemplazo directo y simple del mojibake
-      if (corrected.includes('´┐¢')) {
-        corrected = corrected.replace(/´┐¢/g, 'Ñ');
-        console.log(`🔧 [REEMPLAZO DIRECTO] ${fieldName}: "${value}" -> "${corrected}"`);
-      }
-      
-      // También buscar por códigos de caracteres
-      const chars = Array.from(corrected);
-      for (let i = 0; i < chars.length - 2; i++) {
-        const c1 = chars[i].charCodeAt(0);
-        const c2 = chars[i + 1].charCodeAt(0);
-        const c3 = chars[i + 2].charCodeAt(0);
-        if ((c1 === 180 || c1 === 0xB4) && (c2 === 9488 || c2 === 0x2510) && (c3 === 162 || c3 === 0xA2)) {
-          const before = i > 0 ? chars[i - 1] : '';
-          const after = i + 3 < chars.length ? chars[i + 3] : '';
-          const isUpper = (before && /[A-Z]/.test(before)) || (after && /[A-Z]/.test(after));
-          corrected = corrected.substring(0, i) + (isUpper ? 'Ñ' : 'ñ') + corrected.substring(i + 3);
-          console.log(`🔧 [REEMPLAZO POR CÓDIGOS] ${fieldName}: "${value}" -> "${corrected}"`);
-          break;
+    // Detectar si tiene caracteres que sugieren decodificación incorrecta
+    // "ý" (U+00FD) a menudo aparece cuando "ó" (U+00F3) está mal decodificado
+    const hasIncorrectChars = /ý/.test(value) || hasMojibakeSequences(value) || value.includes('´┐¢') || /[├┐¢]/.test(value);
+    
+    if (hasIncorrectChars) {
+      // Intentar recodificar solo si NO tiene caracteres de reemplazo
+      try {
+        // Convertir el string a Buffer desde latin1 (asumiendo que está mal interpretado)
+        const latin1Buffer = Buffer.from(value, 'latin1');
+        // Decodificar desde WIN1252
+        const recoded = iconv.decode(latin1Buffer, 'win1252');
+        
+        // Verificar que no haya introducido caracteres de reemplazo
+        if (!recoded.includes('\uFFFD') && !recoded.includes('')) {
+          // Si la recodificación eliminó "ý" y no introdujo caracteres de reemplazo, usarla
+          if (!/ý/.test(recoded)) {
+            return fixSpanishCharacters(recoded);
+          }
         }
+        
+        // Si la recodificación introdujo caracteres de reemplazo o aún tiene "ý",
+        // aplicar solo correcciones específicas al string original
+        return fixSpanishCharacters(value);
+      } catch (e) {
+        // Si falla, aplicar correcciones al string original
+        return fixSpanishCharacters(value);
       }
-      
-      // Aplicar fixSpanishCharacters para otros casos
-      corrected = fixSpanishCharacters(corrected);
-      
-      return corrected;
     }
     
-    // Para campos que no son de texto, solo aplicar si hay mojibake obvio
-    const hasMojibake = hasMojibakeSequences(value) || value.includes('┐') ||
-            (value.includes('?') && /[A-Za-z]\?[A-Za-z]/.test(value));
-    
-    if (hasMojibake) {
-      const corrected = fixSpanishCharacters(value);
-      return corrected;
-    }
-    
-    // Si no tiene mojibake obvio, retornar tal cual
+    // Si no tiene problemas obvios, puede que ya esté bien decodificado
     return value;
   }
   
@@ -404,6 +211,7 @@ function decodeFirebirdString(value: any, fieldName?: string): string | null {
 
 /**
  * Convierte recursivamente un objeto de Firebird asegurando la correcta decodificación
+ * Recorre recursivamente objetos y arrays, aplicando decodeFirebirdString a strings y Buffers
  */
 function decodeFirebirdObject(obj: any, parentKey?: string): any {
   if (obj === null || obj === undefined) {
@@ -426,7 +234,6 @@ function decodeFirebirdObject(obj: any, parentKey?: string): any {
     for (const key in obj) {
       if (obj.hasOwnProperty(key)) {
         const value = obj[key];
-        // Pasar el nombre del campo para logging
         decoded[key] = decodeFirebirdObject(value, key);
       }
     }
@@ -435,14 +242,7 @@ function decodeFirebirdObject(obj: any, parentKey?: string): any {
   
   // Si es un string o Buffer, decodificarlo
   if (typeof obj === 'string' || Buffer.isBuffer(obj)) {
-    let decoded = decodeFirebirdString(obj, parentKey);
-    
-    // REEMPLAZO FINAL: Asegurar que '´┐¢' se reemplace por 'Ñ' antes de retornar
-    if (typeof decoded === 'string' && decoded.includes('´┐¢')) {
-      decoded = decoded.replace(/´┐¢/g, 'Ñ');
-    }
-    
-    return decoded;
+    return decodeFirebirdString(obj, parentKey);
   }
   
   // Para otros tipos (números, booleanos, etc.), retornarlos tal cual
@@ -462,13 +262,49 @@ export const executeSerializedQuery = <T>(
   // Crear una nueva promesa que se ejecutará después de que la anterior termine
   const currentQuery = previousMutex.then(async () => {
     try {
-      const db = getFirebirdDb();
-      if (!db || typeof db.query !== 'function') {
-        throw new Error('Conexión a Firebird no disponible');
+      let db: Firebird.Database;
+      
+      // Intentar obtener la conexión existente
+      try {
+        db = getFirebirdDb();
+      } catch (error: any) {
+        // Si la conexión no existe, intentar reconectar
+        console.warn('Conexión a Firebird no disponible, intentando reconectar...');
+        try {
+          db = await connectFirebirdDatabase();
+        } catch (reconnectError: any) {
+          const errorMessage = reconnectError.message || String(reconnectError);
+          const errorCode = reconnectError.code || 'FIREBIRD_CONNECTION_ERROR';
+          
+          // Detectar errores de conexión específicos
+          if (errorCode === 'ECONNREFUSED' || errorMessage.includes('ECONNREFUSED') || 
+              errorMessage.includes('connection refused') || errorMessage.includes('connect')) {
+            throw new Error(`No se pudo conectar al servidor Firebird. Verifique que el servidor esté ejecutándose en ${firebirdConfig.host}:${firebirdConfig.port}. Error: ${errorMessage}`);
+          }
+          
+          throw new Error(`Error al reconectar a Firebird: ${errorMessage}`);
+        }
       }
+      
+      if (!db || typeof db.query !== 'function') {
+        throw new Error('Conexión a Firebird no disponible o inválida');
+      }
+      
       // Ejecutar la consulta y retornar su resultado
       return await queryFn(db);
-    } catch (error) {
+    } catch (error: any) {
+      // Mejorar mensajes de error de conexión
+      if (error.code === 'ECONNREFUSED' || error.message?.includes('ECONNREFUSED') || 
+          error.message?.includes('connection refused') || error.message?.includes('connect')) {
+        const connectionError = new Error(
+          `Error de conexión con Firebird: No se pudo establecer conexión con el servidor en ${firebirdConfig.host}:${firebirdConfig.port}. ` +
+          `Verifique que el servidor Firebird esté ejecutándose y que la configuración sea correcta. ` +
+          `Error original: ${error.message || String(error)}`
+        );
+        (connectionError as any).code = 'ECONNREFUSED';
+        throw connectionError;
+      }
+      
       // Re-lanzar el error para que sea manejado por el caller
       throw error;
     }
@@ -647,16 +483,19 @@ export const executeSafeQuery = (sql: string, params: any[] = []): Promise<any[]
               });
             }
             
-            const mappedRecords = records.map((row: any, index: number) => {
+            // Decodificar todos los registros usando decodeFirebirdObject
+            // Esta función ya maneja correctamente la decodificación desde WIN1252
+            const decodedRecords = records.map((row: any, index: number) => {
               if (!row || typeof row !== 'object') {
                 console.warn('Datos de fila inválidos recibidos de Firebird:', row);
                 return null;
               }
-              // Decodificar el objeto completo para asegurar caracteres especiales (Ñ, acentos, etc.)
+              
+              // Decodificar el objeto completo (maneja Buffers y strings correctamente)
               const decoded = decodeFirebirdObject(row);
               
-              // Log del primer registro después de decodificar
-              if (index === 0) {
+              // Log del primer registro después de decodificar (solo en desarrollo)
+              if (index === 0 && process.env.NODE_ENV === 'development') {
                 console.log('✅ [DEBUG] Primer registro DESPUÉS de decodificar:');
                 sampleFields.forEach((field: string) => {
                   if (decoded[field] !== undefined) {
@@ -668,69 +507,7 @@ export const executeSafeQuery = (sql: string, params: any[] = []): Promise<any[]
               return decoded;
             }).filter(Boolean);
             
-            // REEMPLAZO FINAL: Buscar y reemplazar cualquier variante del mojibake '´┐¢' o '' en contexto de Ñ
-            const finalRecords = mappedRecords.map((record: any, recordIndex: number) => {
-              const cleaned: any = {};
-              for (const key in record) {
-                if (typeof record[key] === 'string') {
-                  let value = record[key];
-                  
-                  // Log para diagnóstico: mostrar caracteres problemáticos
-                  if (value.includes(String.fromCharCode(0xFFFD)) || value.includes('?') || value.includes('´┐¢')) {
-                    const charCodes = Array.from(value).map(c => {
-                      const code = c.charCodeAt(0);
-                      return `${c} (U+${code.toString(16).toUpperCase().padStart(4, '0')})`;
-                    }).join(' ');
-                    console.log(`🔍 [REEMPLAZO FINAL] ${key} en registro ${recordIndex}: "${value}"`);
-                    console.log(`   Códigos: ${charCodes}`);
-                  }
-                  
-                  // Reemplazar '´┐¢' directamente
-                  value = value.replace(/´┐¢/g, 'Ñ');
-                  
-                  // Reemplazar '' (U+FFFD) o '?' cuando está en contexto de Ñ (entre letras)
-                  // Patrones específicos conocidos
-                  value = value.replace(/NU[\uFFFD?]EZ/gi, 'NUÑEZ');
-                  value = value.replace(/MU[\uFFFD?]OZ/gi, 'MUÑOZ');
-                  value = value.replace(/MU[\uFFFD?]IZ/gi, 'MUÑIZ');
-                  value = value.replace(/TISCARE[\uFFFD?]O/gi, 'TISCAREÑO');
-                  value = value.replace(/PI[\uFFFD?]A/gi, 'PIÑA');
-                  value = value.replace(/PE[\uFFFD?]ALOZA/gi, 'PEÑALOZA');
-                  value = value.replace(/CASTA[\uFFFD?]EDA/gi, 'CASTAÑEDA');
-                  
-                  // Patrón genérico: XU?Y -> XUÑY, XI?Y -> XIÑY, XA?Y -> XAÑY (donde ? es U+FFFD o '?')
-                  value = value.replace(/([A-Z])U[\uFFFD?]([A-Z])/g, '$1UÑ$2');
-                  value = value.replace(/([A-Z])I[\uFFFD?]([A-Z])/g, '$1IÑ$2');
-                  value = value.replace(/([A-Z])A[\uFFFD?]([A-Z])/g, '$1AÑ$2');
-                  
-                  value = fixSpanishCharacters(value);
-                  // También buscar por códigos de caracteres directamente
-                  const chars = Array.from(value);
-                  for (let i = 0; i < chars.length - 1; i++) {
-                    const char = chars[i];
-                    const charCode = char.charCodeAt(0);
-                    // Si encontramos U+FFFD (65533) entre letras, reemplazar por Ñ
-                    if (charCode === 0xFFFD || charCode === 65533) {
-                      const before = i > 0 ? chars[i - 1] : '';
-                      const after = i + 1 < chars.length ? chars[i + 1] : '';
-                      if (/[A-Za-z]/.test(before) && /[A-Za-z]/.test(after)) {
-                        const isUpper = /[A-Z]/.test(before) && /[A-Z]/.test(after);
-                        chars[i] = isUpper ? 'Ñ' : 'ñ';
-                        value = chars.join('');
-                        break;
-                      }
-                    }
-                  }
-                  
-                  cleaned[key] = value;
-                } else {
-                  cleaned[key] = record[key];
-                }
-              }
-              return cleaned;
-            });
-            
-            resolve(finalRecords);
+            resolve(decodedRecords);
           } catch (mapError) {
             console.error('Error al mapear resultados de Firebird:', mapError);
             reject(new Error('Error al procesar resultados de la base de datos'));
@@ -813,18 +590,8 @@ export const executeQueryInTransaction = (
           return;
         }
         
-        // Procesar resultado para corregir caracteres especiales
-        const processedResult = result?.map((row: any) => {
-          const processedRow: any = {};
-          for (const [key, value] of Object.entries(row)) {
-            if (typeof value === 'string') {
-              processedRow[key] = fixSpanishCharacters(value);
-            } else {
-              processedRow[key] = value;
-            }
-          }
-          return processedRow;
-        }) || [];
+        // Procesar resultado usando decodeFirebirdObject para manejar correctamente Buffers y strings
+        const processedResult = result?.map((row: any) => decodeFirebirdObject(row)) || [];
         
         resolve(processedResult);
       });
@@ -858,18 +625,8 @@ export const executeProcedureInTransaction = (
         // Normalizar el resultado
         const resultArray = Array.isArray(result) ? result : (result ? [result] : []);
         
-        // Procesar resultado para corregir caracteres especiales
-        const processedResult = resultArray.map((row: any) => {
-          const processedRow: any = {};
-          for (const [key, value] of Object.entries(row)) {
-            if (typeof value === 'string') {
-              processedRow[key] = fixSpanishCharacters(value);
-            } else {
-              processedRow[key] = value;
-            }
-          }
-          return processedRow;
-        });
+        // Procesar resultado usando decodeFirebirdObject para manejar correctamente Buffers y strings
+        const processedResult = resultArray.map((row: any) => decodeFirebirdObject(row));
         
         resolve(processedResult);
       });
@@ -879,3 +636,4 @@ export const executeProcedureInTransaction = (
     }
   });
 };
+

@@ -64,21 +64,14 @@ export async function afiliadosReportesRoutes(fastify: FastifyInstance) {
       const query = request.diScope.resolve<GetHistorialMovimientosQuinQuery>('getHistorialMovimientosQuinQuery');
       const historiales = await query.execute(periodo, userId);
 
-      // SERIALIZACIÓN INMEDIATA Y MANUAL para evitar pérdida de datos
       const responseObject = {
         success: true,
         data: historiales,
         timestamp: new Date().toISOString()
       };
 
-      const responseJson = JSON.stringify(responseObject);
-
-      reply.raw.writeHead(200, {
-        'Content-Type': 'application/json; charset=utf-8',
-        'Content-Length': Buffer.byteLength(responseJson, 'utf8')
-      });
-
-      reply.raw.end(responseJson);
+      // Usar reply.send() para que Fastify maneje automáticamente los headers de CORS
+      return reply.code(200).send(responseObject);
     } catch (error) {
       return handleAfiliadosReportesError(error, reply);
     }
@@ -159,21 +152,14 @@ export async function afiliadosReportesRoutes(fastify: FastifyInstance) {
       const query = request.diScope.resolve<GetHistorialMovPromedioSdoQuery>('getHistorialMovPromedioSdoQuery');
       const promedios = await query.execute(periodo, pOrg0, pOrg1, pOrg2, pOrg3, userId);
 
-      // SERIALIZACIÓN INMEDIATA Y MANUAL para evitar pérdida de datos
       const responseObject = {
         success: true,
         data: promedios,
         timestamp: new Date().toISOString()
       };
 
-      const responseJson = JSON.stringify(responseObject);
-
-      reply.raw.writeHead(200, {
-        'Content-Type': 'application/json; charset=utf-8',
-        'Content-Length': Buffer.byteLength(responseJson, 'utf8')
-      });
-
-      reply.raw.end(responseJson);
+      // Usar reply.send() para que Fastify maneje automáticamente los headers de CORS
+      return reply.code(200).send(responseObject);
     } catch (error) {
       return handleAfiliadosReportesError(error, reply);
     }

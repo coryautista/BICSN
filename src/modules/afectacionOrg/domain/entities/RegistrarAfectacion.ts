@@ -19,4 +19,8 @@ export interface RegistrarAfectacionResult {
   success: boolean;
   afectacionId: number;
   message: string;
+  quincena: number;
+  anio: number;
+  periodo: string; // Formato QQAA (ej: "0225" para quincena 2 del año 2025)
+  accion: string; // Acción del registro (ej: "APLICAR", "TERMINADO")
 }

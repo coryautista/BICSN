@@ -4,7 +4,7 @@ import { z } from 'zod';
 export const RegisterAfectacionOrgSchema = z.object({
   fecha: z.string().refine(val => !isNaN(Date.parse(val)), {
     message: 'Fecha must be a valid date string'
-  }),
+  }).optional(),
   entidad: z.string().default('AFILIADOS'),
   anio: z.number().int().min(2000).max(2100, 'Anio must be between 2000 and 2100'),
   quincena: z.number().int().min(1).max(24, 'Quincena must be between 1 and 24'),

@@ -35,5 +35,16 @@ export interface AplicacionAportaciones {
   org0: string;
   org1: string;
   rfc: string;
+  // Campos calculados de aportaciones
+  sueldoBase?: number;
+  aportacionAhorro?: number;
+  aportacionAhorroPatron?: number;
+  aportacionAhorroEmpleado?: number;
+  aportacionVivienda?: number;
+  aportacionPrestaciones?: number;
+  aportacionPrestacionesPatron?: number;
+  aportacionPrestacionesEmpleado?: number;
+  aportacionCair?: number;
+  totalAportaciones?: number;
 }
 

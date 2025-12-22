@@ -5,11 +5,11 @@ import { LineaCapturaParamsSchema } from './aplicacionesQNA.schemas.js';
 import { GenerateLineaCapturaQuery } from './application/queries/GenerateLineaCapturaQuery.js';
 
 export async function lineaCapturaRoutes(fastify: FastifyInstance) {
-  // POST /aplicaciones-qna/linea-captura - Genera referencia SPEI de 11 posiciones
+  // POST /aplicaciones-qna/linea-captura - Genera referencia SPEI de 15 posiciones
   fastify.post('/linea-captura', {
     preHandler: [requireAuth],
     schema: {
-      description: 'Genera una referencia SPEI de 11 posiciones para línea de captura usando algoritmos de fecha condensada, monto condensado y dígito verificador Base 97. La referencia4 se genera automáticamente desde idOrg0 e idOrg1 (opcionales en body, o del token). La fechaLimite se calcula automáticamente como fecha actual + 5 días.',
+      description: 'Genera una referencia SPEI de 15 posiciones para línea de captura usando algoritmos de fecha condensada, monto condensado y dígito verificador Base 97. La referencia4 se genera automáticamente desde idOrg0 e idOrg1 (opcionales en body, o del token). La fechaLimite se calcula automáticamente como fecha actual + 5 días.',
       summary: 'Generar línea de captura',
       tags: ['reportes', 'aplicaciones-qna'],
       security: [{ bearerAuth: [] }],
@@ -45,8 +45,8 @@ export async function lineaCapturaRoutes(fastify: FastifyInstance) {
               properties: {
                 lineaCaptura: { 
                   type: 'string', 
-                  length: 11,
-                  description: 'Línea de captura de 11 caracteres: pos 1-4 referencia, pos 5-8 fecha condensada, pos 9 monto condensado, pos 10-11 dígito verificador'
+                  length: 15,
+                  description: 'Línea de captura de 15 caracteres: pos 1-4 referencia, pos 5-6 mes, pos 7-8 año, pos 9-12 fecha condensada, pos 13 monto condensado, pos 14-15 dígito verificador'
                 },
                 referencia4: { 
                   type: 'string', 
@@ -65,18 +65,18 @@ export async function lineaCapturaRoutes(fastify: FastifyInstance) {
                 fechaCondensada: { 
                   type: 'string',
                   length: 4,
-                  description: 'Fecha condensada (posiciones 5-8)'
+                  description: 'Fecha condensada (posiciones 9-12)'
                 },
                 montoCondensado: { 
                   type: 'number',
                   minimum: 0,
                   maximum: 9,
-                  description: 'Monto condensado (posición 9)'
+                  description: 'Monto condensado (posición 13)'
                 },
                 digitoVerificador: { 
                   type: 'string',
                   length: 2,
-                  description: 'Dígito verificador Base 97 (posiciones 10-11)'
+                  description: 'Dígito verificador Base 97 (posiciones 14-15)'
                 }
               }
             },

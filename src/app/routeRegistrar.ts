@@ -26,7 +26,10 @@ import unidadMedidaRoutes from '../modules/tablero/unidad-medida/unidad-medida.r
 import indicadorAnualRoutes from '../modules/tablero/indicador-anual/indicador-anual.routes.js';
 import codigosPostalesRoutes from '../modules/codigosPostales/codigosPostales.routes.js';
 import coloniasRoutes from '../modules/colonias/colonias.routes.js';
+import cairRoutes from '../modules/CAIR/CAIR.routes.js';
 import callesRoutes from '../modules/calles/calles.routes.js';
+import retencionesPorCobrarRoutes from '../modules/retencionesPorCobrar/retencionesPorCobrar.routes.js';
+import aplicacionQuincenalRoutes from '../modules/aplicacionQuincenal/aplicacionQuincenal.routes.js';
 import afiliadosPersonalRoutes from '../modules/afiliadosPersonal/afiliadosPersonal.routes.js';
 import tipoMovimientoRoutes from '../modules/tipoMovimiento/tipoMovimiento.routes.js';
 import afiliadoRoutes from '../modules/afiliado/afiliado.routes.js';
@@ -201,6 +204,21 @@ const ROUTE_CONFIGS: RouteConfig[] = [
   },
   {
     plugin: callesRoutes,
+    prefix: '/v1',
+    options: { group: ROUTE_GROUPS.MODULES }
+  },
+  {
+    plugin: cairRoutes,
+    prefix: '/v1',
+    options: { group: ROUTE_GROUPS.MODULES }
+  },
+  {
+    plugin: retencionesPorCobrarRoutes,
+    prefix: '/v1',
+    options: { group: ROUTE_GROUPS.MODULES }
+  },
+  {
+    plugin: aplicacionQuincenalRoutes,
     prefix: '/v1',
     options: { group: ROUTE_GROUPS.MODULES }
   },

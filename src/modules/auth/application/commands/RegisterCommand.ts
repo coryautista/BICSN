@@ -15,6 +15,13 @@ const logger = {
   debug: (message: string, data?: any) => console.debug(`[DEBUG] ${message}`, data ? JSON.stringify(data) : '')
 };
 
+// Función helper para normalizar claves orgánicas a formato de 2 dígitos
+function normalizeClaveOrganica(value: string | number | null | undefined): number | null {
+  if (value === null || value === undefined) return null;
+  const normalized = String(value).trim().padStart(2, '0');
+  return Number(normalized);
+}
+
 export interface RegisterInput {
   username: string;
   email?: string;
@@ -88,6 +95,7 @@ export class RegisterCommand {
       const { hash, algo } = await hashPassword(input.password);
 
       // 2. Prepare user data
+      // Normalizar claves orgánicas 0 y 1 a formato de 2 dígitos (ej: "4" -> "04")
       const userData: CreateUserData = {
         username: input.username,
         email: input.email ?? null,
@@ -95,8 +103,8 @@ export class RegisterCommand {
         passwordAlgo: algo,
         displayName: input.displayName ?? null,
         photoPath: input.photoPath ?? null,
-        idOrganica0: input.idOrganica0 ?? null,
-        idOrganica1: input.idOrganica1 ?? null,
+        idOrganica0: normalizeClaveOrganica(input.idOrganica0),
+        idOrganica1: normalizeClaveOrganica(input.idOrganica1),
         idOrganica2: input.idOrganica2 ?? null,
         idOrganica3: input.idOrganica3 ?? null
       };

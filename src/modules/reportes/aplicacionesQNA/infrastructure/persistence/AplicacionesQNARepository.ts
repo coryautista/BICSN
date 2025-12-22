@@ -60,7 +60,8 @@ export class AplicacionesQNARepository implements IAplicacionesQNARepository {
       FROM HISTORIAL_MOVIMIENTOS_QUIN_IND(?, ?, ?) p
     `;
 
-    return executeSerializedQuery((db) => {
+    // Primero obtener los datos base
+    const movimientosBase = await executeSerializedQuery((db) => {
       return new Promise<MovimientoQuincenal[]>((resolve, reject) => {
         logger.info(logContext, 'Ejecutando procedimiento almacenado HISTORIAL_MOVIMIENTOS_QUIN_IND');
 
@@ -108,11 +109,17 @@ export class AplicacionesQNARepository implements IAplicacionesQNARepository {
                 return;
               }
 
-              logger.info({ ...logContext, totalRegistros: result.length }, 'Mapeando resultados');
+              logger.info({ ...logContext, totalRegistros: result.length }, 'Mapeando resultados base');
 
               // Decodificar resultados de Firebird antes de mapear
               const decodedResult = result.map((row: any) => decodeFirebirdObject(row));
+              
+              // Log temporal para debugging
+              if (decodedResult.length > 0) {
+                logger.debug({ ...logContext, primerRegistro: decodedResult[0] }, 'Primer registro decodificado');
+              }
 
+              // Mapear datos base
               const movimientos: MovimientoQuincenal[] = decodedResult.map((row: any) => ({
                 interno: row.INTERNO || 0,
                 consecutivo: row.CONSECUTIVO || 0,
@@ -140,14 +147,16 @@ export class AplicacionesQNARepository implements IAplicacionesQNARepository {
                 nOrg2: String(row.NORG2 || ''),
                 nOrg3: String(row.NORG3 || ''),
                 usuario: String(row.USUARIO || ''),
-                fRealm: String(row.FREALM || '')
+                fRealm: String(row.FREALM || ''),
+                // Inicializar campos nuevos como null
+                sexo: null,
+                fechaNacimiento: null,
+                periodos: null,
+                anios: null,
+                meses: null,
+                dias: null,
+                amd: null
               }));
-
-              logger.info({
-                ...logContext,
-                recordCount: movimientos.length,
-                duracionMs: duration
-              }, 'Consulta completada exitosamente');
 
               resolve(movimientos);
             }
@@ -165,6 +174,255 @@ export class AplicacionesQNARepository implements IAplicacionesQNARepository {
         }
       });
     });
+
+    // Si no hay movimientos, retornar vacío
+    if (movimientosBase.length === 0) {
+      return movimientosBase;
+    }
+
+    // Enriquecer movimientos con datos de PERSONAL y antigüedad usando batch loading
+    // OPTIMIZACIÓN: En lugar de hacer 2 consultas por cada movimiento (N+1 pattern),
+    // hacemos batch loading: obtenemos todos los datos en 2 consultas totales
+    logger.info({ ...logContext, totalRegistros: movimientosBase.length }, 'Enriqueciendo movimientos con datos de PERSONAL y antigüedad (batch loading)');
+    
+    // Obtener todos los internos únicos
+    const internosUnicos = [...new Set(movimientosBase.map(m => m.interno))];
+    
+    // Batch loading: obtener todos los datos de PERSONAL y antigüedad en 2 consultas
+    const [datosPersonalMap, datosAntiguedadMap] = await Promise.all([
+      this.obtenerDatosPersonalBatch(internosUnicos),
+      this.obtenerAntiguedadBatch(internosUnicos)
+    ]);
+    
+    // Combinar datos usando los mapas para lookup O(1)
+    const movimientosEnriquecidos: MovimientoQuincenal[] = movimientosBase.map(movimiento => {
+      const datosPersonal = datosPersonalMap.get(movimiento.interno) || { sexo: null, fechaNacimiento: null };
+      const datosAntiguedad = datosAntiguedadMap.get(movimiento.interno) || {
+        periodos: null,
+        anios: null,
+        meses: null,
+        dias: null,
+        amd: null
+      };
+      
+      return {
+        ...movimiento,
+        sexo: datosPersonal.sexo,
+        fechaNacimiento: datosPersonal.fechaNacimiento,
+        periodos: datosAntiguedad.periodos,
+        anios: datosAntiguedad.anios,
+        meses: datosAntiguedad.meses,
+        dias: datosAntiguedad.dias,
+        amd: datosAntiguedad.amd
+      };
+    });
+
+    logger.info({
+      ...logContext,
+      recordCount: movimientosEnriquecidos.length,
+      duracionMs: Date.now() - startTime
+    }, 'Consulta completada exitosamente con datos enriquecidos');
+
+    return movimientosEnriquecidos;
+  }
+
+  /**
+   * Obtiene datos de PERSONAL (SEXO y FECHA_NACIMIENTO) por INTERNO - BATCH VERSION
+   * Retorna un Map<interno, {sexo, fechaNacimiento}> para lookup O(1)
+   */
+  private async obtenerDatosPersonalBatch(internos: number[]): Promise<Map<number, { sexo: string | null; fechaNacimiento: string | null }>> {
+    const logContext = {
+      operation: 'obtenerDatosPersonalBatch',
+      totalInternos: internos.length
+    };
+
+    const resultado = new Map<number, { sexo: string | null; fechaNacimiento: string | null }>();
+
+    if (internos.length === 0) {
+      return resultado;
+    }
+
+    try {
+      // Firebird no soporta IN con muchos parámetros, así que procesamos en lotes de 100
+      const BATCH_SIZE = 100;
+      const lotes = [];
+      for (let i = 0; i < internos.length; i += BATCH_SIZE) {
+        lotes.push(internos.slice(i, i + BATCH_SIZE));
+      }
+
+      for (const lote of lotes) {
+        // Construir SQL con parámetros dinámicos
+        const placeholders = lote.map(() => '?').join(',');
+        const sql = `SELECT INTERNO, SEXO, FECHA_NACIMIENTO FROM PERSONAL WHERE INTERNO IN (${placeholders})`;
+
+        await executeSerializedQuery((db) => {
+          return new Promise<void>((resolve, reject) => {
+            db.query(
+              sql,
+              lote,
+              (err: any, result: any) => {
+                if (err) {
+                  logger.warn({
+                    ...logContext,
+                    error: err.message || String(err),
+                    loteSize: lote.length
+                  }, 'Error al consultar PERSONAL en batch, continuando con nulls');
+                  resolve();
+                  return;
+                }
+
+                if (result && result.length > 0) {
+                  result.forEach((row: any) => {
+                    const decoded = decodeFirebirdObject(row);
+                    const interno = Number(decoded.INTERNO);
+                    const sexo = decoded.SEXO ? String(decoded.SEXO) : null;
+                    const fechaNacimiento = decoded.FECHA_NACIMIENTO 
+                      ? (decoded.FECHA_NACIMIENTO instanceof Date 
+                          ? decoded.FECHA_NACIMIENTO.toISOString().split('T')[0] 
+                          : String(decoded.FECHA_NACIMIENTO))
+                      : null;
+                    
+                    resultado.set(interno, { sexo, fechaNacimiento });
+                  });
+                }
+
+                resolve();
+              }
+            );
+          });
+        });
+      }
+
+      logger.debug({
+        ...logContext,
+        registrosEncontrados: resultado.size
+      }, 'Batch loading de PERSONAL completado');
+
+      return resultado;
+    } catch (error: any) {
+      logger.warn({
+        ...logContext,
+        error: error.message || String(error)
+      }, 'Excepción al consultar PERSONAL en batch, retornando mapa vacío');
+      return resultado;
+    }
+  }
+
+  /**
+   * Obtiene datos de antigüedad ejecutando DP_ANTIGUEDAD_IND - BATCH VERSION
+   * Retorna un Map<interno, {periodos, anios, meses, dias, amd}> para lookup O(1)
+   * Nota: Como DP_ANTIGUEDAD_IND es un stored procedure que acepta un solo INTERNO,
+   * ejecutamos múltiples llamadas en paralelo (limitado por executeSerializedQuery)
+   */
+  private async obtenerAntiguedadBatch(internos: number[]): Promise<Map<number, {
+    periodos: number | null;
+    anios: number | null;
+    meses: number | null;
+    dias: number | null;
+    amd: string | null;
+  }>> {
+    const logContext = {
+      operation: 'obtenerAntiguedadBatch',
+      totalInternos: internos.length
+    };
+
+    const resultado = new Map<number, {
+      periodos: number | null;
+      anios: number | null;
+      meses: number | null;
+      dias: number | null;
+      amd: string | null;
+    }>();
+
+    if (internos.length === 0) {
+      return resultado;
+    }
+
+    try {
+      // Como DP_ANTIGUEDAD_IND solo acepta un INTERNO, ejecutamos secuencialmente
+      // pero agrupamos en una sola transacción serializada para mejor rendimiento
+      const sql = `SELECT p.PERIODOS, p.ANIOS, p.MESES, p.DIAS, p.AMD FROM DP_ANTIGUEDAD_IND(?) p`;
+
+      // Ejecutar todas las consultas en una sola transacción serializada
+      await executeSerializedQuery(async (db) => {
+        for (const interno of internos) {
+          try {
+            await new Promise<void>((resolve, reject) => {
+              db.query(
+                sql,
+                [interno],
+                (err: any, result: any) => {
+                  if (err) {
+                    logger.debug({
+                      ...logContext,
+                      interno,
+                      error: err.message || String(err)
+                    }, 'Error al ejecutar DP_ANTIGUEDAD_IND para interno, usando nulls');
+                    resultado.set(interno, {
+                      periodos: null,
+                      anios: null,
+                      meses: null,
+                      dias: null,
+                      amd: null
+                    });
+                    resolve();
+                    return;
+                  }
+
+                  if (!result || result.length === 0) {
+                    resultado.set(interno, {
+                      periodos: null,
+                      anios: null,
+                      meses: null,
+                      dias: null,
+                      amd: null
+                    });
+                    resolve();
+                    return;
+                  }
+
+                  const row = decodeFirebirdObject(result[0]);
+                  resultado.set(interno, {
+                    periodos: row.PERIODOS != null ? Number(row.PERIODOS) : null,
+                    anios: row.ANIOS != null ? Number(row.ANIOS) : null,
+                    meses: row.MESES != null ? Number(row.MESES) : null,
+                    dias: row.DIAS != null ? Number(row.DIAS) : null,
+                    amd: row.AMD ? String(row.AMD) : null
+                  });
+                  resolve();
+                }
+              );
+            });
+          } catch (error: any) {
+            logger.debug({
+              ...logContext,
+              interno,
+              error: error.message || String(error)
+            }, 'Excepción al ejecutar DP_ANTIGUEDAD_IND para interno, usando nulls');
+            resultado.set(interno, {
+              periodos: null,
+              anios: null,
+              meses: null,
+              dias: null,
+              amd: null
+            });
+          }
+        }
+      });
+
+      logger.debug({
+        ...logContext,
+        registrosEncontrados: resultado.size
+      }, 'Batch loading de antigüedad completado');
+
+      return resultado;
+    } catch (error: any) {
+      logger.warn({
+        ...logContext,
+        error: error.message || String(error)
+      }, 'Excepción al ejecutar DP_ANTIGUEDAD_IND en batch, retornando mapa vacío');
+      return resultado;
+    }
   }
 
   async getAplicacionAportaciones(pOrg0: string, pOrg1: string, periodo: string): Promise<AplicacionAportaciones[]> {
@@ -272,50 +530,56 @@ export class AplicacionesQNARepository implements IAplicacionesQNARepository {
               // Decodificar resultados de Firebird antes de mapear
               const decodedResult = result.map((row: any) => decodeFirebirdObject(row));
 
-              const aportaciones: AplicacionAportaciones[] = decodedResult.map((row: any) => ({
-                interno: row.INTERNO || 0,
-                nombre: String(row.NOMBRE || ''),
-                sueldom: Number(row.SUELDOM || 0),
-                otrasPrestaciones: Number(row.OTRAS_PRESTACIONES || 0),
-                quinquenios: Number(row.QUINQUENIOS || 0),
-                sueldoq: Number(row.SUELDOQ || 0),
-                opq: Number(row.OPQ || 0),
-                qq: Number(row.QQ || 0),
-                sare: Number(row.SARE || 0),
-                fra: Number(row.FRA || 0),
-                fre: Number(row.FRE || 0),
-                fhe: Number(row.FHE || 0),
-                fve: Number(row.FVE || 0),
-                faa: Number(row.FAA || 0),
-                fae: Number(row.FAE || 0),
-                fat: Number(row.FAT || 0),
-                fai: Number(row.FAI || 0),
-                sFra: Number(row.SFRA || 0),
-                sFre: Number(row.SFRE || 0),
-                sFhe: Number(row.SFHE || 0),
-                sFve: Number(row.SFVE || 0),
-                sFaa: Number(row.SFAA || 0),
-                sFae: Number(row.SFAE || 0),
-                sFat: Number(row.SFAT || 0),
-                sFai: Number(row.SFAI || 0),
-                tFra: Number(row.TFRA || 0),
-                tFre: Number(row.TFRE || 0),
-                tFhe: Number(row.TFHE || 0),
-                tFve: Number(row.TFVE || 0),
-                tFaa: Number(row.TFAA || 0),
-                tFae: Number(row.TFAE || 0),
-                tFat: Number(row.TFAT || 0),
-                tFai: Number(row.TFAI || 0),
-                org0: String(row.ORG0 || ''),
-                org1: String(row.ORG1 || ''),
-                rfc: String(row.RFC || '')
-              }));
+              const aportaciones: AplicacionAportaciones[] = decodedResult.map((row: any) => {
+                // Mapear datos del histórico
+                const registro: AplicacionAportaciones = {
+                  interno: row.INTERNO || 0,
+                  nombre: String(row.NOMBRE || ''),
+                  sueldom: Number(row.SUELDOM || 0),
+                  otrasPrestaciones: Number(row.OTRAS_PRESTACIONES || 0),
+                  quinquenios: Number(row.QUINQUENIOS || 0),
+                  sueldoq: Number(row.SUELDOQ || 0),
+                  opq: Number(row.OPQ || 0),
+                  qq: Number(row.QQ || 0),
+                  sare: Number(row.SARE || 0),
+                  fra: Number(row.FRA || 0),
+                  fre: Number(row.FRE || 0),
+                  fhe: Number(row.FHE || 0),
+                  fve: Number(row.FVE || 0),
+                  faa: Number(row.FAA || 0),
+                  fae: Number(row.FAE || 0),
+                  fat: Number(row.FAT || 0),
+                  fai: Number(row.FAI || 0),
+                  sFra: Number(row.SFRA || 0),
+                  sFre: Number(row.SFRE || 0),
+                  sFhe: Number(row.SFHE || 0),
+                  sFve: Number(row.SFVE || 0),
+                  sFaa: Number(row.SFAA || 0),
+                  sFae: Number(row.SFAE || 0),
+                  sFat: Number(row.SFAT || 0),
+                  sFai: Number(row.SFAI || 0),
+                  tFra: Number(row.TFRA || 0),
+                  tFre: Number(row.TFRE || 0),
+                  tFhe: Number(row.TFHE || 0),
+                  tFve: Number(row.TFVE || 0),
+                  tFaa: Number(row.TFAA || 0),
+                  tFae: Number(row.TFAE || 0),
+                  tFat: Number(row.TFAT || 0),
+                  tFai: Number(row.TFAI || 0),
+                  org0: String(row.ORG0 || ''),
+                  org1: String(row.ORG1 || ''),
+                  rfc: String(row.RFC || '')
+                };
+
+                // Aplicar cálculos de aportaciones
+                return this.calcularAportacionesDesdeHistorico(registro);
+              });
 
               logger.info({
                 ...logContext,
                 recordCount: aportaciones.length,
                 duracionMs: duration
-              }, 'Consulta completada exitosamente');
+              }, 'Consulta completada exitosamente con cálculos de aportaciones');
 
               resolve(aportaciones);
             }
@@ -374,7 +638,8 @@ export class AplicacionesQNARepository implements IAplicacionesQNARepository {
       FROM AP_S_PCP(?, ?, ?) p
     `;
 
-    return executeSerializedQuery((db) => {
+    try {
+      return await executeSerializedQuery((db) => {
       return new Promise<AplicacionPCP[]>((resolve, reject) => {
         logger.info(logContext, 'Ejecutando procedimiento almacenado AP_S_PCP');
 
@@ -403,8 +668,26 @@ export class AplicacionesQNARepository implements IAplicacionesQNARepository {
                   stack: err.stack,
                   duracionMs: duration
                 }, 'Error ejecutando procedimiento');
+                
+                // Detectar errores de conexión específicos
+                const errorCode = err.code || '';
+                const errorMessage = err.message || String(err);
+                
+                if (errorCode === 'ECONNREFUSED' || 
+                    errorMessage.includes('ECONNREFUSED') || 
+                    errorMessage.includes('connection refused') ||
+                    errorMessage.includes('No se pudo conectar') ||
+                    errorMessage.includes('Conexión a Firebird no disponible')) {
+                  reject(new AplicacionesQNAError(
+                    `Error de conexión con Firebird: ${errorMessage}`,
+                    AplicacionesQNAErrorCode.FIREBIRD_CONNECTION_ERROR,
+                    503
+                  ));
+                  return;
+                }
+                
                 reject(new AplicacionesQNAError(
-                  `Error al ejecutar procedimiento AP_S_PCP: ${err.message || String(err)}`,
+                  `Error al ejecutar procedimiento AP_S_PCP: ${errorMessage}`,
                   AplicacionesQNAErrorCode.FIREBIRD_QUERY_ERROR
                 ));
                 return;
@@ -424,34 +707,99 @@ export class AplicacionesQNARepository implements IAplicacionesQNARepository {
 
               logger.info({ ...logContext, totalRegistros: result.length }, 'Mapeando resultados');
 
+              // Log del primer registro RAW para diagnóstico
+              if (result.length > 0) {
+                logger.info({ 
+                  ...logContext, 
+                  primerRegistroRaw: result[0],
+                  keysRaw: Object.keys(result[0] || {})
+                }, 'Primer registro RAW de Firebird');
+              }
+
               // Decodificar resultados de Firebird antes de mapear
               const decodedResult = result.map((row: any) => decodeFirebirdObject(row));
 
-              const prestamos: AplicacionPCP[] = decodedResult.map((row: any) => ({
-                interno: row.INTERNO || 0,
-                rfc: String(row.RFC || ''),
-                nombre: String(row.NOMBRE || ''),
-                prestamo: String(row.PRESTAMO || ''),
-                letra: Number(row.LETRA || 0),
-                plazo: Number(row.PLAZO || 0),
-                periodoC: String(row.PERIODO_C || ''),
-                fechaC: String(row.FECHA_C || ''),
-                capital: Number(row.CAPITAL || 0),
-                interes: Number(row.INTERES || 0),
-                monto: Number(row.MONTO || 0),
-                moratorios: Number(row.MORATORIOS || 0),
-                total: Number(row.TOTAL || 0),
-                resultado: String(row.RESULTADO || ''),
-                td: String(row.TD || ''),
-                org0: String(row.ORG0 || ''),
-                org1: String(row.ORG1 || ''),
-                org2: String(row.ORG2 || ''),
-                org3: String(row.ORG3 || ''),
-                nOrg0: String(row.NORG0 || ''),
-                nOrg1: String(row.NORG1 || ''),
-                nOrg2: String(row.NORG2 || ''),
-                nOrg3: String(row.NORG3 || '')
-              }));
+              // Log del primer registro después de decodificar
+              if (decodedResult.length > 0) {
+                logger.info({ 
+                  ...logContext, 
+                  primerRegistroDecodificado: decodedResult[0],
+                  keysDecodificado: Object.keys(decodedResult[0] || {})
+                }, 'Primer registro después de decodificar');
+              }
+
+              // Helper para formatear fechas de Firebird
+              const formatFirebirdDate = (dateValue: any): string => {
+                if (!dateValue) return '';
+                if (dateValue instanceof Date) {
+                  // Formatear como YYYY-MM-DD
+                  const year = dateValue.getFullYear();
+                  const month = String(dateValue.getMonth() + 1).padStart(2, '0');
+                  const day = String(dateValue.getDate()).padStart(2, '0');
+                  return `${year}-${month}-${day}`;
+                }
+                if (typeof dateValue === 'string') {
+                  // Si ya es string, intentar parsearlo y formatearlo
+                  const parsed = new Date(dateValue);
+                  if (!isNaN(parsed.getTime())) {
+                    const year = parsed.getFullYear();
+                    const month = String(parsed.getMonth() + 1).padStart(2, '0');
+                    const day = String(parsed.getDate()).padStart(2, '0');
+                    return `${year}-${month}-${day}`;
+                  }
+                  return dateValue;
+                }
+                return String(dateValue);
+              };
+
+              const prestamos: AplicacionPCP[] = decodedResult.map((row: any, index: number) => {
+                // Log para diagnóstico si el objeto está vacío o tiene problemas
+                const rowKeys = Object.keys(row || {});
+                if (rowKeys.length === 0 || (!row.INTERNO && !row.interno)) {
+                  logger.warn({ 
+                    ...logContext, 
+                    index,
+                    rowKeys,
+                    rowSample: JSON.stringify(row).substring(0, 500),
+                    allRowValues: row
+                  }, 'Registro con posibles problemas en mapeo');
+                }
+
+                return {
+                  interno: row.INTERNO || row.interno || 0,
+                  rfc: String(row.RFC || row.rfc || ''),
+                  nombre: String(row.NOMBRE || row.nombre || ''),
+                  prestamo: String(row.PRESTAMO || row.prestamo || ''),
+                  letra: Number(row.LETRA || row.letra || 0),
+                  plazo: Number(row.PLAZO || row.plazo || 0),
+                  periodoC: String(row.PERIODO_C || row.periodo_c || row.PERIODOC || ''),
+                  fechaC: formatFirebirdDate(row.FECHA_C || row.fecha_c || row.FECHAC),
+                  capital: Number(row.CAPITAL || row.capital || 0),
+                  interes: Number(row.INTERES || row.interes || 0),
+                  monto: Number(row.MONTO || row.monto || 0),
+                  moratorios: Number(row.MORATORIOS || row.moratorios || 0),
+                  total: Number(row.TOTAL || row.total || 0),
+                  resultado: String(row.RESULTADO || row.resultado || ''),
+                  td: String(row.TD || row.td || ''),
+                  org0: String(row.ORG0 || row.org0 || ''),
+                  org1: String(row.ORG1 || row.org1 || ''),
+                  org2: String(row.ORG2 || row.org2 || ''),
+                  org3: String(row.ORG3 || row.org3 || ''),
+                  nOrg0: String(row.NORG0 || row.norg0 || row.NORG_0 || ''),
+                  nOrg1: String(row.NORG1 || row.norg1 || row.NORG_1 || ''),
+                  nOrg2: String(row.NORG2 || row.norg2 || row.NORG_2 || ''),
+                  nOrg3: String(row.NORG3 || row.norg3 || row.NORG_3 || '')
+                };
+              });
+
+              // Log de muestra del primer préstamo mapeado
+              if (prestamos.length > 0) {
+                logger.info({
+                  ...logContext,
+                  primerPrestamoMapeado: prestamos[0],
+                  totalCampos: Object.keys(prestamos[0] || {}).length
+                }, 'Primer préstamo después del mapeo');
+              }
 
               logger.info({
                 ...logContext,
@@ -466,15 +814,64 @@ export class AplicacionesQNARepository implements IAplicacionesQNARepository {
           logger.error({
             ...logContext,
             error: syncError.message || String(syncError),
+            errorCode: syncError.code,
             stack: syncError.stack
           }, 'Error síncrono ejecutando procedimiento');
+          
+          // Detectar errores de conexión específicos
+          const errorCode = syncError.code || '';
+          const errorMessage = syncError.message || String(syncError);
+          
+          if (errorCode === 'ECONNREFUSED' || 
+              errorMessage.includes('ECONNREFUSED') || 
+              errorMessage.includes('connection refused') ||
+              errorMessage.includes('No se pudo conectar') ||
+              errorMessage.includes('Conexión a Firebird no disponible')) {
+            reject(new AplicacionesQNAError(
+              `Error de conexión con Firebird: ${errorMessage}`,
+              AplicacionesQNAErrorCode.FIREBIRD_CONNECTION_ERROR,
+              503
+            ));
+            return;
+          }
+          
           reject(new AplicacionesQNAError(
-            `Error síncrono al ejecutar procedimiento AP_S_PCP: ${syncError.message || String(syncError)}`,
+            `Error síncrono al ejecutar procedimiento AP_S_PCP: ${errorMessage}`,
             AplicacionesQNAErrorCode.FIREBIRD_QUERY_ERROR
           ));
         }
       });
     });
+    } catch (error: any) {
+      const duration = Date.now() - startTime;
+      logger.error({
+        ...logContext,
+        error: error.message || String(error),
+        errorCode: error.code,
+        stack: error.stack,
+        duracionMs: duration
+      }, 'Error al ejecutar consulta serializada');
+      
+      // Detectar errores de conexión específicos
+      const errorCode = error.code || '';
+      const errorMessage = error.message || String(error);
+      
+      if (errorCode === 'ECONNREFUSED' || 
+          errorMessage.includes('ECONNREFUSED') || 
+          errorMessage.includes('connection refused') ||
+          errorMessage.includes('No se pudo conectar') ||
+          errorMessage.includes('Conexión a Firebird no disponible') ||
+          errorMessage.includes('Base de datos Firebird no conectada')) {
+        throw new AplicacionesQNAError(
+          `Error de conexión con Firebird: ${errorMessage}`,
+          AplicacionesQNAErrorCode.FIREBIRD_CONNECTION_ERROR,
+          503
+        );
+      }
+      
+      // Re-lanzar otros errores
+      throw error;
+    }
   }
 
   async getAplicacionPMP(pOrg0: string, pOrg1: string, pPeriodo: string): Promise<AplicacionPMP[]> {
@@ -1098,6 +1495,54 @@ export class AplicacionesQNARepository implements IAplicacionesQNARepository {
         500
       );
     }
+  }
+
+  /**
+   * Calcula las aportaciones de fondos desde los datos del histórico
+   * @param registro Registro de AplicacionAportaciones sin campos calculados
+   * @returns Registro con los campos calculados agregados
+   */
+  private calcularAportacionesDesdeHistorico(registro: AplicacionAportaciones): AplicacionAportaciones {
+    const sueldom = registro.sueldom || 0;
+    const otrasPrestaciones = registro.otrasPrestaciones || 0;
+    const quinquenios = registro.quinquenios || 0;
+
+    // Calcular sueldo base (común para todos los tipos)
+    const sueldoBase = ((sueldom + otrasPrestaciones + quinquenios) / 30) * 15;
+
+    // Calcular aportación Ahorro
+    const aportacionAhorroPatron = ((sueldom / 30) * 15) * 0.0250; // AFAE - Patrón 2.5%
+    const aportacionAhorroEmpleado = ((sueldom / 30) * 15) * 0.050; // AFAA - Empleado 5.0%
+    const aportacionAhorro = aportacionAhorroPatron + aportacionAhorroEmpleado;
+
+    // Calcular aportación Vivienda
+    const aportacionVivienda = ((sueldom / 30) * 15) * 0.0175; // AFE - Patrón 1.75%
+
+    // Calcular aportación Prestaciones (usa sueldoBase)
+    const aportacionPrestacionesPatron = sueldoBase * 0.2225; // AFPE - Patrón 22.25%
+    const aportacionPrestacionesEmpleado = sueldoBase * 0.0450; // AFPA - Empleado 4.5%
+    const aportacionPrestaciones = aportacionPrestacionesPatron + aportacionPrestacionesEmpleado;
+
+    // Calcular aportación CAIR
+    const aportacionCair = ((sueldom / 30) * 15) * 0.020; // AFE - Patrón 2.0%
+
+    // Calcular total de todas las aportaciones
+    const totalAportaciones = aportacionAhorro + aportacionVivienda + aportacionPrestaciones + aportacionCair;
+
+    // Retornar registro con campos calculados agregados
+    return {
+      ...registro,
+      sueldoBase,
+      aportacionAhorro,
+      aportacionAhorroPatron,
+      aportacionAhorroEmpleado,
+      aportacionVivienda,
+      aportacionPrestaciones,
+      aportacionPrestacionesPatron,
+      aportacionPrestacionesEmpleado,
+      aportacionCair,
+      totalAportaciones
+    };
   }
 
   /**

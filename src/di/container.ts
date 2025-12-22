@@ -423,6 +423,20 @@ import { CAIRRepository } from '../modules/reportes/CAIR/infrastructure/persiste
 import { GetEstadoCuentaCAIRQuery } from '../modules/reportes/CAIR/application/queries/GetEstadoCuentaCAIRQuery.js';
 import { GetCAIREntregadoQuery } from '../modules/reportes/CAIR/application/queries/GetCAIREntregadoQuery.js';
 
+// CAIR Module (Módulo Independiente)
+import { CAIRRepository as CAIRIndependentRepository } from '../modules/CAIR/infrastructure/persistence/CAIRRepository.js';
+import { GetDevueltoTiposQuery } from '../modules/CAIR/application/queries/GetDevueltoTiposQuery.js';
+import { GetChequesLeyendasQuery } from '../modules/CAIR/application/queries/GetChequesLeyendasQuery.js';
+import { GetSARDevolucionQuery } from '../modules/CAIR/application/queries/GetSARDevolucionQuery.js';
+
+// Retenciones Por Cobrar Module
+import { RetencionesPorCobrarRepository } from '../modules/retencionesPorCobrar/infrastructure/persistence/RetencionesPorCobrarRepository.js';
+import { GetRetencionesPorCobrarQuery } from '../modules/retencionesPorCobrar/application/queries/GetRetencionesPorCobrarQuery.js';
+
+// Aplicacion Quincenal Module
+import { AplicacionQuincenalRepository } from '../modules/aplicacionQuincenal/infrastructure/persistence/AplicacionQuincenalRepository.js';
+import { GetAportacionQuincenalResumenQuery } from '../modules/aplicacionQuincenal/application/queries/GetAportacionQuincenalResumenQuery.js';
+
 // Afiliados Reportes Module (Submódulo de Reportes)
 import { AfiliadosReportesRepository } from '../modules/reportes/afiliados/infrastructure/persistence/AfiliadosReportesRepository.js';
 import { GetHistorialMovimientosQuinQuery } from '../modules/reportes/afiliados/application/queries/GetHistorialMovimientosQuinQuery.js';
@@ -1099,6 +1113,38 @@ container.register({
   // Queries (Scoped)
   getEstadoCuentaCAIRQuery: asClass(GetEstadoCuentaCAIRQuery).scoped(),
   getCAIREntregadoQuery: asClass(GetCAIREntregadoQuery).scoped(),
+  
+  // ============================================================================
+  // CAIR MODULE (Módulo Independiente)
+  // ============================================================================
+  
+  // Repositories (Scoped) - usando nombre diferente para evitar conflicto con reportes/CAIR
+  cairIndependentRepo: asClass(CAIRIndependentRepository).scoped(),
+  
+  // Queries (Scoped) - inyectan cairIndependentRepo por nombre de parámetro
+  getDevueltoTiposQuery: asClass(GetDevueltoTiposQuery).scoped(),
+  getChequesLeyendasQuery: asClass(GetChequesLeyendasQuery).scoped(),
+  getSARDevolucionQuery: asClass(GetSARDevolucionQuery).scoped(),
+  
+  // ============================================================================
+  // RETENCIONES POR COBRAR MODULE
+  // ============================================================================
+  
+  // Repositories (Scoped)
+  retencionesPorCobrarRepo: asClass(RetencionesPorCobrarRepository).scoped(),
+  
+  // Queries (Scoped) - inyectan retencionesPorCobrarRepo por nombre de parámetro
+  getRetencionesPorCobrarQuery: asClass(GetRetencionesPorCobrarQuery).scoped(),
+  
+  // ============================================================================
+  // APLICACION QUINCENAL MODULE
+  // ============================================================================
+  
+  // Repositories (Scoped)
+  aplicacionQuincenalRepo: asClass(AplicacionQuincenalRepository).scoped(),
+  
+  // Queries (Scoped) - inyectan aplicacionQuincenalRepo por nombre de parámetro
+  getAportacionQuincenalResumenQuery: asClass(GetAportacionQuincenalResumenQuery).scoped(),
   
   // ============================================================================
   // AFILIADOS REPORTES MODULE (Submódulo de Reportes)

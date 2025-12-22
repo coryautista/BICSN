@@ -8,7 +8,7 @@ export function handleAportacionesFondosError(error: any, reply: FastifyReply): 
   // Si es un error del dominio aportaciones fondos, manejarlo específicamente
   if (error instanceof AportacionFondoDomainError) {
     const statusCode = getStatusCode(error.code);
-    return reply.status(statusCode).send({
+    return reply.code(statusCode).send({
       ok: false,
       error: {
         code: error.code,

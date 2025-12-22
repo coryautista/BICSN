@@ -90,11 +90,13 @@ export function handleAfectacionError(error: Error, reply: FastifyReply, context
   if (error instanceof AfectacionRegistrationError ||
       error instanceof AfectacionQueryError) {
     logger.error({ ...logContext, stack: error.stack }, 'Error de base de datos/consulta');
+    const domainError = error as DomainError;
     return reply.code(500).send({
       ok: false,
       error: {
-        code: (error as DomainError).code,
-        message: error.message
+        code: domainError.code || 'DATABASE_ERROR',
+        message: error.message,
+        ...(domainError.details && { details: domainError.details })
       }
     });
   }

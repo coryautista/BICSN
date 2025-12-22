@@ -3,6 +3,12 @@ import type { ConnectionPool } from 'mssql';
 import { IUsuariosRepository } from '../../domain/repositories/IUsuariosRepository.js';
 import { Usuario, CreateUsuarioData, UpdateUsuarioData, UsuarioRole } from '../../domain/entities/Usuario.js';
 
+// Función helper para normalizar claves orgánicas a formato de 2 dígitos
+function normalizeClaveOrganica(value: string | number | null | undefined): string | null {
+  if (value === null || value === undefined) return null;
+  return String(value).trim().padStart(2, '0');
+}
+
 export class UsuariosRepository implements IUsuariosRepository {
   constructor(private mssqlPool: ConnectionPool) {}
 
@@ -131,11 +137,11 @@ export class UsuariosRepository implements IUsuariosRepository {
     }
     if (data.idOrganica0 !== undefined) {
       updates.push('idOrganica0 = @idOrganica0');
-      request.input('idOrganica0', sql.NVarChar(2), data.idOrganica0?.toString() ?? null);
+      request.input('idOrganica0', sql.NVarChar(2), normalizeClaveOrganica(data.idOrganica0));
     }
     if (data.idOrganica1 !== undefined) {
       updates.push('idOrganica1 = @idOrganica1');
-      request.input('idOrganica1', sql.NVarChar(2), data.idOrganica1?.toString() ?? null);
+      request.input('idOrganica1', sql.NVarChar(2), normalizeClaveOrganica(data.idOrganica1));
     }
     if (data.idOrganica2 !== undefined) {
       updates.push('idOrganica2 = @idOrganica2');

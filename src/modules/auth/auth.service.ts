@@ -14,6 +14,10 @@ type AccessClaims = {
   jti: string;
   iss: string;
   aud: string;
+  idOrganica0?: string | number;
+  idOrganica1?: string | number;
+  idOrganica2?: string | number;
+  idOrganica3?: string | number;
 };
 
 // Logger básico para utilidades

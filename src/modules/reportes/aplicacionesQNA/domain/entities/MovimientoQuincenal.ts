@@ -26,5 +26,14 @@ export interface MovimientoQuincenal {
   nOrg3: string;
   usuario: string;
   fRealm: string;
+  // Campos de PERSONAL
+  sexo: string | null;
+  fechaNacimiento: string | null;
+  // Campos de antigüedad (DP_ANTIGUEDAD_IND)
+  periodos: number | null;
+  anios: number | null;
+  meses: number | null;
+  dias: number | null;
+  amd: string | null;
 }
 

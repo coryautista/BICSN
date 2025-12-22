@@ -48,7 +48,7 @@ export function handleAfiliadoOrgError(error: Error, reply: FastifyReply, contex
       error instanceof InvalidOrgClaveError ||
       error instanceof AfiliadoOrgValidationError) {
     logger.warn(logContext, 'Error de validación en afiliado-org');
-    return reply.status(400).send({
+    return reply.code(400).send({
       ok: false,
       error: {
         code: 'VALIDATION_ERROR',
@@ -61,7 +61,7 @@ export function handleAfiliadoOrgError(error: Error, reply: FastifyReply, contex
   // Errores de permisos (403)
   if (error instanceof AfiliadoOrgPermissionError) {
     logger.warn(logContext, 'Error de permisos en afiliado-org');
-    return reply.status(403).send({
+    return reply.code(403).send({
       ok: false,
       error: {
         code: 'PERMISSION_DENIED',
@@ -74,7 +74,7 @@ export function handleAfiliadoOrgError(error: Error, reply: FastifyReply, contex
   // Errores de no encontrado (404)
   if (error instanceof AfiliadoOrgNotFoundError) {
     logger.warn(logContext, 'Afiliado-org no encontrado');
-    return reply.status(404).send({
+    return reply.code(404).send({
       ok: false,
       error: {
         code: 'NOT_FOUND',
@@ -88,7 +88,7 @@ export function handleAfiliadoOrgError(error: Error, reply: FastifyReply, contex
   if (error instanceof AfiliadoOrgAlreadyExistsError ||
       error instanceof DuplicateAfiliadoOrgError) {
     logger.warn(logContext, 'Afiliado-org ya existe');
-    return reply.status(409).send({
+    return reply.code(409).send({
       ok: false,
       error: {
         code: 'CONFLICT',
@@ -104,7 +104,7 @@ export function handleAfiliadoOrgError(error: Error, reply: FastifyReply, contex
       error instanceof AfiliadoOrgDeletionError ||
       error instanceof AfiliadoOrgQueryError) {
     logger.error({ ...logContext, stack: error.stack }, 'Error de base de datos en afiliado-org');
-    return reply.status(500).send({
+    return reply.code(500).send({
       ok: false,
       error: {
         code: 'DATABASE_ERROR',
@@ -116,7 +116,7 @@ export function handleAfiliadoOrgError(error: Error, reply: FastifyReply, contex
   // Errores de dominio genéricos (500)
   if (error instanceof DomainError) {
     logger.error({ ...logContext, stack: error.stack }, 'Error de dominio en afiliado-org');
-    return reply.status(500).send({
+    return reply.code(500).send({
       ok: false,
       error: {
         code: 'DOMAIN_ERROR',
@@ -127,7 +127,7 @@ export function handleAfiliadoOrgError(error: Error, reply: FastifyReply, contex
 
   // Errores no manejados (500)
   logger.error({ ...logContext, stack: error.stack }, 'Error no manejado en afiliado-org');
-  return reply.status(500).send({
+  return reply.code(500).send({
     ok: false,
     error: {
       code: 'INTERNAL_ERROR',

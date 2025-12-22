@@ -48,16 +48,30 @@ function cleanMojibake(data: any): any {
  */
 const mojibakeCleanerPlugin: FastifyPluginCallback = (fastify, _opts, done) => {
   fastify.addHook('onSend', async (request, reply, payload) => {
+    // Ignorar peticiones OPTIONS (preflight) - Fastify CORS las maneja automáticamente
+    if (request.method === 'OPTIONS') {
+      return payload;
+    }
+    
     // TEMPORAL: DESHABILITAR COMPLETAMENTE EL PLUGIN PARA DIAGNÓSTICO
     // El plugin mojibakeCleaner está interfiriendo con la serialización JSON
     // Retornar payload original sin procesamiento
     
-    console.log('[MOJIBAKECLEANER] DESHABILITADO - Retornando payload original:', {
-      url: request.url,
-      payloadType: typeof payload,
-      payloadIsArray: Array.isArray(payload),
-      payloadKeys: payload && typeof payload === 'object' ? Object.keys(payload) : null
-    });
+    // Log más detallado para diagnóstico
+    if (request.url?.includes('/pcp')) {
+      const payloadPreview = typeof payload === 'string' 
+        ? payload.substring(0, 500) 
+        : JSON.stringify(payload).substring(0, 500);
+      
+      console.log('[MOJIBAKECLEANER] Payload recibido:', {
+        url: request.url,
+        payloadType: typeof payload,
+        payloadLength: typeof payload === 'string' ? payload.length : 'N/A',
+        payloadIsArray: Array.isArray(payload),
+        payloadPreview: payloadPreview,
+        contentType: reply.getHeader('content-type')
+      });
+    }
     
     return payload;
   });

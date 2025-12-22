@@ -28,7 +28,7 @@ export function handleProcesoError(error: unknown, reply: FastifyReply, userId?:
       }
     };
 
-    return reply.status(statusCode).send(response);
+    return reply.code(statusCode).send(response);
   }
 
   // Si es cualquier otro error de dominio
@@ -42,7 +42,7 @@ export function handleProcesoError(error: unknown, reply: FastifyReply, userId?:
       }
     };
 
-    return reply.status(error.statusCode).send(response);
+    return reply.code(error.statusCode).send(response);
   }
 
   // Error genérico no controlado
@@ -57,5 +57,5 @@ export function handleProcesoError(error: unknown, reply: FastifyReply, userId?:
     }
   };
 
-  return reply.status(500).send(response);
+  return reply.code(500).send(response);
 }

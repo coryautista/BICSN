@@ -64,8 +64,8 @@ export async function createUser(
     .input('algo', sql.VarChar(20), passwordAlgo)
     .input('displayName', sql.NVarChar(255), displayName ?? null)
     .input('photoPath', sql.NVarChar(255), photoPath ?? null)
-    .input('idOrganica0', sql.NVarChar(2), idOrganica0?.toString() ?? null)
-    .input('idOrganica1', sql.NVarChar(2), idOrganica1?.toString() ?? null)
+    .input('idOrganica0', sql.NVarChar(2), normalizeClaveOrganica(idOrganica0))
+    .input('idOrganica1', sql.NVarChar(2), normalizeClaveOrganica(idOrganica1))
     .input('idOrganica2', sql.NVarChar(2), idOrganica2?.toString() ?? null)
     .input('idOrganica3', sql.NVarChar(2), idOrganica3?.toString() ?? null)
     .query(`

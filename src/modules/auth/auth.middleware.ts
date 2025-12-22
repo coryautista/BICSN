@@ -12,21 +12,23 @@ export async function requireAuth(req: FastifyRequest, reply: FastifyReply) {
   }
   if (!token) return reply.code(401).send({ ok:false, error:{code:'UNAUTHORIZED', message:'Missing token'}});
   try {
-    const payload = verifyAccess(token);
+    const payload = verifyAccess(token) as any;
     if (await isAccessDenylisted(payload.jti)) {
       return reply.code(401).send({ ok:false, error:{code:'UNAUTHORIZED', message:'Token revoked'}});
     }
 
     // Obtener información adicional del usuario desde la base de datos
     const userInfo = await findUserById(payload.sub);
+    
+    // Usar valores del token si están disponibles, sino usar los de la BD
     req.user = {
       sub: payload.sub,
       roles: payload.roles,
       entidades: payload.entidades,
-      idOrganica0: userInfo?.idOrganica0,
-      idOrganica1: userInfo?.idOrganica1,
-      idOrganica2: userInfo?.idOrganica2,
-      idOrganica3: userInfo?.idOrganica3,
+      idOrganica0: payload.idOrganica0 ?? userInfo?.idOrganica0,
+      idOrganica1: payload.idOrganica1 ?? userInfo?.idOrganica1,
+      idOrganica2: payload.idOrganica2 ?? userInfo?.idOrganica2,
+      idOrganica3: payload.idOrganica3 ?? userInfo?.idOrganica3,
       jti: payload.jti,
       iat: payload.iat,
       exp: payload.exp

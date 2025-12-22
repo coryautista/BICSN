@@ -10,7 +10,7 @@ export function handleAfiliadosReportesError(error: unknown, reply: FastifyReply
 
   // Si es un error del dominio afiliados reportes, manejarlo específicamente
   if (error instanceof AfiliadosReportesError) {
-    return reply.status(error.statusCode).send({
+    return reply.code(error.statusCode).send({
       success: false,
       error: {
         code: error.code,
@@ -22,7 +22,7 @@ export function handleAfiliadosReportesError(error: unknown, reply: FastifyReply
 
   // Si es un error de validación de Fastify
   if (error instanceof Error && 'validation' in error) {
-    return reply.status(400).send({
+    return reply.code(400).send({
       success: false,
       error: {
         code: 'VALIDATION_ERROR',
@@ -34,7 +34,7 @@ export function handleAfiliadosReportesError(error: unknown, reply: FastifyReply
   }
 
   // Error genérico del servidor
-  return reply.status(500).send({
+  return reply.code(500).send({
     success: false,
     error: {
       code: 'INTERNAL_SERVER_ERROR',

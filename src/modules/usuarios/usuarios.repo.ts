@@ -234,8 +234,8 @@ export async function createUsuario(
     .input('passwordHash', sql.NVarChar(512), passwordHash)
     .input('passwordAlgo', sql.NVarChar(50), passwordAlgo)
     .input('phoneNumber', sql.NVarChar(20), phoneNumber)
-    .input('idOrganica0', sql.NVarChar(2), idOrganica0)
-    .input('idOrganica1', sql.NVarChar(2), idOrganica1)
+    .input('idOrganica0', sql.NVarChar(2), normalizeClaveOrganica(idOrganica0))
+    .input('idOrganica1', sql.NVarChar(2), normalizeClaveOrganica(idOrganica1))
     .input('idOrganica2', sql.NVarChar(2), idOrganica2 || null)
     .input('idOrganica3', sql.NVarChar(2), idOrganica3 || null)
     .query(`

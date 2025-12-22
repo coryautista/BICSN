@@ -51,7 +51,7 @@ export class GenerateLineaCapturaQuery {
         throw new Error('importe debe ser un número positivo');
       }
 
-      // Generar la referencia completa de 11 caracteres
+      // Generar la referencia completa de 15 caracteres
       const lineaCaptura = this.lineaCapturaService.generarReferencia11({
         referencia4: params.referencia4,
         fechaLimite: params.fechaLimite,
@@ -62,8 +62,8 @@ export class GenerateLineaCapturaQuery {
       const fechaCondensada = this.lineaCapturaService.calcularFechaCondensada(params.fechaLimite);
       const montoCondensado = this.lineaCapturaService.calcularMontoCondensado(params.importe);
       
-      // Extraer el dígito verificador de la línea de captura (posiciones 10-11)
-      const digitoVerificador = lineaCaptura.substring(9, 11);
+      // Extraer el dígito verificador de la línea de captura (posiciones 14-15)
+      const digitoVerificador = lineaCaptura.substring(13, 15);
 
       const result: GenerateLineaCapturaResult = {
         lineaCaptura,

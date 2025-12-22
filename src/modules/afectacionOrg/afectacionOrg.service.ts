@@ -11,6 +11,7 @@ import {
   OrgHierarchyValidationError
 } from './domain/errors.js';
 import { DatabaseError } from '../../utils/errors.js';
+import { executeSerializedQuery } from '../../db/firebird.js';
 import pino from 'pino';
 
 // Logger específico del módulo
@@ -488,6 +489,135 @@ export class AfectacionOrgService {
     } catch (error: any) {
       logger.error({ ...logContext, error: error.message }, 'Error al obtener quincena alta');
       throw new AfectacionQueryError('getQuincenaAltaAfectacion', { filters, error: error.message });
+    }
+  }
+
+  async getQuincenaFromFirebird(org0: string, org1: string, org2?: string | null, org3?: string | null) {
+    const logContext = { operation: 'getQuincenaFromFirebird', org0, org1, org2, org3 };
+    logger.info(logContext, 'Obteniendo quincena desde Firebird AP_G_APLICADO_TIPO');
+
+    try {
+      // Normalizar org2 y org3: si son null, undefined o vacío, usar "01" por defecto
+      const org2Final = (!org2 || (typeof org2 === 'string' && org2.trim() === '')) ? '01' : String(org2).padStart(2, '0').substring(0, 2);
+      const org3Final = (!org3 || (typeof org3 === 'string' && org3.trim() === '')) ? '01' : String(org3).padStart(2, '0').substring(0, 2);
+
+      // Validar que org0 y org1 existan
+      if (!org0 || !org1) {
+        throw new Error('org0 y org1 son requeridos para consultar Firebird');
+      }
+
+      // Consultar Firebird para obtener quincena y fecha
+      const firebirdResult = await executeSerializedQuery((db) => {
+        return new Promise<{ QUINCENA: number; FECHA: string }>((resolve, reject) => {
+          try {
+            const sql = `SELECT p.QUINCENA, p.FECHA FROM AP_G_APLICADO_TIPO(?, ?, ?, ?) p`;
+            const params = [org0, org1, org2Final, org3Final];
+
+            const timeoutId = setTimeout(() => {
+              reject(new Error('Tiempo de espera agotado en consulta Firebird AP_G_APLICADO_TIPO'));
+            }, 30000); // 30 segundos de timeout
+
+            db.query(sql, params, (err: any, result: any) => {
+              clearTimeout(timeoutId);
+              
+              if (err) {
+                logger.error({ ...logContext, error: err.message }, 'Error al consultar AP_G_APLICADO_TIPO en Firebird');
+                reject(err);
+                return;
+              }
+
+              if (!result || result.length === 0) {
+                reject(new Error('AP_G_APLICADO_TIPO no retornó resultados'));
+                return;
+              }
+
+              const row = result[0];
+              resolve({
+                QUINCENA: row.QUINCENA,
+                FECHA: row.FECHA
+              });
+            });
+          } catch (error: any) {
+            reject(error);
+          }
+        });
+      });
+
+      // Parsear QUINCENA: formato QQAA (quincena 2 dígitos + año 2 últimos dígitos)
+      // Ejemplo: 2125 = quincena 21 del año 2025
+      const quincenaStr = String(firebirdResult.QUINCENA).padStart(4, '0');
+      const quincenaParsed = parseInt(quincenaStr.substring(0, 2));
+      const anioSuffix = parseInt(quincenaStr.substring(2, 4));
+      const anioFromQuincena = 2000 + anioSuffix; // Asumiendo siglo 20xx
+
+      // Parsear FECHA: formato DD.MM.YYYY (ej: 15.11.2025) o Date object
+      let anioFromFecha: number | null = null;
+      if (firebirdResult.FECHA) {
+        let fechaStr: string;
+        // Si es un objeto Date, convertirlo a string
+        if (firebirdResult.FECHA instanceof Date) {
+          fechaStr = firebirdResult.FECHA.toISOString().split('T')[0]; // YYYY-MM-DD
+          anioFromFecha = firebirdResult.FECHA.getFullYear();
+        } else if (typeof firebirdResult.FECHA === 'string') {
+          fechaStr = firebirdResult.FECHA;
+          // Intentar parsear formato DD.MM.YYYY
+          const fechaParts = fechaStr.split('.');
+          if (fechaParts.length === 3) {
+            anioFromFecha = parseInt(fechaParts[2]);
+          } else {
+            // Intentar parsear como ISO string YYYY-MM-DD
+            const isoParts = fechaStr.split('-');
+            if (isoParts.length === 3) {
+              anioFromFecha = parseInt(isoParts[0]);
+            }
+          }
+        } else {
+          // Si es otro tipo, intentar convertirlo a string
+          fechaStr = String(firebirdResult.FECHA);
+          const fechaParts = fechaStr.split('.');
+          if (fechaParts.length === 3) {
+            anioFromFecha = parseInt(fechaParts[2]);
+          }
+        }
+      }
+
+      // Usar el año de la fecha si está disponible y es válido, sino usar el de la quincena
+      const anioFinal = (anioFromFecha && anioFromFecha >= 2000 && anioFromFecha <= 2100) 
+        ? anioFromFecha 
+        : anioFromQuincena;
+
+      // Convertir fecha a string si es necesario
+      let fechaStr: string | null = null;
+      if (firebirdResult.FECHA) {
+        if (firebirdResult.FECHA instanceof Date) {
+          fechaStr = firebirdResult.FECHA.toISOString().split('T')[0];
+        } else if (typeof firebirdResult.FECHA === 'string') {
+          fechaStr = firebirdResult.FECHA;
+        } else {
+          fechaStr = String(firebirdResult.FECHA);
+        }
+      }
+
+      const result = {
+        quincena: quincenaParsed,
+        anio: anioFinal,
+        fecha: fechaStr
+      };
+
+      logger.info({ ...logContext, result }, 'Quincena obtenida exitosamente desde Firebird');
+      return result;
+    } catch (error: any) {
+      logger.error({ ...logContext, error: error.message, stack: error.stack }, 'Error al obtener quincena desde Firebird');
+      const errorMessage = error.message || 'Error desconocido al consultar Firebird';
+      throw new AfectacionQueryError(`getQuincenaFromFirebird: ${errorMessage}`, { 
+        org0, 
+        org1, 
+        org2, 
+        org3, 
+        originalError: error.message,
+        errorName: error.name,
+        errorCode: error.code
+      });
     }
   }
 }

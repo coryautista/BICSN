@@ -9,29 +9,29 @@ export const MovimientosQuincenalesParamsSchema = z.object({
 
 // Schema para parámetros de Aplicación Aportaciones
 export const AplicacionAportacionesParamsSchema = z.object({
-  pOrg0: z.string().length(2).describe('Clave orgánica nivel 0 (2 caracteres, ej: "01")'),
-  pOrg1: z.string().length(2).describe('Clave orgánica nivel 1 (2 caracteres, ej: "01")'),
+  pOrg0: z.string().length(2).optional().describe('Clave orgánica nivel 0 (2 caracteres, ej: "01"). Requerido para admin, opcional para otros usuarios (se usa la del token)'),
+  pOrg1: z.string().length(2).optional().describe('Clave orgánica nivel 1 (2 caracteres, ej: "01"). Requerido para admin, opcional para otros usuarios (se usa la del token)'),
   periodo: z.string().min(1).max(20).describe('Período en formato específico (ej: "2125")')
 });
 
 // Schema para parámetros de Aplicación PCP
 export const AplicacionPCPParamsSchema = z.object({
-  pOrg0: z.string().length(2).describe('Clave orgánica nivel 0 (2 caracteres, ej: "01")'),
-  pOrg1: z.string().length(2).describe('Clave orgánica nivel 1 (2 caracteres, ej: "01")'),
+  pOrg0: z.string().length(2).optional().describe('Clave orgánica nivel 0 (2 caracteres, ej: "01"). Requerido para admin, opcional para otros usuarios (se usa la del token)'),
+  pOrg1: z.string().length(2).optional().describe('Clave orgánica nivel 1 (2 caracteres, ej: "01"). Requerido para admin, opcional para otros usuarios (se usa la del token)'),
   pPeriodo: z.string().min(1).max(20).describe('Período en formato específico (ej: "2125")')
 });
 
 // Schema para parámetros de Aplicación PMP
 export const AplicacionPMPParamsSchema = z.object({
-  pOrg0: z.string().length(2).describe('Clave orgánica nivel 0 (2 caracteres, ej: "01")'),
-  pOrg1: z.string().length(2).describe('Clave orgánica nivel 1 (2 caracteres, ej: "01")'),
+  pOrg0: z.string().length(2).optional().describe('Clave orgánica nivel 0 (2 caracteres, ej: "01"). Requerido para admin, opcional para otros usuarios (se usa la del token)'),
+  pOrg1: z.string().length(2).optional().describe('Clave orgánica nivel 1 (2 caracteres, ej: "01"). Requerido para admin, opcional para otros usuarios (se usa la del token)'),
   pPeriodo: z.string().min(1).max(20).describe('Período en formato específico (ej: "2125")')
 });
 
 // Schema para parámetros de Aplicación HIP
 export const AplicacionHIPParamsSchema = z.object({
-  org0: z.string().length(2).describe('Clave orgánica nivel 0 (2 caracteres, ej: "01")'),
-  org1: z.string().length(2).describe('Clave orgánica nivel 1 (2 caracteres, ej: "01")'),
+  org0: z.string().length(2).optional().describe('Clave orgánica nivel 0 (2 caracteres, ej: "01"). Requerido para admin, opcional para otros usuarios (se usa la del token)'),
+  org1: z.string().length(2).optional().describe('Clave orgánica nivel 1 (2 caracteres, ej: "01"). Requerido para admin, opcional para otros usuarios (se usa la del token)'),
   quincena: z.string().min(1).max(20).describe('Quincena en formato específico')
 });
 
@@ -267,13 +267,13 @@ export const ConcentradoResponseSchema = z.object({
 export const LineaCapturaResponseSchema = z.object({
   success: z.boolean(),
   data: z.object({
-    lineaCaptura: z.string().length(11).describe('Línea de captura de 11 caracteres: pos 1-4 referencia, pos 5-8 fecha condensada, pos 9 monto condensado, pos 10-11 dígito verificador'),
+    lineaCaptura: z.string().length(15).describe('Línea de captura de 15 caracteres: pos 1-4 referencia, pos 5-6 mes, pos 7-8 año, pos 9-12 fecha condensada, pos 13 monto condensado, pos 14-15 dígito verificador'),
     referencia4: z.string().length(4).describe('Referencia base (posiciones 1-4)'),
     fechaLimite: z.string().describe('Fecha límite de pago en formato YYYY-MM-DD'),
     importe: z.number().describe('Importe total con centavos'),
-    fechaCondensada: z.string().length(4).describe('Fecha condensada (posiciones 5-8)'),
-    montoCondensado: z.number().min(0).max(9).describe('Monto condensado (posición 9)'),
-    digitoVerificador: z.string().length(2).describe('Dígito verificador Base 97 (posiciones 10-11)')
+    fechaCondensada: z.string().length(4).describe('Fecha condensada (posiciones 9-12)'),
+    montoCondensado: z.number().min(0).max(9).describe('Monto condensado (posición 13)'),
+    digitoVerificador: z.string().length(2).describe('Dígito verificador Base 97 (posiciones 14-15)')
   }),
   timestamp: z.string().optional()
 });
