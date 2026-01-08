@@ -223,7 +223,8 @@ export async function aplicacionesQNARoutes(fastify: FastifyInstance) {
         });
       }
 
-      const isAdmin = user.roles?.includes('admin') || false;
+      const entidades = (user as any).entidades || [false];
+      const isEntidad = entidades[0] === true;
       const userClave0 = user.idOrganica0 || '';
       const userClave1 = user.idOrganica1 || '';
 
@@ -231,8 +232,23 @@ export async function aplicacionesQNARoutes(fastify: FastifyInstance) {
       let pOrg0: string;
       let pOrg1: string;
 
-      if (isAdmin) {
-        // Admin puede usar los parámetros de la query
+      if (isEntidad) {
+        // Usuario entidad: usar las claves del token
+        if (!userClave0 || !userClave1) {
+          return reply.code(403).send({
+            success: false,
+            error: {
+              code: 'FORBIDDEN',
+              message: 'No se encontraron claves orgánicas en el token del usuario',
+              timestamp: new Date().toISOString()
+            }
+          });
+        }
+
+        pOrg0 = userClave0;
+        pOrg1 = userClave1;
+      } else {
+        // Usuario no entidad: debe proporcionar pOrg0 y pOrg1 en parámetros
         const parsed = AplicacionAportacionesParamsSchema.safeParse(request.query);
         if (!parsed.success) {
           return reply.code(400).send({
@@ -251,7 +267,7 @@ export async function aplicacionesQNARoutes(fastify: FastifyInstance) {
             success: false,
             error: {
               code: 'VALIDATION_ERROR',
-              message: 'pOrg0 y pOrg1 son requeridos para usuarios admin',
+              message: 'pOrg0 y pOrg1 son requeridos para usuarios no entidad',
               timestamp: new Date().toISOString()
             }
           });
@@ -259,45 +275,6 @@ export async function aplicacionesQNARoutes(fastify: FastifyInstance) {
 
         pOrg0 = parsed.data.pOrg0;
         pOrg1 = parsed.data.pOrg1;
-      } else {
-        // Usuario no admin: usar las claves del token
-        if (!userClave0 || !userClave1) {
-          return reply.code(403).send({
-            success: false,
-            error: {
-              code: 'FORBIDDEN',
-              message: 'No se encontraron claves orgánicas en el token del usuario',
-              timestamp: new Date().toISOString()
-            }
-          });
-        }
-
-        // Validar que los parámetros de query (si se proporcionan) coincidan con las del token
-        const queryParams = request.query as any;
-        if (queryParams.pOrg0 && queryParams.pOrg0 !== userClave0) {
-          return reply.code(403).send({
-            success: false,
-            error: {
-              code: 'FORBIDDEN',
-              message: 'No tiene permiso para consultar la clave orgánica 0 especificada',
-              timestamp: new Date().toISOString()
-            }
-          });
-        }
-
-        if (queryParams.pOrg1 && queryParams.pOrg1 !== userClave1) {
-          return reply.code(403).send({
-            success: false,
-            error: {
-              code: 'FORBIDDEN',
-              message: 'No tiene permiso para consultar la clave orgánica 1 especificada',
-              timestamp: new Date().toISOString()
-            }
-          });
-        }
-
-        pOrg0 = userClave0;
-        pOrg1 = userClave1;
       }
 
       // Validar período
@@ -389,7 +366,8 @@ export async function aplicacionesQNARoutes(fastify: FastifyInstance) {
         });
       }
 
-      const isAdmin = user.roles?.includes('admin') || false;
+      const entidades = (user as any).entidades || [false];
+      const isEntidad = entidades[0] === true;
       const userClave0 = user.idOrganica0 || '';
       const userClave1 = user.idOrganica1 || '';
 
@@ -397,8 +375,23 @@ export async function aplicacionesQNARoutes(fastify: FastifyInstance) {
       let pOrg0: string;
       let pOrg1: string;
 
-      if (isAdmin) {
-        // Admin puede usar los parámetros de la query
+      if (isEntidad) {
+        // Usuario entidad: usar las claves del token
+        if (!userClave0 || !userClave1) {
+          return reply.code(403).send({
+            success: false,
+            error: {
+              code: 'FORBIDDEN',
+              message: 'No se encontraron claves orgánicas en el token del usuario',
+              timestamp: new Date().toISOString()
+            }
+          });
+        }
+
+        pOrg0 = userClave0;
+        pOrg1 = userClave1;
+      } else {
+        // Usuario no entidad: debe proporcionar pOrg0 y pOrg1 en parámetros
         const parsed = AplicacionPCPParamsSchema.safeParse(request.query);
         if (!parsed.success) {
           return reply.code(400).send({
@@ -417,7 +410,7 @@ export async function aplicacionesQNARoutes(fastify: FastifyInstance) {
             success: false,
             error: {
               code: 'VALIDATION_ERROR',
-              message: 'pOrg0 y pOrg1 son requeridos para usuarios admin',
+              message: 'pOrg0 y pOrg1 son requeridos para usuarios no entidad',
               timestamp: new Date().toISOString()
             }
           });
@@ -425,45 +418,6 @@ export async function aplicacionesQNARoutes(fastify: FastifyInstance) {
 
         pOrg0 = parsed.data.pOrg0;
         pOrg1 = parsed.data.pOrg1;
-      } else {
-        // Usuario no admin: usar las claves del token
-        if (!userClave0 || !userClave1) {
-          return reply.code(403).send({
-            success: false,
-            error: {
-              code: 'FORBIDDEN',
-              message: 'No se encontraron claves orgánicas en el token del usuario',
-              timestamp: new Date().toISOString()
-            }
-          });
-        }
-
-        // Validar que los parámetros de query (si se proporcionan) coincidan con las del token
-        const queryParams = request.query as any;
-        if (queryParams.pOrg0 && queryParams.pOrg0 !== userClave0) {
-          return reply.code(403).send({
-            success: false,
-            error: {
-              code: 'FORBIDDEN',
-              message: 'No tiene permiso para consultar la clave orgánica 0 especificada',
-              timestamp: new Date().toISOString()
-            }
-          });
-        }
-
-        if (queryParams.pOrg1 && queryParams.pOrg1 !== userClave1) {
-          return reply.code(403).send({
-            success: false,
-            error: {
-              code: 'FORBIDDEN',
-              message: 'No tiene permiso para consultar la clave orgánica 1 especificada',
-              timestamp: new Date().toISOString()
-            }
-          });
-        }
-
-        pOrg0 = userClave0;
-        pOrg1 = userClave1;
       }
 
       // Validar período
@@ -568,7 +522,8 @@ export async function aplicacionesQNARoutes(fastify: FastifyInstance) {
         });
       }
 
-      const isAdmin = user.roles?.includes('admin') || false;
+      const entidades = (user as any).entidades || [false];
+      const isEntidad = entidades[0] === true;
       const userClave0 = user.idOrganica0 || '';
       const userClave1 = user.idOrganica1 || '';
 
@@ -576,8 +531,23 @@ export async function aplicacionesQNARoutes(fastify: FastifyInstance) {
       let pOrg0: string;
       let pOrg1: string;
 
-      if (isAdmin) {
-        // Admin puede usar los parámetros de la query
+      if (isEntidad) {
+        // Usuario entidad: usar las claves del token
+        if (!userClave0 || !userClave1) {
+          return reply.code(403).send({
+            success: false,
+            error: {
+              code: 'FORBIDDEN',
+              message: 'No se encontraron claves orgánicas en el token del usuario',
+              timestamp: new Date().toISOString()
+            }
+          });
+        }
+
+        pOrg0 = userClave0;
+        pOrg1 = userClave1;
+      } else {
+        // Usuario no entidad: debe proporcionar pOrg0 y pOrg1 en parámetros
         const parsed = AplicacionPMPParamsSchema.safeParse(request.query);
         if (!parsed.success) {
           return reply.code(400).send({
@@ -596,7 +566,7 @@ export async function aplicacionesQNARoutes(fastify: FastifyInstance) {
             success: false,
             error: {
               code: 'VALIDATION_ERROR',
-              message: 'pOrg0 y pOrg1 son requeridos para usuarios admin',
+              message: 'pOrg0 y pOrg1 son requeridos para usuarios no entidad',
               timestamp: new Date().toISOString()
             }
           });
@@ -604,45 +574,6 @@ export async function aplicacionesQNARoutes(fastify: FastifyInstance) {
 
         pOrg0 = parsed.data.pOrg0;
         pOrg1 = parsed.data.pOrg1;
-      } else {
-        // Usuario no admin: usar las claves del token
-        if (!userClave0 || !userClave1) {
-          return reply.code(403).send({
-            success: false,
-            error: {
-              code: 'FORBIDDEN',
-              message: 'No se encontraron claves orgánicas en el token del usuario',
-              timestamp: new Date().toISOString()
-            }
-          });
-        }
-
-        // Validar que los parámetros de query (si se proporcionan) coincidan con las del token
-        const queryParams = request.query as any;
-        if (queryParams.pOrg0 && queryParams.pOrg0 !== userClave0) {
-          return reply.code(403).send({
-            success: false,
-            error: {
-              code: 'FORBIDDEN',
-              message: 'No tiene permiso para consultar la clave orgánica 0 especificada',
-              timestamp: new Date().toISOString()
-            }
-          });
-        }
-
-        if (queryParams.pOrg1 && queryParams.pOrg1 !== userClave1) {
-          return reply.code(403).send({
-            success: false,
-            error: {
-              code: 'FORBIDDEN',
-              message: 'No tiene permiso para consultar la clave orgánica 1 especificada',
-              timestamp: new Date().toISOString()
-            }
-          });
-        }
-
-        pOrg0 = userClave0;
-        pOrg1 = userClave1;
       }
 
       // Validar período
@@ -747,7 +678,8 @@ export async function aplicacionesQNARoutes(fastify: FastifyInstance) {
         });
       }
 
-      const isAdmin = user.roles?.includes('admin') || false;
+      const entidades = (user as any).entidades || [false];
+      const isEntidad = entidades[0] === true;
       const userClave0 = user.idOrganica0 || '';
       const userClave1 = user.idOrganica1 || '';
 
@@ -755,8 +687,23 @@ export async function aplicacionesQNARoutes(fastify: FastifyInstance) {
       let org0: string;
       let org1: string;
 
-      if (isAdmin) {
-        // Admin puede usar los parámetros de la query
+      if (isEntidad) {
+        // Usuario entidad: usar las claves del token
+        if (!userClave0 || !userClave1) {
+          return reply.code(403).send({
+            success: false,
+            error: {
+              code: 'FORBIDDEN',
+              message: 'No se encontraron claves orgánicas en el token del usuario',
+              timestamp: new Date().toISOString()
+            }
+          });
+        }
+
+        org0 = userClave0;
+        org1 = userClave1;
+      } else {
+        // Usuario no entidad: debe proporcionar org0 y org1 en parámetros
         const parsed = AplicacionHIPParamsSchema.safeParse(request.query);
         if (!parsed.success) {
           return reply.code(400).send({
@@ -775,7 +722,7 @@ export async function aplicacionesQNARoutes(fastify: FastifyInstance) {
             success: false,
             error: {
               code: 'VALIDATION_ERROR',
-              message: 'org0 y org1 son requeridos para usuarios admin',
+              message: 'org0 y org1 son requeridos para usuarios no entidad',
               timestamp: new Date().toISOString()
             }
           });
@@ -783,45 +730,6 @@ export async function aplicacionesQNARoutes(fastify: FastifyInstance) {
 
         org0 = parsed.data.org0;
         org1 = parsed.data.org1;
-      } else {
-        // Usuario no admin: usar las claves del token
-        if (!userClave0 || !userClave1) {
-          return reply.code(403).send({
-            success: false,
-            error: {
-              code: 'FORBIDDEN',
-              message: 'No se encontraron claves orgánicas en el token del usuario',
-              timestamp: new Date().toISOString()
-            }
-          });
-        }
-
-        // Validar que los parámetros de query (si se proporcionan) coincidan con las del token
-        const queryParams = request.query as any;
-        if (queryParams.org0 && queryParams.org0 !== userClave0) {
-          return reply.code(403).send({
-            success: false,
-            error: {
-              code: 'FORBIDDEN',
-              message: 'No tiene permiso para consultar la clave orgánica 0 especificada',
-              timestamp: new Date().toISOString()
-            }
-          });
-        }
-
-        if (queryParams.org1 && queryParams.org1 !== userClave1) {
-          return reply.code(403).send({
-            success: false,
-            error: {
-              code: 'FORBIDDEN',
-              message: 'No tiene permiso para consultar la clave orgánica 1 especificada',
-              timestamp: new Date().toISOString()
-            }
-          });
-        }
-
-        org0 = userClave0;
-        org1 = userClave1;
       }
 
       // Validar quincena

@@ -47,32 +47,32 @@ function translateValidationMessage(message: string): string {
   for (const [key, value] of Object.entries(translations)) {
     translated = translated.replace(new RegExp(key, 'gi'), value);
   }
-  
+
   return translated;
 }
 
 async function buildApp() {
-  const app = Fastify({ 
+  const app = Fastify({
     logger: { level: env.logLevel },
     connectionTimeout: 120000, // 2 minutos para conexiones largas (upload de archivos)
     requestTimeout: 120000, // 2 minutos para requests largos
     schemaErrorFormatter: (errors, dataVar) => {
       // Formatear errores de validación de esquema
-      
+
       app.log.error(errors);
       app.log.info(dataVar);
-      
+
       const validationMessages = errors.map((error) => {
         const field = error.instancePath?.replace('/', '') || error.params?.missingProperty || 'campo desconocido';
         const originalMessage = error.message || 'Valor inválido';
         const message = translateValidationMessage(originalMessage);
         return `${field}: ${message}`;
       });
-      
-      const errorMessage = validationMessages.length === 1 
+
+      const errorMessage = validationMessages.length === 1
         ? validationMessages[0]
         : `Errores de validación: ${validationMessages.join(', ')}`;
-      
+
       return new Error(errorMessage);
     }
   });
@@ -81,17 +81,17 @@ async function buildApp() {
   await app.register(requestLoggerPlugin);
   await app.register(loggerPlugin);
   await app.register(versioningPlugin);
-  
+
   // Plugin para limpiar mojibake automáticamente de todas las respuestas
-  const mojibakeCleanerPlugin = (await import('./plugins/mojibakeCleaner.js')).default;
-  await app.register(mojibakeCleanerPlugin);
-  
+  // const mojibakeCleanerPlugin = (await import('./plugins/mojibakeCleaner.js')).default;
+  // await app.register(mojibakeCleanerPlugin);
+
   // Register Awilix DI Container (MUST be before routes)
-  await app.register(fastifyAwilixPlugin, { 
+  await app.register(fastifyAwilixPlugin, {
     disposeOnClose: true,
     disposeOnResponse: true,
     strictBooleanEnforced: true,
-    container 
+    container
   });
 
   // Hook global para asegurar charset=utf-8 en todas las respuestas JSON
@@ -101,13 +101,13 @@ async function buildApp() {
     if (request.method === 'OPTIONS') {
       return payload;
     }
-    
+
     // Log para diagnóstico en rutas PCP
     if (request.url?.includes('/pcp')) {
-      const payloadPreview = typeof payload === 'string' 
-        ? payload.substring(0, 500) 
+      const payloadPreview = typeof payload === 'string'
+        ? payload.substring(0, 500)
         : JSON.stringify(payload).substring(0, 500);
-      
+
       console.log('[SERVER HOOK] onSend para PCP:', {
         url: request.url,
         payloadType: typeof payload,
@@ -116,32 +116,32 @@ async function buildApp() {
         contentType: reply.getHeader('content-type')
       });
     }
-    
+
     // Obtener el content-type actual
     const contentType = reply.getHeader('content-type');
-    
+
     // Si es una respuesta JSON (o no tiene content-type definido y el payload es un objeto/array)
-    const isJsonResponse = 
+    const isJsonResponse =
       (typeof contentType === 'string' && contentType.includes('application/json')) ||
       (!contentType && (typeof payload === 'object' || Array.isArray(payload)));
-    
+
     if (isJsonResponse) {
       // Si no tiene charset o no es exactamente 'application/json; charset=utf-8', actualizarlo
-      if (!contentType || 
-          (typeof contentType === 'string' && 
-           (!contentType.includes('charset=utf-8') && !contentType.includes('charset=UTF-8')))) {
+      if (!contentType ||
+        (typeof contentType === 'string' &&
+          (!contentType.includes('charset=utf-8') && !contentType.includes('charset=UTF-8')))) {
         reply.header('Content-Type', 'application/json; charset=utf-8');
       }
     }
-    
+
     return payload;
   });
-  
+
   await app.register(helmet, {
     contentSecurityPolicy: false,  // Deshabilitado para permitir Swagger UI
     global: true
   });
-  
+
   await app.register(cors, {
     credentials: true,
     origin: [
@@ -151,10 +151,10 @@ async function buildApp() {
       'http://187.233.212.215:4000',    // IP externa para docs
       'http://187.233.212.215:3000',    // IP externa para frontend
       'http://187.233.240.171:3000',    // IP externa para frontend
-      'http://10.20.1.90:3000', 
+      'http://10.20.1.90:3000',
       'http://10.20.1.90:3001',         // IP interna para frontend
       'http://10.20.1.90:3002',         // IP interna para frontend
-      'http://187.233.247.69:3000', 
+      'http://187.233.247.69:3000',
       'http://187.233.247.69:4000',       // IP interna frontend
       'http://187.233.234.212:3000',           // IP externa adicional
       /^http:\/\/187\.233\.212\.215:\d+$/, // Regex para cualquier puerto en esa IP
@@ -163,7 +163,7 @@ async function buildApp() {
     allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept-Version'],
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS']
   });
-  
+
   await app.register(cookie);
 
   // Swagger
@@ -198,7 +198,7 @@ async function buildApp() {
       }
     }
   });
-  
+
   await app.register(swaggerUi, {
     routePrefix: '/docs',
     uiConfig: {
@@ -210,7 +210,7 @@ async function buildApp() {
     baseDir: undefined
   });
 
-// Extend FastifyInstance with custom config interface
+  // Extend FastifyInstance with custom config interface
   (app as any).config = {
     cookie: {
       secure: env.cookie.secure,
@@ -236,13 +236,13 @@ async function setupApplication(app: FastifyInstance) {
         const message = translateValidationMessage(originalMessage);
         return `${field}: ${message}`;
       });
-      
-      const errorMessage = validationMessages.length === 1 
+
+      const errorMessage = validationMessages.length === 1
         ? validationMessages[0]
-        : (validationMessages.length > 0 
+        : (validationMessages.length > 0
           ? `Errores de validación: ${validationMessages.join(', ')}`
           : translateValidationMessage(err.message) || 'Error de validación en los datos proporcionados');
-      
+
       return reply.code(err.statusCode || 400).send({
         ok: false,
         error: {
@@ -252,12 +252,12 @@ async function setupApplication(app: FastifyInstance) {
         }
       });
     }
-    
+
     // Handle other errors
     const statusCode = err.statusCode || 500;
     const errorMessage = err.message || 'Error interno del servidor';
     const errorCode = err.code || 'INTERNAL_SERVER_ERROR';
-    
+
     return reply.code(statusCode).send({
       ok: false,
       error: {
@@ -357,11 +357,11 @@ async function setupApplication(app: FastifyInstance) {
     }
   }, async (_req: any, reply: any) => {
     const healthData = await performDetailedHealthCheck();
-    
+
     // Set appropriate HTTP status code based on health
-    const statusCode = healthData.status === 'healthy' ? 200 : 
-                       healthData.status === 'degraded' ? 200 : 503;
-    
+    const statusCode = healthData.status === 'healthy' ? 200 :
+      healthData.status === 'degraded' ? 200 : 503;
+
     return reply.code(statusCode).send(healthData);
   });
 
@@ -369,6 +369,65 @@ async function setupApplication(app: FastifyInstance) {
     try {
       const ok = await ping();
       return reply.send({ ok });
+    } catch (e: any) {
+      app.log.error(e);
+      return reply.code(500).send({ ok: false, error: e.message });
+    }
+  });
+
+  // Endpoint temporal para verificar charset de Firebird
+  app.get('/debug/firebird-charset', async (_req: any, reply: any) => {
+    try {
+      const { checkFirebirdCharset, firebirdRuntimeInfo } = await import('./db/firebird.js');
+      const charsetId = await checkFirebirdCharset();
+      
+      // Mapeo de charset IDs comunes de Firebird
+      const charsetMap: Record<number, string> = {
+        0: 'NONE',
+        2: 'OCTETS',
+        3: 'ASCII',
+        4: 'UNICODE_FSS',
+        5: 'UTF8',
+        21: 'DOS437',
+        22: 'DOS850',
+        23: 'DOS852',
+        24: 'DOS857',
+        25: 'DOS860',
+        26: 'DOS861',
+        27: 'DOS863',
+        28: 'DOS865',
+        44: 'ISO8859_1',
+        45: 'ISO8859_2',
+        46: 'ISO8859_3',
+        47: 'ISO8859_4',
+        48: 'ISO8859_5',
+        49: 'ISO8859_6',
+        50: 'ISO8859_7',
+        51: 'ISO8859_8',
+        52: 'ISO8859_9',
+        53: 'ISO8859_13',
+        54: 'ISO8859_15',
+        56: 'WIN1250',
+        57: 'WIN1251',
+        58: 'WIN1252',
+        59: 'WIN1253',
+        60: 'WIN1254',
+        61: 'WIN1255',
+        62: 'WIN1256',
+        63: 'WIN1257',
+        64: 'WIN1258'
+      };
+      
+      return reply.send({
+        ok: true,
+        charsetId,
+        charsetName: charsetId !== null ? charsetMap[charsetId] || `Unknown (${charsetId})` : null,
+        config: {
+          configuredCharset: firebirdRuntimeInfo.charset,
+          poolSize: firebirdRuntimeInfo.poolSize,
+          serializeAll: firebirdRuntimeInfo.serializeAll
+        }
+      });
     } catch (e: any) {
       app.log.error(e);
       return reply.code(500).send({ ok: false, error: e.message });

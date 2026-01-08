@@ -26,8 +26,25 @@ export const ConsultaIntMoratorioResponseSchema = z.object({
   registros: z.array(RetencionPorCobrarSchema)
 });
 
+// Schema para crear retenciones moratorio
+export const CreateRetencionesMoratorioSchema = z.object({
+  org0: z.string().min(1).max(2).describe('Clave orgánica 0'),
+  org1: z.string().min(1).max(2).describe('Clave orgánica 1'),
+  org2: z.string().min(1).max(2).describe('Clave orgánica 2'),
+  org3: z.string().min(1).max(2).describe('Clave orgánica 3'),
+  periodo: z.string().min(1).max(10).describe('Período en formato QQAA (ej: "2225")')
+});
+
+// Schema para la respuesta de Crear_Int_Moratorio
+export const CreateRetencionesMoratorioResponseSchema = z.object({
+  ok: z.boolean(),
+  registros: z.array(RetencionPorCobrarSchema)
+});
+
 // Tipos TypeScript inferidos
 export type ConsultaIntMoratorioParams = z.infer<typeof ConsultaIntMoratorioParamsSchema>;
 export type RetencionPorCobrar = z.infer<typeof RetencionPorCobrarSchema>;
 export type ConsultaIntMoratorioResponse = z.infer<typeof ConsultaIntMoratorioResponseSchema>;
+export type CreateRetencionesMoratorioParams = z.infer<typeof CreateRetencionesMoratorioSchema>;
+export type CreateRetencionesMoratorioResponse = z.infer<typeof CreateRetencionesMoratorioResponseSchema>;
 

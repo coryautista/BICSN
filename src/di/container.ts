@@ -188,6 +188,7 @@ import { GetPrestamosMedianoPlazoQuery } from '../modules/aportacionesFondos/app
 import { GetPrestamosHipotecariosQuery } from '../modules/aportacionesFondos/application/queries/GetPrestamosHipotecariosQuery.js';
 import { GetAportacionGuarderiasQuery } from '../modules/aportacionesFondos/application/queries/GetAportacionGuarderiasQuery.js';
 import { GetPensionNominaTransitorioQuery } from '../modules/aportacionesFondos/application/queries/GetPensionNominaTransitorioQuery.js';
+import { GetAguinaldoQuery } from '../modules/aportacionesFondos/application/queries/GetAguinaldoQuery.js';
 import { UpdateColoniaCommand } from '../modules/colonias/application/commands/UpdateColoniaCommand.js';
 import { DeleteColoniaCommand } from '../modules/colonias/application/commands/DeleteColoniaCommand.js';
 
@@ -432,10 +433,12 @@ import { GetSARDevolucionQuery } from '../modules/CAIR/application/queries/GetSA
 // Retenciones Por Cobrar Module
 import { RetencionesPorCobrarRepository } from '../modules/retencionesPorCobrar/infrastructure/persistence/RetencionesPorCobrarRepository.js';
 import { GetRetencionesPorCobrarQuery } from '../modules/retencionesPorCobrar/application/queries/GetRetencionesPorCobrarQuery.js';
+import { CreateRetencionesMoratorioCommand } from '../modules/retencionesPorCobrar/application/commands/CreateRetencionesMoratorioCommand.js';
 
 // Aplicacion Quincenal Module
 import { AplicacionQuincenalRepository } from '../modules/aplicacionQuincenal/infrastructure/persistence/AplicacionQuincenalRepository.js';
 import { GetAportacionQuincenalResumenQuery } from '../modules/aplicacionQuincenal/application/queries/GetAportacionQuincenalResumenQuery.js';
+import { GetResumenOrgQnaAllQuery } from '../modules/aplicacionQuincenal/application/queries/GetResumenOrgQnaAllQuery.js';
 
 // Afiliados Reportes Module (Submódulo de Reportes)
 import { AfiliadosReportesRepository } from '../modules/reportes/afiliados/infrastructure/persistence/AfiliadosReportesRepository.js';
@@ -1136,6 +1139,9 @@ container.register({
   // Queries (Scoped) - inyectan retencionesPorCobrarRepo por nombre de parámetro
   getRetencionesPorCobrarQuery: asClass(GetRetencionesPorCobrarQuery).scoped(),
   
+  // Commands (Scoped) - inyectan retencionesPorCobrarRepo por nombre de parámetro
+  createRetencionesMoratorioCommand: asClass(CreateRetencionesMoratorioCommand).scoped(),
+  
   // ============================================================================
   // APLICACION QUINCENAL MODULE
   // ============================================================================
@@ -1145,6 +1151,7 @@ container.register({
   
   // Queries (Scoped) - inyectan aplicacionQuincenalRepo por nombre de parámetro
   getAportacionQuincenalResumenQuery: asClass(GetAportacionQuincenalResumenQuery).scoped(),
+  getResumenOrgQnaAllQuery: asClass(GetResumenOrgQnaAllQuery).scoped(),
   
   // ============================================================================
   // AFILIADOS REPORTES MODULE (Submódulo de Reportes)
@@ -1209,7 +1216,8 @@ container.register({
   getPrestamosMedianoPlazoQuery: asClass(GetPrestamosMedianoPlazoQuery).scoped(),
   getPrestamosHipotecariosQuery: asClass(GetPrestamosHipotecariosQuery).scoped(),
   getAportacionGuarderiasQuery: asClass(GetAportacionGuarderiasQuery).scoped(),
-  getPensionNominaTransitorioQuery: asClass(GetPensionNominaTransitorioQuery).scoped()
+  getPensionNominaTransitorioQuery: asClass(GetPensionNominaTransitorioQuery).scoped(),
+  getAguinaldoQuery: asClass(GetAguinaldoQuery).scoped()
 });
 
 /**

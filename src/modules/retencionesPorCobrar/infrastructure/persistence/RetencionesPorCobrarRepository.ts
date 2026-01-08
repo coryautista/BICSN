@@ -1,4 +1,4 @@
-import { executeSerializedQuery, decodeFirebirdObject } from '../../../../db/firebird.js';
+import { executeSerializedQuery, decodeFirebirdObject, executeInTransaction, executeQueryInTransaction } from '../../../../db/firebird.js';
 import { IRetencionesPorCobrarRepository } from '../../domain/repositories/IRetencionesPorCobrarRepository.js';
 import { RetencionPorCobrar } from '../../domain/entities/RetencionPorCobrar.js';
 import { RetencionesPorCobrarError, RetencionesPorCobrarErrorCode } from '../../domain/errors.js';
@@ -127,6 +127,126 @@ export class RetencionesPorCobrarRepository implements IRetencionesPorCobrarRepo
           ));
         }
       });
+    });
+  }
+
+  async createRetencionesMoratorio(
+    org0: string,
+    org1: string,
+    org2: string,
+    org3: string,
+    periodo: string,
+    userAlta: string
+  ): Promise<RetencionPorCobrar[]> {
+    const startTime = Date.now();
+    const logContext = {
+      operation: 'createRetencionesMoratorio',
+      org0,
+      org1,
+      org2,
+      org3,
+      periodo,
+      userAlta
+    };
+
+    logger.info(logContext, 'Iniciando creación de retenciones moratorio');
+
+    // Asegurar que los parámetros sean strings y estén limpios
+    const clave0 = String(org0).trim().padStart(2, '0');
+    const clave1 = String(org1).trim().padStart(2, '0');
+    const clave2 = String(org2).trim().padStart(2, '0');
+    const clave3 = String(org3).trim().padStart(2, '0');
+    const periodoStr = String(periodo).trim();
+    const userAltaStr = String(userAlta).trim();
+
+    // Verificar si ya existen registros para estas claves orgánicas y periodo
+    logger.info(logContext, 'Verificando si ya existen registros');
+    const registrosExistentes = await this.getRetencionesPorCobrar(clave0, clave1, periodoStr);
+    
+    if (registrosExistentes.length > 0) {
+      logger.warn({
+        ...logContext,
+        existingRecordsCount: registrosExistentes.length
+      }, 'Ya existen registros para estas claves orgánicas y periodo');
+      
+      throw new RetencionesPorCobrarError(
+        `Ya existen registros para las claves orgánicas ${clave0}-${clave1} y periodo ${periodoStr}`,
+        RetencionesPorCobrarErrorCode.RECORDS_ALREADY_EXIST,
+        409 // Conflict
+      );
+    }
+
+    // Tipos de retención a crear
+    const tipos = ['PPV', 'PMP', 'PCP'];
+
+    return executeInTransaction(async (transaction) => {
+      const registrosCreados: RetencionPorCobrar[] = [];
+
+      for (const tipo of tipos) {
+        const fechaGeneracion = new Date();
+        
+        const sql = `
+          INSERT INTO ORGANICAS_INT_MORATORIO_GEN 
+            (CLAVE_ORGANICA_0, CLAVE_ORGANICA_1, CLAVE_ORGANICA_2, CLAVE_ORGANICA_3, 
+             PERIODO, FECHA_GENERACION, USER_ALTA, TIPO) 
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        `;
+
+        const params = [
+          clave0,
+          clave1,
+          clave2,
+          clave3,
+          periodoStr,
+          fechaGeneracion,
+          userAltaStr,
+          tipo
+        ];
+
+        logger.debug({
+          ...logContext,
+          tipo,
+          fechaGeneracion: fechaGeneracion.toISOString()
+        }, 'Insertando registro');
+
+        try {
+          await executeQueryInTransaction(transaction, sql, params);
+
+          // Crear objeto del registro insertado
+          const registro: RetencionPorCobrar = {
+            claveOrganica0: clave0,
+            claveOrganica1: clave1,
+            claveOrganica2: clave2,
+            claveOrganica3: clave3,
+            periodo: periodoStr,
+            fechaGeneracion: fechaGeneracion,
+            userAlta: userAltaStr,
+            tipo: tipo
+          };
+
+          registrosCreados.push(registro);
+        } catch (error: any) {
+          logger.error({
+            ...logContext,
+            tipo,
+            error: error.message || String(error),
+            stack: error.stack
+          }, 'Error insertando registro');
+          throw new RetencionesPorCobrarError(
+            `Error al insertar registro ${tipo} en ORGANICAS_INT_MORATORIO_GEN: ${error.message || String(error)}`,
+            RetencionesPorCobrarErrorCode.FIREBIRD_QUERY_ERROR
+          );
+        }
+      }
+
+      const duration = Date.now() - startTime;
+      logger.info({
+        ...logContext,
+        recordCount: registrosCreados.length,
+        duracionMs: duration
+      }, 'Retenciones moratorio creadas exitosamente');
+
+      return registrosCreados;
     });
   }
 }

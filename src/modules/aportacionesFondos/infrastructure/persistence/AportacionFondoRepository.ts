@@ -5,6 +5,7 @@ import { PrestamoMedianoPlazo } from '../../domain/entities/PrestamoMedianoPlazo
 import { PrestamoHipotecario } from '../../domain/entities/PrestamoHipotecario.js';
 import { AportacionGuarderia } from '../../domain/entities/AportacionGuarderia.js';
 import { PensionNominaTransitorio } from '../../domain/entities/PensionNominaTransitorio.js';
+import { Aguinaldo } from '../../domain/entities/Aguinaldo.js';
 import { AportacionFondoDomainError, AportacionFondoError, AportacionFondoErrorMessages } from '../../domain/errors.js';
 import { getOrgPersonalByClavesOrganicas } from '../../../orgPersonal/orgPersonal.repo.js';
 import { getPool, sql } from '../../../../db/mssql.js';
@@ -1823,6 +1824,233 @@ export class AportacionFondoRepository implements IAportacionFondoRepository {
           });
           reject(new AportacionFondoDomainError(
             `Error inesperado al ejecutar función PENSION_NOMINA_QNAL_TRANSITORIO: ${error.message || 'Error desconocido'}`,
+            AportacionFondoError.ERROR_FIREBIRD_PROCEDIMIENTO
+          ));
+        }
+      });
+    });
+  }
+
+  /**
+   * Obtiene aguinaldo ejecutando la función AGUINALDO_ORGANICAS en Firebird
+   */
+  async obtenerAguinaldo(
+    org0: string,
+    org1: string,
+    periodo: string
+  ): Promise<Aguinaldo[]> {
+    const logContext = {
+      org0,
+      org1,
+      periodo,
+      funcion: 'AGUINALDO_ORGANICAS'
+    };
+
+    // Validar parámetros de entrada
+    if (!org0 || org0.trim().length === 0) {
+      throw new AportacionFondoDomainError(
+        'Clave orgánica 0 es requerida',
+        AportacionFondoError.CLAVE_ORGANICA_REQUERIDA
+      );
+    }
+
+    if (!org1 || org1.trim().length === 0) {
+      throw new AportacionFondoDomainError(
+        'Clave orgánica 1 es requerida',
+        AportacionFondoError.CLAVE_ORGANICA_REQUERIDA
+      );
+    }
+
+    if (!periodo || periodo.trim().length === 0) {
+      throw new AportacionFondoDomainError(
+        'Período es requerido',
+        AportacionFondoError.PARAMETRO_INVALIDO
+      );
+    }
+
+    if (org0.length > 2) {
+      throw new AportacionFondoDomainError(
+        `Clave orgánica 0 inválida: "${org0}". Debe tener máximo 2 caracteres`,
+        AportacionFondoError.CLAVE_ORGANICA_INVALIDA
+      );
+    }
+
+    if (org1.length > 2) {
+      throw new AportacionFondoDomainError(
+        `Clave orgánica 1 inválida: "${org1}". Debe tener máximo 2 caracteres`,
+        AportacionFondoError.CLAVE_ORGANICA_INVALIDA
+      );
+    }
+
+    if (periodo.length !== 4) {
+      throw new AportacionFondoDomainError(
+        `Período inválido: "${periodo}". Debe tener 4 caracteres (quincena + año)`,
+        AportacionFondoError.PARAMETRO_INVALIDO
+      );
+    }
+
+    const startTime = Date.now();
+    
+    console.log('[APORTACIONES_FONDOS] [AGUINALDO] Iniciando consulta serializada', logContext);
+    
+    // Ejecutar función AGUINALDO_ORGANICAS de forma serializada
+    const sql = `
+      SELECT 
+        p.INTERNO, 
+        p.ORG0, 
+        p.ORG1, 
+        p.ORG2, 
+        p.ORG3, 
+        p.MOVIMIENTO, 
+        p.NOEMPLEADO,
+        p.TIPOMOVIMIENTO, 
+        p.NOMBRES, 
+        p.RFC, 
+        p.CURP, 
+        p.FECHA, 
+        p.DIAS_AGUINALDO,
+        p.CUANTOS, 
+        p.CUANTOS_ORI, 
+        p.NOCONTAR, 
+        p.SDO, 
+        p.OP, 
+        p.Q, 
+        p.ACTIVO,
+        p.NOM_ACTIVO, 
+        p.QNA_A, 
+        p.PORCENTAJE_A, 
+        p.DIARIO, 
+        p.GENERAL, 
+        p.PORCENTAJE,
+        p.PROPORCION, 
+        p.MENSAJE, 
+        p.DIAS_GRAL_AGUI, 
+        p.FECHA_LF, 
+        p.FECHA_LI,
+        p.F_INICIO, 
+        p.F_FIN, 
+        p.NORG0, 
+        p.NORG1, 
+        p.NORG2, 
+        p.NORG3
+      FROM AGUINALDO_ORGANICAS(?, ?, ?) p
+    `;
+
+    return executeSerializedQuery((db) => {
+      return new Promise<Aguinaldo[]>((resolve, reject) => {
+        console.log('[APORTACIONES_FONDOS] [AGUINALDO] Ejecutando función', logContext);
+
+        // Validar que la conexión esté disponible
+        if (!db || typeof db.query !== 'function') {
+          console.error('[APORTACIONES_FONDOS] [AGUINALDO] Conexión Firebird inválida', logContext);
+          reject(new AportacionFondoDomainError(
+            'Conexión a Firebird no disponible o inválida',
+            AportacionFondoError.ERROR_FIREBIRD_CONEXION
+          ));
+          return;
+        }
+
+        try {
+          db.query(
+            sql,
+            [periodo, org0, org1],
+            (err: any, result: any) => {
+              const duration = Date.now() - startTime;
+              
+              if (err) {
+                console.error('[APORTACIONES_FONDOS] [AGUINALDO] Error ejecutando función', {
+                  ...logContext,
+                  error: err.message || String(err),
+                  errorCode: err.code,
+                  errorName: err.name,
+                  stack: err.stack,
+                  duracionMs: duration
+                });
+                reject(new AportacionFondoDomainError(
+                  `Error al ejecutar función AGUINALDO_ORGANICAS con parámetros PERIODO=${periodo}, ORG0=${org0}, ORG1=${org1}: ${err.message || String(err)}`,
+                  AportacionFondoError.ERROR_FIREBIRD_PROCEDIMIENTO
+                ));
+                return;
+              }
+
+              if (!result) {
+                console.warn('[APORTACIONES_FONDOS] [AGUINALDO] Resultado nulo recibido', { ...logContext, duracionMs: duration });
+                resolve([]);
+                return;
+              }
+
+              // Normalizar resultado a array
+              const resultArray = Array.isArray(result) ? result : (result ? [result] : []);
+
+              if (resultArray.length === 0) {
+                console.log('[APORTACIONES_FONDOS] [AGUINALDO] No se encontraron registros de aguinaldo', { ...logContext, duracionMs: duration });
+                resolve([]);
+                return;
+              }
+
+              // Decodificar resultados de Firebird antes de mapear
+              const decodedResult = resultArray.map((row: any) => decodeFirebirdObject(row));
+              
+              // Mapear resultados a entidad Aguinaldo
+              const aguinaldos: Aguinaldo[] = decodedResult.map((row: any) => ({
+                interno: row.INTERNO !== null && row.INTERNO !== undefined ? Number(row.INTERNO) : null,
+                org0: row.ORG0 || null,
+                org1: row.ORG1 || null,
+                org2: row.ORG2 || null,
+                org3: row.ORG3 || null,
+                movimiento: row.MOVIMIENTO || null,
+                noempleado: row.NOEMPLEADO || null,
+                tipomovimiento: row.TIPOMOVIMIENTO || null,
+                nombres: row.NOMBRES || null,
+                rfc: row.RFC || null,
+                curp: row.CURP || null,
+                fecha: row.FECHA ? new Date(row.FECHA) : null,
+                dias_aguinaldo: row.DIAS_AGUINALDO !== null && row.DIAS_AGUINALDO !== undefined ? Number(row.DIAS_AGUINALDO) : null,
+                cuantos: row.CUANTOS !== null && row.CUANTOS !== undefined ? Number(row.CUANTOS) : null,
+                cuantos_ori: row.CUANTOS_ORI !== null && row.CUANTOS_ORI !== undefined ? Number(row.CUANTOS_ORI) : null,
+                nocontar: row.NOCONTAR || null,
+                sdo: row.SDO !== null && row.SDO !== undefined ? Number(row.SDO) : null,
+                op: row.OP !== null && row.OP !== undefined ? Number(row.OP) : null,
+                q: row.Q !== null && row.Q !== undefined ? Number(row.Q) : null,
+                activo: row.ACTIVO || null,
+                nom_activo: row.NOM_ACTIVO || null,
+                qna_a: row.QNA_A !== null && row.QNA_A !== undefined ? Number(row.QNA_A) : null,
+                porcentaje_a: row.PORCENTAJE_A !== null && row.PORCENTAJE_A !== undefined ? Number(row.PORCENTAJE_A) : null,
+                diario: row.DIARIO !== null && row.DIARIO !== undefined ? Number(row.DIARIO) : null,
+                general: row.GENERAL !== null && row.GENERAL !== undefined ? Number(row.GENERAL) : null,
+                porcentaje: row.PORCENTAJE !== null && row.PORCENTAJE !== undefined ? Number(row.PORCENTAJE) : null,
+                proporcion: row.PROPORCION !== null && row.PROPORCION !== undefined ? Number(row.PROPORCION) : null,
+                mensaje: row.MENSAJE || null,
+                dias_gral_agui: row.DIAS_GRAL_AGUI !== null && row.DIAS_GRAL_AGUI !== undefined ? Number(row.DIAS_GRAL_AGUI) : null,
+                fecha_lf: row.FECHA_LF ? new Date(row.FECHA_LF) : null,
+                fecha_li: row.FECHA_LI ? new Date(row.FECHA_LI) : null,
+                f_inicio: row.F_INICIO ? new Date(row.F_INICIO) : null,
+                f_fin: row.F_FIN ? new Date(row.F_FIN) : null,
+                norg0: row.NORG0 || null,
+                norg1: row.NORG1 || null,
+                norg2: row.NORG2 || null,
+                norg3: row.NORG3 || null
+              }));
+
+              console.log('[APORTACIONES_FONDOS] [AGUINALDO] Consulta completada exitosamente', {
+                ...logContext,
+                totalRegistros: aguinaldos.length,
+                duracionMs: duration
+              });
+
+              resolve(aguinaldos);
+            }
+          );
+        } catch (error: any) {
+          const duration = Date.now() - startTime;
+          console.error('[APORTACIONES_FONDOS] [AGUINALDO] Error inesperado', {
+            ...logContext,
+            error: error.message || String(error),
+            stack: error.stack,
+            duracionMs: duration
+          });
+          reject(new AportacionFondoDomainError(
+            `Error inesperado al ejecutar función AGUINALDO_ORGANICAS: ${error.message || 'Error desconocido'}`,
             AportacionFondoError.ERROR_FIREBIRD_PROCEDIMIENTO
           ));
         }

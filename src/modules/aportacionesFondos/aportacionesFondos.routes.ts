@@ -9,6 +9,7 @@ import { GetPrestamosMedianoPlazoQuery } from './application/queries/GetPrestamo
 import { GetPrestamosHipotecariosQuery } from './application/queries/GetPrestamosHipotecariosQuery.js';
 import { GetAportacionGuarderiasQuery } from './application/queries/GetAportacionGuarderiasQuery.js';
 import { GetPensionNominaTransitorioQuery } from './application/queries/GetPensionNominaTransitorioQuery.js';
+import { GetAguinaldoQuery } from './application/queries/GetAguinaldoQuery.js';
 import { handleAportacionesFondosError } from './infrastructure/errorHandler.js';
 
 // Routes for fund contributions operations
@@ -1082,6 +1083,171 @@ export default async function aportacionesFondosRoutes(app: FastifyInstance) {
       const duration = Date.now() - startTime;
       console.log(`[APORTACIONES_FONDOS] [ROUTE] [${requestId}] Solicitud completada exitosamente`, {
         totalRegistros: result.registros.length,
+        periodo: result.periodo,
+        duracionMs: duration
+      });
+
+      return reply.send(ok(result));
+    } catch (error: any) {
+      const duration = Date.now() - startTime;
+      console.error(`[APORTACIONES_FONDOS] [ROUTE] [${requestId}] Error en solicitud`, {
+        error: error.message || String(error),
+        errorCode: error.code,
+        duracionMs: duration
+      });
+      return handleAportacionesFondosError(error, reply);
+    }
+  });
+
+  // GET /aportacionesFondos/individuales/aguinaldo - Get aguinaldo (bonus payment)
+  app.get('/aportacionesFondos/individuales/aguinaldo', {
+    preHandler: [requireAuth],
+    schema: {
+      description: 'Get aguinaldo by executing AGUINALDO_ORGANICAS function',
+      tags: ['aportacionesFondos'],
+      security: [{ bearerAuth: [] }],
+      querystring: {
+        type: 'object',
+        properties: {
+          clave_organica_0: { type: 'string', maxLength: 2 },
+          clave_organica_1: { type: 'string', maxLength: 2 }
+        }
+      },
+      response: {
+        200: {
+          type: 'object',
+          properties: {
+            ok: { type: 'boolean' },
+            data: {
+              type: 'object',
+              properties: {
+                clave_organica_0: { type: 'string' },
+                clave_organica_1: { type: 'string' },
+                periodo: { type: 'string' },
+                accion: { type: 'string' },
+                aguinaldos: {
+                  type: 'array',
+                  items: {
+                    type: 'object',
+                    properties: {
+                      interno: { type: 'number', nullable: true },
+                      org0: { type: 'string', nullable: true },
+                      org1: { type: 'string', nullable: true },
+                      org2: { type: 'string', nullable: true },
+                      org3: { type: 'string', nullable: true },
+                      movimiento: { type: 'string', nullable: true },
+                      noempleado: { type: 'string', nullable: true },
+                      tipomovimiento: { type: 'string', nullable: true },
+                      nombres: { type: 'string', nullable: true },
+                      rfc: { type: 'string', nullable: true },
+                      curp: { type: 'string', nullable: true },
+                      fecha: { type: 'string', nullable: true },
+                      dias_aguinaldo: { type: 'number', nullable: true },
+                      cuantos: { type: 'number', nullable: true },
+                      cuantos_ori: { type: 'number', nullable: true },
+                      nocontar: { type: 'string', nullable: true },
+                      sdo: { type: 'number', nullable: true },
+                      op: { type: 'number', nullable: true },
+                      q: { type: 'number', nullable: true },
+                      activo: { type: 'string', nullable: true },
+                      nom_activo: { type: 'string', nullable: true },
+                      qna_a: { type: 'number', nullable: true },
+                      porcentaje_a: { type: 'number', nullable: true },
+                      diario: { type: 'number', nullable: true },
+                      general: { type: 'number', nullable: true },
+                      porcentaje: { type: 'number', nullable: true },
+                      proporcion: { type: 'number', nullable: true },
+                      mensaje: { type: 'string', nullable: true },
+                      dias_gral_agui: { type: 'number', nullable: true },
+                      fecha_lf: { type: 'string', nullable: true },
+                      fecha_li: { type: 'string', nullable: true },
+                      f_inicio: { type: 'string', nullable: true },
+                      f_fin: { type: 'string', nullable: true },
+                      norg0: { type: 'string', nullable: true },
+                      norg1: { type: 'string', nullable: true },
+                      norg2: { type: 'string', nullable: true },
+                      norg3: { type: 'string', nullable: true }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        400: {
+          type: 'object',
+          properties: {
+            ok: { type: 'boolean' },
+            error: {
+              type: 'object',
+              properties: {
+                code: { type: 'string' },
+                message: { type: 'string' }
+              }
+            }
+          }
+        },
+        500: {
+          type: 'object',
+          properties: {
+            ok: { type: 'boolean' },
+            error: {
+              type: 'object',
+              properties: {
+                code: { type: 'string' },
+                message: { type: 'string' }
+              }
+            }
+          }
+        }
+      }
+    }
+  }, async (req, reply) => {
+    const requestId = `req_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    const startTime = Date.now();
+    
+    try {
+      console.log(`[APORTACIONES_FONDOS] [ROUTE] [${requestId}] Iniciando solicitud aguinaldo`, {
+        method: req.method,
+        url: req.url,
+        ip: req.ip
+      });
+
+      // Get user information from token
+      const user = req.user;
+      if (!user) {
+        console.warn(`[APORTACIONES_FONDOS] [ROUTE] [${requestId}] Usuario no autenticado`);
+        return reply.send(unauthorized('Usuario no autenticado'));
+      }
+
+      // Extract user organica keys and entity status
+      const userClave0 = (user as any).idOrganica0 || '';
+      const userClave1 = (user as any).idOrganica1 || '';
+      const entidades = (user as any).entidades || [false];
+      const isEntidad = entidades[0] === true; // Check first role's isEntidad status
+
+      console.log(`[APORTACIONES_FONDOS] [ROUTE] [${requestId}] Usuario autenticado`, {
+        userId: user.sub,
+        userClave0,
+        userClave1,
+        isEntidad,
+        queryParams: req.query
+      });
+
+      const getAguinaldoQuery = req.diScope.resolve<GetAguinaldoQuery>('getAguinaldoQuery');
+      
+      const result = await getAguinaldoQuery.execute(
+        userClave0,
+        userClave1,
+        isEntidad,
+        (req.query as any)?.clave_organica_0,
+        (req.query as any)?.clave_organica_1,
+        user.sub?.toString()
+      );
+
+      const duration = Date.now() - startTime;
+      console.log(`[APORTACIONES_FONDOS] [ROUTE] [${requestId}] Solicitud completada exitosamente`, {
+        totalAguinaldos: result.aguinaldos.length,
         periodo: result.periodo,
         duracionMs: duration
       });

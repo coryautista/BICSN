@@ -170,6 +170,8 @@ Ver [docs/ARQUITECTURA_MODULOS_COMPLEJOS.md](./docs/ARQUITECTURA_MODULOS_COMPLEJ
 - [Arquitectura del Proyecto](./docs/ARQUITECTURA_PROYECTO.md) - Arquitectura completa
 - [Módulos Modulares](./docs/ARQUITECTURA_MODULOS_COMPLEJOS.md) - Estructura de módulos grandes
 - [Sistema de Versionado](./docs/INDEX-VERSIONADO.md) - Versionado de API
+- [Patrones para Prompts de AI](./docs/PROMPTS_AI_PATRONES_CODIGO.md) - **Patrones y soluciones para desarrollo con AI**
+- [Solución Serialización Fastify](./docs/SOLUCION_SERIALIZACION_FASTIFY.md) - Problema crítico de serialización
 
 ## 📝 Licencia
 

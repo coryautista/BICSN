@@ -124,8 +124,6 @@ export default async function afiliadosPersonalRoutes(app: FastifyInstance) {
       const claveOrganica1 = user.idOrganica1.toString().trim().padStart(2, '0');
 
       const records = await getPlantillaQuery.execute(claveOrganica0, claveOrganica1);
-      
-      // El mojibake se limpia automáticamente por el plugin mojibakeCleaner
       return reply.send(ok(records));
     } catch (error: any) {
       console.error('[DEBUG obtenerPlantilla] Error en endpoint:', {

@@ -4,6 +4,7 @@ import { PrestamoMedianoPlazo } from '../entities/PrestamoMedianoPlazo.js';
 import { PrestamoHipotecario } from '../entities/PrestamoHipotecario.js';
 import { AportacionGuarderia } from '../entities/AportacionGuarderia.js';
 import { PensionNominaTransitorio } from '../entities/PensionNominaTransitorio.js';
+import { Aguinaldo } from '../entities/Aguinaldo.js';
 
 export interface IAportacionFondoRepository {
   // Obtener aportaciones de un tipo específico
@@ -62,6 +63,13 @@ export interface IAportacionFondoRepository {
     org3: string,
     periodo: string
   ): Promise<PensionNominaTransitorio[]>;
+  
+  // Obtener aguinaldo ejecutando función AGUINALDO_ORGANICAS
+  obtenerAguinaldo(
+    org0: string,
+    org1: string,
+    periodo: string
+  ): Promise<Aguinaldo[]>;
   
   // Validar si el usuario puede acceder a las claves orgánicas especificadas
   validarAccesoClavesOrganicas(

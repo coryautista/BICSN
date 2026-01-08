@@ -64,6 +64,9 @@ export class GetAuditLogsByDateRangeQuery {
   }
 
   private validateInput(data: GetAuditLogsByDateRangeData): void {
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/2454688e-9650-418e-b8e5-aaa5bbb75080',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'GetAuditLogsByDateRangeQuery.ts:66',message:'Inicio validación input',data:{fechaInicio:data.fechaInicio,fechaFin:data.fechaFin,tipoInicio:typeof data.fechaInicio,tipoFin:typeof data.fechaFin},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
+    // #endregion
     // Validar que las fechas estén presentes
     if (!data.fechaInicio || !data.fechaFin) {
       throw new AuditLogInvalidDateRangeError(
@@ -74,10 +77,19 @@ export class GetAuditLogsByDateRangeQuery {
 
     // Validar formato de fechas (YYYY-MM-DD)
     const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/2454688e-9650-418e-b8e5-aaa5bbb75080',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'GetAuditLogsByDateRangeQuery.ts:77',message:'Validando formato regex',data:{fechaInicio:data.fechaInicio,fechaFin:data.fechaFin,testInicio:dateRegex.test(data.fechaInicio),testFin:dateRegex.test(data.fechaFin)},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
+    // #endregion
     if (!dateRegex.test(data.fechaInicio)) {
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/2454688e-9650-418e-b8e5-aaa5bbb75080',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'GetAuditLogsByDateRangeQuery.ts:78',message:'Error formato fechaInicio',data:{fechaInicio:data.fechaInicio,regex:dateRegex.toString()},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
+      // #endregion
       throw new AuditLogInvalidDateFormatError(data.fechaInicio);
     }
     if (!dateRegex.test(data.fechaFin)) {
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/2454688e-9650-418e-b8e5-aaa5bbb75080',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'GetAuditLogsByDateRangeQuery.ts:81',message:'Error formato fechaFin',data:{fechaFin:data.fechaFin,regex:dateRegex.toString()},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
+      // #endregion
       throw new AuditLogInvalidDateFormatError(data.fechaFin);
     }
 
