@@ -154,10 +154,13 @@ async function buildApp() {
       'http://10.20.1.90:3000',
       'http://10.20.1.90:3001',         // IP interna para frontend
       'http://10.20.1.90:3002',         // IP interna para frontend
+      'http://10.20.101.2',              // IP interna adicional
+      /^http:\/\/10\.20\.101\.2:\d+$/,  // Regex para cualquier puerto en esa IP
       'http://187.233.247.69:3000',
       'http://187.233.247.69:4000',       // IP interna frontend
       'http://187.233.234.212:3000',           // IP externa adicional
       /^http:\/\/187\.233\.212\.215:\d+$/, // Regex para cualquier puerto en esa IP
+      /^http:\/\/187\.233\.222\.216:\d+$/, // Regex para cualquier puerto en esa IP
       /^http:\/\/localhost:\d+$/        // localhost con cualquier puerto
     ],
     allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept-Version'],
@@ -420,8 +423,8 @@ async function setupApplication(app: FastifyInstance) {
       
       return reply.send({
         ok: true,
-        charsetId,
-        charsetName: charsetId !== null ? charsetMap[charsetId] || `Unknown (${charsetId})` : null,
+        charsetId: charsetId?.id ?? null,
+        charsetName: charsetId !== null ? charsetMap[charsetId.id] || charsetId.name || `Unknown (${charsetId.id})` : null,
         config: {
           configuredCharset: firebirdRuntimeInfo.charset,
           poolSize: firebirdRuntimeInfo.poolSize,

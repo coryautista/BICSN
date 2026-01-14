@@ -124,15 +124,31 @@ function decodeFirebirdString(value: any, fieldName?: string): string | null {
       // Unificar basura a un token seguro
       let corrected = s.replace(/[²ý\uFFFD]|´┐¢/g, TOKEN);
 
-      // Reglas de contexto (TN -> TÍN, etc.)
+      // Reglas de contexto - Orden: específicas primero, luego generales
       const rules = [
-        { regex: new RegExp(`T${TOKEN}N`, 'g'), replace: 'TÍN' },    // AGUSTÍN, MARTÍN
-        { regex: new RegExp(`C${TOKEN}A`, 'g'), replace: 'CÍA' },    // GARCÍA
-        { regex: new RegExp(`R${TOKEN}A`, 'g'), replace: 'RÍA' },    // MARÍA
-        { regex: new RegExp(`N${TOKEN}A`, 'g'), replace: 'NÍA' },    // ESTEFANÍA
-        { regex: new RegExp(`NU${TOKEN}EZ`, 'g'), replace: 'NUÑEZ' }, // NUÑEZ
-        { regex: new RegExp(`VI${TOKEN}A`, 'g'), replace: 'VIÑA' },   // AVIÑA
-        { regex: new RegExp(`O${TOKEN}O`, 'g'), replace: 'OÑO' },     // TOÑO
+        // Reglas específicas para palabras completas (más específicas primero)
+        { regex: new RegExp(`C${TOKEN}N$`, 'gi'), replace: 'CIÓN' },    // NACIÓN, ACCIÓN, EDUCACIÓN, POBLACIÓN, etc.
+        { regex: new RegExp(`T${TOKEN}N`, 'g'), replace: 'TÍN' },         // AGUSTÍN, MARTÍN
+        { regex: new RegExp(`C${TOKEN}A`, 'g'), replace: 'CÍA' },        // GARCÍA
+        { regex: new RegExp(`R${TOKEN}A`, 'g'), replace: 'RÍA' },         // MARÍA
+        { regex: new RegExp(`N${TOKEN}A`, 'g'), replace: 'NÍA' },         // ESTEFANÍA
+        { regex: new RegExp(`NU${TOKEN}EZ`, 'g'), replace: 'NUÑEZ' },     // NUÑEZ
+        { regex: new RegExp(`VI${TOKEN}A`, 'g'), replace: 'VIÑA' },       // AVIÑA
+        { regex: new RegExp(`O${TOKEN}O`, 'g'), replace: 'OÑO' },         // TOÑO
+        
+        // Reglas de acentuación por posición (final de palabra)
+        { regex: new RegExp(`${TOKEN}N$`, 'gi'), replace: 'ÓN' },         // CORAZÓN, RAZÓN, CANCIÓN, etc.
+        { regex: new RegExp(`${TOKEN}S$`, 'gi'), replace: 'ÓS' },          // JOSÉ, MÉXICO, etc.
+        { regex: new RegExp(`${TOKEN}L$`, 'gi'), replace: 'ÓL' },         // ESPAÑOL, etc.
+        { regex: new RegExp(`${TOKEN}M$`, 'gi'), replace: 'ÓM' },         // ALGORITMO, etc.
+        { regex: new RegExp(`${TOKEN}R$`, 'gi'), replace: 'ÓR' },         // COLOR, etc.
+        
+        // Reglas de acentuación por vocal inicial
+        { regex: new RegExp(`A${TOKEN}`, 'g'), replace: 'Á' },            // MÉXICO, ÁNGEL, etc.
+        { regex: new RegExp(`E${TOKEN}`, 'g'), replace: 'É' },            // JOSÉ, etc.
+        { regex: new RegExp(`I${TOKEN}`, 'g'), replace: 'Í' },            // MARTÍN, AGUSTÍN, etc.
+        { regex: new RegExp(`O${TOKEN}`, 'g'), replace: 'Ó' },            // CORAZÓN, etc.
+        { regex: new RegExp(`U${TOKEN}`, 'g'), replace: 'Ú' },            // MENÚ, etc.
       ];
 
       for (const rule of rules) {
