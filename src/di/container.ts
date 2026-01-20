@@ -317,7 +317,6 @@ import { BusquedaHistoricoQuery } from '../modules/afiliadosPersonal/application
 
 // Tablero Repositories
 import { EjeRepository } from '../modules/tablero/eje/infrastructure/persistence/EjeRepository.js';
-import { ProgramaRepository } from '../modules/tablero/programa/infrastructure/ProgramaRepository.js';
 
 // Tablero Eje Commands & Queries
 import { CreateEjeCommand } from '../modules/tablero/eje/application/commands/CreateEjeCommand.js';

@@ -555,9 +555,10 @@ export class AfectacionOrgService {
       if (firebirdResult.FECHA) {
         let fechaStr: string;
         // Si es un objeto Date, convertirlo a string
-        if (firebirdResult.FECHA instanceof Date) {
-          fechaStr = firebirdResult.FECHA.toISOString().split('T')[0]; // YYYY-MM-DD
-          anioFromFecha = firebirdResult.FECHA.getFullYear();
+        const fecha = firebirdResult.FECHA as unknown;
+        if (fecha instanceof Date) {
+          fechaStr = fecha.toISOString().split('T')[0]; // YYYY-MM-DD
+          anioFromFecha = fecha.getFullYear();
         } else if (typeof firebirdResult.FECHA === 'string') {
           fechaStr = firebirdResult.FECHA;
           // Intentar parsear formato DD.MM.YYYY
@@ -589,8 +590,9 @@ export class AfectacionOrgService {
       // Convertir fecha a string si es necesario
       let fechaStr: string | null = null;
       if (firebirdResult.FECHA) {
-        if (firebirdResult.FECHA instanceof Date) {
-          fechaStr = firebirdResult.FECHA.toISOString().split('T')[0];
+        const fecha = firebirdResult.FECHA as unknown;
+        if (fecha instanceof Date) {
+          fechaStr = fecha.toISOString().split('T')[0];
         } else if (typeof firebirdResult.FECHA === 'string') {
           fechaStr = firebirdResult.FECHA;
         } else {

@@ -481,53 +481,88 @@ export class AplicacionQuincenalRepository implements IAplicacionQuincenalReposi
 
     try {
       await withDbContext(req, async (tx) => {
-        // Procesar Ahorro
+        // Procesar Ahorro (siempre, incluso con 0 registros)
         if (data.ahorro) {
-          await this.crearYEjecutarAhorro(tx, data.ahorro.header, data.ahorro.detalle);
-          procesados.push('ahorro');
-          totalRegistros.ahorro = data.ahorro.detalle.length;
+          try {
+            await this.crearYEjecutarAhorro(tx, data.ahorro.header, data.ahorro.detalle);
+            procesados.push('ahorro');
+            totalRegistros.ahorro = data.ahorro.detalle.length;
+          } catch (err: any) {
+            logger.error({ ...logContext, tipo: 'ahorro', error: err.message || String(err), stack: err.stack }, 'Error al procesar ahorro');
+            throw err;
+          }
         }
 
-        // Procesar Vivienda
+        // Procesar Vivienda (siempre, incluso con 0 registros)
         if (data.vivienda) {
-          await this.crearYEjecutarVivienda(tx, data.vivienda.header, data.vivienda.detalle);
-          procesados.push('vivienda');
-          totalRegistros.vivienda = data.vivienda.detalle.length;
+          try {
+            await this.crearYEjecutarVivienda(tx, data.vivienda.header, data.vivienda.detalle);
+            procesados.push('vivienda');
+            totalRegistros.vivienda = data.vivienda.detalle.length;
+          } catch (err: any) {
+            logger.error({ ...logContext, tipo: 'vivienda', error: err.message || String(err), stack: err.stack }, 'Error al procesar vivienda');
+            throw err;
+          }
         }
 
-        // Procesar Prestaciones
+        // Procesar Prestaciones (siempre, incluso con 0 registros)
         if (data.prestaciones) {
-          await this.crearYEjecutarPrestaciones(tx, data.prestaciones.header, data.prestaciones.detalle);
-          procesados.push('prestaciones');
-          totalRegistros.prestaciones = data.prestaciones.detalle.length;
+          try {
+            await this.crearYEjecutarPrestaciones(tx, data.prestaciones.header, data.prestaciones.detalle);
+            procesados.push('prestaciones');
+            totalRegistros.prestaciones = data.prestaciones.detalle.length;
+          } catch (err: any) {
+            logger.error({ ...logContext, tipo: 'prestaciones', error: err.message || String(err), stack: err.stack }, 'Error al procesar prestaciones');
+            throw err;
+          }
         }
 
-        // Procesar Cair
+        // Procesar Cair (siempre, incluso con 0 registros)
         if (data.cair) {
-          await this.crearYEjecutarCair(tx, data.cair.header, data.cair.detalle);
-          procesados.push('cair');
-          totalRegistros.cair = data.cair.detalle.length;
+          try {
+            await this.crearYEjecutarCair(tx, data.cair.header, data.cair.detalle);
+            procesados.push('cair');
+            totalRegistros.cair = data.cair.detalle.length;
+          } catch (err: any) {
+            logger.error({ ...logContext, tipo: 'cair', error: err.message || String(err), stack: err.stack }, 'Error al procesar cair');
+            throw err;
+          }
         }
 
-        // Procesar Transitorio
+        // Procesar Transitorio (siempre, incluso con 0 registros)
         if (data.transitorio) {
-          await this.crearYEjecutarTransitorio(tx, data.transitorio.header, data.transitorio.detalle);
-          procesados.push('transitorio');
-          totalRegistros.transitorio = data.transitorio.detalle.length;
+          try {
+            await this.crearYEjecutarTransitorio(tx, data.transitorio.header, data.transitorio.detalle);
+            procesados.push('transitorio');
+            totalRegistros.transitorio = data.transitorio.detalle.length;
+          } catch (err: any) {
+            logger.error({ ...logContext, tipo: 'transitorio', error: err.message || String(err), stack: err.stack }, 'Error al procesar transitorio');
+            throw err;
+          }
         }
 
-        // Procesar Guarderias
+        // Procesar Guarderias (siempre, incluso con 0 registros)
         if (data.guarderias) {
-          await this.crearYEjecutarGuarderias(tx, data.guarderias.header, data.guarderias.detalle);
-          procesados.push('guarderias');
-          totalRegistros.guarderias = data.guarderias.detalle.length;
+          try {
+            await this.crearYEjecutarGuarderias(tx, data.guarderias.header, data.guarderias.detalle);
+            procesados.push('guarderias');
+            totalRegistros.guarderias = data.guarderias.detalle.length;
+          } catch (err: any) {
+            logger.error({ ...logContext, tipo: 'guarderias', error: err.message || String(err), stack: err.stack }, 'Error al procesar guarderias');
+            throw err;
+          }
         }
 
-        // Procesar Aguinaldo
+        // Procesar Aguinaldo (siempre, incluso con 0 registros)
         if (data.aguinaldo) {
-          await this.crearYEjecutarAguinaldo(tx, data.aguinaldo.header, data.aguinaldo.detalle);
-          procesados.push('aguinaldo');
-          totalRegistros.aguinaldo = data.aguinaldo.detalle.length;
+          try {
+            await this.crearYEjecutarAguinaldo(tx, data.aguinaldo.header, data.aguinaldo.detalle);
+            procesados.push('aguinaldo');
+            totalRegistros.aguinaldo = data.aguinaldo.detalle.length;
+          } catch (err: any) {
+            logger.error({ ...logContext, tipo: 'aguinaldo', error: err.message || String(err), stack: err.stack }, 'Error al procesar aguinaldo');
+            throw err;
+          }
         }
       });
 
@@ -545,15 +580,67 @@ export class AplicacionQuincenalRepository implements IAplicacionQuincenalReposi
       };
     } catch (error: any) {
       const duration = Date.now() - startTime;
+      
+      // Capturar información detallada del error de mssql
+      const errorDetails: any = {
+        message: error.message || String(error),
+        name: error.name,
+        stack: error.stack
+      };
+      
+      // Si es un error de mssql, agregar información adicional
+      if (error.code) errorDetails.code = error.code;
+      if (error.number) errorDetails.number = error.number;
+      if (error.class) errorDetails.class = error.class;
+      if (error.state) errorDetails.state = error.state;
+      if (error.procName) errorDetails.procName = error.procName;
+      if (error.lineNumber) errorDetails.lineNumber = error.lineNumber;
+      if (error.info) errorDetails.info = error.info;
+      
+      // Capturar originalError con todas sus propiedades
+      if (error.originalError) {
+        errorDetails.originalError = {
+          message: error.originalError.message,
+          name: error.originalError.name,
+          code: error.originalError.code,
+          number: error.originalError.number,
+          class: error.originalError.class,
+          state: error.originalError.state,
+          procName: error.originalError.procName,
+          lineNumber: error.originalError.lineNumber,
+          info: error.originalError.info,
+          serverName: error.originalError.serverName,
+          sqlState: error.originalError.sqlState
+        };
+      }
+      
+      // Intentar obtener el mensaje del error de diferentes fuentes
+      let errorMessage = error.message || String(error);
+      if (error.originalError?.message) {
+        errorMessage = error.originalError.message;
+      } else if (error.originalError && typeof error.originalError === 'object') {
+        // Intentar serializar el originalError completo
+        try {
+          const serialized = JSON.stringify(error.originalError, Object.getOwnPropertyNames(error.originalError));
+          errorDetails.originalErrorSerialized = serialized;
+          if (serialized.includes('message')) {
+            const parsed = JSON.parse(serialized);
+            if (parsed.message) errorMessage = parsed.message;
+          }
+        } catch (e) {
+          // Ignorar errores de serialización
+        }
+      }
+      
       logger.error({
         ...logContext,
-        error: error.message || String(error),
-        stack: error.stack,
+        ...errorDetails,
+        errorMessage,
         duracionMs: duration
       }, 'Error al guardar histórico de aportaciones');
 
       throw new AplicacionQuincenalError(
-        `Error al guardar histórico de aportaciones: ${error.message || String(error)}`,
+        `Error al guardar histórico de aportaciones: ${errorMessage}`,
         AplicacionQuincenalErrorCode.SQL_SERVER_ERROR
       );
     }
@@ -640,12 +727,18 @@ export class AplicacionQuincenalRepository implements IAplicacionQuincenalReposi
     headerTable.columns.add('quincena', sql.Int);
     headerTable.columns.add('anio', sql.Int);
     headerTable.columns.add('usuario_id', sql.NVarChar(100));
+    headerTable.columns.add('total_empleados', sql.Int);
+    headerTable.columns.add('total_contribucion', sql.Decimal(18, 2));
+    headerTable.columns.add('total_sueldo_base', sql.Decimal(18, 2));
     headerTable.rows.add(
       header.clave_organica_0,
       header.clave_organica_1,
       header.quincena,
       header.anio,
-      header.usuario_id
+      header.usuario_id,
+      header.total_empleados ?? 0,
+      header.total_contribucion ?? 0,
+      header.total_sueldo_base ?? 0
     );
 
     const detalleTable = new sql.Table('aportaciones.TVP_ViviendaLoteDetalle');
@@ -655,6 +748,9 @@ export class AplicacionQuincenalRepository implements IAplicacionQuincenalReposi
     detalleTable.columns.add('anio', sql.Int);
     detalleTable.columns.add('interno', sql.Int);
     detalleTable.columns.add('nombre', sql.NVarChar(200));
+    detalleTable.columns.add('sueldo', sql.Decimal(18, 2));
+    detalleTable.columns.add('quinquenios', sql.Decimal(18, 2));
+    detalleTable.columns.add('otras_prestaciones', sql.Decimal(18, 2));
     detalleTable.columns.add('sueldo_base', sql.Decimal(18, 2));
     detalleTable.columns.add('afe', sql.Decimal(18, 2));
     detalleTable.columns.add('total', sql.Decimal(18, 2));
@@ -667,6 +763,9 @@ export class AplicacionQuincenalRepository implements IAplicacionQuincenalReposi
         row.anio,
         row.interno,
         row.nombre,
+        row.sueldo,
+        row.quinquenios,
+        row.otras_prestaciones ?? null,
         row.sueldo_base,
         row.afe,
         row.total
@@ -691,12 +790,18 @@ export class AplicacionQuincenalRepository implements IAplicacionQuincenalReposi
     headerTable.columns.add('quincena', sql.Int);
     headerTable.columns.add('anio', sql.Int);
     headerTable.columns.add('usuario_id', sql.NVarChar(100));
+    headerTable.columns.add('total_empleados', sql.Int);
+    headerTable.columns.add('total_contribucion', sql.Decimal(18, 2));
+    headerTable.columns.add('total_sueldo_base', sql.Decimal(18, 2));
     headerTable.rows.add(
       header.clave_organica_0,
       header.clave_organica_1,
       header.quincena,
       header.anio,
-      header.usuario_id
+      header.usuario_id,
+      header.total_empleados ?? 0,
+      header.total_contribucion ?? 0,
+      header.total_sueldo_base ?? 0
     );
 
     const detalleTable = new sql.Table('aportaciones.TVP_PrestacionesLoteDetalle');
@@ -750,12 +855,18 @@ export class AplicacionQuincenalRepository implements IAplicacionQuincenalReposi
     headerTable.columns.add('quincena', sql.Int);
     headerTable.columns.add('anio', sql.Int);
     headerTable.columns.add('usuario_id', sql.NVarChar(100));
+    headerTable.columns.add('total_empleados', sql.Int);
+    headerTable.columns.add('total_contribucion', sql.Decimal(18, 2));
+    headerTable.columns.add('total_sueldo_base', sql.Decimal(18, 2));
     headerTable.rows.add(
       header.clave_organica_0,
       header.clave_organica_1,
       header.quincena,
       header.anio,
-      header.usuario_id
+      header.usuario_id,
+      header.total_empleados ?? 0,
+      header.total_contribucion ?? 0,
+      header.total_sueldo_base ?? 0
     );
 
     const detalleTable = new sql.Table('aportaciones.TVP_CairLoteDetalle');
@@ -807,15 +918,22 @@ export class AplicacionQuincenalRepository implements IAplicacionQuincenalReposi
     headerTable.columns.add('quincena', sql.Int);
     headerTable.columns.add('anio', sql.Int);
     headerTable.columns.add('usuario_id', sql.NVarChar(100));
+    headerTable.columns.add('total_empleados', sql.Int);
+    headerTable.columns.add('total_contribucion', sql.Decimal(18, 2));
+    headerTable.columns.add('total_sueldo_base', sql.Decimal(18, 2));
     headerTable.rows.add(
       header.clave_organica_0,
       header.clave_organica_1,
       header.quincena,
       header.anio,
-      header.usuario_id
+      header.usuario_id,
+      header.total_empleados ?? 0,
+      header.total_contribucion ?? 0,
+      header.total_sueldo_base ?? 0
     );
 
     const detalleTable = new sql.Table('aportaciones.TVP_TransitorioLoteDetalle');
+    // Agregar todas las columnas requeridas (63 en total)
     detalleTable.columns.add('clave_organica_0', sql.Char(2));
     detalleTable.columns.add('clave_organica_1', sql.Char(2));
     detalleTable.columns.add('quincena', sql.Int);
@@ -823,19 +941,62 @@ export class AplicacionQuincenalRepository implements IAplicacionQuincenalReposi
     detalleTable.columns.add('fpension', sql.Int);
     detalleTable.columns.add('interno', sql.Int);
     detalleTable.columns.add('nombres', sql.NVarChar(200));
+    detalleTable.columns.add('nonombre', sql.NVarChar(200));
     detalleTable.columns.add('rfc', sql.NVarChar(20));
+    detalleTable.columns.add('norfc', sql.NVarChar(20));
+    detalleTable.columns.add('org0', sql.Char(2));
+    detalleTable.columns.add('org1', sql.Char(2));
+    detalleTable.columns.add('org2', sql.Char(2));
+    detalleTable.columns.add('org3', sql.Char(2));
+    detalleTable.columns.add('sueldo', sql.Decimal(18, 2));
+    detalleTable.columns.add('oprestaciones', sql.Decimal(18, 2));
+    detalleTable.columns.add('quinquenios', sql.Decimal(18, 2));
     detalleTable.columns.add('sdo', sql.Decimal(18, 2));
+    detalleTable.columns.add('oprest', sql.Decimal(18, 2));
+    detalleTable.columns.add('quinq', sql.Decimal(18, 2));
+    detalleTable.columns.add('tpension', sql.Decimal(18, 2));
     detalleTable.columns.add('transitorio', sql.Decimal(18, 2));
+    detalleTable.columns.add('norg0', sql.NVarChar(100));
+    detalleTable.columns.add('norg1', sql.NVarChar(100));
+    detalleTable.columns.add('norg2', sql.NVarChar(100));
+    detalleTable.columns.add('norg3', sql.NVarChar(100));
     detalleTable.columns.add('cconcepto', sql.NVarChar(50));
     detalleTable.columns.add('descripcion', sql.NVarChar(200));
     detalleTable.columns.add('importe', sql.Decimal(18, 2));
+    detalleTable.columns.add('defuncion', sql.Date);
+    detalleTable.columns.add('pcp', sql.Decimal(18, 2));
+    detalleTable.columns.add('palimenticia', sql.Decimal(18, 2));
+    detalleTable.columns.add('retroactivo', sql.Decimal(18, 2));
+    detalleTable.columns.add('payudaecon', sql.Decimal(18, 2));
+    detalleTable.columns.add('otrosp1', sql.Decimal(18, 2));
+    detalleTable.columns.add('otrosp2', sql.Decimal(18, 2));
+    detalleTable.columns.add('otrosp3', sql.Decimal(18, 2));
+    detalleTable.columns.add('otrosp4', sql.Decimal(18, 2));
+    detalleTable.columns.add('otrosp5', sql.Decimal(18, 2));
+    detalleTable.columns.add('terreno', sql.Decimal(18, 2));
+    detalleTable.columns.add('hipviv', sql.Decimal(18, 2));
+    detalleTable.columns.add('prodental', sql.Decimal(18, 2));
+    detalleTable.columns.add('otrod1', sql.Decimal(18, 2));
+    detalleTable.columns.add('otrod2', sql.Decimal(18, 2));
+    detalleTable.columns.add('otrod3', sql.Decimal(18, 2));
+    detalleTable.columns.add('otrod4', sql.Decimal(18, 2));
+    detalleTable.columns.add('otrod5', sql.Decimal(18, 2));
+    detalleTable.columns.add('otrod6', sql.Decimal(18, 2));
     detalleTable.columns.add('tpercep', sql.Decimal(18, 2));
     detalleTable.columns.add('tdeduc', sql.Decimal(18, 2));
     detalleTable.columns.add('total', sql.Decimal(18, 2));
     detalleTable.columns.add('inicio', sql.Date);
     detalleTable.columns.add('fin', sql.Date);
+    detalleTable.columns.add('anio_detalle', sql.Int);
+    detalleTable.columns.add('sihay', sql.NVarChar(10));
+    detalleTable.columns.add('porcentaje', sql.Decimal(18, 2));
+    detalleTable.columns.add('sdoporc', sql.Decimal(18, 2));
+    detalleTable.columns.add('ayudporc', sql.Decimal(18, 2));
+    detalleTable.columns.add('quinqporc', sql.Decimal(18, 2));
     detalleTable.columns.add('transorg0', sql.Char(2));
     detalleTable.columns.add('transorg1', sql.Char(2));
+    detalleTable.columns.add('transnorg0', sql.NVarChar(100));
+    detalleTable.columns.add('transnorg1', sql.NVarChar(100));
 
     detalle.forEach(row => {
       detalleTable.rows.add(
@@ -846,19 +1007,62 @@ export class AplicacionQuincenalRepository implements IAplicacionQuincenalReposi
         row.fpension,
         row.interno,
         row.nombres,
+        row.nonombre ?? null,
         row.rfc,
+        row.norfc ?? null,
+        row.org0,
+        row.org1,
+        row.org2,
+        row.org3,
+        row.sueldo ?? null,
+        row.oprestaciones ?? null,
+        row.quinquenios ?? null,
         row.sdo,
+        row.oprest ?? null,
+        row.quinq ?? null,
+        row.tpension ?? null,
         row.transitorio,
+        row.norg0 ?? null,
+        row.norg1 ?? null,
+        row.norg2 ?? null,
+        row.norg3 ?? null,
         row.cconcepto,
         row.descripcion,
         row.importe,
+        row.defuncion ? new Date(row.defuncion) : null,
+        row.pcp ?? null,
+        row.palimenticia ?? null,
+        row.retroactivo ?? null,
+        row.payudaecon ?? null,
+        row.otrosp1 ?? null,
+        row.otrosp2 ?? null,
+        row.otrosp3 ?? null,
+        row.otrosp4 ?? null,
+        row.otrosp5 ?? null,
+        row.terreno ?? null,
+        row.hipviv ?? null,
+        row.prodental ?? null,
+        row.otrod1 ?? null,
+        row.otrod2 ?? null,
+        row.otrod3 ?? null,
+        row.otrod4 ?? null,
+        row.otrod5 ?? null,
+        row.otrod6 ?? null,
         row.tpercep,
         row.tdeduc,
         row.total,
         new Date(row.inicio),
         new Date(row.fin),
+        row.anio_detalle ?? null,
+        row.sihay ?? null,
+        row.porcentaje ?? null,
+        row.sdoporc ?? null,
+        row.ayudporc ?? null,
+        row.quinqporc ?? null,
         row.transorg0,
-        row.transorg1
+        row.transorg1,
+        row.transnorg0 ?? null,
+        row.transnorg1 ?? null
       );
     });
 
@@ -880,15 +1084,22 @@ export class AplicacionQuincenalRepository implements IAplicacionQuincenalReposi
     headerTable.columns.add('quincena', sql.Int);
     headerTable.columns.add('anio', sql.Int);
     headerTable.columns.add('usuario_id', sql.NVarChar(100));
+    headerTable.columns.add('total_empleados', sql.Int);
+    headerTable.columns.add('total_contribucion', sql.Decimal(18, 2));
+    headerTable.columns.add('total_sueldo_base', sql.Decimal(18, 2));
     headerTable.rows.add(
       header.clave_organica_0,
       header.clave_organica_1,
       header.quincena,
       header.anio,
-      header.usuario_id
+      header.usuario_id,
+      header.total_empleados ?? 0,
+      header.total_contribucion ?? 0,
+      header.total_sueldo_base ?? 0
     );
 
     const detalleTable = new sql.Table('aportaciones.TVP_GuarderiasLoteDetalle');
+    // Agregar todas las columnas requeridas (29 en total)
     detalleTable.columns.add('clave_organica_0', sql.Char(2));
     detalleTable.columns.add('clave_organica_1', sql.Char(2));
     detalleTable.columns.add('quincena', sql.Int);
@@ -897,12 +1108,24 @@ export class AplicacionQuincenalRepository implements IAplicacionQuincenalReposi
     detalleTable.columns.add('titular_no_empleado', sql.NVarChar(50));
     detalleTable.columns.add('titular_monto', sql.Decimal(18, 2));
     detalleTable.columns.add('titular_rfc', sql.NVarChar(20));
+    detalleTable.columns.add('titular_monto_texto', sql.NVarChar(200));
+    detalleTable.columns.add('titular_org0', sql.Char(2));
+    detalleTable.columns.add('titular_org0_nombre', sql.NVarChar(200));
+    detalleTable.columns.add('titular_org1', sql.Char(2));
+    detalleTable.columns.add('titular_org1_nombre', sql.NVarChar(200));
+    detalleTable.columns.add('titular_org2', sql.Char(2));
+    detalleTable.columns.add('titular_org2_nombre', sql.NVarChar(200));
+    detalleTable.columns.add('titular_org3', sql.Char(2));
+    detalleTable.columns.add('titular_org3_nombre', sql.NVarChar(200));
+    detalleTable.columns.add('entidad_monto', sql.Decimal(18, 2));
+    detalleTable.columns.add('recibo_ajuste', sql.Decimal(18, 2));
     detalleTable.columns.add('recibo_total', sql.Decimal(18, 2));
     detalleTable.columns.add('recibo_mes_ano', sql.NVarChar(50));
     detalleTable.columns.add('recibo_fecha_venc', sql.Date);
     detalleTable.columns.add('recibo_folio', sql.NVarChar(50));
     detalleTable.columns.add('menor_id', sql.Int);
     detalleTable.columns.add('menor_nombre', sql.NVarChar(200));
+    detalleTable.columns.add('menor_rfc', sql.NVarChar(20));
     detalleTable.columns.add('menor_nivel', sql.NVarChar(100));
     detalleTable.columns.add('menor_sala', sql.NVarChar(100));
     detalleTable.columns.add('estatus', sql.NVarChar(50));
@@ -917,12 +1140,24 @@ export class AplicacionQuincenalRepository implements IAplicacionQuincenalReposi
         row.titular_no_empleado,
         row.titular_monto,
         row.titular_rfc,
+        row.titular_monto_texto ?? null,
+        row.titular_org0 ?? null,
+        row.titular_org0_nombre ?? null,
+        row.titular_org1 ?? null,
+        row.titular_org1_nombre ?? null,
+        row.titular_org2 ?? null,
+        row.titular_org2_nombre ?? null,
+        row.titular_org3 ?? null,
+        row.titular_org3_nombre ?? null,
+        row.entidad_monto ?? null,
+        row.recibo_ajuste ?? null,
         row.recibo_total,
         row.recibo_mes_ano,
         new Date(row.recibo_fecha_venc),
         row.recibo_folio,
         row.menor_id,
         row.menor_nombre,
+        row.menor_rfc ?? null,
         row.menor_nivel,
         row.menor_sala,
         row.estatus
@@ -947,36 +1182,63 @@ export class AplicacionQuincenalRepository implements IAplicacionQuincenalReposi
     headerTable.columns.add('quincena', sql.Int);
     headerTable.columns.add('anio', sql.Int);
     headerTable.columns.add('usuario_id', sql.NVarChar(100));
+    headerTable.columns.add('total_empleados', sql.Int);
+    headerTable.columns.add('total_contribucion', sql.Decimal(18, 2));
+    headerTable.columns.add('total_sueldo_base', sql.Decimal(18, 2));
     headerTable.rows.add(
       header.clave_organica_0,
       header.clave_organica_1,
       header.quincena,
       header.anio,
-      header.usuario_id
+      header.usuario_id,
+      header.total_empleados ?? 0,
+      header.total_contribucion ?? 0,
+      header.total_sueldo_base ?? 0
     );
 
     const detalleTable = new sql.Table('aportaciones.TVP_AguinaldoLoteDetalle');
+    // Agregar todas las columnas requeridas (41 en total) en el orden correcto del TVP
     detalleTable.columns.add('clave_organica_0', sql.Char(2));
     detalleTable.columns.add('clave_organica_1', sql.Char(2));
     detalleTable.columns.add('quincena', sql.Int);
     detalleTable.columns.add('anio', sql.Int);
     detalleTable.columns.add('interno', sql.Int);
-    detalleTable.columns.add('noempleado', sql.NVarChar(50));
-    detalleTable.columns.add('nombres', sql.NVarChar(200));
-    detalleTable.columns.add('rfc', sql.NVarChar(20));
-    detalleTable.columns.add('curp', sql.NVarChar(20));
-    detalleTable.columns.add('fecha', sql.Date);
-    detalleTable.columns.add('sdo', sql.Decimal(18, 2));
-    detalleTable.columns.add('general', sql.Decimal(18, 2));
-    detalleTable.columns.add('proporcion', sql.Decimal(18, 2));
     detalleTable.columns.add('org0', sql.Char(2));
     detalleTable.columns.add('org1', sql.Char(2));
     detalleTable.columns.add('org2', sql.Char(2));
     detalleTable.columns.add('org3', sql.Char(2));
-    detalleTable.columns.add('norg0', sql.NVarChar(50));
-    detalleTable.columns.add('norg1', sql.NVarChar(50));
-    detalleTable.columns.add('norg2', sql.NVarChar(50));
-    detalleTable.columns.add('norg3', sql.NVarChar(50));
+    detalleTable.columns.add('movimiento', sql.NVarChar(50));
+    detalleTable.columns.add('noempleado', sql.NVarChar(50));
+    detalleTable.columns.add('tipomovimiento', sql.NVarChar(50));
+    detalleTable.columns.add('nombres', sql.NVarChar(200));
+    detalleTable.columns.add('rfc', sql.NVarChar(20));
+    detalleTable.columns.add('curp', sql.NVarChar(20));
+    detalleTable.columns.add('fecha', sql.Date);
+    detalleTable.columns.add('dias_aguinaldo', sql.Int);
+    detalleTable.columns.add('cuantos', sql.Int);
+    detalleTable.columns.add('cuantos_ori', sql.Int);
+    detalleTable.columns.add('nocontar', sql.NVarChar(50));
+    detalleTable.columns.add('sdo', sql.Decimal(18, 2));
+    detalleTable.columns.add('op', sql.Decimal(18, 2));
+    detalleTable.columns.add('q', sql.Decimal(18, 2));
+    detalleTable.columns.add('activo', sql.NVarChar(50));
+    detalleTable.columns.add('nom_activo', sql.NVarChar(200));
+    detalleTable.columns.add('qna_a', sql.Int);
+    detalleTable.columns.add('porcentaje_a', sql.Decimal(18, 2));
+    detalleTable.columns.add('diario', sql.Decimal(18, 2));
+    detalleTable.columns.add('general', sql.Decimal(18, 2));
+    detalleTable.columns.add('porcentaje', sql.Decimal(18, 2));
+    detalleTable.columns.add('proporcion', sql.Decimal(18, 2));
+    detalleTable.columns.add('mensaje', sql.NVarChar(500));
+    detalleTable.columns.add('dias_gral_agui', sql.Int);
+    detalleTable.columns.add('fecha_lf', sql.Date);
+    detalleTable.columns.add('fecha_li', sql.Date);
+    detalleTable.columns.add('f_inicio', sql.Date);
+    detalleTable.columns.add('f_fin', sql.Date);
+    detalleTable.columns.add('norg0', sql.NVarChar(200));
+    detalleTable.columns.add('norg1', sql.NVarChar(200));
+    detalleTable.columns.add('norg2', sql.NVarChar(200));
+    detalleTable.columns.add('norg3', sql.NVarChar(200));
 
     detalle.forEach(row => {
       detalleTable.rows.add(
@@ -985,18 +1247,38 @@ export class AplicacionQuincenalRepository implements IAplicacionQuincenalReposi
         row.quincena,
         row.anio,
         row.interno,
-        row.noempleado,
-        row.nombres,
-        row.rfc,
-        row.curp,
-        new Date(row.fecha),
-        row.sdo,
-        row.general,
-        row.proporcion,
         row.org0,
         row.org1,
         row.org2,
         row.org3,
+        row.movimiento ?? null,
+        row.noempleado,
+        row.tipomovimiento ?? null,
+        row.nombres,
+        row.rfc,
+        row.curp,
+        row.fecha ? new Date(row.fecha) : new Date('1900-01-01'),
+        row.dias_aguinaldo ?? null,
+        row.cuantos ?? null,
+        row.cuantos_ori ?? null,
+        row.nocontar ?? null,
+        row.sdo ?? 0,
+        row.op ?? null,
+        row.q ?? null,
+        row.activo ?? null,
+        row.nom_activo ?? null,
+        row.qna_a ?? null,
+        row.porcentaje_a ?? null,
+        row.diario ?? null,
+        row.general ?? 0,
+        row.porcentaje ?? null,
+        row.proporcion ?? 0,
+        row.mensaje ?? null,
+        row.dias_gral_agui ?? null,
+        row.fecha_lf ? new Date(row.fecha_lf) : null,
+        row.fecha_li ? new Date(row.fecha_li) : null,
+        row.f_inicio ? new Date(row.f_inicio) : null,
+        row.f_fin ? new Date(row.f_fin) : null,
         row.norg0,
         row.norg1,
         row.norg2,
@@ -1030,23 +1312,29 @@ export class AplicacionQuincenalRepository implements IAplicacionQuincenalReposi
       await withDbContext(req, async (tx) => {
         // Procesar PrestamosCortoPlazo
         if (data.prestamosCortoPlazo) {
+          const detalleLength = Array.isArray(data.prestamosCortoPlazo.detalle) ? data.prestamosCortoPlazo.detalle.length : 0;
           await this.crearYEjecutarPrestamosCortoPlazo(tx, data.prestamosCortoPlazo.header, data.prestamosCortoPlazo.detalle);
           procesados.push('prestamosCortoPlazo');
-          totalRegistros.prestamosCortoPlazo = data.prestamosCortoPlazo.detalle.length;
+          totalRegistros.prestamosCortoPlazo = detalleLength;
+          logger.info({ tipo: 'prestamosCortoPlazo', detalleLength, totalRegistros }, 'Asignado totalRegistros para prestamosCortoPlazo');
         }
 
         // Procesar PrestamosMedianoPlazo
         if (data.prestamosMedianoPlazo) {
+          const detalleLength = Array.isArray(data.prestamosMedianoPlazo.detalle) ? data.prestamosMedianoPlazo.detalle.length : 0;
           await this.crearYEjecutarPrestamosMedianoPlazo(tx, data.prestamosMedianoPlazo.header, data.prestamosMedianoPlazo.detalle);
           procesados.push('prestamosMedianoPlazo');
-          totalRegistros.prestamosMedianoPlazo = data.prestamosMedianoPlazo.detalle.length;
+          totalRegistros.prestamosMedianoPlazo = detalleLength;
+          logger.info({ tipo: 'prestamosMedianoPlazo', detalleLength, totalRegistros }, 'Asignado totalRegistros para prestamosMedianoPlazo');
         }
 
         // Procesar PrestamosHipotecarios
         if (data.prestamosHipotecarios) {
+          const detalleLength = Array.isArray(data.prestamosHipotecarios.detalle) ? data.prestamosHipotecarios.detalle.length : 0;
           await this.crearYEjecutarPrestamosHipotecarios(tx, data.prestamosHipotecarios.header, data.prestamosHipotecarios.detalle);
           procesados.push('prestamosHipotecarios');
-          totalRegistros.prestamosHipotecarios = data.prestamosHipotecarios.detalle.length;
+          totalRegistros.prestamosHipotecarios = detalleLength;
+          logger.info({ tipo: 'prestamosHipotecarios', detalleLength, totalRegistros }, 'Asignado totalRegistros para prestamosHipotecarios');
         }
       });
 
@@ -1055,12 +1343,20 @@ export class AplicacionQuincenalRepository implements IAplicacionQuincenalReposi
         ...logContext,
         procesados,
         totalRegistros,
+        totalRegistrosKeys: Object.keys(totalRegistros),
+        totalRegistrosString: JSON.stringify(totalRegistros),
         duracionMs: duration
       }, 'Guardado de histórico de retenciones completado exitosamente');
 
+      // Asegurar que totalRegistros tenga valores para todos los procesados
+      const finalTotalRegistros: Record<string, number> = {};
+      procesados.forEach(tipo => {
+        finalTotalRegistros[tipo] = totalRegistros[tipo] ?? 0;
+      });
+
       return {
         procesados,
-        totalRegistros
+        totalRegistros: finalTotalRegistros
       };
     } catch (error: any) {
       const duration = Date.now() - startTime;
@@ -1091,12 +1387,18 @@ export class AplicacionQuincenalRepository implements IAplicacionQuincenalReposi
     headerTable.columns.add('quincena', sql.Int);
     headerTable.columns.add('anio', sql.Int);
     headerTable.columns.add('usuario_id', sql.NVarChar(100));
+    headerTable.columns.add('total_empleados', sql.Int);
+    headerTable.columns.add('total_contribucion', sql.Decimal(18, 2));
+    headerTable.columns.add('total_sueldo_base', sql.Decimal(18, 2));
     headerTable.rows.add(
       header.clave_organica_0,
       header.clave_organica_1,
       header.quincena,
       header.anio,
-      header.usuario_id
+      header.usuario_id,
+      (header as any).total_empleados ?? 0,
+      (header as any).total_contribucion ?? 0,
+      (header as any).total_sueldo_base ?? 0
     );
 
     const detalleTable = new sql.Table('retenciones.TVP_PrestamosCortoPlazoLoteDetalle');
@@ -1178,12 +1480,18 @@ export class AplicacionQuincenalRepository implements IAplicacionQuincenalReposi
     headerTable.columns.add('quincena', sql.Int);
     headerTable.columns.add('anio', sql.Int);
     headerTable.columns.add('usuario_id', sql.NVarChar(100));
+    headerTable.columns.add('total_empleados', sql.Int);
+    headerTable.columns.add('total_contribucion', sql.Decimal(18, 2));
+    headerTable.columns.add('total_sueldo_base', sql.Decimal(18, 2));
     headerTable.rows.add(
       header.clave_organica_0,
       header.clave_organica_1,
       header.quincena,
       header.anio,
-      header.usuario_id
+      header.usuario_id,
+      (header as any).total_empleados ?? 0,
+      (header as any).total_contribucion ?? 0,
+      (header as any).total_sueldo_base ?? 0
     );
 
     const detalleTable = new sql.Table('retenciones.TVP_PrestamosMedianoPlazoLoteDetalle');
@@ -1281,12 +1589,18 @@ export class AplicacionQuincenalRepository implements IAplicacionQuincenalReposi
     headerTable.columns.add('quincena', sql.Int);
     headerTable.columns.add('anio', sql.Int);
     headerTable.columns.add('usuario_id', sql.NVarChar(100));
+    headerTable.columns.add('total_empleados', sql.Int);
+    headerTable.columns.add('total_contribucion', sql.Decimal(18, 2));
+    headerTable.columns.add('total_sueldo_base', sql.Decimal(18, 2));
     headerTable.rows.add(
       header.clave_organica_0,
       header.clave_organica_1,
       header.quincena,
       header.anio,
-      header.usuario_id
+      header.usuario_id,
+      (header as any).total_empleados ?? 0,
+      (header as any).total_contribucion ?? 0,
+      (header as any).total_sueldo_base ?? 0
     );
 
     const detalleTable = new sql.Table('retenciones.TVP_PrestamosHipotecariosLoteDetalle');

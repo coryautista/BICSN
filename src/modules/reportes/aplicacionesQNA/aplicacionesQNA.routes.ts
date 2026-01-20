@@ -58,6 +58,7 @@ export async function aplicacionesQNARoutes(fastify: FastifyInstance) {
         },
         400: { type: 'object' },
         401: { type: 'object' },
+        403: { type: 'object' },
         500: { type: 'object' }
       }
     }
@@ -206,6 +207,7 @@ export async function aplicacionesQNARoutes(fastify: FastifyInstance) {
         },
         400: { type: 'object' },
         401: { type: 'object' },
+        403: { type: 'object' },
         500: { type: 'object' }
       }
     }
@@ -349,6 +351,7 @@ export async function aplicacionesQNARoutes(fastify: FastifyInstance) {
         },
         400: { type: 'object' },
         401: { type: 'object' },
+        403: { type: 'object' },
         500: { type: 'object' }
       }
     }
@@ -505,6 +508,7 @@ export async function aplicacionesQNARoutes(fastify: FastifyInstance) {
         },
         400: { type: 'object' },
         401: { type: 'object' },
+        403: { type: 'object' },
         500: { type: 'object' }
       }
     }
@@ -661,6 +665,7 @@ export async function aplicacionesQNARoutes(fastify: FastifyInstance) {
         },
         400: { type: 'object' },
         401: { type: 'object' },
+        403: { type: 'object' },
         500: { type: 'object' }
       }
     }

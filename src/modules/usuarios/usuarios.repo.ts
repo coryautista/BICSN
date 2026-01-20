@@ -1,4 +1,5 @@
 import { getPool, sql } from '../../db/mssql.js';
+import { normalizeClaveOrganica } from '../../utils/organica.js';
 import { sql as sqlType } from '../../db/context.js';
 
 export async function findUsuarioById(usuarioId: string) {

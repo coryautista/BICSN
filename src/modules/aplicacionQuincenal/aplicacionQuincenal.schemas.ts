@@ -65,7 +65,10 @@ export const ViviendaHeaderSchema = z.object({
   clave_organica_1: claveOrganicaSchema,
   quincena: quincenaSchema,
   anio: anioSchema,
-  usuario_id: usuarioIdSchema
+  usuario_id: usuarioIdSchema,
+  total_empleados: z.number().int().min(0).optional(),
+  total_contribucion: z.number().optional(),
+  total_sueldo_base: z.number().optional()
 });
 
 export const ViviendaDetalleSchema = z.object({
@@ -75,6 +78,9 @@ export const ViviendaDetalleSchema = z.object({
   anio: anioSchema,
   interno: z.number().int(),
   nombre: z.string().min(1),
+  sueldo: z.number(),
+  quinquenios: z.number(),
+  otras_prestaciones: decimalSchema,
   sueldo_base: z.number(),
   afe: z.number(),
   total: z.number()
@@ -86,7 +92,10 @@ export const PrestacionesHeaderSchema = z.object({
   clave_organica_1: claveOrganicaSchema,
   quincena: quincenaSchema,
   anio: anioSchema,
-  usuario_id: usuarioIdSchema
+  usuario_id: usuarioIdSchema,
+  total_empleados: z.number().int().min(0).optional(),
+  total_contribucion: z.number().optional(),
+  total_sueldo_base: z.number().optional()
 });
 
 export const PrestacionesDetalleSchema = z.object({
@@ -111,7 +120,10 @@ export const CairHeaderSchema = z.object({
   clave_organica_1: claveOrganicaSchema,
   quincena: quincenaSchema,
   anio: anioSchema,
-  usuario_id: usuarioIdSchema
+  usuario_id: usuarioIdSchema,
+  total_empleados: z.number().int().min(0).optional(),
+  total_contribucion: z.number().optional(),
+  total_sueldo_base: z.number().optional()
 });
 
 export const CairDetalleSchema = z.object({
@@ -135,7 +147,10 @@ export const TransitorioHeaderSchema = z.object({
   clave_organica_1: claveOrganicaSchema,
   quincena: quincenaSchema,
   anio: anioSchema,
-  usuario_id: usuarioIdSchema
+  usuario_id: usuarioIdSchema,
+  total_empleados: z.number().int().min(0).optional(),
+  total_contribucion: z.number().optional(),
+  total_sueldo_base: z.number().optional()
 });
 
 export const TransitorioDetalleSchema = z.object({
@@ -145,20 +160,63 @@ export const TransitorioDetalleSchema = z.object({
   anio: anioSchema,
   fpension: z.number().int(),
   interno: z.number().int(),
-  nombres: z.string().min(1),
-  rfc: z.string().min(1),
+  nombres: z.string().min(0).max(200),
+  nonombre: stringSchema,
+  rfc: z.string().min(0).max(20),
+  norfc: stringSchema,
+  org0: claveOrganicaSchema,
+  org1: claveOrganicaSchema,
+  org2: claveOrganicaSchema,
+  org3: claveOrganicaSchema,
+  sueldo: decimalSchema,
+  oprestaciones: decimalSchema,
+  quinquenios: decimalSchema,
   sdo: z.number(),
+  oprest: decimalSchema,
+  quinq: decimalSchema,
+  tpension: decimalSchema,
   transitorio: z.number(),
-  cconcepto: z.string().min(1),
-  descripcion: z.string().min(1),
+  norg0: stringSchema,
+  norg1: stringSchema,
+  norg2: stringSchema,
+  norg3: stringSchema,
+  cconcepto: z.string().min(0).max(50),
+  descripcion: z.string().min(0).max(200),
   importe: z.number(),
+  defuncion: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Formato de fecha debe ser YYYY-MM-DD').optional().nullable(),
+  pcp: decimalSchema,
+  palimenticia: decimalSchema,
+  retroactivo: decimalSchema,
+  payudaecon: decimalSchema,
+  otrosp1: decimalSchema,
+  otrosp2: decimalSchema,
+  otrosp3: decimalSchema,
+  otrosp4: decimalSchema,
+  otrosp5: decimalSchema,
+  terreno: decimalSchema,
+  hipviv: decimalSchema,
+  prodental: decimalSchema,
+  otrod1: decimalSchema,
+  otrod2: decimalSchema,
+  otrod3: decimalSchema,
+  otrod4: decimalSchema,
+  otrod5: decimalSchema,
+  otrod6: decimalSchema,
   tpercep: z.number(),
   tdeduc: z.number(),
   total: z.number(),
   inicio: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Formato de fecha debe ser YYYY-MM-DD'),
   fin: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Formato de fecha debe ser YYYY-MM-DD'),
+  anio_detalle: intSchema,
+  sihay: stringSchema,
+  porcentaje: decimalSchema,
+  sdoporc: decimalSchema,
+  ayudporc: decimalSchema,
+  quinqporc: decimalSchema,
   transorg0: claveOrganicaSchema,
-  transorg1: claveOrganicaSchema
+  transorg1: claveOrganicaSchema,
+  transnorg0: stringSchema,
+  transnorg1: stringSchema
 });
 
 // Guarderias
@@ -167,7 +225,10 @@ export const GuarderiasHeaderSchema = z.object({
   clave_organica_1: claveOrganicaSchema,
   quincena: quincenaSchema,
   anio: anioSchema,
-  usuario_id: usuarioIdSchema
+  usuario_id: usuarioIdSchema,
+  total_empleados: z.number().int().min(0).optional(),
+  total_contribucion: z.number().optional(),
+  total_sueldo_base: z.number().optional()
 });
 
 export const GuarderiasDetalleSchema = z.object({
@@ -175,19 +236,31 @@ export const GuarderiasDetalleSchema = z.object({
   clave_organica_1: claveOrganicaSchema,
   quincena: quincenaSchema,
   anio: anioSchema,
-  titular_nombre: z.string().min(1),
-  titular_no_empleado: z.string().min(1),
+  titular_nombre: z.string().min(0).max(200),
+  titular_no_empleado: z.string().min(0).max(50),
   titular_monto: z.number(),
-  titular_rfc: z.string().min(1),
+  titular_rfc: z.string().min(0).max(20),
+  titular_monto_texto: stringSchema,
+  titular_org0: claveOrganicaSchema.optional().nullable(),
+  titular_org0_nombre: stringSchema,
+  titular_org1: claveOrganicaSchema.optional().nullable(),
+  titular_org1_nombre: stringSchema,
+  titular_org2: claveOrganicaSchema.optional().nullable(),
+  titular_org2_nombre: stringSchema,
+  titular_org3: claveOrganicaSchema.optional().nullable(),
+  titular_org3_nombre: stringSchema,
+  entidad_monto: decimalSchema,
+  recibo_ajuste: decimalSchema,
   recibo_total: z.number(),
-  recibo_mes_ano: z.string().min(1),
+  recibo_mes_ano: z.string().min(0).max(50),
   recibo_fecha_venc: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Formato de fecha debe ser YYYY-MM-DD'),
-  recibo_folio: z.string().min(1),
+  recibo_folio: z.string().min(0).max(50),
   menor_id: z.number().int(),
-  menor_nombre: z.string().min(1),
-  menor_nivel: z.string().min(1),
-  menor_sala: z.string().min(1),
-  estatus: z.string().min(1)
+  menor_nombre: z.string().min(0).max(200),
+  menor_rfc: stringSchema,
+  menor_nivel: z.string().min(0).max(100),
+  menor_sala: z.string().min(0).max(100),
+  estatus: z.string().min(0).max(50)
 });
 
 // Aguinaldo
@@ -196,7 +269,10 @@ export const AguinaldoHeaderSchema = z.object({
   clave_organica_1: claveOrganicaSchema,
   quincena: quincenaSchema,
   anio: anioSchema,
-  usuario_id: usuarioIdSchema
+  usuario_id: usuarioIdSchema,
+  total_empleados: z.number().int().min(0).optional(),
+  total_contribucion: z.number().optional(),
+  total_sueldo_base: z.number().optional()
 });
 
 export const AguinaldoDetalleSchema = z.object({
@@ -205,57 +281,77 @@ export const AguinaldoDetalleSchema = z.object({
   quincena: quincenaSchema,
   anio: anioSchema,
   interno: z.number().int(),
-  noempleado: z.string().min(1),
-  nombres: z.string().min(1),
-  rfc: z.string().min(1),
-  curp: z.string().min(1),
+  movimiento: stringSchema,
+  noempleado: z.string().min(0).max(50),
+  tipomovimiento: stringSchema,
+  nombres: z.string().min(0).max(200),
+  rfc: z.string().min(0).max(20),
+  curp: z.string().min(0).max(20),
   fecha: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Formato de fecha debe ser YYYY-MM-DD'),
+  dias_aguinaldo: intSchema,
+  cuantos: intSchema,
+  cuantos_ori: intSchema,
+  nocontar: stringSchema,
   sdo: z.number(),
+  op: decimalSchema,
+  q: decimalSchema,
+  activo: stringSchema,
+  nom_activo: stringSchema,
+  qna_a: intSchema,
+  porcentaje_a: decimalSchema,
+  diario: decimalSchema,
   general: z.number(),
+  porcentaje: decimalSchema,
   proporcion: z.number(),
+  mensaje: stringSchema,
+  dias_gral_agui: intSchema,
+  fecha_lf: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Formato de fecha debe ser YYYY-MM-DD').optional().nullable(),
+  fecha_li: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Formato de fecha debe ser YYYY-MM-DD').optional().nullable(),
+  f_inicio: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Formato de fecha debe ser YYYY-MM-DD').optional().nullable(),
+  f_fin: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Formato de fecha debe ser YYYY-MM-DD').optional().nullable(),
   org0: claveOrganicaSchema,
   org1: claveOrganicaSchema,
   org2: claveOrganicaSchema,
   org3: claveOrganicaSchema,
-  norg0: z.string().min(1),
-  norg1: z.string().min(1),
-  norg2: z.string().min(1),
-  norg3: z.string().min(1)
+  norg0: z.string().min(0).max(200),
+  norg1: z.string().min(0).max(200),
+  norg2: z.string().min(0).max(200),
+  norg3: z.string().min(0).max(200)
 });
 
 // Schema principal que agrupa todos los tipos
 export const GuardarHistoricoAportacionesSchema = z.object({
   ahorro: z.object({
     header: AhorroHeaderSchema,
-    detalle: z.array(AhorroDetalleSchema).min(1)
+    detalle: z.array(AhorroDetalleSchema).min(0) // Permitir arrays vacíos
   }).optional(),
   vivienda: z.object({
     header: ViviendaHeaderSchema,
-    detalle: z.array(ViviendaDetalleSchema).min(1)
+    detalle: z.array(ViviendaDetalleSchema).min(0) // Permitir arrays vacíos
   }).optional(),
   prestaciones: z.object({
     header: PrestacionesHeaderSchema,
-    detalle: z.array(PrestacionesDetalleSchema).min(1)
+    detalle: z.array(PrestacionesDetalleSchema).min(0) // Permitir arrays vacíos
   }).optional(),
   cair: z.object({
     header: CairHeaderSchema,
-    detalle: z.array(CairDetalleSchema).min(1)
+    detalle: z.array(CairDetalleSchema).min(0) // Permitir arrays vacíos
   }).optional(),
   transitorio: z.object({
     header: TransitorioHeaderSchema,
-    detalle: z.array(TransitorioDetalleSchema).min(1)
+    detalle: z.array(TransitorioDetalleSchema).min(0) // Permitir arrays vacíos
   }).optional(),
   guarderias: z.object({
     header: GuarderiasHeaderSchema,
-    detalle: z.array(GuarderiasDetalleSchema).min(1)
+    detalle: z.array(GuarderiasDetalleSchema).min(0) // Permitir arrays vacíos
   }).optional(),
   aguinaldo: z.object({
     header: AguinaldoHeaderSchema,
-    detalle: z.array(AguinaldoDetalleSchema).min(1)
+    detalle: z.array(AguinaldoDetalleSchema).min(0) // Permitir arrays vacíos
   }).optional()
 }).refine(
   (data) => {
-    // Validar que al menos un tipo tenga datos
+    // Validar que al menos un tipo esté presente (aunque tenga 0 registros)
     return !!(
       data.ahorro ||
       data.vivienda ||
@@ -298,7 +394,10 @@ export const PrestamosCortoPlazoHeaderSchema = z.object({
   clave_organica_1: claveOrganicaSchema,
   quincena: quincenaSchema,
   anio: anioSchema,
-  usuario_id: usuarioIdSchema
+  usuario_id: usuarioIdSchema,
+  total_empleados: z.number().int().min(0).optional(),
+  total_contribucion: z.number().optional(),
+  total_sueldo_base: z.number().optional()
 });
 
 export const PrestamosCortoPlazoDetalleSchema = z.object({
@@ -337,7 +436,10 @@ export const PrestamosMedianoPlazoHeaderSchema = z.object({
   clave_organica_1: claveOrganicaSchema,
   quincena: quincenaSchema,
   anio: anioSchema,
-  usuario_id: usuarioIdSchema
+  usuario_id: usuarioIdSchema,
+  total_empleados: z.number().int().min(0).optional(),
+  total_contribucion: z.number().optional(),
+  total_sueldo_base: z.number().optional()
 });
 
 export const PrestamosMedianoPlazoDetalleSchema = z.object({
@@ -384,7 +486,10 @@ export const PrestamosHipotecariosHeaderSchema = z.object({
   clave_organica_1: claveOrganicaSchema,
   quincena: quincenaSchema,
   anio: anioSchema,
-  usuario_id: usuarioIdSchema
+  usuario_id: usuarioIdSchema,
+  total_empleados: z.number().int().min(0).optional(),
+  total_contribucion: z.number().optional(),
+  total_sueldo_base: z.number().optional()
 });
 
 export const PrestamosHipotecariosDetalleSchema = z.object({
@@ -434,19 +539,19 @@ export const PrestamosHipotecariosDetalleSchema = z.object({
 export const GuardarHistoricoRetencionesSchema = z.object({
   prestamosCortoPlazo: z.object({
     header: PrestamosCortoPlazoHeaderSchema,
-    detalle: z.array(PrestamosCortoPlazoDetalleSchema).min(1)
+    detalle: z.array(PrestamosCortoPlazoDetalleSchema).min(0) // Permitir arrays vacíos
   }).optional(),
   prestamosMedianoPlazo: z.object({
     header: PrestamosMedianoPlazoHeaderSchema,
-    detalle: z.array(PrestamosMedianoPlazoDetalleSchema).min(1)
+    detalle: z.array(PrestamosMedianoPlazoDetalleSchema).min(0) // Permitir arrays vacíos
   }).optional(),
   prestamosHipotecarios: z.object({
     header: PrestamosHipotecariosHeaderSchema,
-    detalle: z.array(PrestamosHipotecariosDetalleSchema).min(1)
+    detalle: z.array(PrestamosHipotecariosDetalleSchema).min(0) // Permitir arrays vacíos
   }).optional()
 }).refine(
   (data) => {
-    // Validar que al menos un tipo tenga datos
+    // Validar que al menos un tipo esté presente (aunque tenga 0 registros)
     return !!(
       data.prestamosCortoPlazo ||
       data.prestamosMedianoPlazo ||

@@ -5,11 +5,21 @@ import {
   AportacionQuincenalResumenParamsSchema, 
   ResumenOrgQnaAllParamsSchema,
   GuardarHistoricoAportacionesSchema,
-  GuardarHistoricoRetencionesSchema
+  GuardarHistoricoRetencionesSchema,
+  GuardarHistoricoAportaciones,
+  GuardarHistoricoRetenciones
 } from './aplicacionQuincenal.schemas.js';
 import { GetAportacionQuincenalResumenQuery } from './application/queries/GetAportacionQuincenalResumenQuery.js';
 import { GetResumenOrgQnaAllQuery } from './application/queries/GetResumenOrgQnaAllQuery.js';
 import { AplicacionQuincenalRepository } from './infrastructure/persistence/AplicacionQuincenalRepository.js';
+import { GetAportacionesIndividualesQuery } from '../aportacionesFondos/application/queries/GetAportacionesIndividualesQuery.js';
+import { GetAguinaldoQuery } from '../aportacionesFondos/application/queries/GetAguinaldoQuery.js';
+import { GetPensionNominaTransitorioQuery } from '../aportacionesFondos/application/queries/GetPensionNominaTransitorioQuery.js';
+import { GetAportacionGuarderiasQuery } from '../aportacionesFondos/application/queries/GetAportacionGuarderiasQuery.js';
+import { GetPrestamosQuery } from '../aportacionesFondos/application/queries/GetPrestamosQuery.js';
+import { GetPrestamosMedianoPlazoQuery } from '../aportacionesFondos/application/queries/GetPrestamosMedianoPlazoQuery.js';
+import { GetPrestamosHipotecariosQuery } from '../aportacionesFondos/application/queries/GetPrestamosHipotecariosQuery.js';
+import { IAportacionFondoRepository } from '../aportacionesFondos/domain/repositories/IAportacionFondoRepository.js';
 
 export default async function aplicacionQuincenalRoutes(app: FastifyInstance) {
   // GET /aplicacion-quincenal/AportacionQuincenalResumen
@@ -640,6 +650,805 @@ export default async function aplicacionQuincenalRoutes(app: FastifyInstance) {
       }
 
       // Llamar al repository
+      const repository = request.diScope.resolve<AplicacionQuincenalRepository>('aplicacionQuincenalRepo');
+      const result = await repository.guardarHistoricoRetenciones(request, parsed.data);
+
+      return reply.code(200).send({
+        ok: true,
+        data: result
+      });
+    } catch (error) {
+      return handleAplicacionQuincenalError(error, reply);
+    }
+  });
+
+  // POST /aplicacion-quincenal/guardar-historico-aportaciones-desde-bd
+  app.post('/aplicacion-quincenal/guardar-historico-aportaciones-desde-bd', {
+    preHandler: [requireAuth],
+    schema: {
+      description: '[SQL SERVER] Obtiene los datos de aportaciones directamente de la base de datos y los guarda en el histórico. Los usuarios entidad (isEntidad=true) usan las claves orgánicas del token. Los usuarios no entidad deben proporcionar claves orgánicas en query params.',
+      summary: 'Guardar Histórico de Aportaciones desde BD',
+      tags: ['aplicacion-quincenal', 'sql-server'],
+      security: [{ bearerAuth: [] }],
+      querystring: {
+        type: 'object',
+        properties: {
+          clave_organica_0: {
+            type: 'string',
+            description: 'Clave orgánica 0 (requerido para usuarios no entidad, ignorado para usuarios entidad)',
+            minLength: 1,
+            maxLength: 2
+          },
+          clave_organica_1: {
+            type: 'string',
+            description: 'Clave orgánica 1 (requerido para usuarios no entidad, ignorado para usuarios entidad)',
+            minLength: 1,
+            maxLength: 2
+          }
+        }
+      },
+      response: {
+        200: {
+          description: 'Histórico guardado exitosamente',
+          type: 'object',
+          properties: {
+            ok: { type: 'boolean' },
+            data: {
+              type: 'object',
+              properties: {
+                procesados: { type: 'array', items: { type: 'string' } },
+                totalRegistros: { type: 'object' }
+              }
+            }
+          }
+        },
+        400: { type: 'object' },
+        401: { type: 'object' },
+        500: { type: 'object' }
+      }
+    }
+  }, async (request, reply) => {
+    try {
+      const user = (request as any).user;
+      const userId = user?.sub;
+      const entidades = (user as any).entidades || [false];
+      const isEntidad = entidades[0] === true;
+
+      // Validar y determinar las claves orgánicas a usar
+      let org0: string | null = null;
+      let org1: string | null = null;
+
+      if (isEntidad) {
+        // Usuario entidad: usar claves del token
+        const idOrg0 = user?.idOrganica0;
+        const idOrg1 = user?.idOrganica1;
+
+        org0 = idOrg0 ? (typeof idOrg0 === 'string' ? idOrg0.padStart(2, '0') : idOrg0.toString().padStart(2, '0')) : null;
+        org1 = idOrg1 ? (typeof idOrg1 === 'string' ? idOrg1.padStart(2, '0') : idOrg1.toString().padStart(2, '0')) : null;
+
+        if (!org0 || !org1) {
+          return reply.code(400).send({
+            ok: false,
+            error: {
+              code: 'MISSING_ORGANICA_KEYS',
+              message: 'Las claves orgánicas (org0 y org1) son requeridas en el token del usuario.',
+              timestamp: new Date().toISOString()
+            }
+          });
+        }
+      } else {
+        // Usuario no entidad: debe proporcionar org0 y org1 en query params
+        const query = request.query as any;
+        if (!query?.clave_organica_0 || !query?.clave_organica_1) {
+          return reply.code(400).send({
+            ok: false,
+            error: {
+              code: 'VALIDATION_ERROR',
+              message: 'clave_organica_0 y clave_organica_1 son requeridos para usuarios no entidad',
+              timestamp: new Date().toISOString()
+            }
+          });
+        }
+
+        org0 = query.clave_organica_0.padStart(2, '0');
+        org1 = query.clave_organica_1.padStart(2, '0');
+      }
+
+      // Asegurar que org0 y org1 no sean null en este punto
+      if (!org0 || !org1) {
+        return reply.code(400).send({
+          ok: false,
+          error: {
+            code: 'MISSING_ORGANICA_KEYS',
+            message: 'Las claves orgánicas (org0 y org1) son requeridas.',
+            timestamp: new Date().toISOString()
+          }
+        });
+      }
+
+      // Obtener período (quincena y año)
+      const aportacionFondoRepo = request.diScope.resolve<IAportacionFondoRepository>('aportacionFondoRepo');
+      const periodoInfo = await aportacionFondoRepo.obtenerQuincenaYAnio(org0, org1);
+      const quincena = periodoInfo.quincena;
+      const anio = periodoInfo.anio;
+
+      // Obtener datos de todos los tipos de aportaciones en paralelo
+      const getAportacionesIndividualesQuery = request.diScope.resolve<GetAportacionesIndividualesQuery>('getAportacionesIndividualesQuery');
+      const getAguinaldoQuery = request.diScope.resolve<GetAguinaldoQuery>('getAguinaldoQuery');
+      const getPensionNominaTransitorioQuery = request.diScope.resolve<GetPensionNominaTransitorioQuery>('getPensionNominaTransitorioQuery');
+      const getAportacionGuarderiasQuery = request.diScope.resolve<GetAportacionGuarderiasQuery>('getAportacionGuarderiasQuery');
+
+      const userClave0 = (user as any).idOrganica0 || '';
+      const userClave1 = (user as any).idOrganica1 || '';
+
+      const [
+        ahorroData,
+        viviendaData,
+        prestacionesData,
+        cairData,
+        aguinaldoData,
+        transitorioData,
+        guarderiasData
+      ] = await Promise.all([
+        getAportacionesIndividualesQuery.execute('ahorro', userClave0, userClave1, isEntidad, org0, org1, userId?.toString()).catch(() => null),
+        getAportacionesIndividualesQuery.execute('vivienda', userClave0, userClave1, isEntidad, org0, org1, userId?.toString()).catch(() => null),
+        getAportacionesIndividualesQuery.execute('prestaciones', userClave0, userClave1, isEntidad, org0, org1, userId?.toString()).catch(() => null),
+        getAportacionesIndividualesQuery.execute('cair', userClave0, userClave1, isEntidad, org0, org1, userId?.toString()).catch(() => null),
+        getAguinaldoQuery.execute(userClave0, userClave1, isEntidad, org0, org1, userId?.toString()).catch(() => null),
+        getPensionNominaTransitorioQuery.execute(userClave0, userClave1, isEntidad, org0, org1, userId?.toString()).catch(() => null),
+        getAportacionGuarderiasQuery.execute(userClave0, userClave1, isEntidad, org0, org1, userId?.toString()).catch(() => null)
+      ]);
+
+      // Transformar datos al formato esperado
+      // Siempre crear todos los tipos, incluso si tienen 0 registros
+      const historicoData: GuardarHistoricoAportaciones = {};
+
+      // Transformar Ahorro (siempre, incluso con 0 registros)
+      historicoData.ahorro = {
+        header: {
+          clave_organica_0: org0,
+          clave_organica_1: org1,
+          quincena,
+          anio,
+          usuario_id: userId?.toString() || '',
+          total_empleados: ahorroData?.resumen?.total_empleados || 0,
+          total_contribucion: ahorroData?.resumen?.total_contribucion || 0,
+          total_sueldo_base: ahorroData?.resumen?.total_sueldo_base || 0
+        },
+        detalle: (ahorroData?.datos || []).map(d => ({
+          clave_organica_0: org0,
+          clave_organica_1: org1,
+          quincena,
+          anio,
+          interno: d.interno || 0,
+          nombre: (d.nombre || '').substring(0, 200),
+          sueldo: d.sueldo || 0,
+          quinquenios: d.quinquenios || 0,
+          otras_prestaciones: d.otras_prestaciones ?? null,
+          sueldo_base: d.sueldo_base || 0,
+          afae: d.afae || 0,
+          afaa: d.afaa || 0,
+          total: d.total || 0
+        }))
+      };
+
+      // Transformar Vivienda (siempre, incluso con 0 registros)
+      historicoData.vivienda = {
+        header: {
+          clave_organica_0: org0,
+          clave_organica_1: org1,
+          quincena,
+          anio,
+          usuario_id: userId?.toString() || '',
+          total_empleados: viviendaData?.resumen?.total_empleados || 0,
+          total_contribucion: viviendaData?.resumen?.total_contribucion || 0,
+          total_sueldo_base: viviendaData?.resumen?.total_sueldo_base || 0
+        },
+        detalle: (viviendaData?.datos || []).map(d => ({
+          clave_organica_0: org0,
+          clave_organica_1: org1,
+          quincena,
+          anio,
+          interno: d.interno || 0,
+          nombre: (d.nombre || '').substring(0, 200),
+          sueldo: d.sueldo || 0,
+          quinquenios: d.quinquenios || 0,
+          otras_prestaciones: d.otras_prestaciones ?? null,
+          sueldo_base: d.sueldo_base || 0,
+          afe: d.afe || 0,
+          total: d.total || 0
+        }))
+      };
+
+      // Transformar Prestaciones (siempre, incluso con 0 registros)
+      historicoData.prestaciones = {
+        header: {
+          clave_organica_0: org0,
+          clave_organica_1: org1,
+          quincena,
+          anio,
+          usuario_id: userId?.toString() || '',
+          total_empleados: prestacionesData?.resumen?.total_empleados || 0,
+          total_contribucion: prestacionesData?.resumen?.total_contribucion || 0,
+          total_sueldo_base: prestacionesData?.resumen?.total_sueldo_base || 0
+        },
+        detalle: (prestacionesData?.datos || []).map(d => ({
+          clave_organica_0: org0,
+          clave_organica_1: org1,
+          quincena,
+          anio,
+          interno: d.interno || 0,
+          nombre: (d.nombre || '').substring(0, 200),
+          sueldo: d.sueldo || 0,
+          quinquenios: d.quinquenios || 0,
+          otras_prestaciones: d.otras_prestaciones ?? null,
+          sueldo_base: d.sueldo_base || 0,
+          afpe: d.afpe || 0,
+          afpa: d.afpa || 0,
+          total: d.total || 0
+        }))
+      };
+
+      // Transformar Cair (siempre, incluso con 0 registros)
+      historicoData.cair = {
+        header: {
+          clave_organica_0: org0,
+          clave_organica_1: org1,
+          quincena,
+          anio,
+          usuario_id: userId?.toString() || '',
+          total_empleados: cairData?.resumen?.total_empleados || 0,
+          total_contribucion: cairData?.resumen?.total_contribucion || 0,
+          total_sueldo_base: cairData?.resumen?.total_sueldo_base || 0
+        },
+        detalle: (cairData?.datos || []).map(d => ({
+          clave_organica_0: org0,
+          clave_organica_1: org1,
+          quincena,
+          anio,
+          interno: d.interno || 0,
+          nombre: (d.nombre || '').substring(0, 200),
+          sueldo: d.sueldo || 0,
+          quinquenios: d.quinquenios || 0,
+          otras_prestaciones: d.otras_prestaciones ?? null,
+          sueldo_base: d.sueldo_base || 0,
+          afe: d.afe || 0,
+          total: d.total || 0
+        }))
+      };
+
+      // Transformar Transitorio (siempre, incluso con 0 registros)
+      historicoData.transitorio = {
+        header: {
+          clave_organica_0: org0,
+          clave_organica_1: org1,
+          quincena,
+          anio,
+          usuario_id: userId?.toString() || '',
+          total_empleados: transitorioData?.registros?.length || 0,
+          total_contribucion: transitorioData?.registros?.reduce((sum, r) => sum + (r.total || 0), 0) || 0,
+          total_sueldo_base: transitorioData?.registros?.reduce((sum, r) => sum + (r.sdo || 0), 0) || 0
+        },
+        detalle: (transitorioData?.registros || []).map(d => ({
+          clave_organica_0: org0,
+          clave_organica_1: org1,
+          quincena,
+          anio,
+          fpension: d.fpension || 0,
+          interno: d.interno || 0,
+          nombres: d.nombres || '',
+          nonombre: d.nonombre || null,
+          rfc: d.rfc || '',
+          norfc: d.norfc || null,
+          org0: (d.org0 || org0).padStart(2, '0').substring(0, 2),
+          org1: (d.org1 || org1).padStart(2, '0').substring(0, 2),
+          org2: (d.org2 || '00').padStart(2, '0').substring(0, 2),
+          org3: (d.org3 || '00').padStart(2, '0').substring(0, 2),
+          sueldo: d.sueldo ?? null,
+          oprestaciones: d.oprestaciones ?? null,
+          quinquenios: d.quinquenios ?? null,
+          sdo: d.sdo ?? 0,
+          oprest: d.oprest ?? null,
+          quinq: d.quinq ?? null,
+          tpension: d.tpension ?? null,
+          transitorio: d.transitorio ?? 0,
+          norg0: d.norg0 || null,
+          norg1: d.norg1 || null,
+          norg2: d.norg2 || null,
+          norg3: d.norg3 || null,
+          cconcepto: d.cconcepto || '',
+          descripcion: d.descripcion || '',
+          importe: d.importe || 0,
+          defuncion: d.defuncion ? new Date(d.defuncion).toISOString().split('T')[0] : null,
+          pcp: d.pcp ?? null,
+          palimenticia: d.palimenticia ?? null,
+          retroactivo: d.retroactivo ?? null,
+          payudaecon: d.payudaecon ?? null,
+          otrosp1: d.otrosp1 ?? null,
+          otrosp2: d.otrosp2 ?? null,
+          otrosp3: d.otrosp3 ?? null,
+          otrosp4: d.otrosp4 ?? null,
+          otrosp5: d.otrosp5 ?? null,
+          terreno: d.terreno ?? null,
+          hipviv: d.hipviv ?? null,
+          prodental: d.prodental ?? null,
+          otrod1: d.otrod1 ?? null,
+          otrod2: d.otrod2 ?? null,
+          otrod3: d.otrod3 ?? null,
+          otrod4: d.otrod4 ?? null,
+          otrod5: d.otrod5 ?? null,
+          otrod6: d.otrod6 ?? null,
+          tpercep: d.tpercep ?? 0,
+          tdeduc: d.tdeduc ?? 0,
+          total: d.total ?? 0,
+          inicio: d.inicio ? new Date(d.inicio).toISOString().split('T')[0] : '1900-01-01',
+          fin: d.fin ? new Date(d.fin).toISOString().split('T')[0] : '1900-01-01',
+          anio_detalle: d.anio || null,
+          sihay: d.sihay || null,
+          porcentaje: d.porcentaje ?? null,
+          sdoporc: d.sdoporc ?? null,
+          ayudporc: d.ayudporc ?? null,
+          quinqporc: d.quinqporc ?? null,
+          transorg0: d.transorg0 || org0,
+          transorg1: d.transorg1 || org1,
+          transnorg0: d.transnorg0 || null,
+          transnorg1: d.transnorg1 || null
+        }))
+      };
+
+      // Transformar Guarderias (siempre, incluso con 0 registros)
+      historicoData.guarderias = {
+        header: {
+          clave_organica_0: org0,
+          clave_organica_1: org1,
+          quincena,
+          anio,
+          usuario_id: userId?.toString() || '',
+          total_empleados: guarderiasData?.aportaciones?.length || 0,
+          total_contribucion: guarderiasData?.aportaciones?.reduce((sum, a) => sum + (a.recibo_total || 0), 0) || 0,
+          total_sueldo_base: 0 // Guarderías no tiene sueldo_base
+        },
+        detalle: (guarderiasData?.aportaciones || []).map(d => ({
+          clave_organica_0: org0,
+          clave_organica_1: org1,
+          quincena,
+          anio,
+          titular_nombre: d.titular_nombre || '',
+          titular_no_empleado: d.titular_no_empleado || '',
+          titular_monto: d.titular_monto ?? 0,
+          titular_rfc: d.titular_rfc || '',
+          titular_monto_texto: d.titular_monto_texto ?? null,
+          titular_org0: d.titular_org0 ?? null,
+          titular_org0_nombre: d.titular_org0_nombre ?? null,
+          titular_org1: d.titular_org1 ?? null,
+          titular_org1_nombre: d.titular_org1_nombre ?? null,
+          titular_org2: d.titular_org2 ?? null,
+          titular_org2_nombre: d.titular_org2_nombre ?? null,
+          titular_org3: d.titular_org3 ?? null,
+          titular_org3_nombre: d.titular_org3_nombre ?? null,
+          entidad_monto: d.entidad_monto ?? null,
+          recibo_ajuste: d.recibo_ajuste ?? null,
+          recibo_total: d.recibo_total ?? 0,
+          recibo_mes_ano: d.recibo_mes_ano || '',
+          recibo_fecha_venc: d.recibo_fecha_venc ? new Date(d.recibo_fecha_venc).toISOString().split('T')[0] : '1900-01-01',
+          recibo_folio: d.recibo_folio || '',
+          menor_id: d.menor_id ?? 0,
+          menor_nombre: d.menor_nombre || '',
+          menor_rfc: d.menor_rfc ?? null,
+          menor_nivel: d.menor_nivel || '',
+          menor_sala: d.menor_sala || '',
+          estatus: d.estatus || ''
+        }))
+      };
+
+      // Transformar Aguinaldo (siempre, incluso con 0 registros)
+      historicoData.aguinaldo = {
+        header: {
+          clave_organica_0: org0,
+          clave_organica_1: org1,
+          quincena,
+          anio,
+          usuario_id: userId?.toString() || '',
+          total_empleados: aguinaldoData?.aguinaldos?.length || 0,
+          total_contribucion: aguinaldoData?.aguinaldos?.reduce((sum, a) => sum + (a.general || 0), 0) || 0,
+          total_sueldo_base: aguinaldoData?.aguinaldos?.reduce((sum, a) => sum + (a.sdo || 0), 0) || 0
+        },
+        detalle: (aguinaldoData?.aguinaldos || []).map(d => ({
+          clave_organica_0: org0,
+          clave_organica_1: org1,
+          quincena,
+          anio,
+          interno: d.interno ?? 0,
+          movimiento: d.movimiento ?? null,
+          noempleado: d.noempleado || '',
+          tipomovimiento: d.tipomovimiento ?? null,
+          nombres: d.nombres || '',
+          rfc: d.rfc || '',
+          curp: d.curp || '',
+          fecha: d.fecha ? new Date(d.fecha).toISOString().split('T')[0] : '1900-01-01',
+          dias_aguinaldo: d.dias_aguinaldo ?? null,
+          cuantos: d.cuantos ?? null,
+          cuantos_ori: d.cuantos_ori ?? null,
+          nocontar: d.nocontar ?? null,
+          sdo: d.sdo ?? 0,
+          op: d.op ?? null,
+          q: d.q ?? null,
+          activo: d.activo ?? null,
+          nom_activo: d.nom_activo ?? null,
+          qna_a: d.qna_a ?? null,
+          porcentaje_a: d.porcentaje_a ?? null,
+          diario: d.diario ?? null,
+          general: d.general ?? 0,
+          porcentaje: d.porcentaje ?? null,
+          proporcion: d.proporcion ?? 0,
+          mensaje: d.mensaje ?? null,
+          dias_gral_agui: d.dias_gral_agui ?? null,
+          fecha_lf: d.fecha_lf ? new Date(d.fecha_lf).toISOString().split('T')[0] : null,
+          fecha_li: d.fecha_li ? new Date(d.fecha_li).toISOString().split('T')[0] : null,
+          f_inicio: d.f_inicio ? new Date(d.f_inicio).toISOString().split('T')[0] : null,
+          f_fin: d.f_fin ? new Date(d.f_fin).toISOString().split('T')[0] : null,
+          org0: (d.org0 || org0).padStart(2, '0').substring(0, 2),
+          org1: (d.org1 || org1).padStart(2, '0').substring(0, 2),
+          org2: (d.org2 || '00').padStart(2, '0').substring(0, 2),
+          org3: (d.org3 || '00').padStart(2, '0').substring(0, 2),
+          norg0: d.norg0 || '',
+          norg1: d.norg1 || '',
+          norg2: d.norg2 || '',
+          norg3: d.norg3 || ''
+        }))
+      };
+
+      // Validar con schema
+      const parsed = GuardarHistoricoAportacionesSchema.safeParse(historicoData);
+      if (!parsed.success) {
+        return reply.code(400).send({
+          ok: false,
+          error: {
+            code: 'VALIDATION_ERROR',
+            message: 'Datos transformados inválidos',
+            details: parsed.error.issues,
+            timestamp: new Date().toISOString()
+          }
+        });
+      }
+
+      // Llamar al repository para guardar
+      const repository = request.diScope.resolve<AplicacionQuincenalRepository>('aplicacionQuincenalRepo');
+      const result = await repository.guardarHistoricoAportaciones(request, parsed.data);
+
+      return reply.code(200).send({
+        ok: true,
+        data: result
+      });
+    } catch (error) {
+      return handleAplicacionQuincenalError(error, reply);
+    }
+  });
+
+  // POST /aplicacion-quincenal/guardar-historico-retenciones-desde-bd
+  app.post('/aplicacion-quincenal/guardar-historico-retenciones-desde-bd', {
+    preHandler: [requireAuth],
+    schema: {
+      description: '[SQL SERVER] Obtiene los datos de retenciones (préstamos) directamente de la base de datos y los guarda en el histórico. Los usuarios entidad (isEntidad=true) usan las claves orgánicas del token. Los usuarios no entidad deben proporcionar claves orgánicas en query params.',
+      summary: 'Guardar Histórico de Retenciones desde BD',
+      tags: ['aplicacion-quincenal', 'sql-server'],
+      security: [{ bearerAuth: [] }],
+      querystring: {
+        type: 'object',
+        properties: {
+          clave_organica_0: {
+            type: 'string',
+            description: 'Clave orgánica 0 (requerido para usuarios no entidad, ignorado para usuarios entidad)',
+            minLength: 1,
+            maxLength: 2
+          },
+          clave_organica_1: {
+            type: 'string',
+            description: 'Clave orgánica 1 (requerido para usuarios no entidad, ignorado para usuarios entidad)',
+            minLength: 1,
+            maxLength: 2
+          }
+        }
+      },
+      response: {
+        200: {
+          description: 'Histórico guardado exitosamente',
+          type: 'object',
+          properties: {
+            ok: { type: 'boolean' },
+            data: {
+              type: 'object',
+              properties: {
+                procesados: { type: 'array', items: { type: 'string' } },
+                totalRegistros: { type: 'object' }
+              }
+            }
+          }
+        },
+        400: { type: 'object' },
+        401: { type: 'object' },
+        500: { type: 'object' }
+      }
+    }
+  }, async (request, reply) => {
+    try {
+      const user = (request as any).user;
+      const userId = user?.sub;
+      const entidades = (user as any).entidades || [false];
+      const isEntidad = entidades[0] === true;
+
+      // Validar y determinar las claves orgánicas a usar
+      let org0: string | null = null;
+      let org1: string | null = null;
+
+      if (isEntidad) {
+        // Usuario entidad: usar claves del token
+        const idOrg0 = user?.idOrganica0;
+        const idOrg1 = user?.idOrganica1;
+
+        org0 = idOrg0 ? (typeof idOrg0 === 'string' ? idOrg0.padStart(2, '0') : idOrg0.toString().padStart(2, '0')) : null;
+        org1 = idOrg1 ? (typeof idOrg1 === 'string' ? idOrg1.padStart(2, '0') : idOrg1.toString().padStart(2, '0')) : null;
+
+        if (!org0 || !org1) {
+          return reply.code(400).send({
+            ok: false,
+            error: {
+              code: 'MISSING_ORGANICA_KEYS',
+              message: 'Las claves orgánicas (org0 y org1) son requeridas en el token del usuario.',
+              timestamp: new Date().toISOString()
+            }
+          });
+        }
+      } else {
+        // Usuario no entidad: debe proporcionar org0 y org1 en query params
+        const query = request.query as any;
+        if (!query?.clave_organica_0 || !query?.clave_organica_1) {
+          return reply.code(400).send({
+            ok: false,
+            error: {
+              code: 'VALIDATION_ERROR',
+              message: 'clave_organica_0 y clave_organica_1 son requeridos para usuarios no entidad',
+              timestamp: new Date().toISOString()
+            }
+          });
+        }
+
+        org0 = query.clave_organica_0.padStart(2, '0');
+        org1 = query.clave_organica_1.padStart(2, '0');
+      }
+
+      // Asegurar que org0 y org1 no sean null en este punto
+      if (!org0 || !org1) {
+        return reply.code(400).send({
+          ok: false,
+          error: {
+            code: 'MISSING_ORGANICA_KEYS',
+            message: 'Las claves orgánicas (org0 y org1) son requeridas.',
+            timestamp: new Date().toISOString()
+          }
+        });
+      }
+
+      // Obtener período (quincena y año)
+      const aportacionFondoRepo = request.diScope.resolve<IAportacionFondoRepository>('aportacionFondoRepo');
+      const periodoInfo = await aportacionFondoRepo.obtenerQuincenaYAnio(org0, org1);
+      const quincena = periodoInfo.quincena;
+      const anio = periodoInfo.anio;
+
+      // Obtener datos de todos los tipos de préstamos en paralelo
+      const getPrestamosQuery = request.diScope.resolve<GetPrestamosQuery>('getPrestamosQuery');
+      const getPrestamosMedianoPlazoQuery = request.diScope.resolve<GetPrestamosMedianoPlazoQuery>('getPrestamosMedianoPlazoQuery');
+      const getPrestamosHipotecariosQuery = request.diScope.resolve<GetPrestamosHipotecariosQuery>('getPrestamosHipotecariosQuery');
+
+      const userClave0 = (user as any).idOrganica0 || '';
+      const userClave1 = (user as any).idOrganica1 || '';
+
+      const [
+        prestamosCortoPlazoData,
+        prestamosMedianoPlazoData,
+        prestamosHipotecariosData
+      ] = await Promise.all([
+        getPrestamosQuery.execute(userClave0, userClave1, isEntidad, org0, org1, userId?.toString()).catch(() => null),
+        getPrestamosMedianoPlazoQuery.execute(userClave0, userClave1, isEntidad, org0, org1, userId?.toString()).catch(() => null),
+        getPrestamosHipotecariosQuery.execute(userClave0, userClave1, isEntidad, false, org0, org1, userId?.toString()).catch(() => null)
+      ]);
+
+      // Transformar datos al formato esperado
+      // Siempre crear todos los tipos, incluso si tienen 0 registros
+      const historicoData: GuardarHistoricoRetenciones = {};
+
+      // Transformar PrestamosCortoPlazo (siempre, incluso con 0 registros)
+      historicoData.prestamosCortoPlazo = {
+        header: {
+          clave_organica_0: org0,
+          clave_organica_1: org1,
+          quincena,
+          anio,
+          usuario_id: userId?.toString() || 'system',
+          total_empleados: prestamosCortoPlazoData?.prestamos?.length || 0,
+          total_contribucion: prestamosCortoPlazoData?.prestamos?.reduce((sum, p) => sum + (p.total || 0), 0) || 0,
+          total_sueldo_base: 0 // Los préstamos no tienen sueldo_base
+        },
+        detalle: (prestamosCortoPlazoData?.prestamos || []).map(d => ({
+          clave_organica_0: org0,
+          clave_organica_1: org1,
+          quincena,
+          anio,
+          interno: Number.isInteger(d.interno) ? d.interno : 0,
+          rfc: (d.rfc && typeof d.rfc === 'string' && d.rfc.trim()) || 'N/A',
+          nombre: ((d.nombre && typeof d.nombre === 'string' && d.nombre.trim()) || 'N/A').substring(0, 200),
+          prestamo: Number.isInteger(d.prestamo) ? d.prestamo : 0,
+          letra: Number.isInteger(d.letra) ? d.letra : 0,
+          plazo: Number.isInteger(d.plazo) ? d.plazo : 0,
+          periodo_c: (d.periodo_c && typeof d.periodo_c === 'string' && d.periodo_c.trim()) || 'N/A',
+          fecha_c: d.fecha_c ? new Date(d.fecha_c).toISOString().split('T')[0] : '1900-01-01',
+          capital: typeof d.capital === 'number' && !isNaN(d.capital) ? d.capital : 0,
+          interes: typeof d.interes === 'number' && !isNaN(d.interes) ? d.interes : 0,
+          monto: typeof d.monto === 'number' && !isNaN(d.monto) ? d.monto : 0,
+          moratorios: typeof d.moratorios === 'number' && !isNaN(d.moratorios) ? d.moratorios : 0,
+          total: typeof d.total === 'number' && !isNaN(d.total) ? d.total : 0,
+          resultado: (d.resultado && typeof d.resultado === 'string' && d.resultado.trim()) || 'N/A',
+          td: (d.td && typeof d.td === 'string' && d.td.trim()) || 'N/A',
+          org0: ((d.org0 && typeof d.org0 === 'string' && d.org0.trim()) || org0).padStart(2, '0').substring(0, 2),
+          org1: ((d.org1 && typeof d.org1 === 'string' && d.org1.trim()) || org1).padStart(2, '0').substring(0, 2),
+          org2: ((d.org2 && typeof d.org2 === 'string' && d.org2.trim()) || '00').padStart(2, '0').substring(0, 2),
+          org3: ((d.org3 && typeof d.org3 === 'string' && d.org3.trim()) || '00').padStart(2, '0').substring(0, 2),
+          norg0: (d.norg0 && typeof d.norg0 === 'string' && d.norg0.trim()) || 'N/A',
+          norg1: (d.norg1 && typeof d.norg1 === 'string' && d.norg1.trim()) || 'N/A',
+          norg2: (d.norg2 && typeof d.norg2 === 'string' && d.norg2.trim()) || 'N/A',
+          norg3: (d.norg3 && typeof d.norg3 === 'string' && d.norg3.trim()) || 'N/A'
+        }))
+      };
+
+      // Transformar PrestamosMedianoPlazo (siempre, incluso con 0 registros)
+      historicoData.prestamosMedianoPlazo = {
+        header: {
+          clave_organica_0: org0,
+          clave_organica_1: org1,
+          quincena,
+          anio,
+          usuario_id: userId?.toString() || 'system',
+          total_empleados: prestamosMedianoPlazoData?.prestamos?.length || 0,
+          total_contribucion: prestamosMedianoPlazoData?.prestamos?.reduce((sum, p) => sum + (p.total || 0), 0) || 0,
+          total_sueldo_base: 0 // Los préstamos no tienen sueldo_base
+        },
+        detalle: (prestamosMedianoPlazoData?.prestamos || []).map(d => ({
+          clave_organica_0: org0,
+          clave_organica_1: org1,
+          quincena,
+          anio,
+          interno: Number.isInteger(d.interno) ? d.interno : 0,
+          rfc: (d.rfc && typeof d.rfc === 'string' && d.rfc.trim()) || 'N/A',
+          nombre: ((d.nombre && typeof d.nombre === 'string' && d.nombre.trim()) || 'N/A').substring(0, 200),
+          prestamo: Number.isInteger(d.prestamo) ? d.prestamo : 0,
+          letra: Number.isInteger(d.letra) ? d.letra : 0,
+          plazo: Number.isInteger(d.plazo) ? d.plazo : 0,
+          periodo_c: (d.periodo_c && typeof d.periodo_c === 'string' && d.periodo_c.trim()) || 'N/A',
+          fecha_c: d.fecha_c ? new Date(d.fecha_c).toISOString().split('T')[0] : '1900-01-01',
+          capital: typeof d.capital === 'number' && !isNaN(d.capital) ? d.capital : 0,
+          moratorios: typeof d.moratorios === 'number' && !isNaN(d.moratorios) ? d.moratorios : 0,
+          interes: typeof d.interes === 'number' && !isNaN(d.interes) ? d.interes : 0,
+          seguro: typeof d.seguro === 'number' && !isNaN(d.seguro) ? d.seguro : 0,
+          total: typeof d.total === 'number' && !isNaN(d.total) ? d.total : 0,
+          resultado: (d.resultado && typeof d.resultado === 'string' && d.resultado.trim()) || 'N/A',
+          clase: (d.clase && typeof d.clase === 'string' && d.clase.trim()) || 'N/A',
+          desc_clase: (d.desc_clase && typeof d.desc_clase === 'string' && d.desc_clase.trim()) || 'N/A',
+          desc_prestamo: (d.desc_prestamo && typeof d.desc_prestamo === 'string' && d.desc_prestamo.trim()) || 'N/A',
+          clave_p: (d.clave_p && typeof d.clave_p === 'string' && d.clave_p.trim()) || 'N/A',
+          noemple: (d.noemple && typeof d.noemple === 'string' && d.noemple.trim()) || 'N/A',
+          folio: Number.isInteger(d.folio) ? d.folio : 0,
+          anio_prestamo: Number.isInteger(d.anio) ? d.anio : 0,
+          po: (d.po && typeof d.po === 'string' && d.po.trim()) || 'N/A',
+          fecha_origen: d.fecha_origen ? new Date(d.fecha_origen).toISOString().split('T')[0] : '1900-01-01',
+          org0: ((d.org0 && typeof d.org0 === 'string' && d.org0.trim()) || org0).padStart(2, '0').substring(0, 2),
+          org1: ((d.org1 && typeof d.org1 === 'string' && d.org1.trim()) || org1).padStart(2, '0').substring(0, 2),
+          org2: ((d.org2 && typeof d.org2 === 'string' && d.org2.trim()) || '00').padStart(2, '0').substring(0, 2),
+          org3: ((d.org3 && typeof d.org3 === 'string' && d.org3.trim()) || '00').padStart(2, '0').substring(0, 2),
+          norg0: (d.norg0 && typeof d.norg0 === 'string' && d.norg0.trim()) || 'N/A',
+          norg1: (d.norg1 && typeof d.norg1 === 'string' && d.norg1.trim()) || 'N/A',
+          norg2: (d.norg2 && typeof d.norg2 === 'string' && d.norg2.trim()) || 'N/A',
+          norg3: (d.norg3 && typeof d.norg3 === 'string' && d.norg3.trim()) || 'N/A'
+        }))
+      };
+
+      // Transformar PrestamosHipotecarios (siempre, incluso con 0 registros)
+      historicoData.prestamosHipotecarios = {
+        header: {
+          clave_organica_0: org0,
+          clave_organica_1: org1,
+          quincena,
+          anio,
+          usuario_id: userId?.toString() || 'system',
+          total_empleados: prestamosHipotecariosData?.prestamos?.length || 0,
+          total_contribucion: prestamosHipotecariosData?.prestamos?.reduce((sum, p) => sum + ((p.capital_pagar || 0) + (p.interes_pagar || 0) + (p.interes_diferido_pagar || 0) + (p.seguro_pagar || 0) + (p.moratorio_pagar || 0)), 0) || 0,
+          total_sueldo_base: 0 // Los préstamos no tienen sueldo_base
+        },
+        detalle: (prestamosHipotecariosData?.prestamos || []).map(d => ({
+          clave_organica_0: org0,
+          clave_organica_1: org1,
+          quincena,
+          anio,
+          computadora_antigua: prestamosHipotecariosData?.computadora_antigua ? 1 : 0,
+          interno: Number.isInteger(d.interno) ? d.interno : 0,
+          nombre: ((d.nombre && typeof d.nombre === 'string' && d.nombre.trim()) || 'N/A').substring(0, 200),
+          noempleado: (d.noempleado && typeof d.noempleado === 'string' && d.noempleado.trim()) || 'N/A',
+          rfc: (d.rfc && typeof d.rfc === 'string' && d.rfc.trim()) || 'N/A',
+          cantidad: typeof d.cantidad === 'number' && !isNaN(d.cantidad) ? d.cantidad : 0,
+          status: (d.status && typeof d.status === 'string' && d.status.trim()) || 'N/A',
+          referencia_1: (d.referencia_1 && typeof d.referencia_1 === 'string' && d.referencia_1.trim()) || 'N/A',
+          referencia_2: (d.referencia_2 && typeof d.referencia_2 === 'string' && d.referencia_2.trim()) || 'N/A',
+          pno_solicitud: Number.isInteger(d.pno_solicitud) ? d.pno_solicitud : 0,
+          pano: Number.isInteger(d.pano) ? d.pano : 0,
+          pclave_clase_prestamo: (d.pclave_clase_prestamo && typeof d.pclave_clase_prestamo === 'string' && d.pclave_clase_prestamo.trim()) || 'N/A',
+          pdescripcion: (d.pdescripcion && typeof d.pdescripcion === 'string' && d.pdescripcion.trim()) || 'N/A',
+          pclave_prestamo: (d.pclave_prestamo && typeof d.pclave_prestamo === 'string' && d.pclave_prestamo.trim()) || 'N/A',
+          prestamo_desc: (d.prestamo_desc && typeof d.prestamo_desc === 'string' && d.prestamo_desc.trim()) || 'N/A',
+          tipo: (d.tipo && typeof d.tipo === 'string' && d.tipo.trim()) || 'N/A',
+          periodo_c: (d.periodo_c && typeof d.periodo_c === 'string' && d.periodo_c.trim()) || 'N/A',
+          descto: typeof d.descto === 'number' && !isNaN(d.descto) ? d.descto : 0,
+          fecha_c: d.fecha_c ? new Date(d.fecha_c).toISOString().split('T')[0] : '1900-01-01',
+          resultado: (d.resultado && typeof d.resultado === 'string' && d.resultado.trim()) || 'N/A',
+          po: (d.po && typeof d.po === 'string' && d.po.trim()) || 'N/A',
+          fecha_origen: d.fecha_origen ? new Date(d.fecha_origen).toISOString().split('T')[0] : '1900-01-01',
+          plazo: Number.isInteger(d.plazo) ? d.plazo : 0,
+          capital_pagar: typeof d.capital_pagar === 'number' && !isNaN(d.capital_pagar) ? d.capital_pagar : 0,
+          interes_pagar: typeof d.interes_pagar === 'number' && !isNaN(d.interes_pagar) ? d.interes_pagar : 0,
+          interes_diferido_pagar: typeof d.interes_diferido_pagar === 'number' && !isNaN(d.interes_diferido_pagar) ? d.interes_diferido_pagar : 0,
+          seguro_pagar: typeof d.seguro_pagar === 'number' && !isNaN(d.seguro_pagar) ? d.seguro_pagar : 0,
+          moratorio_pagar: typeof d.moratorio_pagar === 'number' && !isNaN(d.moratorio_pagar) ? d.moratorio_pagar : 0,
+          org0: ((d.org0 && typeof d.org0 === 'string' && d.org0.trim()) || org0).padStart(2, '0').substring(0, 2),
+          org1: ((d.org1 && typeof d.org1 === 'string' && d.org1.trim()) || org1).padStart(2, '0').substring(0, 2),
+          org2: ((d.org2 && typeof d.org2 === 'string' && d.org2.trim()) || '00').padStart(2, '0').substring(0, 2),
+          org3: ((d.org3 && typeof d.org3 === 'string' && d.org3.trim()) || '00').padStart(2, '0').substring(0, 2),
+          norg0: (d.norg0 && typeof d.norg0 === 'string' && d.norg0.trim()) || 'N/A',
+          norg1: (d.norg1 && typeof d.norg1 === 'string' && d.norg1.trim()) || 'N/A',
+          norg2: (d.norg2 && typeof d.norg2 === 'string' && d.norg2.trim()) || 'N/A',
+          norg3: (d.norg3 && typeof d.norg3 === 'string' && d.norg3.trim()) || 'N/A'
+        }))
+      };
+
+      // Validar con schema
+      console.log('[GUARDAR_HISTORICO_RETENCIONES_DESDE_BD] Datos antes de validar:', {
+        historicoDataKeys: Object.keys(historicoData),
+        prestamosCortoPlazo: {
+          hasHeader: !!historicoData.prestamosCortoPlazo?.header,
+          detalleCount: historicoData.prestamosCortoPlazo?.detalle?.length || 0,
+          firstItem: historicoData.prestamosCortoPlazo?.detalle?.[0]
+        },
+        prestamosMedianoPlazo: {
+          hasHeader: !!historicoData.prestamosMedianoPlazo?.header,
+          detalleCount: historicoData.prestamosMedianoPlazo?.detalle?.length || 0,
+          firstItem: historicoData.prestamosMedianoPlazo?.detalle?.[0]
+        },
+        prestamosHipotecarios: {
+          hasHeader: !!historicoData.prestamosHipotecarios?.header,
+          detalleCount: historicoData.prestamosHipotecarios?.detalle?.length || 0,
+          firstItem: historicoData.prestamosHipotecarios?.detalle?.[0]
+        }
+      });
+      
+      const parsed = GuardarHistoricoRetencionesSchema.safeParse(historicoData);
+      if (!parsed.success) {
+        console.error('[GUARDAR_HISTORICO_RETENCIONES_DESDE_BD] Error de validación:', {
+          issues: JSON.stringify(parsed.error.issues, null, 2),
+          issuesCount: parsed.error.issues.length,
+          historicoDataKeys: Object.keys(historicoData),
+          prestamosCortoPlazoCount: historicoData.prestamosCortoPlazo?.detalle?.length || 0,
+          prestamosMedianoPlazoCount: historicoData.prestamosMedianoPlazo?.detalle?.length || 0,
+          prestamosHipotecariosCount: historicoData.prestamosHipotecarios?.detalle?.length || 0
+        });
+        return reply.code(400).send({
+          ok: false,
+          error: {
+            code: 'VALIDATION_ERROR',
+            message: 'Datos transformados inválidos',
+            details: parsed.error.issues,
+            timestamp: new Date().toISOString()
+          }
+        });
+      }
+
+      // Llamar al repository para guardar
       const repository = request.diScope.resolve<AplicacionQuincenalRepository>('aplicacionQuincenalRepo');
       const result = await repository.guardarHistoricoRetenciones(request, parsed.data);
 

@@ -94,7 +94,7 @@ export class AplicarBDIssspeaQNACommand {
         quincena = `${String(quincenaNumero).padStart(2, '0')}${String(anio).slice(-2)}`;
 
         const paso1Time = Date.now() - paso1Start;
-        ejecuciones.obtenerQuincena = { exito: true, duracionMs: paso1Time };
+        ejecuciones.obtenerQuincena = { exito: true, duracionMs: paso1Time, error: undefined };
         
         logger.info({
           ...logContext,
@@ -144,7 +144,7 @@ export class AplicarBDIssspeaQNACommand {
       try {
         await ejecutarAP_P_APLICAR(data.org0, data.org1, quincena, quincena, 'C');
         const paso2Time = Date.now() - paso2Start;
-        ejecuciones.aplicarC = { exito: true, duracionMs: paso2Time };
+        ejecuciones.aplicarC = { exito: true, duracionMs: paso2Time, error: undefined };
         
         logger.info({
           ...logContext,
@@ -193,7 +193,7 @@ export class AplicarBDIssspeaQNACommand {
       try {
         await ejecutarAP_P_APLICAR(data.org0, data.org1, quincena, quincena, 'F');
         const paso3Time = Date.now() - paso3Start;
-        ejecuciones.aplicarF = { exito: true, duracionMs: paso3Time };
+        ejecuciones.aplicarF = { exito: true, duracionMs: paso3Time, error: undefined };
         
         logger.info({
           ...logContext,
@@ -242,7 +242,7 @@ export class AplicarBDIssspeaQNACommand {
       try {
         await ejecutarAP_D_ENVIO_LAYOUT(quincena, data.org0, data.org1, '01', '01');
         const paso4Time = Date.now() - paso4Start;
-        ejecuciones.envioLayout = { exito: true, duracionMs: paso4Time };
+        ejecuciones.envioLayout = { exito: true, duracionMs: paso4Time, error: undefined };
         
         logger.info({
           ...logContext,

@@ -20,6 +20,15 @@ export interface AplicarBDIsspeaLoteResult {
     procesadosConError: number;
     organica: string;
   };
+  detallesMigracion?: Array<{
+    afiliadoId: number;
+    movimientoId: number;
+    tipoMovimientoId: number;
+    codigoMovimiento: string | null;
+    exito: boolean;
+    cveError: number;
+    nomError: string;
+  }>;
 }
 
 export interface IAfiliadoRepository {

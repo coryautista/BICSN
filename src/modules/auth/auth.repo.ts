@@ -1,4 +1,5 @@
 import { getPool, sql } from '../../db/mssql.js';
+import { normalizeClaveOrganica } from '../../utils/organica.js';
 
 export async function findUserByUsernameOrEmail(usernameOrEmail: string) {
   const p = await getPool();
