@@ -17,7 +17,7 @@ const POOL_SIZE = Number((config.firebird as any).poolSize || 5);
 const SERIALIZE_ALL = Boolean((config.firebird as any).serialize) || false;
 
 // Ajusta según tu caso real:
-const FIREBIRD_CHARSET = "WIN1252"; // <- clave para que ODBC decodifique bien
+const FIREBIRD_CHARSET = config.firebird.charset; // <- ajustado por config
 
 // Puedes usar DSN o DSN-less
 const USE_DSN = Boolean((config.firebird as any).dsn);
@@ -47,10 +47,10 @@ function buildConnectionString(): string {
     `Port=${port};` +
     `Uid=${config.firebird.user};` +
     `Pwd=${config.firebird.password};` +
-    // Diferentes builds del driver usan distinta clave para charset; incluimos varias.
     `Charset=${FIREBIRD_CHARSET};` +
     `CHARSET=${FIREBIRD_CHARSET};` +
-    `CharacterSet=${FIREBIRD_CHARSET};`
+    `CharacterSet=${FIREBIRD_CHARSET};` +
+    `LC_CTYPE=${FIREBIRD_CHARSET};`
   );
 }
 
@@ -168,7 +168,7 @@ function decodeValue(v: any): any {
       try {
         const s = iconv.decode(buf, enc);
         if (!s.includes("\uFFFD")) return s;
-      } catch {}
+      } catch { }
     }
     return iconv.decode(buf, "win1252");
   }
@@ -238,7 +238,7 @@ export async function executeInTransaction<T>(fn: (tx: odbc.Connection) => Promi
     } catch (e) {
       try {
         await cn.rollback();
-      } catch {}
+      } catch { }
       throw e;
     } finally {
       await cn.close();
@@ -303,7 +303,7 @@ export async function checkFirebirdCharset(): Promise<number> {
   } catch {
     // Si falla, intentar query alternativa
   }
-  
+
   try {
     // Fallback: intentar obtener desde RDB$DATABASE
     const rows = await executeSafeQuery('SELECT RDB$CHARACTER_SET_ID AS CHARSET_ID FROM RDB$DATABASE', []);
@@ -314,7 +314,7 @@ export async function checkFirebirdCharset(): Promise<number> {
   } catch {
     // Si ambas fallan, retornar 0
   }
-  
+
   return 0;
 }
 
