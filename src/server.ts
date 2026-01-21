@@ -83,8 +83,8 @@ async function buildApp() {
   await app.register(versioningPlugin);
 
   // Plugin para limpiar mojibake automáticamente de todas las respuestas
-  // const mojibakeCleanerPlugin = (await import('./plugins/mojibakeCleaner.js')).default;
-  // await app.register(mojibakeCleanerPlugin);
+  const mojibakeCleanerPlugin = (await import('./plugins/mojibakeCleaner.js')).default;
+  await app.register(mojibakeCleanerPlugin);
 
   // Register Awilix DI Container (MUST be before routes)
   await app.register(fastifyAwilixPlugin, {
