@@ -68,7 +68,7 @@ export async function validateInternoInFirebird(interno: number): Promise<boolea
           return;
         }
 
-        const exists = orgPersonalResult && orgPersonalResult.length > 0;
+        const exists = !!(orgPersonalResult && orgPersonalResult.length > 0);
         logger.info({ ...logContext, exists }, 'Validación de interno completada');
         resolve(exists);
       });

@@ -71,7 +71,7 @@ export class ValidateInternoInFirebirdQuery {
               return;
             }
 
-            const exists = orgPersonalResult && orgPersonalResult.length > 0;
+            const exists = !!(orgPersonalResult && orgPersonalResult.length > 0);
             logger.info({
               ...logContext,
               exists,

@@ -423,8 +423,8 @@ async function setupApplication(app: FastifyInstance) {
       
       return reply.send({
         ok: true,
-        charsetId: charsetId?.id ?? null,
-        charsetName: charsetId !== null ? charsetMap[charsetId.id] || charsetId.name || `Unknown (${charsetId.id})` : null,
+        charsetId: charsetId ?? null,
+        charsetName: charsetId !== null && charsetId !== undefined ? charsetMap[charsetId] || `Unknown (${charsetId})` : null,
         config: {
           configuredCharset: firebirdRuntimeInfo.charset,
           poolSize: firebirdRuntimeInfo.poolSize,

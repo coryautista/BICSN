@@ -17,6 +17,21 @@ export class OrgPersonalRepository implements IOrgPersonalRepository {
     return result === null ? undefined : result;
   }
 
+  async findByNombreApellidosFechaNac(
+    nombre: string,
+    apellidoPaterno: string,
+    apellidoMaterno: string | null,
+    fechaNacimiento: string
+  ): Promise<OrgPersonal | undefined> {
+    const result = await repo.getOrgPersonalByNombreApellidosFechaNac(
+      nombre,
+      apellidoPaterno,
+      apellidoMaterno,
+      fechaNacimiento
+    );
+    return result === null ? undefined : result;
+  }
+
   async create(data: CreateOrgPersonalData): Promise<OrgPersonal> {
     return await repo.createOrgPersonal(data);
   }

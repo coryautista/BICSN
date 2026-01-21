@@ -1349,14 +1349,26 @@ export class AplicacionQuincenalRepository implements IAplicacionQuincenalReposi
       }, 'Guardado de histórico de retenciones completado exitosamente');
 
       // Asegurar que totalRegistros tenga valores para todos los procesados
-      const finalTotalRegistros: Record<string, number> = {};
+      // Usar el mismo objeto totalRegistros directamente, asegurando que todos los procesados tengan un valor
       procesados.forEach(tipo => {
-        finalTotalRegistros[tipo] = totalRegistros[tipo] ?? 0;
+        if (totalRegistros[tipo] === undefined || totalRegistros[tipo] === null) {
+          totalRegistros[tipo] = 0;
+          logger.warn({ tipo, totalRegistros }, `totalRegistros[${tipo}] era undefined/null, asignando 0`);
+        }
       });
+
+      logger.info({
+        ...logContext,
+        procesados,
+        totalRegistros,
+        totalRegistrosKeys: Object.keys(totalRegistros),
+        totalRegistrosString: JSON.stringify(totalRegistros),
+        totalRegistrosEntries: Object.entries(totalRegistros)
+      }, 'Retornando resultado final con totalRegistros');
 
       return {
         procesados,
-        totalRegistros: finalTotalRegistros
+        totalRegistros: { ...totalRegistros } // Crear una copia para asegurar que se retorne correctamente
       };
     } catch (error: any) {
       const duration = Date.now() - startTime;

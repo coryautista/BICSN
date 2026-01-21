@@ -12,7 +12,14 @@ const logger = pino({
   level: process.env.LOG_LEVEL || 'info'
 });
 
-const TIPOS_VALIDOS = ['FERIADO', 'VACACIONES', 'EVENTO_ESPECIAL', 'DIA_NO_LABORABLE'];
+const TIPOS_VALIDOS = [
+  'ARCHIVO_APLICACION',
+  'ASUETO',
+  'ALTA_BAJA_CAMBIO',
+  'PAGO',
+  'HIPOTECARIO',
+  'INTERESES_MORATORIOS'
+];
 
 export class GetEventoCalendariosByDateRangeQuery {
   constructor(private eventoCalendarioRepo: IEventoCalendarioRepository) {}

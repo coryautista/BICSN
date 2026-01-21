@@ -1,4 +1,3 @@
-import { Database } from 'node-firebird';
 import { AfiliadoPersonal } from '../../domain/entities/AfiliadoPersonal.js';
 import { IAfiliadoPersonalRepository } from '../../domain/repositories/IAfiliadoPersonalRepository.js';
 import { executeSerializedQuery, decodeFirebirdObject } from '../../../../db/firebird.js';
@@ -13,7 +12,7 @@ const logger = pino({
  * Firebird implementation of AfiliadoPersonalRepository
  */
 export class AfiliadoPersonalRepository implements IAfiliadoPersonalRepository {
-  constructor(private firebirdDb: Database) {}
+  constructor() {}
 
   /**
    * Get employee roster by organic keys
@@ -44,9 +43,9 @@ export class AfiliadoPersonalRepository implements IAfiliadoPersonalRepository {
         p.CURP,
         p.RFC,
         p.NOEMPLEADO,
-        p.NOMBRE,
-        p.APELLIDO_PATERNO,
-        p.APELLIDO_MATERNO,
+        CAST(p.NOMBRE AS VARCHAR(200) CHARACTER SET WIN1252) AS NOMBRE,
+        CAST(p.APELLIDO_PATERNO AS VARCHAR(200) CHARACTER SET WIN1252) AS APELLIDO_PATERNO,
+        CAST(p.APELLIDO_MATERNO AS VARCHAR(200) CHARACTER SET WIN1252) AS APELLIDO_MATERNO,
         p.FECHA_NACIMIENTO,
         p.SEGURO_SOCIAL,
         p.CALLE_NUMERO,
@@ -314,6 +313,19 @@ export class AfiliadoPersonalRepository implements IAfiliadoPersonalRepository {
    * Map database row to AfiliadoPersonal entity
    */
   private mapRowToEntity(row: any): AfiliadoPersonal {
+    const toIsoString = (v: any): string | null => {
+      if (!v) return null;
+      if (v instanceof Date) return v.toISOString();
+      if (typeof v === 'string') return v;
+      // Algunos drivers devuelven objetos tipo Timestamp con valueOf/toString
+      try {
+        const s = String(v);
+        return s || null;
+      } catch {
+        return null;
+      }
+    };
+
     return {
       INTERNO: row.INTERNO,
       CURP: row.CURP,
@@ -322,7 +334,7 @@ export class AfiliadoPersonalRepository implements IAfiliadoPersonalRepository {
       NOMBRE: row.NOMBRE,
       APELLIDO_PATERNO: row.APELLIDO_PATERNO,
       APELLIDO_MATERNO: row.APELLIDO_MATERNO,
-      FECHA_NACIMIENTO: row.FECHA_NACIMIENTO ? row.FECHA_NACIMIENTO.toISOString() : null,
+      FECHA_NACIMIENTO: toIsoString(row.FECHA_NACIMIENTO),
       SEGURO_SOCIAL: row.SEGURO_SOCIAL,
       CALLE_NUMERO: row.CALLE_NUMERO,
       FRACCIONAMIENTO: row.FRACCIONAMIENTO,
@@ -337,13 +349,13 @@ export class AfiliadoPersonalRepository implements IAfiliadoPersonalRepository {
       DEPENDIENTES: row.DEPENDIENTES,
       POSEE_INMUEBLES: row.POSEE_INMUEBLES,
       FULLNAME: row.FULLNAME,
-      FECHA_CARTA: row.FECHA_CARTA ? row.FECHA_CARTA.toISOString() : null,
+      FECHA_CARTA: toIsoString(row.FECHA_CARTA),
       EMAIL: row.EMAIL,
       NACIONALIDAD: row.NACIONALIDAD,
-      FECHA_ALTA: row.FECHA_ALTA ? row.FECHA_ALTA.toISOString() : null,
+      FECHA_ALTA: toIsoString(row.FECHA_ALTA),
       CELULAR: row.CELULAR,
       EXPEDIENTE: row.EXPEDIENTE,
-      F_EXPEDIENTE: row.F_EXPEDIENTE ? row.F_EXPEDIENTE.toISOString() : null,
+      F_EXPEDIENTE: toIsoString(row.F_EXPEDIENTE),
       CLAVE_ORGANICA_0: row.CLAVE_ORGANICA_0,
       CLAVE_ORGANICA_1: row.CLAVE_ORGANICA_1,
       CLAVE_ORGANICA_2: row.CLAVE_ORGANICA_2,
@@ -352,7 +364,7 @@ export class AfiliadoPersonalRepository implements IAfiliadoPersonalRepository {
       OTRAS_PRESTACIONES: row.OTRAS_PRESTACIONES,
       QUINQUENIOS: row.QUINQUENIOS,
       ACTIVO: row.ACTIVO,
-      FECHA_MOV_ALT: row.FECHA_MOV_ALT ? row.FECHA_MOV_ALT.toISOString() : null,
+      FECHA_MOV_ALT: toIsoString(row.FECHA_MOV_ALT),
       ORGS1: row.ORGS1,
       ORGS2: row.ORGS2,
       ORGS3: row.ORGS3,

@@ -5,41 +5,24 @@ import { FastifyPluginCallback } from 'fastify';
  * Limpia mojibake '´┐¢' y caracteres de reemplazo (U+FFFD) de todos los strings en un objeto
  * Reemplaza cualquier carácter problemático entre letras por Ñ/ñ según el contexto
  */
-function cleanMojibake(data: any): any {
-  // Manejo de null y undefined
-  if (data === null || data === undefined) {
-    return data;
-  }
+function cleanMojibakeString(value: string): string {
+  // Usar puntos de código para que sea estable aunque el editor/terminal cambie encoding.
+  // ´  = U+00B4
+  // ┐  = U+2510
+  // ¢  = U+00A2
+  // ¤  = U+00A4
+  let v = value;
 
-  // Si es un array, retornar tal cual SIN procesar recursivamente
-  if (Array.isArray(data)) {
-    return data;
-  }
+  v = v.replace(/\u00B4\u2510\u00A2/g, 'Ñ'); // ´┐¢ -> Ñ (ej: MU´┐¢OZ -> MUÑOZ)
+  v = v.replace(/\u00B4\u2510\u00A4/g, 'ñ'); // ´┐¤ -> ñ
 
-  // Si es un string, aplicar limpieza de mojibake
-  if (typeof data === 'string') {
-    let value = data;
+  // Reemplazo genérico para caracteres problemáticos (U+FFFD o '?') entre letras
+  v = v.replace(/([A-Za-zÁÉÍÓÚÑáéíóúñ])([\uFFFD?])([A-Za-zÁÉÍÓÚÑáéíóúñ])/g, (_m, before, _problem, after) => {
+    const isUpper = /[A-ZÁÉÍÓÚÑ]/.test(before) && /[A-ZÁÉÍÓÚÑ]/.test(after);
+    return before + (isUpper ? 'Ñ' : 'ñ') + after;
+  });
 
-    // 1. Reemplazo directo de '´┐¢' por 'Ñ'
-    value = value.replace(/´┐¢/g, 'Ñ');
-
-    // 2. Reemplazo genérico para caracteres problemáticos (U+FFFD o '?') entre letras
-    value = value.replace(/([A-Za-z])([\uFFFD?])([A-Za-z])/g, (match, before, problem, after) => {
-      const isUpper = /[A-Z]/.test(before) && /[A-Z]/.test(after);
-      return before + (isUpper ? 'Ñ' : 'ñ') + after;
-    });
-
-    return value;
-  }
-
-  // Si es un objeto, retornar tal cual SIN procesar recursivamente
-  // Solo limpiar strings individuales cuando se accedan directamente
-  if (data && typeof data === 'object' && !(data instanceof Date) && !Buffer.isBuffer(data)) {
-    return data;
-  }
-
-  // Para números, booleanos, fechas, etc., retornar tal cual
-  return data;
+  return v;
 }
 
 /**
@@ -53,33 +36,21 @@ const mojibakeCleanerPlugin: FastifyPluginCallback = (fastify, _opts, done) => {
       return payload;
     }
 
-    // TEMPORAL: DESHABILITAR COMPLETAMENTE EL PLUGIN PARA DIAGNÓSTICO
-    // El plugin mojibakeCleaner está interfiriendo con la serialización JSON
-    // Retornar payload original sin procesamiento
+    const contentType = reply.getHeader('content-type')?.toString() ?? '';
+    const isJson = contentType.includes('application/json');
+    if (!isJson) return payload;
 
-    // Log más detallado para diagnóstico
-    if (request.url?.includes('/pcp')) {
-      // Mostrar payload como string para ver exactamente qué se envía
-      let payloadStr: string;
-      if (typeof payload === 'string') {
-        payloadStr = payload;
-      } else if (Buffer.isBuffer(payload)) {
-        payloadStr = payload.toString('utf8');
-      } else {
-        payloadStr = JSON.stringify(payload);
-      }
-
-      // Buscar apellidos con caracteres especiales
-      const apellidoMatch = payloadStr.match(/"APELLIDO_PATERNO":"[^"]*[^\x00-\x7F][^"]*"/g);
-      if (apellidoMatch) {
-        console.log('[MOJIBAKECLEANER] Apellidos en payload:', apellidoMatch.slice(0, 5));
-        // Mostrar char codes del primer apellido problemático
-        const firstMatch = apellidoMatch[0];
-        const codes = [...firstMatch].map(c => c.charCodeAt(0) > 127 ? `[0x${c.charCodeAt(0).toString(16)}]` : c).join('');
-        console.log('[MOJIBAKECLEANER] Char codes:', codes);
-      }
+    if (typeof payload === 'string') {
+      return cleanMojibakeString(payload);
     }
 
+    if (Buffer.isBuffer(payload)) {
+      const s = payload.toString('utf8');
+      const cleaned = cleanMojibakeString(s);
+      return Buffer.from(cleaned, 'utf8');
+    }
+
+    // Si Fastify nos entrega objeto, no lo tocamos para no interferir con serialización.
     return payload;
   });
 

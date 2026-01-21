@@ -100,7 +100,7 @@ export class CreateEventoCalendarioCommand {
       throw new InvalidEventoCalendarioDataError('tipo', 'Es requerido y debe ser una cadena');
     }
 
-    const validTipos = ['FERIADO', 'VACACIONES', 'EVENTO_ESPECIAL', 'DIA_NO_LABORABLE', 'ALTA_BAJA_CAMBIO'];
+    const validTipos = ['ARCHIVO_APLICACION', 'ASUETO', 'ALTA_BAJA_CAMBIO', 'PAGO', 'HIPOTECARIO', 'INTERESES_MORATORIOS'];
     if (!validTipos.includes(data.tipo)) {
       throw new InvalidEventoCalendarioTipoError(data.tipo);
     }

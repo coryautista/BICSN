@@ -84,7 +84,7 @@ export async function createEventoCalendario(fecha: string, tipo: string, anio: 
     throw new Error('EVENTO_CALENDARIO_MISSING_REQUIRED_FIELDS');
   }
 
-  const validTipos = ['ARCHIVO_APLICACION', 'ASUETO', 'ALTA_BAJA_CAMBIO', 'PAGO', 'HIPOTECARIO'];
+  const validTipos = ['ARCHIVO_APLICACION', 'ASUETO', 'ALTA_BAJA_CAMBIO', 'PAGO', 'HIPOTECARIO', 'INTERESES_MORATORIOS'];
   if (!validTipos.includes(tipo)) {
     throw new Error('EVENTO_CALENDARIO_INVALID_TIPO');
   }
@@ -166,7 +166,7 @@ export async function updateEventoCalendario(id: number, fecha?: string, tipo?: 
   }
 
   if (tipo) {
-    const validTipos = ['ARCHIVO_APLICACION', 'ASUETO', 'ALTA_BAJA_CAMBIO', 'PAGO', 'HIPOTECARIO'];
+    const validTipos = ['ARCHIVO_APLICACION', 'ASUETO', 'ALTA_BAJA_CAMBIO', 'PAGO', 'HIPOTECARIO', 'INTERESES_MORATORIOS'];
     if (!validTipos.includes(tipo)) {
       throw new Error('EVENTO_CALENDARIO_INVALID_TIPO');
     }
@@ -278,7 +278,7 @@ export async function findEventoCalendariosByDateRange(fechaInicio: string, fech
     .input('fechaFin', sql.Date, fechaFin);
 
   if (tipo) {
-    const validTipos = ['ARCHIVO_APLICACION', 'ASUETO', 'ALTA_BAJA_CAMBIO', 'PAGO', 'HIPOTECARIO'];
+    const validTipos = ['ARCHIVO_APLICACION', 'ASUETO', 'ALTA_BAJA_CAMBIO', 'PAGO', 'HIPOTECARIO', 'INTERESES_MORATORIOS'];
     if (!validTipos.includes(tipo)) {
       throw new Error('EVENTO_CALENDARIO_INVALID_TIPO');
     }

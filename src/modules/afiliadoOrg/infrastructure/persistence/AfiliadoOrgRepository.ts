@@ -14,7 +14,7 @@ export class AfiliadoOrgRepository implements IAfiliadoOrgRepository {
         interno, sueldo, otrasPrestaciones, quinquenios, activo,
         fechaMovAlt, orgs1, orgs2, orgs3, orgs4, dSueldo,
         dOtrasPrestaciones, dQuinquenios, aplicar, bc, porcentaje,
-        createdAt, updatedAt
+        numQuinquenios, createdAt, updatedAt
       FROM afi.AfiliadoOrg
       ORDER BY id
     `);
@@ -45,6 +45,7 @@ export class AfiliadoOrgRepository implements IAfiliadoOrgRepository {
       aplicar: row.aplicar === 1 || row.aplicar === true ? true : row.aplicar === 0 || row.aplicar === false ? false : null,
       bc: row.bc,
       porcentaje: row.porcentaje,
+      numQuinquenios: row.numQuinquenios,
       createdAt: row.createdAt?.toISOString() || new Date().toISOString(),
       updatedAt: row.updatedAt?.toISOString() || new Date().toISOString()
     }));
@@ -93,6 +94,7 @@ export class AfiliadoOrgRepository implements IAfiliadoOrgRepository {
       aplicar: row.aplicar === 1 || row.aplicar === true ? true : row.aplicar === 0 || row.aplicar === false ? false : null,
       bc: row.bc,
       porcentaje: row.porcentaje,
+      numQuinquenios: row.numQuinquenios,
       createdAt: row.createdAt?.toISOString() || new Date().toISOString(),
       updatedAt: row.updatedAt?.toISOString() || new Date().toISOString()
     };
@@ -172,13 +174,14 @@ export class AfiliadoOrgRepository implements IAfiliadoOrgRepository {
       .input('aplicar', sql.Bit, data.aplicar)
       .input('bc', sql.VarChar(30), data.bc)
       .input('porcentaje', sql.Decimal(9, 4), data.porcentaje)
+      .input('numQuinquenios', sql.Int, data.numQuinquenios ?? 1)
       .query(`
         INSERT INTO afi.AfiliadoOrg (
           afiliadoId, nivel0Id, nivel1Id, nivel2Id, nivel3Id,
           claveOrganica0, claveOrganica1, claveOrganica2, claveOrganica3,
           interno, sueldo, otrasPrestaciones, quinquenios, activo,
           fechaMovAlt, orgs1, orgs2, orgs3, orgs4, dSueldo,
-          dOtrasPrestaciones, dQuinquenios, aplicar, bc, porcentaje
+          dOtrasPrestaciones, dQuinquenios, aplicar, bc, porcentaje, numQuinquenios
         )
         OUTPUT INSERTED.*
         VALUES (
@@ -186,7 +189,7 @@ export class AfiliadoOrgRepository implements IAfiliadoOrgRepository {
           @claveOrganica0, @claveOrganica1, @claveOrganica2, @claveOrganica3,
           @interno, @sueldo, @otrasPrestaciones, @quinquenios, @activo,
           @fechaMovAlt, @orgs1, @orgs2, @orgs3, @orgs4, @dSueldo,
-          @dOtrasPrestaciones, @dQuinquenios, @aplicar, @bc, @porcentaje
+          @dOtrasPrestaciones, @dQuinquenios, @aplicar, @bc, @porcentaje, @numQuinquenios
         )
       `);
     const row = r.recordset[0];
@@ -217,6 +220,7 @@ export class AfiliadoOrgRepository implements IAfiliadoOrgRepository {
       aplicar: row.aplicar === 1 || row.aplicar === true ? true : row.aplicar === 0 || row.aplicar === false ? false : null,
       bc: row.bc,
       porcentaje: row.porcentaje,
+      numQuinquenios: row.numQuinquenios,
       createdAt: row.createdAt?.toISOString() || new Date().toISOString(),
       updatedAt: row.updatedAt?.toISOString() || new Date().toISOString()
     };
@@ -326,6 +330,10 @@ export class AfiliadoOrgRepository implements IAfiliadoOrgRepository {
       updates.push('porcentaje = @porcentaje');
       request.input('porcentaje', sql.Decimal(9, 4), data.porcentaje);
     }
+    if (data.numQuinquenios !== undefined) {
+      updates.push('numQuinquenios = @numQuinquenios');
+      request.input('numQuinquenios', sql.Int, data.numQuinquenios);
+    }
 
     updates.push('updatedAt = SYSUTCDATETIME()');
 
@@ -366,6 +374,7 @@ export class AfiliadoOrgRepository implements IAfiliadoOrgRepository {
       aplicar: row.aplicar === 1 || row.aplicar === true ? true : row.aplicar === 0 || row.aplicar === false ? false : null,
       bc: row.bc,
       porcentaje: row.porcentaje,
+      numQuinquenios: row.numQuinquenios,
       createdAt: row.createdAt?.toISOString() || new Date().toISOString(),
       updatedAt: row.updatedAt?.toISOString() || new Date().toISOString()
     };
