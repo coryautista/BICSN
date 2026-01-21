@@ -5,6 +5,7 @@ import { ok, fail } from '../../utils/http.js';
 import { GetAllOrgPersonalQuery } from './application/queries/GetAllOrgPersonalQuery.js';
 import { GetOrgPersonalByIdQuery } from './application/queries/GetOrgPersonalByIdQuery.js';
 import { GetOrgPersonalBySearchQuery } from './application/queries/GetOrgPersonalBySearchQuery.js';
+import { GetOrgPersonalByNombreApellidosFechaNacQuery } from './application/queries/GetOrgPersonalByNombreApellidosFechaNacQuery.js';
 import { CreateOrgPersonalCommand } from './application/commands/CreateOrgPersonalCommand.js';
 import { UpdateOrgPersonalCommand } from './application/commands/UpdateOrgPersonalCommand.js';
 import { DeleteOrgPersonalCommand } from './application/commands/DeleteOrgPersonalCommand.js';
@@ -75,6 +76,105 @@ export default async function orgPersonalRoutes(app: FastifyInstance) {
       const getAllOrgPersonalQuery = req.diScope.resolve<GetAllOrgPersonalQuery>('getAllOrgPersonalQuery');
       const records = await getAllOrgPersonalQuery.execute(req.user?.sub?.toString());
       return reply.send(ok(records));
+    } catch (error: any) {
+      return handleOrgPersonalError(error, reply);
+    }
+  });
+
+  // GET /orgPersonal/search/by-nombre-apellidos-fecha - Get record by nombre, apellidos and fecha de nacimiento
+  app.get('/orgPersonal/search/by-nombre-apellidos-fecha', {
+    preHandler: [requireAuth],
+    schema: {
+      description: 'Get OrgPersonal record by nombre, apellidos and fecha de nacimiento',
+      tags: ['orgPersonal'],
+      security: [{ bearerAuth: [] }],
+      querystring: {
+        type: 'object',
+        required: ['nombre', 'apellidoPaterno', 'fechaNacimiento'],
+        properties: {
+          nombre: { type: 'string' },
+          apellidoPaterno: { type: 'string' },
+          apellidoMaterno: { type: 'string', nullable: true },
+          fechaNacimiento: { type: 'string', format: 'date' }
+        }
+      },
+      response: {
+        200: {
+          type: 'object',
+          properties: {
+            ok: { type: 'boolean' },
+            data: {
+              type: 'object',
+              properties: {
+                interno: { type: 'number' },
+                clave_organica_0: { type: 'string', nullable: true },
+                clave_organica_1: { type: 'string', nullable: true },
+                clave_organica_2: { type: 'string', nullable: true },
+                clave_organica_3: { type: 'string', nullable: true },
+                sueldo: { type: 'number', nullable: true },
+                otras_prestaciones: { type: 'number', nullable: true },
+                quinquenios: { type: 'number', nullable: true },
+                activo: { type: 'string', nullable: true },
+                fecha_mov_alt: { type: 'string', nullable: true },
+                orgs1: { type: 'string', nullable: true },
+                orgs2: { type: 'string', nullable: true },
+                orgs3: { type: 'string', nullable: true },
+                orgs: { type: 'string', nullable: true },
+                dsueldo: { type: 'number', nullable: true },
+                dotras_prestaciones: { type: 'number', nullable: true },
+                dquinquenios: { type: 'number', nullable: true },
+                aplicar: { type: 'string', nullable: true },
+                bc: { type: 'string', nullable: true },
+                porcentaje: { type: 'number', nullable: true }
+              }
+            }
+          }
+        },
+        404: {
+          type: 'object',
+          properties: {
+            ok: { type: 'boolean' },
+            error: {
+              type: 'object',
+              properties: {
+                code: { type: 'string' },
+                message: { type: 'string' }
+              }
+            }
+          }
+        },
+        500: {
+          type: 'object',
+          properties: {
+            ok: { type: 'boolean' },
+            error: {
+              type: 'object',
+              properties: {
+                code: { type: 'string' },
+                message: { type: 'string' }
+              }
+            }
+          }
+        }
+      }
+    }
+  }, async (req, reply) => {
+    try {
+      const { nombre, apellidoPaterno, apellidoMaterno, fechaNacimiento } = req.query as {
+        nombre: string;
+        apellidoPaterno: string;
+        apellidoMaterno?: string | null;
+        fechaNacimiento: string;
+      };
+      const getOrgPersonalByNombreApellidosFechaNacQuery = req.diScope.resolve<GetOrgPersonalByNombreApellidosFechaNacQuery>('getOrgPersonalByNombreApellidosFechaNacQuery');
+      const record = await getOrgPersonalByNombreApellidosFechaNacQuery.execute(
+        nombre,
+        apellidoPaterno,
+        apellidoMaterno || null,
+        fechaNacimiento,
+        req.user?.sub?.toString()
+      );
+      return reply.send(ok(record));
     } catch (error: any) {
       return handleOrgPersonalError(error, reply);
     }

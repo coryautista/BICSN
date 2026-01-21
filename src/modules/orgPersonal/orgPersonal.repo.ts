@@ -240,7 +240,7 @@ export async function getOrgPersonalBySearch(searchTerm: string): Promise<OrgPer
   let params: any[];
   
   if (searchType === 'CURP' && trimmedTerm.length === 18) {
-    // Search only by CURP
+    // Search only by CURP - usar TRIM para evitar espacios
     sql = `
       SELECT FIRST 1
         OP.INTERNO, OP.CLAVE_ORGANICA_0, OP.CLAVE_ORGANICA_1, OP.CLAVE_ORGANICA_2, OP.CLAVE_ORGANICA_3,
@@ -249,7 +249,7 @@ export async function getOrgPersonalBySearch(searchTerm: string): Promise<OrgPer
         OP.APLICAR, OP.BC, OP.PORCENTAJE
       FROM ORG_PERSONAL OP
       INNER JOIN PERSONAL P ON OP.INTERNO = P.INTERNO
-      WHERE UPPER(P.CURP) = UPPER(?)
+      WHERE TRIM(UPPER(P.CURP)) = TRIM(UPPER(?))
       ORDER BY OP.FECHA_MOV_ALT DESC
     `;
     params = [trimmedTerm];
@@ -263,7 +263,7 @@ export async function getOrgPersonalBySearch(searchTerm: string): Promise<OrgPer
         OP.APLICAR, OP.BC, OP.PORCENTAJE
       FROM ORG_PERSONAL OP
       INNER JOIN PERSONAL P ON OP.INTERNO = P.INTERNO
-      WHERE UPPER(P.RFC) = UPPER(?)
+      WHERE TRIM(UPPER(P.RFC)) = TRIM(UPPER(?))
       ORDER BY OP.FECHA_MOV_ALT DESC
     `;
     params = [trimmedTerm.substring(0, 13)];
@@ -283,47 +283,140 @@ export async function getOrgPersonalBySearch(searchTerm: string): Promise<OrgPer
     params = [`%${trimmedTerm}%`];
   }
 
-  return executeSerializedQuery((db) => {
-    return new Promise<OrgPersonal | null>((resolve, reject) => {
-      db.query(sql, params, (err: any, result: any) => {
-        if (err) {
-          console.error('Error in getOrgPersonalBySearch:', err);
-          reject(err);
-          return;
-        }
-        
-        if (!result || result.length === 0) {
-          resolve(null);
-          return;
-        }
-        
-        const row = result[0];
-        const record: OrgPersonal = {
-          interno: row.INTERNO,
-          clave_organica_0: row.CLAVE_ORGANICA_0 || null,
-          clave_organica_1: row.CLAVE_ORGANICA_1 || null,
-          clave_organica_2: row.CLAVE_ORGANICA_2 || null,
-          clave_organica_3: row.CLAVE_ORGANICA_3 || null,
-          sueldo: row.SUELDO || null,
-          otras_prestaciones: row.OTRAS_PRESTACIONES || null,
-          quinquenios: row.QUINQUENIOS || null,
-          activo: row.ACTIVO || null,
-          fecha_mov_alt: row.FECHA_MOV_ALT ? row.FECHA_MOV_ALT.toISOString() : null,
-          orgs1: row.ORGS1 || null,
-          orgs2: row.ORGS2 || null,
-          orgs3: row.ORGS3 || null,
-          orgs: row.ORGS || null,
-          dsueldo: row.DSUELDO || null,
-          dotras_prestaciones: row.DOTRAS_PRESTACIONES || null,
-          dquinquenios: row.DQUINQUENIOS || null,
-          aplicar: row.APLICAR || null,
-          bc: row.BC || null,
-          porcentaje: row.PORCENTAJE || null
-        };
-        resolve(record);
-      });
-    });
-  });
+  // Usar executeSafeQuery que aplica automáticamente la decodificación
+  const result = await executeSafeQuery(sql, params);
+  
+  if (!result || result.length === 0) {
+    return null;
+  }
+  
+  const row = result[0];
+  const record: OrgPersonal = {
+    interno: row.INTERNO,
+    clave_organica_0: row.CLAVE_ORGANICA_0 || null,
+    clave_organica_1: row.CLAVE_ORGANICA_1 || null,
+    clave_organica_2: row.CLAVE_ORGANICA_2 || null,
+    clave_organica_3: row.CLAVE_ORGANICA_3 || null,
+    sueldo: row.SUELDO || null,
+    otras_prestaciones: row.OTRAS_PRESTACIONES || null,
+    quinquenios: row.QUINQUENIOS || null,
+    activo: row.ACTIVO || null,
+    fecha_mov_alt: row.FECHA_MOV_ALT ? row.FECHA_MOV_ALT.toISOString() : null,
+    orgs1: row.ORGS1 || null,
+    orgs2: row.ORGS2 || null,
+    orgs3: row.ORGS3 || null,
+    orgs: row.ORGS || null,
+    dsueldo: row.DSUELDO || null,
+    dotras_prestaciones: row.DOTRAS_PRESTACIONES || null,
+    dquinquenios: row.DQUINQUENIOS || null,
+    aplicar: row.APLICAR || null,
+    bc: row.BC || null,
+    porcentaje: row.PORCENTAJE || null
+  };
+  
+  return record;
+}
+
+/**
+ * Search OrgPersonal by nombre, apellidos and fecha de nacimiento
+ */
+export async function getOrgPersonalByNombreApellidosFechaNac(
+  nombre: string,
+  apellidoPaterno: string,
+  apellidoMaterno: string | null,
+  fechaNacimiento: string
+): Promise<OrgPersonal | null> {
+  const nombreTrimmed = nombre.trim();
+  const apellidoPaternoTrimmed = apellidoPaterno.trim();
+  const apellidoMaternoTrimmed = apellidoMaterno ? apellidoMaterno.trim() : null;
+  
+  // Convertir fecha de nacimiento a formato Date para comparación
+  let fechaNac: Date;
+  try {
+    fechaNac = new Date(fechaNacimiento);
+    if (isNaN(fechaNac.getTime())) {
+      console.error('Fecha de nacimiento inválida:', fechaNacimiento);
+      return null;
+    }
+  } catch (error) {
+    console.error('Error al parsear fecha de nacimiento:', error);
+    return null;
+  }
+  
+  // Formatear fecha para Firebird (YYYY-MM-DD)
+  const fechaFormateada = fechaNac.toISOString().split('T')[0];
+  
+  let sql: string;
+  let params: any[];
+  
+  if (apellidoMaternoTrimmed) {
+    // Búsqueda con apellido materno
+    sql = `
+      SELECT FIRST 1
+        OP.INTERNO, OP.CLAVE_ORGANICA_0, OP.CLAVE_ORGANICA_1, OP.CLAVE_ORGANICA_2, OP.CLAVE_ORGANICA_3,
+        OP.SUELDO, OP.OTRAS_PRESTACIONES, OP.QUINQUENIOS, OP.ACTIVO, OP.FECHA_MOV_ALT,
+        OP.ORGS1, OP.ORGS2, OP.ORGS3, OP.ORGS, OP.DSUELDO, OP.DOTRAS_PRESTACIONES, OP.DQUINQUENIOS,
+        OP.APLICAR, OP.BC, OP.PORCENTAJE
+      FROM ORG_PERSONAL OP
+      INNER JOIN PERSONAL P ON OP.INTERNO = P.INTERNO
+      WHERE TRIM(UPPER(P.NOMBRE)) = TRIM(UPPER(?))
+        AND TRIM(UPPER(P.APELLIDO_PATERNO)) = TRIM(UPPER(?))
+        AND TRIM(UPPER(P.APELLIDO_MATERNO)) = TRIM(UPPER(?))
+        AND CAST(P.FECHA_NACIMIENTO AS DATE) = CAST(? AS DATE)
+      ORDER BY OP.FECHA_MOV_ALT DESC
+    `;
+    params = [nombreTrimmed, apellidoPaternoTrimmed, apellidoMaternoTrimmed, fechaFormateada];
+  } else {
+    // Búsqueda sin apellido materno
+    sql = `
+      SELECT FIRST 1
+        OP.INTERNO, OP.CLAVE_ORGANICA_0, OP.CLAVE_ORGANICA_1, OP.CLAVE_ORGANICA_2, OP.CLAVE_ORGANICA_3,
+        OP.SUELDO, OP.OTRAS_PRESTACIONES, OP.QUINQUENIOS, OP.ACTIVO, OP.FECHA_MOV_ALT,
+        OP.ORGS1, OP.ORGS2, OP.ORGS3, OP.ORGS, OP.DSUELDO, OP.DOTRAS_PRESTACIONES, OP.DQUINQUENIOS,
+        OP.APLICAR, OP.BC, OP.PORCENTAJE
+      FROM ORG_PERSONAL OP
+      INNER JOIN PERSONAL P ON OP.INTERNO = P.INTERNO
+      WHERE TRIM(UPPER(P.NOMBRE)) = TRIM(UPPER(?))
+        AND TRIM(UPPER(P.APELLIDO_PATERNO)) = TRIM(UPPER(?))
+        AND (P.APELLIDO_MATERNO IS NULL OR TRIM(P.APELLIDO_MATERNO) = '')
+        AND CAST(P.FECHA_NACIMIENTO AS DATE) = CAST(? AS DATE)
+      ORDER BY OP.FECHA_MOV_ALT DESC
+    `;
+    params = [nombreTrimmed, apellidoPaternoTrimmed, fechaFormateada];
+  }
+  
+  // Usar executeSafeQuery que aplica automáticamente la decodificación
+  const result = await executeSafeQuery(sql, params);
+  
+  if (!result || result.length === 0) {
+    return null;
+  }
+  
+  const row = result[0];
+  const record: OrgPersonal = {
+    interno: row.INTERNO,
+    clave_organica_0: row.CLAVE_ORGANICA_0 || null,
+    clave_organica_1: row.CLAVE_ORGANICA_1 || null,
+    clave_organica_2: row.CLAVE_ORGANICA_2 || null,
+    clave_organica_3: row.CLAVE_ORGANICA_3 || null,
+    sueldo: row.SUELDO || null,
+    otras_prestaciones: row.OTRAS_PRESTACIONES || null,
+    quinquenios: row.QUINQUENIOS || null,
+    activo: row.ACTIVO || null,
+    fecha_mov_alt: row.FECHA_MOV_ALT ? row.FECHA_MOV_ALT.toISOString() : null,
+    orgs1: row.ORGS1 || null,
+    orgs2: row.ORGS2 || null,
+    orgs3: row.ORGS3 || null,
+    orgs: row.ORGS || null,
+    dsueldo: row.DSUELDO || null,
+    dotras_prestaciones: row.DOTRAS_PRESTACIONES || null,
+    dquinquenios: row.DQUINQUENIOS || null,
+    aplicar: row.APLICAR || null,
+    bc: row.BC || null,
+    porcentaje: row.PORCENTAJE || null
+  };
+  
+  return record;
 }
 
 /**

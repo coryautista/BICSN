@@ -940,10 +940,10 @@ export default async function aplicacionQuincenalRoutes(app: FastifyInstance) {
           nonombre: d.nonombre || null,
           rfc: d.rfc || '',
           norfc: d.norfc || null,
-          org0: (d.org0 || org0).padStart(2, '0').substring(0, 2),
-          org1: (d.org1 || org1).padStart(2, '0').substring(0, 2),
-          org2: (d.org2 || '00').padStart(2, '0').substring(0, 2),
-          org3: (d.org3 || '00').padStart(2, '0').substring(0, 2),
+          org0: d.org0 || org0,
+          org1: d.org1 || org1,
+          org2: d.org2 || '00',
+          org3: d.org3 || '00',
           sueldo: d.sueldo ?? null,
           oprestaciones: d.oprestaciones ?? null,
           quinquenios: d.quinquenios ?? null,
@@ -1087,10 +1087,10 @@ export default async function aplicacionQuincenalRoutes(app: FastifyInstance) {
           fecha_li: d.fecha_li ? new Date(d.fecha_li).toISOString().split('T')[0] : null,
           f_inicio: d.f_inicio ? new Date(d.f_inicio).toISOString().split('T')[0] : null,
           f_fin: d.f_fin ? new Date(d.f_fin).toISOString().split('T')[0] : null,
-          org0: (d.org0 || org0).padStart(2, '0').substring(0, 2),
-          org1: (d.org1 || org1).padStart(2, '0').substring(0, 2),
-          org2: (d.org2 || '00').padStart(2, '0').substring(0, 2),
-          org3: (d.org3 || '00').padStart(2, '0').substring(0, 2),
+          org0: d.org0 || org0,
+          org1: d.org1 || org1,
+          org2: d.org2 || '00',
+          org3: d.org3 || '00',
           norg0: d.norg0 || '',
           norg1: d.norg1 || '',
           norg2: d.norg2 || '',
@@ -1129,7 +1129,7 @@ export default async function aplicacionQuincenalRoutes(app: FastifyInstance) {
   app.post('/aplicacion-quincenal/guardar-historico-retenciones-desde-bd', {
     preHandler: [requireAuth],
     schema: {
-      description: '[SQL SERVER] Obtiene los datos de retenciones (préstamos) directamente de la base de datos y los guarda en el histórico. Los usuarios entidad (isEntidad=true) usan las claves orgánicas del token. Los usuarios no entidad deben proporcionar claves orgánicas en query params.',
+      description: '[SQL SERVER] Obtiene los datos de retenciones (préstamos) directamente desde Firebird usando los queries del módulo aportacionesFondos y los guarda en el histórico. Los usuarios entidad (isEntidad=true) usan las claves orgánicas del token. Los usuarios no entidad deben proporcionar claves orgánicas en query params.',
       summary: 'Guardar Histórico de Retenciones desde BD',
       tags: ['aplicacion-quincenal', 'sql-server'],
       security: [{ bearerAuth: [] }],
@@ -1235,22 +1235,47 @@ export default async function aplicacionQuincenalRoutes(app: FastifyInstance) {
       const quincena = periodoInfo.quincena;
       const anio = periodoInfo.anio;
 
-      // Obtener datos de todos los tipos de préstamos en paralelo
+      // Obtener datos (Firebird) mediante los queries del módulo aportacionesFondos (igual que aportaciones-desde-bd)
       const getPrestamosQuery = request.diScope.resolve<GetPrestamosQuery>('getPrestamosQuery');
       const getPrestamosMedianoPlazoQuery = request.diScope.resolve<GetPrestamosMedianoPlazoQuery>('getPrestamosMedianoPlazoQuery');
       const getPrestamosHipotecariosQuery = request.diScope.resolve<GetPrestamosHipotecariosQuery>('getPrestamosHipotecariosQuery');
 
-      const userClave0 = (user as any).idOrganica0 || '';
-      const userClave1 = (user as any).idOrganica1 || '';
+      // Normalizar claves del usuario a string de 2 dígitos (evita errores tipo: userClave0.trim is not a function)
+      // Si el usuario no tiene claves en token (caso no-entidad/admin), usamos las claves objetivo para pasar validación del query.
+      const rawUserClave0 = (user as any).idOrganica0;
+      const rawUserClave1 = (user as any).idOrganica1;
+      const userClave0 =
+        rawUserClave0 !== undefined && rawUserClave0 !== null && String(rawUserClave0).trim().length > 0
+          ? String(rawUserClave0).trim().padStart(2, '0').substring(0, 2)
+          : org0;
+      const userClave1 =
+        rawUserClave1 !== undefined && rawUserClave1 !== null && String(rawUserClave1).trim().length > 0
+          ? String(rawUserClave1).trim().padStart(2, '0').substring(0, 2)
+          : org1;
 
       const [
         prestamosCortoPlazoData,
         prestamosMedianoPlazoData,
         prestamosHipotecariosData
       ] = await Promise.all([
-        getPrestamosQuery.execute(userClave0, userClave1, isEntidad, org0, org1, userId?.toString()).catch(() => null),
-        getPrestamosMedianoPlazoQuery.execute(userClave0, userClave1, isEntidad, org0, org1, userId?.toString()).catch(() => null),
-        getPrestamosHipotecariosQuery.execute(userClave0, userClave1, isEntidad, false, org0, org1, userId?.toString()).catch(() => null)
+        getPrestamosQuery
+          .execute(userClave0, userClave1, isEntidad, org0, org1, userId?.toString())
+          .catch((e: any) => {
+            request.log?.error?.({ err: e }, 'Error ejecutando GetPrestamosQuery (corto plazo)');
+            return null;
+          }),
+        getPrestamosMedianoPlazoQuery
+          .execute(userClave0, userClave1, isEntidad, org0, org1, userId?.toString())
+          .catch((e: any) => {
+            request.log?.error?.({ err: e }, 'Error ejecutando GetPrestamosMedianoPlazoQuery (mediano plazo)');
+            return null;
+          }),
+        getPrestamosHipotecariosQuery
+          .execute(userClave0, userClave1, isEntidad, false, org0, org1, userId?.toString())
+          .catch((e: any) => {
+            request.log?.error?.({ err: e }, 'Error ejecutando GetPrestamosHipotecariosQuery (hipotecarios)');
+            return null;
+          })
       ]);
 
       // Transformar datos al formato esperado
@@ -1266,10 +1291,10 @@ export default async function aplicacionQuincenalRoutes(app: FastifyInstance) {
           anio,
           usuario_id: userId?.toString() || 'system',
           total_empleados: prestamosCortoPlazoData?.prestamos?.length || 0,
-          total_contribucion: prestamosCortoPlazoData?.prestamos?.reduce((sum, p) => sum + (p.total || 0), 0) || 0,
-          total_sueldo_base: 0 // Los préstamos no tienen sueldo_base
+          total_contribucion: prestamosCortoPlazoData?.prestamos?.reduce((sum: number, p: any) => sum + (typeof p.total === 'number' && !isNaN(p.total) ? p.total : 0), 0) || 0,
+          total_sueldo_base: 0 // No aplica directamente para préstamos
         },
-        detalle: (prestamosCortoPlazoData?.prestamos || []).map(d => ({
+        detalle: (prestamosCortoPlazoData?.prestamos || []).map((d: any) => ({
           clave_organica_0: org0,
           clave_organica_1: org1,
           quincena,
@@ -1309,10 +1334,10 @@ export default async function aplicacionQuincenalRoutes(app: FastifyInstance) {
           anio,
           usuario_id: userId?.toString() || 'system',
           total_empleados: prestamosMedianoPlazoData?.prestamos?.length || 0,
-          total_contribucion: prestamosMedianoPlazoData?.prestamos?.reduce((sum, p) => sum + (p.total || 0), 0) || 0,
-          total_sueldo_base: 0 // Los préstamos no tienen sueldo_base
+          total_contribucion: prestamosMedianoPlazoData?.prestamos?.reduce((sum: number, p: any) => sum + (typeof p.total === 'number' && !isNaN(p.total) ? p.total : 0), 0) || 0,
+          total_sueldo_base: 0 // No aplica directamente para préstamos
         },
-        detalle: (prestamosMedianoPlazoData?.prestamos || []).map(d => ({
+        detalle: (prestamosMedianoPlazoData?.prestamos || []).map((d: any) => ({
           clave_organica_0: org0,
           clave_organica_1: org1,
           quincena,
@@ -1352,6 +1377,7 @@ export default async function aplicacionQuincenalRoutes(app: FastifyInstance) {
       };
 
       // Transformar PrestamosHipotecarios (siempre, incluso con 0 registros)
+      const computadoraAntiguaInt = prestamosHipotecariosData?.computadora_antigua ? 1 : 0;
       historicoData.prestamosHipotecarios = {
         header: {
           clave_organica_0: org0,
@@ -1360,15 +1386,15 @@ export default async function aplicacionQuincenalRoutes(app: FastifyInstance) {
           anio,
           usuario_id: userId?.toString() || 'system',
           total_empleados: prestamosHipotecariosData?.prestamos?.length || 0,
-          total_contribucion: prestamosHipotecariosData?.prestamos?.reduce((sum, p) => sum + ((p.capital_pagar || 0) + (p.interes_pagar || 0) + (p.interes_diferido_pagar || 0) + (p.seguro_pagar || 0) + (p.moratorio_pagar || 0)), 0) || 0,
-          total_sueldo_base: 0 // Los préstamos no tienen sueldo_base
+          total_contribucion: prestamosHipotecariosData?.prestamos?.reduce((sum: number, p: any) => sum + (typeof p.cantidad === 'number' && !isNaN(p.cantidad) ? p.cantidad : 0), 0) || 0,
+          total_sueldo_base: 0 // No aplica directamente para préstamos
         },
-        detalle: (prestamosHipotecariosData?.prestamos || []).map(d => ({
+        detalle: (prestamosHipotecariosData?.prestamos || []).map((d: any) => ({
           clave_organica_0: org0,
           clave_organica_1: org1,
           quincena,
           anio,
-          computadora_antigua: prestamosHipotecariosData?.computadora_antigua ? 1 : 0,
+          computadora_antigua: computadoraAntiguaInt,
           interno: Number.isInteger(d.interno) ? d.interno : 0,
           nombre: ((d.nombre && typeof d.nombre === 'string' && d.nombre.trim()) || 'N/A').substring(0, 200),
           noempleado: (d.noempleado && typeof d.noempleado === 'string' && d.noempleado.trim()) || 'N/A',
@@ -1408,35 +1434,8 @@ export default async function aplicacionQuincenalRoutes(app: FastifyInstance) {
       };
 
       // Validar con schema
-      console.log('[GUARDAR_HISTORICO_RETENCIONES_DESDE_BD] Datos antes de validar:', {
-        historicoDataKeys: Object.keys(historicoData),
-        prestamosCortoPlazo: {
-          hasHeader: !!historicoData.prestamosCortoPlazo?.header,
-          detalleCount: historicoData.prestamosCortoPlazo?.detalle?.length || 0,
-          firstItem: historicoData.prestamosCortoPlazo?.detalle?.[0]
-        },
-        prestamosMedianoPlazo: {
-          hasHeader: !!historicoData.prestamosMedianoPlazo?.header,
-          detalleCount: historicoData.prestamosMedianoPlazo?.detalle?.length || 0,
-          firstItem: historicoData.prestamosMedianoPlazo?.detalle?.[0]
-        },
-        prestamosHipotecarios: {
-          hasHeader: !!historicoData.prestamosHipotecarios?.header,
-          detalleCount: historicoData.prestamosHipotecarios?.detalle?.length || 0,
-          firstItem: historicoData.prestamosHipotecarios?.detalle?.[0]
-        }
-      });
-      
       const parsed = GuardarHistoricoRetencionesSchema.safeParse(historicoData);
       if (!parsed.success) {
-        console.error('[GUARDAR_HISTORICO_RETENCIONES_DESDE_BD] Error de validación:', {
-          issues: JSON.stringify(parsed.error.issues, null, 2),
-          issuesCount: parsed.error.issues.length,
-          historicoDataKeys: Object.keys(historicoData),
-          prestamosCortoPlazoCount: historicoData.prestamosCortoPlazo?.detalle?.length || 0,
-          prestamosMedianoPlazoCount: historicoData.prestamosMedianoPlazo?.detalle?.length || 0,
-          prestamosHipotecariosCount: historicoData.prestamosHipotecarios?.detalle?.length || 0
-        });
         return reply.code(400).send({
           ok: false,
           error: {
@@ -1456,7 +1455,7 @@ export default async function aplicacionQuincenalRoutes(app: FastifyInstance) {
         ok: true,
         data: result
       });
-    } catch (error) {
+    } catch (error: any) {
       return handleAplicacionQuincenalError(error, reply);
     }
   });

@@ -1,6 +1,5 @@
 import { IRetencionesPorCobrarRepository } from '../../domain/repositories/IRetencionesPorCobrarRepository.js';
 import { RetencionPorCobrar } from '../../domain/entities/RetencionPorCobrar.js';
-import { RetencionesPorCobrarError, RetencionesPorCobrarErrorCode } from '../../domain/errors.js';
 import pino from 'pino';
 
 const logger = pino({

@@ -34,13 +34,7 @@ export class GetPlantillaQuery {
 
       logger.info({
         ...logContext,
-        resultsCount: results.length,
-        results: results.map(r => ({
-          INTERNO: r.INTERNO,
-          NOMBRE: r.NOMBRE,
-          APELLIDO_PATERNO: r.APELLIDO_PATERNO,
-          SUELDO: r.SUELDO
-        }))
+        resultsCount: results.length
       }, 'Consulta de plantilla de personal completada exitosamente');
 
       return results;

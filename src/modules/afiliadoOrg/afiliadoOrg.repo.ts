@@ -27,6 +27,7 @@ export type AfiliadoOrg = {
   aplicar: boolean | null;
   bc: string | null;
   porcentaje: number | null;
+  numQuinquenios?: number | null;
   createdAt: string;
   updatedAt: string;
 };
@@ -41,7 +42,7 @@ export async function getAllAfiliadoOrg(): Promise<AfiliadoOrg[]> {
         interno, sueldo, otrasPrestaciones, quinquenios, activo,
         fechaMovAlt, orgs1, orgs2, orgs3, orgs4, dSueldo,
         dOtrasPrestaciones, dQuinquenios, aplicar, bc, porcentaje,
-        createdAt, updatedAt
+        numQuinquenios, createdAt, updatedAt
       FROM afi.AfiliadoOrg
       ORDER BY id
     `);
@@ -72,6 +73,7 @@ export async function getAllAfiliadoOrg(): Promise<AfiliadoOrg[]> {
     aplicar: row.aplicar === 1 || row.aplicar === true ? true : row.aplicar === 0 || row.aplicar === false ? false : null,
     bc: row.bc,
     porcentaje: row.porcentaje,
+    numQuinquenios: row.numQuinquenios,
     createdAt: row.createdAt?.toISOString() || new Date().toISOString(),
     updatedAt: row.updatedAt?.toISOString() || new Date().toISOString()
   }));
@@ -88,7 +90,7 @@ export async function getAfiliadoOrgById(id: number): Promise<AfiliadoOrg | unde
         interno, sueldo, otrasPrestaciones, quinquenios, activo,
         fechaMovAlt, orgs1, orgs2, orgs3, orgs4, dSueldo,
         dOtrasPrestaciones, dQuinquenios, aplicar, bc, porcentaje,
-        createdAt, updatedAt
+        numQuinquenios, createdAt, updatedAt
       FROM afi.AfiliadoOrg
       WHERE id = @id
     `);
@@ -121,6 +123,7 @@ export async function getAfiliadoOrgById(id: number): Promise<AfiliadoOrg | unde
     aplicar: row.aplicar === 1 || row.aplicar === true ? true : row.aplicar === 0 || row.aplicar === false ? false : null,
     bc: row.bc,
     porcentaje: row.porcentaje,
+    numQuinquenios: row.numQuinquenios,
     createdAt: row.createdAt?.toISOString() || new Date().toISOString(),
     updatedAt: row.updatedAt?.toISOString() || new Date().toISOString()
   };
@@ -137,7 +140,7 @@ export async function getAfiliadoOrgByAfiliadoId(afiliadoId: number): Promise<Af
         interno, sueldo, otrasPrestaciones, quinquenios, activo,
         fechaMovAlt, orgs1, orgs2, orgs3, orgs4, dSueldo,
         dOtrasPrestaciones, dQuinquenios, aplicar, bc, porcentaje,
-        createdAt, updatedAt
+        numQuinquenios, createdAt, updatedAt
       FROM afi.AfiliadoOrg
       WHERE afiliadoId = @afiliadoId
       ORDER BY id
@@ -202,13 +205,14 @@ export async function createAfiliadoOrg(data: Omit<AfiliadoOrg, 'id' | 'createdA
     .input('aplicar', sql.Bit, data.aplicar)
     .input('bc', sql.VarChar(30), data.bc)
     .input('porcentaje', sql.Decimal(9, 4), data.porcentaje)
+    .input('numQuinquenios', sql.Int, data.numQuinquenios ?? 1)
     .query(`
       INSERT INTO afi.AfiliadoOrg (
         afiliadoId, nivel0Id, nivel1Id, nivel2Id, nivel3Id,
         claveOrganica0, claveOrganica1, claveOrganica2, claveOrganica3,
         interno, sueldo, otrasPrestaciones, quinquenios, activo,
         fechaMovAlt, orgs1, orgs2, orgs3, orgs4, dSueldo,
-        dOtrasPrestaciones, dQuinquenios, aplicar, bc, porcentaje
+        dOtrasPrestaciones, dQuinquenios, aplicar, bc, porcentaje, numQuinquenios
       )
       OUTPUT INSERTED.*
       VALUES (
@@ -216,7 +220,7 @@ export async function createAfiliadoOrg(data: Omit<AfiliadoOrg, 'id' | 'createdA
         @claveOrganica0, @claveOrganica1, @claveOrganica2, @claveOrganica3,
         @interno, @sueldo, @otrasPrestaciones, @quinquenios, @activo,
         @fechaMovAlt, @orgs1, @orgs2, @orgs3, @orgs4, @dSueldo,
-        @dOtrasPrestaciones, @dQuinquenios, @aplicar, @bc, @porcentaje
+        @dOtrasPrestaciones, @dQuinquenios, @aplicar, @bc, @porcentaje, @numQuinquenios
       )
     `);
   const row = r.recordset[0];
@@ -247,6 +251,7 @@ export async function createAfiliadoOrg(data: Omit<AfiliadoOrg, 'id' | 'createdA
     aplicar: row.aplicar === 1 || row.aplicar === true ? true : row.aplicar === 0 || row.aplicar === false ? false : null,
     bc: row.bc,
     porcentaje: row.porcentaje,
+    numQuinquenios: row.numQuinquenios,
     createdAt: row.createdAt?.toISOString() || new Date().toISOString(),
     updatedAt: row.updatedAt?.toISOString() || new Date().toISOString()
   };
@@ -357,6 +362,10 @@ export async function updateAfiliadoOrg(id: number, data: Partial<Omit<AfiliadoO
     updates.push('porcentaje = @porcentaje');
     request.input('porcentaje', sql.Decimal(9, 4), data.porcentaje);
   }
+  if (data.numQuinquenios !== undefined) {
+    updates.push('numQuinquenios = @numQuinquenios');
+    request.input('numQuinquenios', sql.Int, data.numQuinquenios);
+  }
 
   updates.push('updatedAt = SYSUTCDATETIME()');
 
@@ -397,6 +406,7 @@ export async function updateAfiliadoOrg(id: number, data: Partial<Omit<AfiliadoO
     aplicar: row.aplicar === 1 || row.aplicar === true ? true : row.aplicar === 0 || row.aplicar === false ? false : null,
     bc: row.bc,
     porcentaje: row.porcentaje,
+    numQuinquenios: row.numQuinquenios,
     createdAt: row.createdAt?.toISOString() || new Date().toISOString(),
     updatedAt: row.updatedAt?.toISOString() || new Date().toISOString()
   };

@@ -63,6 +63,7 @@ export default async function afiliadoOrgRoutes(app: FastifyInstance) {
                   aplicar: { type: 'boolean', nullable: true },
                   bc: { type: 'string', nullable: true },
                   porcentaje: { type: 'number', nullable: true },
+                  numQuinquenios: { type: 'number', nullable: true },
                   createdAt: { type: 'string' },
                   updatedAt: { type: 'string' }
                 }
@@ -142,6 +143,7 @@ export default async function afiliadoOrgRoutes(app: FastifyInstance) {
                 aplicar: { type: 'boolean', nullable: true },
                 bc: { type: 'string', nullable: true },
                 porcentaje: { type: 'number', nullable: true },
+                numQuinquenios: { type: 'number', nullable: true },
                 createdAt: { type: 'string' },
                 updatedAt: { type: 'string' }
               }
@@ -236,6 +238,7 @@ export default async function afiliadoOrgRoutes(app: FastifyInstance) {
                   aplicar: { type: 'boolean', nullable: true },
                   bc: { type: 'string', nullable: true },
                   porcentaje: { type: 'number', nullable: true },
+                  numQuinquenios: { type: 'number', nullable: true },
                   createdAt: { type: 'string' },
                   updatedAt: { type: 'string' }
                 }
@@ -303,7 +306,8 @@ export default async function afiliadoOrgRoutes(app: FastifyInstance) {
           dQuinquenios: { type: 'string', maxLength: 200 },
           aplicar: { type: 'boolean' },
           bc: { type: 'string', maxLength: 30 },
-          porcentaje: { type: 'number' }
+          porcentaje: { type: 'number' },
+          numQuinquenios: { type: 'number' }
         }
       },
       response: {
@@ -374,7 +378,8 @@ export default async function afiliadoOrgRoutes(app: FastifyInstance) {
         dQuinquenios: parsed.data.dQuinquenios ?? null,
         aplicar: parsed.data.aplicar ?? null,
         bc: parsed.data.bc ?? null,
-        porcentaje: parsed.data.porcentaje ?? null
+        porcentaje: parsed.data.porcentaje ?? null,
+        numQuinquenios: parsed.data.numQuinquenios ?? 1
       });
       return reply.code(201).send(ok(record));
     } catch (error: any) {
@@ -422,7 +427,8 @@ export default async function afiliadoOrgRoutes(app: FastifyInstance) {
           dQuinquenios: { type: 'string', maxLength: 200 },
           aplicar: { type: 'boolean' },
           bc: { type: 'string', maxLength: 30 },
-          porcentaje: { type: 'number' }
+          porcentaje: { type: 'number' },
+          numQuinquenios: { type: 'number' }
         }
       },
       response: {

@@ -175,6 +175,7 @@ import { OrgPersonalRepository } from '../modules/orgPersonal/infrastructure/per
 import { GetAllOrgPersonalQuery } from '../modules/orgPersonal/application/queries/GetAllOrgPersonalQuery.js';
 import { GetOrgPersonalByIdQuery } from '../modules/orgPersonal/application/queries/GetOrgPersonalByIdQuery.js';
 import { GetOrgPersonalBySearchQuery } from '../modules/orgPersonal/application/queries/GetOrgPersonalBySearchQuery.js';
+import { GetOrgPersonalByNombreApellidosFechaNacQuery } from '../modules/orgPersonal/application/queries/GetOrgPersonalByNombreApellidosFechaNacQuery.js';
 import { CreateOrgPersonalCommand } from '../modules/orgPersonal/application/commands/CreateOrgPersonalCommand.js';
 import { UpdateOrgPersonalCommand } from '../modules/orgPersonal/application/commands/UpdateOrgPersonalCommand.js';
 import { DeleteOrgPersonalCommand } from '../modules/orgPersonal/application/commands/DeleteOrgPersonalCommand.js';
@@ -1195,6 +1196,7 @@ container.register({
   getAllOrgPersonalQuery: asClass(GetAllOrgPersonalQuery).scoped(),
   getOrgPersonalByIdQuery: asClass(GetOrgPersonalByIdQuery).scoped(),
   getOrgPersonalBySearchQuery: asClass(GetOrgPersonalBySearchQuery).scoped(),
+  getOrgPersonalByNombreApellidosFechaNacQuery: asClass(GetOrgPersonalByNombreApellidosFechaNacQuery).scoped(),
   
   // Commands (Scoped)
   createOrgPersonalCommand: asClass(CreateOrgPersonalCommand).scoped(),

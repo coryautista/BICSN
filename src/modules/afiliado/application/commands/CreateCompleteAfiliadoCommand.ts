@@ -201,7 +201,8 @@ export class CreateCompleteAfiliadoCommand {
         .input('dQuinquenios', sql.VarChar(200), data.afiliadoOrg.dQuinquenios)
         .input('aplicar', sql.Bit, data.afiliadoOrg.aplicar)
         .input('bc', sql.VarChar(30), data.afiliadoOrg.bc)
-        .input('porcentaje', sql.Decimal(9, 4), data.afiliadoOrg.porcentaje);
+        .input('porcentaje', sql.Decimal(9, 4), data.afiliadoOrg.porcentaje)
+        .input('numQuinquenios', sql.Int, data.afiliadoOrg.numQuinquenios ?? 1);
 
       const afiliadoOrgResult = await afiliadoOrgRequest.query(`
         INSERT INTO afi.AfiliadoOrg (
@@ -209,7 +210,7 @@ export class CreateCompleteAfiliadoCommand {
           claveOrganica0, claveOrganica1, claveOrganica2, claveOrganica3,
           interno, sueldo, otrasPrestaciones, quinquenios, activo,
           fechaMovAlt, orgs1, orgs2, orgs3, orgs4, dSueldo,
-          dOtrasPrestaciones, dQuinquenios, aplicar, bc, porcentaje
+          dOtrasPrestaciones, dQuinquenios, aplicar, bc, porcentaje, numQuinquenios
         )
         OUTPUT INSERTED.*
         VALUES (
@@ -217,7 +218,7 @@ export class CreateCompleteAfiliadoCommand {
           @claveOrganica0, @claveOrganica1, @claveOrganica2, @claveOrganica3,
           @interno, @sueldo, @otrasPrestaciones, @quinquenios, @activo,
           @fechaMovAlt, @orgs1, @orgs2, @orgs3, @orgs4, @dSueldo,
-          @dOtrasPrestaciones, @dQuinquenios, @aplicar, @bc, @porcentaje
+          @dOtrasPrestaciones, @dQuinquenios, @aplicar, @bc, @porcentaje, @numQuinquenios
         )
       `);
 

@@ -67,6 +67,7 @@ export interface CreateCompleteAfiliadoData {
     aplicar: boolean | null;
     bc: string | null;
     porcentaje: number | null;
+    numQuinquenios?: number | null;
   };
   movimiento: {
     quincenaId?: string | null;

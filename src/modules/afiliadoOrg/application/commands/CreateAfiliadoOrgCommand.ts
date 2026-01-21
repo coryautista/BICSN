@@ -20,24 +20,30 @@ export class CreateAfiliadoOrgCommand {
   constructor(private afiliadoOrgRepo: IAfiliadoOrgRepository) {}
 
   async execute(data: CreateAfiliadoOrgData): Promise<AfiliadoOrg> {
+    // Aplicar default para numQuinquenios si no viene
+    const dataWithDefaults: CreateAfiliadoOrgData = {
+      ...data,
+      numQuinquenios: data.numQuinquenios ?? 1
+    };
+
     // Validaciones de entrada
-    this.validateInput(data);
+    this.validateInput(dataWithDefaults);
 
     const logContext = {
       operation: 'createAfiliadoOrg',
-      afiliadoId: data.afiliadoId,
-      claveOrganica0: data.claveOrganica0,
-      claveOrganica1: data.claveOrganica1,
-      claveOrganica2: data.claveOrganica2,
-      claveOrganica3: data.claveOrganica3,
-      sueldo: data.sueldo,
-      activo: data.activo
+      afiliadoId: dataWithDefaults.afiliadoId,
+      claveOrganica0: dataWithDefaults.claveOrganica0,
+      claveOrganica1: dataWithDefaults.claveOrganica1,
+      claveOrganica2: dataWithDefaults.claveOrganica2,
+      claveOrganica3: dataWithDefaults.claveOrganica3,
+      sueldo: dataWithDefaults.sueldo,
+      activo: dataWithDefaults.activo
     };
 
     logger.info(logContext, 'Iniciando creación de relación afiliado-org');
 
     try {
-      const result = await this.afiliadoOrgRepo.create(data);
+      const result = await this.afiliadoOrgRepo.create(dataWithDefaults);
 
       logger.info({
         ...logContext,

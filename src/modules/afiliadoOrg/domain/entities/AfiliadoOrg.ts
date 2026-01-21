@@ -25,6 +25,7 @@ export interface AfiliadoOrg {
   aplicar: boolean | null;
   bc: string | null;
   porcentaje: number | null;
+  numQuinquenios?: number | null;
   createdAt: string;
   updatedAt: string;
 }

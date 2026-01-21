@@ -30,7 +30,7 @@ export default async function eventoCalendarioRoutes(app: FastifyInstance) {
                 properties: {
                   id: { type: 'integer' },
                   fecha: { type: 'string', format: 'date' },
-                  tipo: { type: 'string', enum: ['FERIADO', 'VACACIONES', 'EVENTO_ESPECIAL', 'DIA_NO_LABORABLE', 'ALTA_BAJA_CAMBIO'] },
+                  tipo: { type: 'string', enum: ['ARCHIVO_APLICACION', 'ASUETO', 'ALTA_BAJA_CAMBIO', 'PAGO', 'HIPOTECARIO', 'INTERESES_MORATORIOS'] },
                   anio: { type: 'integer' },
                   createdAt: { type: 'string', format: 'date-time' }
                 }
@@ -78,7 +78,7 @@ export default async function eventoCalendarioRoutes(app: FastifyInstance) {
           fechaFin: { type: 'string', format: 'date', description: 'Fecha de fin del rango (YYYY-MM-DD)' },
           tipo: {
             type: 'string',
-            enum: ['FERIADO', 'VACACIONES', 'EVENTO_ESPECIAL', 'DIA_NO_LABORABLE'],
+            enum: ['ARCHIVO_APLICACION', 'ASUETO', 'ALTA_BAJA_CAMBIO', 'PAGO', 'HIPOTECARIO', 'INTERESES_MORATORIOS'],
             description: 'Tipo de evento (opcional)'
           }
         }
@@ -96,7 +96,7 @@ export default async function eventoCalendarioRoutes(app: FastifyInstance) {
                   fecha: { type: 'string', format: 'date', description: 'Fecha del evento' },
                   tipo: {
                     type: 'string',
-                    enum: ['FERIADO', 'VACACIONES', 'EVENTO_ESPECIAL', 'DIA_NO_LABORABLE'],
+                    enum: ['ARCHIVO_APLICACION', 'ASUETO', 'ALTA_BAJA_CAMBIO', 'PAGO', 'HIPOTECARIO', 'INTERESES_MORATORIOS'],
                     description: 'Tipo de evento'
                   },
                   anio: { type: 'integer', description: 'Año del evento' },
@@ -176,7 +176,7 @@ export default async function eventoCalendarioRoutes(app: FastifyInstance) {
               properties: {
                 id: { type: 'integer' },
                 fecha: { type: 'string', format: 'date' },
-                tipo: { type: 'string', enum: ['FERIADO', 'VACACIONES', 'EVENTO_ESPECIAL', 'DIA_NO_LABORABLE', 'HIPOTECARIO'] },
+                tipo: { type: 'string', enum: ['ARCHIVO_APLICACION', 'ASUETO', 'ALTA_BAJA_CAMBIO', 'PAGO', 'HIPOTECARIO', 'INTERESES_MORATORIOS'] },
                 anio: { type: 'integer' },
                 createdAt: { type: 'string', format: 'date-time' }
               }
@@ -253,7 +253,7 @@ export default async function eventoCalendarioRoutes(app: FastifyInstance) {
         required: ['fecha', 'tipo', 'anio'],
         properties: {
           fecha: { type: 'string', format: 'date' },
-          tipo: { type: 'string', enum: ['FERIADO', 'VACACIONES', 'EVENTO_ESPECIAL', 'DIA_NO_LABORABLE', 'ALTA_BAJA_CAMBIO'] },
+          tipo: { type: 'string', enum: ['ARCHIVO_APLICACION', 'ASUETO', 'ALTA_BAJA_CAMBIO', 'PAGO', 'HIPOTECARIO', 'INTERESES_MORATORIOS'] },
           anio: { type: 'integer' },
           createdAt: { type: 'string', format: 'date-time' }
         }
@@ -267,7 +267,7 @@ export default async function eventoCalendarioRoutes(app: FastifyInstance) {
               properties: {
                 id: { type: 'integer' },
                 fecha: { type: 'string', format: 'date' },
-                tipo: { type: 'string', enum: ['FERIADO', 'VACACIONES', 'EVENTO_ESPECIAL', 'DIA_NO_LABORABLE', 'ALTA_BAJA_CAMBIO'] },
+                tipo: { type: 'string', enum: ['ARCHIVO_APLICACION', 'ASUETO', 'ALTA_BAJA_CAMBIO', 'PAGO', 'HIPOTECARIO', 'INTERESES_MORATORIOS'] },
                 anio: { type: 'integer' },
                 createdAt: { type: 'string', format: 'date-time' }
               }
@@ -356,7 +356,7 @@ export default async function eventoCalendarioRoutes(app: FastifyInstance) {
         type: 'object',
         properties: {
           fecha: { type: 'string', format: 'date' },
-          tipo: { type: 'string', enum: ['FERIADO', 'VACACIONES', 'EVENTO_ESPECIAL', 'DIA_NO_LABORABLE', 'HIPOTECARIO'] },
+          tipo: { type: 'string', enum: ['ARCHIVO_APLICACION', 'ASUETO', 'ALTA_BAJA_CAMBIO', 'PAGO', 'HIPOTECARIO', 'INTERESES_MORATORIOS'] },
           anio: { type: 'integer' },
           createdAt: { type: 'string', format: 'date-time' }
         }
@@ -370,7 +370,7 @@ export default async function eventoCalendarioRoutes(app: FastifyInstance) {
               properties: {
                 id: { type: 'integer' },
                 fecha: { type: 'string', format: 'date' },
-                tipo: { type: 'string', enum: ['FERIADO', 'VACACIONES', 'EVENTO_ESPECIAL', 'DIA_NO_LABORABLE', 'HIPOTECARIO'] },
+                tipo: { type: 'string', enum: ['ARCHIVO_APLICACION', 'ASUETO', 'ALTA_BAJA_CAMBIO', 'PAGO', 'HIPOTECARIO', 'INTERESES_MORATORIOS'] },
                 anio: { type: 'integer' },
                 createdAt: { type: 'string', format: 'date-time' }
               }

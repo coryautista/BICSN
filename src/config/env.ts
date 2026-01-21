@@ -34,7 +34,7 @@ export const env = {
     database: process.env.FIREBIRD_DATABASE!,
     user: process.env.FIREBIRD_USER!,
     password: process.env.FIREBIRD_PASSWORD!,
-    charset: process.env.FIREBIRD_CHARSET ?? 'NONE' // NONE (recomendado para evitar U+FFFD), WIN1252, UTF8, ISO8859_1
+    charset: process.env.FIREBIRD_CHARSET ?? 'WIN1252' // OCTETS (force buffer for manual decoding), NONE, UTF8, WIN1252
   },
   ftp: {
     host: process.env.FTP_HOST ?? 'codigosingular.com',

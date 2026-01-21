@@ -12,6 +12,30 @@ import { getPool, sql } from '../../../../db/mssql.js';
 import { executeSerializedQuery, decodeFirebirdObject } from '../../../../db/firebird.js';
 
 export class AportacionFondoRepository implements IAportacionFondoRepository {
+  /**
+   * Convierte un valor a número de forma segura, evitando NaN.
+   * Si el valor no es convertible a número válido, retorna null.
+   */
+  private safeNumber(value: any): number | null {
+    if (value === null || value === undefined) {
+      return null;
+    }
+    // Si ya es un número válido, retornarlo directamente
+    if (typeof value === 'number') {
+      return Number.isFinite(value) ? value : null;
+    }
+    // Si es string, verificar que no sea "NaN" o vacío
+    if (typeof value === 'string') {
+      const trimmed = value.trim();
+      if (trimmed === '' || trimmed.toLowerCase() === 'nan') {
+        return null;
+      }
+    }
+    // Intentar convertir
+    const num = Number(value);
+    return Number.isFinite(num) ? num : null;
+  }
+
   async obtenerAportacionesIndividuales(
     tipo: TipoFondo,
     claveOrganica0: string,
@@ -37,26 +61,24 @@ export class AportacionFondoRepository implements IAportacionFondoRepository {
         );
       }
 
-      // Debug: verificar que los registros tengan nombre
-      if (registros.length > 0) {
+      // Debug (solo LOG_LEVEL=debug): verificar que los registros tengan nombre
+      if (process.env.LOG_LEVEL === 'debug' && registros.length > 0) {
         console.log('[APORTACIONES_FONDOS] [DEBUG] Primer registro antes de calcularAportaciones:', {
           interno: registros[0].interno,
           nombre: registros[0].nombre,
-          tieneNombre: !!registros[0].nombre,
-          todasLasPropiedades: Object.keys(registros[0])
+          tieneNombre: !!registros[0].nombre
         });
       }
 
       // Calcular aportaciones según el tipo
       const datos = await this.calcularAportaciones(registros, tipo);
 
-      // Debug: verificar que los datos tengan nombre después del cálculo
-      if (datos.length > 0) {
+      // Debug (solo LOG_LEVEL=debug): verificar que los datos tengan nombre después del cálculo
+      if (process.env.LOG_LEVEL === 'debug' && datos.length > 0) {
         console.log('[APORTACIONES_FONDOS] [DEBUG] Primer dato después de calcularAportaciones:', {
           interno: datos[0].interno,
           nombre: datos[0].nombre,
-          tieneNombre: !!datos[0].nombre,
-          todasLasPropiedades: Object.keys(datos[0])
+          tieneNombre: !!datos[0].nombre
         });
       }
 
@@ -1078,12 +1100,25 @@ export class AportacionFondoRepository implements IAportacionFondoRepository {
           // Decodificar resultados de Firebird antes de mapear
           const decodedRecords = records.map((row: any) => decodeFirebirdObject(row));
           
-          // Debug: verificar estructura del primer resultado
-          if (decodedRecords.length > 0) {
+          // Debug (solo LOG_LEVEL=debug): verificar estructura del primer resultado
+          if (process.env.LOG_LEVEL === 'debug' && decodedRecords.length > 0) {
             console.log('[APORTACIONES_FONDOS] [DEBUG] Primer row keys:', Object.keys(decodedRecords[0]));
-            console.log('[APORTACIONES_FONDOS] [DEBUG] Primer row completo:', JSON.stringify(decodedRecords[0], null, 2));
           }
           
+          // Helper para convertir fechas de ODBC (pueden venir como Date o string)
+          const toIsoString = (v: any): string | null => {
+            if (!v) return null;
+            if (v instanceof Date) return v.toISOString();
+            if (typeof v === 'string') return v;
+            // Algunos drivers devuelven objetos tipo Timestamp con valueOf/toString
+            try {
+              const s = String(v);
+              return s || null;
+            } catch {
+              return null;
+            }
+          };
+
           const mappedRecords = decodedRecords.map((row: any, index: number) => {
             // Firebird retorna columnas en mayúsculas
             // Usar el alias NOMBRE_EMPLEADO que creamos en la consulta SQL
@@ -1106,12 +1141,8 @@ export class AportacionFondoRepository implements IAportacionFondoRepository {
               nombreValue = String(row.NOMBRE).trim();
             }
             
-            // Debug para el primer registro
-            if (index === 0) {
-              console.log('[APORTACIONES_FONDOS] [DEBUG] Row keys:', Object.keys(row));
-              console.log('[APORTACIONES_FONDOS] [DEBUG] Row.NOMBRE_EMPLEADO:', row.NOMBRE_EMPLEADO, 'type:', typeof row.NOMBRE_EMPLEADO);
-              console.log('[APORTACIONES_FONDOS] [DEBUG] Row.FULLNAME:', row.FULLNAME, 'type:', typeof row.FULLNAME);
-              console.log('[APORTACIONES_FONDOS] [DEBUG] Row.NOMBRE:', row.NOMBRE, 'type:', typeof row.NOMBRE);
+            // Debug (solo LOG_LEVEL=debug) para el primer registro
+            if (process.env.LOG_LEVEL === 'debug' && index === 0) {
               console.log('[APORTACIONES_FONDOS] [DEBUG] Nombre final seleccionado:', nombreValue);
             }
             
@@ -1125,8 +1156,7 @@ export class AportacionFondoRepository implements IAportacionFondoRepository {
               otras_prestaciones: row.OTRAS_PRESTACIONES || row.otras_prestaciones || null,
               quinquenios: row.QUINQUENIOS || row.quinquenios || null,
               activo: row.ACTIVO || row.activo || null,
-              fecha_mov_alt: (row.FECHA_MOV_ALT || row.fecha_mov_alt) ? 
-                (row.FECHA_MOV_ALT || row.fecha_mov_alt).toISOString() : null,
+              fecha_mov_alt: toIsoString(row.FECHA_MOV_ALT || row.fecha_mov_alt),
               orgs1: row.ORGS1 || row.orgs1 || null,
               orgs2: row.ORGS2 || row.orgs2 || null,
               orgs3: row.ORGS3 || row.orgs3 || null,
@@ -1141,8 +1171,8 @@ export class AportacionFondoRepository implements IAportacionFondoRepository {
             };
           });
           
-          // Debug log final
-          if (mappedRecords.length > 0) {
+          // Debug (solo LOG_LEVEL=debug) log final
+          if (process.env.LOG_LEVEL === 'debug' && mappedRecords.length > 0) {
             console.log('[APORTACIONES_FONDOS] [DEBUG] Primer registro mapeado:', {
               interno: mappedRecords[0].interno,
               nombre: mappedRecords[0].nombre,
@@ -1168,18 +1198,16 @@ export class AportacionFondoRepository implements IAportacionFondoRepository {
       // Debug: verificar que el nombre esté presente
       const nombre = registro.nombre || null;
       
-      // Debug detallado para el primer registro
-      if (registros.indexOf(registro) === 0) {
+      // Debug (solo LOG_LEVEL=debug) para el primer registro
+      if (process.env.LOG_LEVEL === 'debug' && registros.indexOf(registro) === 0) {
         console.log('[APORTACIONES_FONDOS] [DEBUG] calcularAportaciones - Primer registro:', {
           interno: registro.interno,
           nombre: registro.nombre,
-          tieneNombre: !!registro.nombre,
-          tipoNombre: typeof registro.nombre,
-          todasLasPropiedades: Object.keys(registro)
+          tieneNombre: !!registro.nombre
         });
       }
       
-      if (!nombre && registro.interno) {
+      if (process.env.LOG_LEVEL === 'debug' && !nombre && registro.interno) {
         console.warn(`[APORTACIONES_FONDOS] [DEBUG] Registro sin nombre para interno: ${registro.interno}`);
       }
 
@@ -1195,13 +1223,12 @@ export class AportacionFondoRepository implements IAportacionFondoRepository {
         tipo
       };
       
-      // Debug: verificar que el nombre se asignó correctamente
-      if (registros.indexOf(registro) === 0) {
+      // Debug (solo LOG_LEVEL=debug): verificar que el nombre se asignó correctamente
+      if (process.env.LOG_LEVEL === 'debug' && registros.indexOf(registro) === 0) {
         console.log('[APORTACIONES_FONDOS] [DEBUG] Aportacion creada:', {
           interno: aportacion.interno,
           nombre: aportacion.nombre,
-          tieneNombre: !!aportacion.nombre,
-          objetoCompleto: aportacion
+          tieneNombre: !!aportacion.nombre
         });
       }
 
@@ -1744,8 +1771,8 @@ export class AportacionFondoRepository implements IAportacionFondoRepository {
               
               // Mapear resultados a entidad PensionNominaTransitorio
               const registros: PensionNominaTransitorio[] = decodedResult.map((row: any) => ({
-                fpension: row.FPENSION !== null && row.FPENSION !== undefined ? Number(row.FPENSION) : null,
-                interno: row.INTERNO !== null && row.INTERNO !== undefined ? Number(row.INTERNO) : null,
+                fpension: this.safeNumber(row.FPENSION),
+                interno: this.safeNumber(row.INTERNO),
                 nombres: row.NOMBRES || null,
                 nonombre: row.NONOMBRE || null,
                 rfc: row.RFC || null,
@@ -1754,51 +1781,51 @@ export class AportacionFondoRepository implements IAportacionFondoRepository {
                 org1: row.ORG1 || null,
                 org2: row.ORG2 || null,
                 org3: row.ORG3 || null,
-                sueldo: row.SUELDO !== null && row.SUELDO !== undefined ? Number(row.SUELDO) : null,
-                oprestaciones: row.OPRESTACIONES !== null && row.OPRESTACIONES !== undefined ? Number(row.OPRESTACIONES) : null,
-                quinquenios: row.QUINQUENIOS !== null && row.QUINQUENIOS !== undefined ? Number(row.QUINQUENIOS) : null,
-                sdo: row.SDO !== null && row.SDO !== undefined ? Number(row.SDO) : null,
-                oprest: row.OPREST !== null && row.OPREST !== undefined ? Number(row.OPREST) : null,
-                quinq: row.QUINQ !== null && row.QUINQ !== undefined ? Number(row.QUINQ) : null,
-                tpension: row.TPENSION !== null && row.TPENSION !== undefined ? Number(row.TPENSION) : null,
-                transitorio: row.TRANSITORIO !== null && row.TRANSITORIO !== undefined ? Number(row.TRANSITORIO) : null,
+                sueldo: this.safeNumber(row.SUELDO),
+                oprestaciones: this.safeNumber(row.OPRESTACIONES),
+                quinquenios: this.safeNumber(row.QUINQUENIOS),
+                sdo: this.safeNumber(row.SDO),
+                oprest: this.safeNumber(row.OPREST),
+                quinq: this.safeNumber(row.QUINQ),
+                tpension: this.safeNumber(row.TPENSION),
+                transitorio: this.safeNumber(row.TRANSITORIO),
                 norg0: row.NORG0 || null,
                 norg1: row.NORG1 || null,
                 norg2: row.NORG2 || null,
                 norg3: row.NORG3 || null,
                 cconcepto: row.CCONCEPTO || null,
                 descripcion: row.DESCRIPCION || null,
-                importe: row.IMPORTE !== null && row.IMPORTE !== undefined ? Number(row.IMPORTE) : null,
+                importe: this.safeNumber(row.IMPORTE),
                 defuncion: row.DEFUNCION ? new Date(row.DEFUNCION) : null,
-                pcp: row.PCP !== null && row.PCP !== undefined ? Number(row.PCP) : null,
-                palimenticia: row.PALIMENTICIA !== null && row.PALIMENTICIA !== undefined ? Number(row.PALIMENTICIA) : null,
-                retroactivo: row.RETROACTIVO !== null && row.RETROACTIVO !== undefined ? Number(row.RETROACTIVO) : null,
-                payudaecon: row.PAYUDAECON !== null && row.PAYUDAECON !== undefined ? Number(row.PAYUDAECON) : null,
-                otrosp1: row.OTROSP1 !== null && row.OTROSP1 !== undefined ? Number(row.OTROSP1) : null,
-                otrosp2: row.OTROSP2 !== null && row.OTROSP2 !== undefined ? Number(row.OTROSP2) : null,
-                otrosp3: row.OTROSP3 !== null && row.OTROSP3 !== undefined ? Number(row.OTROSP3) : null,
-                otrosp4: row.OTROSP4 !== null && row.OTROSP4 !== undefined ? Number(row.OTROSP4) : null,
-                otrosp5: row.OTROSP5 !== null && row.OTROSP5 !== undefined ? Number(row.OTROSP5) : null,
-                terreno: row.TERRENO !== null && row.TERRENO !== undefined ? Number(row.TERRENO) : null,
-                hipviv: row.HIPVIV !== null && row.HIPVIV !== undefined ? Number(row.HIPVIV) : null,
-                prodental: row.PRODENTAL !== null && row.PRODENTAL !== undefined ? Number(row.PRODENTAL) : null,
-                otrod1: row.OTROD1 !== null && row.OTROD1 !== undefined ? Number(row.OTROD1) : null,
-                otrod2: row.OTROD2 !== null && row.OTROD2 !== undefined ? Number(row.OTROD2) : null,
-                otrod3: row.OTROD3 !== null && row.OTROD3 !== undefined ? Number(row.OTROD3) : null,
-                otrod4: row.OTROD4 !== null && row.OTROD4 !== undefined ? Number(row.OTROD4) : null,
-                otrod5: row.OTROD5 !== null && row.OTROD5 !== undefined ? Number(row.OTROD5) : null,
-                otrod6: row.OTROD6 !== null && row.OTROD6 !== undefined ? Number(row.OTROD6) : null,
-                tpercep: row.TPERCEP !== null && row.TPERCEP !== undefined ? Number(row.TPERCEP) : null,
-                tdeduc: row.TDEDUC !== null && row.TDEDUC !== undefined ? Number(row.TDEDUC) : null,
-                total: row.TOTAL !== null && row.TOTAL !== undefined ? Number(row.TOTAL) : null,
+                pcp: this.safeNumber(row.PCP),
+                palimenticia: this.safeNumber(row.PALIMENTICIA),
+                retroactivo: this.safeNumber(row.RETROACTIVO),
+                payudaecon: this.safeNumber(row.PAYUDAECON),
+                otrosp1: this.safeNumber(row.OTROSP1),
+                otrosp2: this.safeNumber(row.OTROSP2),
+                otrosp3: this.safeNumber(row.OTROSP3),
+                otrosp4: this.safeNumber(row.OTROSP4),
+                otrosp5: this.safeNumber(row.OTROSP5),
+                terreno: this.safeNumber(row.TERRENO),
+                hipviv: this.safeNumber(row.HIPVIV),
+                prodental: this.safeNumber(row.PRODENTAL),
+                otrod1: this.safeNumber(row.OTROD1),
+                otrod2: this.safeNumber(row.OTROD2),
+                otrod3: this.safeNumber(row.OTROD3),
+                otrod4: this.safeNumber(row.OTROD4),
+                otrod5: this.safeNumber(row.OTROD5),
+                otrod6: this.safeNumber(row.OTROD6),
+                tpercep: this.safeNumber(row.TPERCEP),
+                tdeduc: this.safeNumber(row.TDEDUC),
+                total: this.safeNumber(row.TOTAL),
                 fin: row.FIN ? new Date(row.FIN) : null,
                 inicio: row.INICIO ? new Date(row.INICIO) : null,
-                anio: row.ANIO !== null && row.ANIO !== undefined ? Number(row.ANIO) : null,
+                anio: this.safeNumber(row.ANIO),
                 sihay: row.SIHAY || null,
-                porcentaje: row.PORCENTAJE !== null && row.PORCENTAJE !== undefined ? Number(row.PORCENTAJE) : null,
-                sdoporc: row.SDOPORC !== null && row.SDOPORC !== undefined ? Number(row.SDOPORC) : null,
-                ayudporc: row.AYUDPORC !== null && row.AYUDPORC !== undefined ? Number(row.AYUDPORC) : null,
-                quinqporc: row.QUINQPORC !== null && row.QUINQPORC !== undefined ? Number(row.QUINQPORC) : null,
+                porcentaje: this.safeNumber(row.PORCENTAJE),
+                sdoporc: this.safeNumber(row.SDOPORC),
+                ayudporc: this.safeNumber(row.AYUDPORC),
+                quinqporc: this.safeNumber(row.QUINQPORC),
                 transorg0: row.TRANSORG0 || null,
                 transorg1: row.TRANSORG1 || null,
                 transnorg0: row.TRANSNORG0 || null,
