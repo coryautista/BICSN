@@ -291,6 +291,12 @@ export async function getOrgPersonalBySearch(searchTerm: string): Promise<OrgPer
   }
   
   const row = result[0];
+  const fechaMovAltIso = (() => {
+    if (!row.FECHA_MOV_ALT) return null;
+    if (row.FECHA_MOV_ALT instanceof Date) return row.FECHA_MOV_ALT.toISOString();
+    const parsed = new Date(row.FECHA_MOV_ALT);
+    return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString();
+  })();
   const record: OrgPersonal = {
     interno: row.INTERNO,
     clave_organica_0: row.CLAVE_ORGANICA_0 || null,
@@ -301,7 +307,7 @@ export async function getOrgPersonalBySearch(searchTerm: string): Promise<OrgPer
     otras_prestaciones: row.OTRAS_PRESTACIONES || null,
     quinquenios: row.QUINQUENIOS || null,
     activo: row.ACTIVO || null,
-    fecha_mov_alt: row.FECHA_MOV_ALT ? row.FECHA_MOV_ALT.toISOString() : null,
+    fecha_mov_alt: fechaMovAltIso,
     orgs1: row.ORGS1 || null,
     orgs2: row.ORGS2 || null,
     orgs3: row.ORGS3 || null,

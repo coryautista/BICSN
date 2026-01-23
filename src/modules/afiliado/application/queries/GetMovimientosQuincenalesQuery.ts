@@ -15,25 +15,27 @@ const logger = pino({
 export class GetMovimientosQuincenalesQuery {
   constructor(private mssqlPool: ConnectionPool) {}
 
-  async execute(userOrg0: string, userOrg1: string): Promise<MovimientoQuincenal[]> {
+  async execute(userOrg0: string, userOrg1: string, quincenaId: string): Promise<MovimientoQuincenal[]> {
     const logContext = {
       operation: 'getMovimientosQuincenales',
       userOrg0,
-      userOrg1
+      userOrg1,
+      quincenaId
     };
 
     logger.info(logContext, 'Consultando movimientos quincenales');
 
     // Validar parámetros de entrada
-    if (!userOrg0 || !userOrg1) {
+    if (!userOrg0 || !userOrg1 || !quincenaId) {
       logger.warn(logContext, 'Parámetros de organización inválidos');
-      throw new InvalidAfiliadoDataError('userOrg0/userOrg1', 'Parámetros de organización requeridos');
+      throw new InvalidAfiliadoDataError('userOrg0/userOrg1/quincenaId', 'Parámetros de organización y quincenaId requeridos');
     }
 
     try {
       const result = await this.mssqlPool.request()
         .input('userOrg0', sql.Char(2), userOrg0)
         .input('userOrg1', sql.Char(2), userOrg1)
+        .input('quincenaId', sql.VarChar(30), quincenaId)
       .query(`
       SELECT
         -- Afiliado fields
@@ -131,6 +133,7 @@ export class GetMovimientosQuincenalesQuery {
         AND ao.claveOrganica1 = @userOrg1
         AND a.estatus = 1
         AND m.estatus IN ('A', 'L')
+        AND m.quincenaId = @quincenaId
       ORDER BY a.id, m.id
     `);
 

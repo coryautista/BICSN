@@ -10,6 +10,7 @@ import { AportacionFondoDomainError, AportacionFondoError, AportacionFondoErrorM
 import { getOrgPersonalByClavesOrganicas } from '../../../orgPersonal/orgPersonal.repo.js';
 import { getPool, sql } from '../../../../db/mssql.js';
 import { executeSerializedQuery, decodeFirebirdObject } from '../../../../db/firebird.js';
+import { normalizeTextDeep } from '../../../../utils/encoding.js';
 
 export class AportacionFondoRepository implements IAportacionFondoRepository {
   /**
@@ -440,8 +441,8 @@ export class AportacionFondoRepository implements IAportacionFondoRepository {
               return;
             }
 
-            // Decodificar resultados de Firebird antes de mapear
-            const decodedResult = result.map((row: any) => decodeFirebirdObject(row));
+            // Decodificar resultados de Firebird y normalizar strings (mojibake/UTF-8 mal decodificado)
+            const decodedResult = result.map((row: any) => normalizeTextDeep(decodeFirebirdObject(row)));
             
             // Mapear resultados a entidad Prestamo
             console.log('[APORTACIONES_FONDOS] [AP_S_PCP] Mapeando resultados', { ...logContext, totalRegistros: decodedResult.length });
@@ -686,7 +687,7 @@ export class AportacionFondoRepository implements IAportacionFondoRepository {
             }
 
             // Decodificar resultados de Firebird antes de mapear
-            const decodedResult = result.map((row: any) => decodeFirebirdObject(row));
+            const decodedResult = result.map((row: any) => normalizeTextDeep(decodeFirebirdObject(row)));
             
             // Mapear resultados a entidad PrestamoMedianoPlazo
             console.log('[APORTACIONES_FONDOS] [AP_S_VIV] Mapeando resultados', { ...logContext, totalRegistros: decodedResult.length });
@@ -898,7 +899,7 @@ export class AportacionFondoRepository implements IAportacionFondoRepository {
             }
 
             // Decodificar resultados de Firebird antes de mapear
-            const decodedResult = result.map((row: any) => decodeFirebirdObject(row));
+            const decodedResult = result.map((row: any) => normalizeTextDeep(decodeFirebirdObject(row)));
             
             // Mapear resultados a entidad PrestamoHipotecario
             console.log(`[APORTACIONES_FONDOS] [HIPOTECARIOS] Mapeando resultados`, { ...logContext, totalRegistros: decodedResult.length });
@@ -1097,8 +1098,8 @@ export class AportacionFondoRepository implements IAportacionFondoRepository {
 
           const records = Array.isArray(result) ? result : [];
           
-          // Decodificar resultados de Firebird antes de mapear
-          const decodedRecords = records.map((row: any) => decodeFirebirdObject(row));
+          // Decodificar resultados de Firebird y normalizar strings (mojibake/UTF-8 mal decodificado)
+          const decodedRecords = records.map((row: any) => normalizeTextDeep(decodeFirebirdObject(row)));
           
           // Debug (solo LOG_LEVEL=debug): verificar estructura del primer resultado
           if (process.env.LOG_LEVEL === 'debug' && decodedRecords.length > 0) {
@@ -1503,7 +1504,7 @@ export class AportacionFondoRepository implements IAportacionFondoRepository {
               }
 
               // Decodificar resultados de Firebird antes de mapear
-              const decodedResult = resultArray.map((row: any) => decodeFirebirdObject(row));
+              const decodedResult = resultArray.map((row: any) => normalizeTextDeep(decodeFirebirdObject(row)));
               
               // Mapear resultados a entidad AportacionGuarderia
               const aportaciones: AportacionGuarderia[] = decodedResult.map((row: any) => ({
@@ -1767,7 +1768,7 @@ export class AportacionFondoRepository implements IAportacionFondoRepository {
               }
 
               // Decodificar resultados de Firebird antes de mapear
-              const decodedResult = resultArray.map((row: any) => decodeFirebirdObject(row));
+              const decodedResult = resultArray.map((row: any) => normalizeTextDeep(decodeFirebirdObject(row)));
               
               // Mapear resultados a entidad PensionNominaTransitorio
               const registros: PensionNominaTransitorio[] = decodedResult.map((row: any) => ({
@@ -2016,7 +2017,7 @@ export class AportacionFondoRepository implements IAportacionFondoRepository {
               }
 
               // Decodificar resultados de Firebird antes de mapear
-              const decodedResult = resultArray.map((row: any) => decodeFirebirdObject(row));
+              const decodedResult = resultArray.map((row: any) => normalizeTextDeep(decodeFirebirdObject(row)));
               
               // Mapear resultados a entidad Aguinaldo
               const aguinaldos: Aguinaldo[] = decodedResult.map((row: any) => ({
