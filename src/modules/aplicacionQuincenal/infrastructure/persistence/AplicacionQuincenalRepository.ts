@@ -940,95 +940,111 @@ export class AplicacionQuincenalRepository implements IAplicacionQuincenalReposi
     detalleTable.columns.add('anio', sql.Int);
     detalleTable.columns.add('fpension', sql.Int);
     detalleTable.columns.add('interno', sql.Int);
-    detalleTable.columns.add('nombres', sql.NVarChar(200));
-    detalleTable.columns.add('nonombre', sql.NVarChar(200));
-    detalleTable.columns.add('rfc', sql.NVarChar(20));
-    detalleTable.columns.add('norfc', sql.NVarChar(20));
+    detalleTable.columns.add('nombres', sql.NVarChar(255));
+    detalleTable.columns.add('nonombre', sql.NVarChar(50));
+    detalleTable.columns.add('rfc', sql.NVarChar(13));
+    detalleTable.columns.add('norfc', sql.NVarChar(13));
     detalleTable.columns.add('org0', sql.Char(2));
     detalleTable.columns.add('org1', sql.Char(2));
     detalleTable.columns.add('org2', sql.Char(2));
     detalleTable.columns.add('org3', sql.Char(2));
-    detalleTable.columns.add('sueldo', sql.Decimal(18, 2));
-    detalleTable.columns.add('oprestaciones', sql.Decimal(18, 2));
-    detalleTable.columns.add('quinquenios', sql.Decimal(18, 2));
-    detalleTable.columns.add('sdo', sql.Decimal(18, 2));
-    detalleTable.columns.add('oprest', sql.Decimal(18, 2));
-    detalleTable.columns.add('quinq', sql.Decimal(18, 2));
-    detalleTable.columns.add('tpension', sql.Decimal(18, 2));
-    detalleTable.columns.add('transitorio', sql.Decimal(18, 2));
-    detalleTable.columns.add('norg0', sql.NVarChar(100));
-    detalleTable.columns.add('norg1', sql.NVarChar(100));
-    detalleTable.columns.add('norg2', sql.NVarChar(100));
-    detalleTable.columns.add('norg3', sql.NVarChar(100));
-    detalleTable.columns.add('cconcepto', sql.NVarChar(50));
-    detalleTable.columns.add('descripcion', sql.NVarChar(200));
-    detalleTable.columns.add('importe', sql.Decimal(18, 2));
-    detalleTable.columns.add('defuncion', sql.Date);
-    detalleTable.columns.add('pcp', sql.Decimal(18, 2));
-    detalleTable.columns.add('palimenticia', sql.Decimal(18, 2));
-    detalleTable.columns.add('retroactivo', sql.Decimal(18, 2));
-    detalleTable.columns.add('payudaecon', sql.Decimal(18, 2));
-    detalleTable.columns.add('otrosp1', sql.Decimal(18, 2));
-    detalleTable.columns.add('otrosp2', sql.Decimal(18, 2));
-    detalleTable.columns.add('otrosp3', sql.Decimal(18, 2));
-    detalleTable.columns.add('otrosp4', sql.Decimal(18, 2));
-    detalleTable.columns.add('otrosp5', sql.Decimal(18, 2));
-    detalleTable.columns.add('terreno', sql.Decimal(18, 2));
-    detalleTable.columns.add('hipviv', sql.Decimal(18, 2));
-    detalleTable.columns.add('prodental', sql.Decimal(18, 2));
-    detalleTable.columns.add('otrod1', sql.Decimal(18, 2));
-    detalleTable.columns.add('otrod2', sql.Decimal(18, 2));
-    detalleTable.columns.add('otrod3', sql.Decimal(18, 2));
-    detalleTable.columns.add('otrod4', sql.Decimal(18, 2));
-    detalleTable.columns.add('otrod5', sql.Decimal(18, 2));
-    detalleTable.columns.add('otrod6', sql.Decimal(18, 2));
-    detalleTable.columns.add('tpercep', sql.Decimal(18, 2));
-    detalleTable.columns.add('tdeduc', sql.Decimal(18, 2));
-    detalleTable.columns.add('total', sql.Decimal(18, 2));
-    detalleTable.columns.add('inicio', sql.Date);
-    detalleTable.columns.add('fin', sql.Date);
-    detalleTable.columns.add('anio_detalle', sql.Int);
+    detalleTable.columns.add('norg0', sql.NVarChar(255));
+    detalleTable.columns.add('norg1', sql.NVarChar(255));
+    detalleTable.columns.add('norg2', sql.NVarChar(255));
+    detalleTable.columns.add('norg3', sql.NVarChar(255));
+    detalleTable.columns.add('sueldo', sql.Decimal(19, 6));
+    detalleTable.columns.add('oprestaciones', sql.Decimal(19, 6));
+    detalleTable.columns.add('quinquenios', sql.Decimal(19, 6));
+    detalleTable.columns.add('sdo', sql.Decimal(19, 6));
+    detalleTable.columns.add('oprest', sql.Decimal(19, 6));
+    detalleTable.columns.add('quinq', sql.Decimal(19, 6));
+    detalleTable.columns.add('tpension', sql.Decimal(19, 6));
+    detalleTable.columns.add('transitorio', sql.Decimal(19, 6));
+    detalleTable.columns.add('cconcepto', sql.NVarChar(20));
+    detalleTable.columns.add('descripcion', sql.NVarChar(255));
+    detalleTable.columns.add('importe', sql.Decimal(19, 6));
+    detalleTable.columns.add('defuncion', sql.DateTime2(7));
+    detalleTable.columns.add('pcp', sql.Decimal(19, 6));
+    detalleTable.columns.add('palimenticia', sql.Decimal(19, 6));
+    detalleTable.columns.add('retroactivo', sql.Decimal(19, 6));
+    detalleTable.columns.add('payudaecon', sql.Decimal(19, 6));
+    detalleTable.columns.add('otrosp1', sql.Decimal(19, 6));
+    detalleTable.columns.add('otrosp2', sql.Decimal(19, 6));
+    detalleTable.columns.add('otrosp3', sql.Decimal(19, 6));
+    detalleTable.columns.add('otrosp4', sql.Decimal(19, 6));
+    detalleTable.columns.add('otrosp5', sql.Decimal(19, 6));
+    detalleTable.columns.add('terreno', sql.Decimal(19, 6));
+    detalleTable.columns.add('hipviv', sql.Decimal(19, 6));
+    detalleTable.columns.add('prodental', sql.Decimal(19, 6));
+    detalleTable.columns.add('otrod1', sql.Decimal(19, 6));
+    detalleTable.columns.add('otrod2', sql.Decimal(19, 6));
+    detalleTable.columns.add('otrod3', sql.Decimal(19, 6));
+    detalleTable.columns.add('otrod4', sql.Decimal(19, 6));
+    detalleTable.columns.add('otrod5', sql.Decimal(19, 6));
+    detalleTable.columns.add('otrod6', sql.Decimal(19, 6));
+    detalleTable.columns.add('tpercep', sql.Decimal(19, 6));
+    detalleTable.columns.add('tdeduc', sql.Decimal(19, 6));
+    detalleTable.columns.add('total', sql.Decimal(19, 6));
+    detalleTable.columns.add('fin', sql.DateTime2(7));
+    detalleTable.columns.add('inicio', sql.DateTime2(7));
+    detalleTable.columns.add('anio_registro', sql.Int);
     detalleTable.columns.add('sihay', sql.NVarChar(10));
-    detalleTable.columns.add('porcentaje', sql.Decimal(18, 2));
-    detalleTable.columns.add('sdoporc', sql.Decimal(18, 2));
-    detalleTable.columns.add('ayudporc', sql.Decimal(18, 2));
-    detalleTable.columns.add('quinqporc', sql.Decimal(18, 2));
+    detalleTable.columns.add('porcentaje', sql.Decimal(19, 6));
+    detalleTable.columns.add('sdoporc', sql.Decimal(19, 6));
+    detalleTable.columns.add('ayudporc', sql.Decimal(19, 6));
+    detalleTable.columns.add('quinqporc', sql.Decimal(19, 6));
     detalleTable.columns.add('transorg0', sql.Char(2));
     detalleTable.columns.add('transorg1', sql.Char(2));
-    detalleTable.columns.add('transnorg0', sql.NVarChar(100));
-    detalleTable.columns.add('transnorg1', sql.NVarChar(100));
+    detalleTable.columns.add('transnorg0', sql.NVarChar(255));
+    detalleTable.columns.add('transnorg1', sql.NVarChar(255));
+
+    const truncate = (value: string | null | undefined, maxLength: number) => {
+      if (value === null || value === undefined) return null;
+      if (value.length <= maxLength) return value;
+      return value.slice(0, maxLength);
+    };
 
     detalle.forEach(row => {
+      // Validar campos Char(2) para asegurar que sean strings de exactamente 2 caracteres
+      const org0Str = (row.org0 && String(row.org0).length === 2) ? String(row.org0) : (row.clave_organica_0 || '00');
+      const org1Str = (row.org1 && String(row.org1).length === 2) ? String(row.org1) : (row.clave_organica_1 || '00');
+      const org2Str = (row.org2 && String(row.org2).length === 2) ? String(row.org2) : '00';
+      const org3Str = (row.org3 && String(row.org3).length === 2) ? String(row.org3) : '00';
+      const transorg0Str = (row.transorg0 && String(row.transorg0).length === 2) ? String(row.transorg0) : (row.clave_organica_0 || '00');
+      const transorg1Str = (row.transorg1 && String(row.transorg1).length === 2) ? String(row.transorg1) : (row.clave_organica_1 || '00');
+      const claveOrg0Str = (row.clave_organica_0 && String(row.clave_organica_0).length === 2) ? String(row.clave_organica_0) : '00';
+      const claveOrg1Str = (row.clave_organica_1 && String(row.clave_organica_1).length === 2) ? String(row.clave_organica_1) : '00';
+
       detalleTable.rows.add(
-        row.clave_organica_0,
-        row.clave_organica_1,
+        claveOrg0Str,
+        claveOrg1Str,
         row.quincena,
         row.anio,
-        row.fpension,
-        row.interno,
-        row.nombres,
-        row.nonombre ?? null,
-        row.rfc,
-        row.norfc ?? null,
-        row.org0,
-        row.org1,
-        row.org2,
-        row.org3,
+        row.fpension ?? null,
+        row.interno ?? null,
+        truncate(row.nombres ?? null, 255),
+        truncate(row.nonombre ?? null, 50),
+        truncate(row.rfc ?? null, 13),
+        truncate(row.norfc ?? null, 13),
+        org0Str,
+        org1Str,
+        org2Str,
+        org3Str,
+        truncate(row.norg0 ?? null, 255),
+        truncate(row.norg1 ?? null, 255),
+        truncate(row.norg2 ?? null, 255),
+        truncate(row.norg3 ?? null, 255),
         row.sueldo ?? null,
         row.oprestaciones ?? null,
         row.quinquenios ?? null,
-        row.sdo,
+        row.sdo ?? null,
         row.oprest ?? null,
         row.quinq ?? null,
         row.tpension ?? null,
-        row.transitorio,
-        row.norg0 ?? null,
-        row.norg1 ?? null,
-        row.norg2 ?? null,
-        row.norg3 ?? null,
-        row.cconcepto,
-        row.descripcion,
-        row.importe,
+        row.transitorio ?? null,
+        truncate(row.cconcepto ?? null, 20),
+        truncate(row.descripcion ?? null, 255),
+        row.importe ?? null,
         row.defuncion ? new Date(row.defuncion) : null,
         row.pcp ?? null,
         row.palimenticia ?? null,
@@ -1048,21 +1064,21 @@ export class AplicacionQuincenalRepository implements IAplicacionQuincenalReposi
         row.otrod4 ?? null,
         row.otrod5 ?? null,
         row.otrod6 ?? null,
-        row.tpercep,
-        row.tdeduc,
-        row.total,
-        new Date(row.inicio),
-        new Date(row.fin),
+        row.tpercep ?? null,
+        row.tdeduc ?? null,
+        row.total ?? null,
+        row.fin ? new Date(row.fin) : null,
+        row.inicio ? new Date(row.inicio) : null,
         row.anio_detalle ?? null,
-        row.sihay ?? null,
+        truncate(row.sihay ?? null, 10),
         row.porcentaje ?? null,
         row.sdoporc ?? null,
         row.ayudporc ?? null,
         row.quinqporc ?? null,
-        row.transorg0,
-        row.transorg1,
-        row.transnorg0 ?? null,
-        row.transnorg1 ?? null
+        transorg0Str,
+        transorg1Str,
+        truncate(row.transnorg0 ?? null, 255),
+        truncate(row.transnorg1 ?? null, 255)
       );
     });
 

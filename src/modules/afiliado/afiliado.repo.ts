@@ -1594,9 +1594,24 @@ export async function ejecutarAP_P_APLICAR(
       try {
         // En Firebird, los stored procedures ejecutables (sin SUSPEND) se ejecutan con EXECUTE PROCEDURE
         // AP_P_APLICAR es un stored procedure ejecutable que no retorna resultados
-        const sql = `EXECUTE PROCEDURE AP_P_APLICAR(?, ?, ?, ?, ?)`;
+        const ensureMatch = (value: string, re: RegExp, label: string) => {
+          if (!re.test(value)) {
+            throw new Error(`Parámetro inválido para ${label}: ${value}`);
+          }
+          return value;
+        };
+        const safe = (value: string) => value.replace(/'/g, "''");
 
-        const params = [org0, org1, quincenaC, quincenaA, tipo];
+        const org0Safe = safe(ensureMatch(org0, /^\d{2}$/, 'org0'));
+        const org1Safe = safe(ensureMatch(org1, /^\d{2}$/, 'org1'));
+        const quincenaCSafe = safe(ensureMatch(quincenaC, /^\d{4}$/, 'quincenaC'));
+        const quincenaASafe = safe(ensureMatch(quincenaA, /^\d{4}$/, 'quincenaA'));
+        const tipoSafe = safe(ensureMatch(tipo, /^[A-Z]$/, 'tipo'));
+
+        // Evitar bind de parámetros con ODBC en este SP (output param rompe el driver)
+        const sql = `EXECUTE PROCEDURE AP_P_APLICAR('${org0Safe}', '${org1Safe}', '${quincenaCSafe}', '${quincenaASafe}', '${tipoSafe}')`;
+
+        const params: any[] = [];
 
         const timeoutId = setTimeout(() => {
           logger.error({

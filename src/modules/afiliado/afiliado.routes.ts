@@ -2680,12 +2680,21 @@ export default async function afiliadoRoutes(app: FastifyInstance) {
 
       // Obtener periodo desde BitacoraAfectacionOrg para logging (opcional)
       const periodo = await obtenerPeriodo(userOrg0, userOrg1);
-      if (periodo) {
-        console.log('Periodo obtenido:', periodo);
+      if (!periodo) {
+        return reply.code(400).send(fail('PERIODO_NOT_FOUND: No se pudo determinar el periodo actual para la orgánica del usuario'));
       }
 
+      // Convertir periodo Firebird/Bitacora (QQAA) a quincenaId de Movimiento (YYYY-QQ)
+      // Ej: '1925' => '2025-19'
+      const quincena = periodo.slice(0, 2);
+      const anio2 = periodo.slice(2, 4);
+      const anio = `20${anio2}`;
+      const quincenaId = `${anio}-${quincena}`;
+
+      console.log('Periodo obtenido:', { periodo, quincenaId });
+
       const getMovimientosQuincenalesQuery = req.diScope.resolve<GetMovimientosQuincenalesQuery>('getMovimientosQuincenalesQuery');
-      const movimientos = await getMovimientosQuincenalesQuery.execute(userOrg0, userOrg1);
+      const movimientos = await getMovimientosQuincenalesQuery.execute(userOrg0, userOrg1, quincenaId);
       return reply.send(ok(movimientos));
     } catch (error: any) {
       return handleAfiliadoError(error, reply, { operation: 'getMovimientosQuincenales', user: req.user?.sub });
@@ -4108,7 +4117,7 @@ export default async function afiliadoRoutes(app: FastifyInstance) {
   app.post('/afiliado/aplicar-bdisssspea-qna', {
     preHandler: [requireAuth],
     schema: {
-      description: 'Ejecutar stored procedures de Firebird para aplicar BDIssspea QNA. Ejecuta: 1) AP_G_APLICADO_TIPO para obtener quincena, 2) AP_P_APLICAR con tipo C, 3) AP_P_APLICAR con tipo F, 4) AP_D_ENVIO_LAYOUT, 5) Actualizar BitacoraAfectacionOrg a TERMINADO',
+      description: 'Ejecutar stored procedures de Firebird para aplicar BDIssspea QNA. Ejecuta: 1) AP_G_APLICADO_TIPO para obtener quincena, 2) AP_P_APLICAR con tipo C, 3) AP_P_APLICAR con tipo F, 4) Actualizar BitacoraAfectacionOrg a TERMINADO',
       tags: ['afiliado'],
       security: [{ bearerAuth: [] }],
       querystring: {

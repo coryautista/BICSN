@@ -32,7 +32,20 @@ export type AfiliadoOrg = {
   updatedAt: string;
 };
 
+let cachedHasNumQuinquenios: boolean | null = null;
+
+async function hasNumQuinqueniosColumn(): Promise<boolean> {
+  if (cachedHasNumQuinquenios !== null) return cachedHasNumQuinquenios;
+  const p = await getPool();
+  const r = await p.request().query(`
+    SELECT COL_LENGTH('afi.AfiliadoOrg', 'numQuinquenios') AS len
+  `);
+  cachedHasNumQuinquenios = r.recordset[0]?.len != null;
+  return cachedHasNumQuinquenios;
+}
+
 export async function getAllAfiliadoOrg(): Promise<AfiliadoOrg[]> {
+  const hasNumQuinquenios = await hasNumQuinqueniosColumn();
   const p = await getPool();
   const r = await p.request()
     .query(`
@@ -41,8 +54,9 @@ export async function getAllAfiliadoOrg(): Promise<AfiliadoOrg[]> {
         claveOrganica0, claveOrganica1, claveOrganica2, claveOrganica3,
         interno, sueldo, otrasPrestaciones, quinquenios, activo,
         fechaMovAlt, orgs1, orgs2, orgs3, orgs4, dSueldo,
-        dOtrasPrestaciones, dQuinquenios, aplicar, bc, porcentaje,
-        numQuinquenios, createdAt, updatedAt
+        dOtrasPrestaciones, dQuinquenios, aplicar, bc, porcentaje
+        ${hasNumQuinquenios ? ', numQuinquenios' : ''}
+        , createdAt, updatedAt
       FROM afi.AfiliadoOrg
       ORDER BY id
     `);
@@ -73,13 +87,14 @@ export async function getAllAfiliadoOrg(): Promise<AfiliadoOrg[]> {
     aplicar: row.aplicar === 1 || row.aplicar === true ? true : row.aplicar === 0 || row.aplicar === false ? false : null,
     bc: row.bc,
     porcentaje: row.porcentaje,
-    numQuinquenios: row.numQuinquenios,
+    numQuinquenios: hasNumQuinquenios ? row.numQuinquenios : null,
     createdAt: row.createdAt?.toISOString() || new Date().toISOString(),
     updatedAt: row.updatedAt?.toISOString() || new Date().toISOString()
   }));
 }
 
 export async function getAfiliadoOrgById(id: number): Promise<AfiliadoOrg | undefined> {
+  const hasNumQuinquenios = await hasNumQuinqueniosColumn();
   const p = await getPool();
   const r = await p.request()
     .input('id', sql.BigInt, id)
@@ -89,8 +104,9 @@ export async function getAfiliadoOrgById(id: number): Promise<AfiliadoOrg | unde
         claveOrganica0, claveOrganica1, claveOrganica2, claveOrganica3,
         interno, sueldo, otrasPrestaciones, quinquenios, activo,
         fechaMovAlt, orgs1, orgs2, orgs3, orgs4, dSueldo,
-        dOtrasPrestaciones, dQuinquenios, aplicar, bc, porcentaje,
-        numQuinquenios, createdAt, updatedAt
+        dOtrasPrestaciones, dQuinquenios, aplicar, bc, porcentaje
+        ${hasNumQuinquenios ? ', numQuinquenios' : ''}
+        , createdAt, updatedAt
       FROM afi.AfiliadoOrg
       WHERE id = @id
     `);
@@ -123,13 +139,14 @@ export async function getAfiliadoOrgById(id: number): Promise<AfiliadoOrg | unde
     aplicar: row.aplicar === 1 || row.aplicar === true ? true : row.aplicar === 0 || row.aplicar === false ? false : null,
     bc: row.bc,
     porcentaje: row.porcentaje,
-    numQuinquenios: row.numQuinquenios,
+    numQuinquenios: hasNumQuinquenios ? row.numQuinquenios : null,
     createdAt: row.createdAt?.toISOString() || new Date().toISOString(),
     updatedAt: row.updatedAt?.toISOString() || new Date().toISOString()
   };
 }
 
 export async function getAfiliadoOrgByAfiliadoId(afiliadoId: number): Promise<AfiliadoOrg[]> {
+  const hasNumQuinquenios = await hasNumQuinqueniosColumn();
   const p = await getPool();
   const r = await p.request()
     .input('afiliadoId', sql.Int, afiliadoId)
@@ -139,8 +156,9 @@ export async function getAfiliadoOrgByAfiliadoId(afiliadoId: number): Promise<Af
         claveOrganica0, claveOrganica1, claveOrganica2, claveOrganica3,
         interno, sueldo, otrasPrestaciones, quinquenios, activo,
         fechaMovAlt, orgs1, orgs2, orgs3, orgs4, dSueldo,
-        dOtrasPrestaciones, dQuinquenios, aplicar, bc, porcentaje,
-        numQuinquenios, createdAt, updatedAt
+        dOtrasPrestaciones, dQuinquenios, aplicar, bc, porcentaje
+        ${hasNumQuinquenios ? ', numQuinquenios' : ''}
+        , createdAt, updatedAt
       FROM afi.AfiliadoOrg
       WHERE afiliadoId = @afiliadoId
       ORDER BY id
@@ -172,14 +190,16 @@ export async function getAfiliadoOrgByAfiliadoId(afiliadoId: number): Promise<Af
     aplicar: row.aplicar === 1 || row.aplicar === true ? true : row.aplicar === 0 || row.aplicar === false ? false : null,
     bc: row.bc,
     porcentaje: row.porcentaje,
+    numQuinquenios: hasNumQuinquenios ? row.numQuinquenios : null,
     createdAt: row.createdAt?.toISOString() || new Date().toISOString(),
     updatedAt: row.updatedAt?.toISOString() || new Date().toISOString()
   }));
 }
 
 export async function createAfiliadoOrg(data: Omit<AfiliadoOrg, 'id' | 'createdAt' | 'updatedAt'>): Promise<AfiliadoOrg> {
+  const hasNumQuinquenios = await hasNumQuinqueniosColumn();
   const p = await getPool();
-  const r = await p.request()
+  const request = p.request()
     .input('afiliadoId', sql.Int, data.afiliadoId)
     .input('nivel0Id', sql.BigInt, data.nivel0Id)
     .input('nivel1Id', sql.BigInt, data.nivel1Id)
@@ -204,15 +224,20 @@ export async function createAfiliadoOrg(data: Omit<AfiliadoOrg, 'id' | 'createdA
     .input('dQuinquenios', sql.VarChar(200), data.dQuinquenios)
     .input('aplicar', sql.Bit, data.aplicar)
     .input('bc', sql.VarChar(30), data.bc)
-    .input('porcentaje', sql.Decimal(9, 4), data.porcentaje)
-    .input('numQuinquenios', sql.Int, data.numQuinquenios ?? 1)
-    .query(`
+    .input('porcentaje', sql.Decimal(9, 4), data.porcentaje);
+
+  if (hasNumQuinquenios) {
+    request.input('numQuinquenios', sql.Int, data.numQuinquenios ?? 1);
+  }
+
+  const r = await request.query(`
       INSERT INTO afi.AfiliadoOrg (
         afiliadoId, nivel0Id, nivel1Id, nivel2Id, nivel3Id,
         claveOrganica0, claveOrganica1, claveOrganica2, claveOrganica3,
         interno, sueldo, otrasPrestaciones, quinquenios, activo,
         fechaMovAlt, orgs1, orgs2, orgs3, orgs4, dSueldo,
-        dOtrasPrestaciones, dQuinquenios, aplicar, bc, porcentaje, numQuinquenios
+        dOtrasPrestaciones, dQuinquenios, aplicar, bc, porcentaje
+        ${hasNumQuinquenios ? ', numQuinquenios' : ''}
       )
       OUTPUT INSERTED.*
       VALUES (
@@ -220,7 +245,8 @@ export async function createAfiliadoOrg(data: Omit<AfiliadoOrg, 'id' | 'createdA
         @claveOrganica0, @claveOrganica1, @claveOrganica2, @claveOrganica3,
         @interno, @sueldo, @otrasPrestaciones, @quinquenios, @activo,
         @fechaMovAlt, @orgs1, @orgs2, @orgs3, @orgs4, @dSueldo,
-        @dOtrasPrestaciones, @dQuinquenios, @aplicar, @bc, @porcentaje, @numQuinquenios
+        @dOtrasPrestaciones, @dQuinquenios, @aplicar, @bc, @porcentaje
+        ${hasNumQuinquenios ? ', @numQuinquenios' : ''}
       )
     `);
   const row = r.recordset[0];
@@ -251,13 +277,14 @@ export async function createAfiliadoOrg(data: Omit<AfiliadoOrg, 'id' | 'createdA
     aplicar: row.aplicar === 1 || row.aplicar === true ? true : row.aplicar === 0 || row.aplicar === false ? false : null,
     bc: row.bc,
     porcentaje: row.porcentaje,
-    numQuinquenios: row.numQuinquenios,
+    numQuinquenios: hasNumQuinquenios ? row.numQuinquenios : null,
     createdAt: row.createdAt?.toISOString() || new Date().toISOString(),
     updatedAt: row.updatedAt?.toISOString() || new Date().toISOString()
   };
 }
 
 export async function updateAfiliadoOrg(id: number, data: Partial<Omit<AfiliadoOrg, 'id' | 'createdAt' | 'updatedAt'>>): Promise<AfiliadoOrg> {
+  const hasNumQuinquenios = await hasNumQuinqueniosColumn();
   const p = await getPool();
   const updates: string[] = [];
   const request = p.request().input('id', sql.BigInt, id);
@@ -362,7 +389,7 @@ export async function updateAfiliadoOrg(id: number, data: Partial<Omit<AfiliadoO
     updates.push('porcentaje = @porcentaje');
     request.input('porcentaje', sql.Decimal(9, 4), data.porcentaje);
   }
-  if (data.numQuinquenios !== undefined) {
+  if (hasNumQuinquenios && data.numQuinquenios !== undefined) {
     updates.push('numQuinquenios = @numQuinquenios');
     request.input('numQuinquenios', sql.Int, data.numQuinquenios);
   }
@@ -406,7 +433,7 @@ export async function updateAfiliadoOrg(id: number, data: Partial<Omit<AfiliadoO
     aplicar: row.aplicar === 1 || row.aplicar === true ? true : row.aplicar === 0 || row.aplicar === false ? false : null,
     bc: row.bc,
     porcentaje: row.porcentaje,
-    numQuinquenios: row.numQuinquenios,
+    numQuinquenios: hasNumQuinquenios ? row.numQuinquenios : null,
     createdAt: row.createdAt?.toISOString() || new Date().toISOString(),
     updatedAt: row.updatedAt?.toISOString() || new Date().toISOString()
   };

@@ -2,7 +2,6 @@ import pino from 'pino';
 import {
   getQuincenaAplicacion,
   ejecutarAP_P_APLICAR,
-  ejecutarAP_D_ENVIO_LAYOUT,
   actualizarBitacoraAfectacionOrgTerminado
 } from '../../afiliado.repo.js';
 
@@ -56,7 +55,7 @@ export class AplicarBDIssspeaQNACommand {
       obtenerQuincena: { exito: false, duracionMs: 0, error: undefined as string | undefined },
       aplicarC: { exito: false, duracionMs: 0, error: undefined as string | undefined },
       aplicarF: { exito: false, duracionMs: 0, error: undefined as string | undefined },
-      envioLayout: { exito: false, duracionMs: 0, error: undefined as string | undefined },
+      envioLayout: { exito: true, duracionMs: 0, error: 'OMITIDO' as string | undefined },
       actualizarBitacora: { exito: false, duracionMs: 0, error: undefined as string | undefined }
     };
 
@@ -225,58 +224,9 @@ export class AplicarBDIssspeaQNACommand {
         throw new Error(`Error al ejecutar AP_P_APLICAR con tipo 'F': ${errorMsg}`);
       }
 
-      // PASO 4: Ejecutar AP_D_ENVIO_LAYOUT
+      // PASO 4: Actualizar BitacoraAfectacionOrg a TERMINADO (SOLO si todos los pasos anteriores fueron exitosos)
       console.log(`\n${'─'.repeat(80)}`);
-      console.log(`📋 PASO 4: Ejecutando AP_D_ENVIO_LAYOUT`);
-      console.log(`${'─'.repeat(80)}`);
-      
-      const paso4Start = Date.now();
-      logger.info({
-        ...logContext,
-        step: 'ejecutarAP_D_ENVIO_LAYOUT',
-        quincena,
-        elapsedMs: Date.now() - startTime
-      }, `Ejecutando AP_D_ENVIO_LAYOUT(${quincena}, ${data.org0}, ${data.org1}, '01', '01')`);
-      console.log(`⏳ [${Date.now() - startTime}ms] Ejecutando AP_D_ENVIO_LAYOUT(${quincena}, ${data.org0}, ${data.org1}, '01', '01')...`);
-
-      try {
-        await ejecutarAP_D_ENVIO_LAYOUT(quincena, data.org0, data.org1, '01', '01');
-        const paso4Time = Date.now() - paso4Start;
-        ejecuciones.envioLayout = { exito: true, duracionMs: paso4Time, error: undefined };
-        
-        logger.info({
-          ...logContext,
-          step: 'AP_D_ENVIO_LAYOUT_exitoso',
-          quincena,
-          duracionMs: paso4Time,
-          elapsedMs: Date.now() - startTime
-        }, '✅ AP_D_ENVIO_LAYOUT ejecutado exitosamente');
-        console.log(`✅ [${paso4Time}ms] AP_D_ENVIO_LAYOUT ejecutado exitosamente`);
-
-      } catch (error: any) {
-        const paso4Time = Date.now() - paso4Start;
-        const errorMsg = error.message || String(error);
-        ejecuciones.envioLayout = { exito: false, duracionMs: paso4Time, error: errorMsg };
-        
-        logger.error({
-          ...logContext,
-          step: 'errorAP_D_ENVIO_LAYOUT',
-          quincena,
-          error: {
-            message: errorMsg,
-            stack: error.stack,
-            name: error.name
-          },
-          duracionMs: paso4Time,
-          elapsedMs: Date.now() - startTime
-        }, '❌ Error ejecutando AP_D_ENVIO_LAYOUT');
-        console.error(`❌ [${paso4Time}ms] Error ejecutando AP_D_ENVIO_LAYOUT: ${errorMsg}`);
-        throw new Error(`Error al ejecutar AP_D_ENVIO_LAYOUT: ${errorMsg}`);
-      }
-
-      // PASO 5: Actualizar BitacoraAfectacionOrg a TERMINADO (SOLO si todos los pasos anteriores fueron exitosos)
-      console.log(`\n${'─'.repeat(80)}`);
-      console.log(`📋 PASO 5: Actualizando BitacoraAfectacionOrg a TERMINADO`);
+      console.log(`📋 PASO 4: Actualizando BitacoraAfectacionOrg a TERMINADO`);
       console.log(`${'─'.repeat(80)}`);
       
       const paso5Start = Date.now();
@@ -289,7 +239,7 @@ export class AplicarBDIssspeaQNACommand {
       console.log(`⏳ [${Date.now() - startTime}ms] Actualizando BitacoraAfectacionOrg a TERMINADO...`);
 
       try {
-        const mensajeBitacora = `Proceso QNA completado - Quincena: ${quincena} (${quincenaNumero}/${anio}). Stored procedures ejecutados: AP_P_APLICAR(C), AP_P_APLICAR(F), AP_D_ENVIO_LAYOUT`;
+        const mensajeBitacora = `Proceso QNA completado - Quincena: ${quincena} (${quincenaNumero}/${anio}). Stored procedures ejecutados: AP_P_APLICAR(C), AP_P_APLICAR(F)`;
         const bitacoraResult = await actualizarBitacoraAfectacionOrgTerminado(
           data.org0,
           data.org1,
@@ -352,8 +302,7 @@ export class AplicarBDIssspeaQNACommand {
       const tiempoTotal = Date.now() - startTime;
       const todosExitosos = ejecuciones.obtenerQuincena.exito &&
                             ejecuciones.aplicarC.exito &&
-                            ejecuciones.aplicarF.exito &&
-                            ejecuciones.envioLayout.exito;
+                            ejecuciones.aplicarF.exito;
 
       console.log(`\n${'='.repeat(80)}`);
       console.log(`🎉 PROCESO ${todosExitosos ? '✅ COMPLETADO' : '❌ FALLIDO'}`);
@@ -364,7 +313,6 @@ export class AplicarBDIssspeaQNACommand {
       console.log(`   ✅ Obtener quincena: ${ejecuciones.obtenerQuincena.exito ? 'SÍ' : 'NO'} (${ejecuciones.obtenerQuincena.duracionMs}ms)`);
       console.log(`   ✅ AP_P_APLICAR(C): ${ejecuciones.aplicarC.exito ? 'SÍ' : 'NO'} (${ejecuciones.aplicarC.duracionMs}ms)`);
       console.log(`   ✅ AP_P_APLICAR(F): ${ejecuciones.aplicarF.exito ? 'SÍ' : 'NO'} (${ejecuciones.aplicarF.duracionMs}ms)`);
-      console.log(`   ✅ AP_D_ENVIO_LAYOUT: ${ejecuciones.envioLayout.exito ? 'SÍ' : 'NO'} (${ejecuciones.envioLayout.duracionMs}ms)`);
       console.log(`   💾 Bitácora actualizada: ${bitacoraActualizada ? 'SÍ' : 'NO'} (${ejecuciones.actualizarBitacora.duracionMs}ms)`);
       console.log(`   🏢 Orgánica: ${data.org0}/${data.org1}`);
       console.log(`${'='.repeat(80)}\n`);
@@ -387,7 +335,7 @@ export class AplicarBDIssspeaQNACommand {
         ejecuciones,
         bitacoraActualizada,
         mensaje: todosExitosos
-          ? `Proceso completado exitosamente. Quincena: ${quincena} (${quincenaNumero}/${anio}). Todos los stored procedures ejecutados correctamente.`
+          ? `Proceso completado exitosamente. Quincena: ${quincena} (${quincenaNumero}/${anio}).`
           : `Proceso completado con errores. Revisar ejecuciones para detalles.`,
         tiempoTotalMs: tiempoTotal
       };
