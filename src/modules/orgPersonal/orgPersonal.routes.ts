@@ -19,7 +19,7 @@ export default async function orgPersonalRoutes(app: FastifyInstance) {
     preHandler: [requireAuth],
     schema: {
       description: 'List all OrgPersonal records',
-      tags: ['orgPersonal'],
+      tags: ['orgPersonal', 'firebird'],
       security: [{ bearerAuth: [] }],
       response: {
         200: {
@@ -86,7 +86,7 @@ export default async function orgPersonalRoutes(app: FastifyInstance) {
     preHandler: [requireAuth],
     schema: {
       description: 'Get OrgPersonal record by nombre, apellidos and fecha de nacimiento',
-      tags: ['orgPersonal'],
+      tags: ['orgPersonal', 'firebird'],
       security: [{ bearerAuth: [] }],
       querystring: {
         type: 'object',
@@ -185,7 +185,7 @@ export default async function orgPersonalRoutes(app: FastifyInstance) {
     preHandler: [requireAuth],
     schema: {
       description: 'Get OrgPersonal record by CURP, INE or Full Name',
-      tags: ['orgPersonal'],
+      tags: ['orgPersonal', 'firebird'],
       security: [{ bearerAuth: [] }],
       params: {
         type: 'object',
@@ -270,7 +270,7 @@ export default async function orgPersonalRoutes(app: FastifyInstance) {
     preHandler: [requireAuth],
     schema: {
       description: 'Get OrgPersonal record by interno',
-      tags: ['orgPersonal'],
+      tags: ['orgPersonal', 'firebird'],
       security: [{ bearerAuth: [] }],
       params: {
         type: 'object',
@@ -355,7 +355,7 @@ export default async function orgPersonalRoutes(app: FastifyInstance) {
     preHandler: [requireAuth],
     schema: {
       description: 'Create new OrgPersonal record',
-      tags: ['orgPersonal'],
+      tags: ['orgPersonal', 'firebird'],
       security: [{ bearerAuth: [] }],
       body: {
         type: 'object',
@@ -452,7 +452,7 @@ export default async function orgPersonalRoutes(app: FastifyInstance) {
     preHandler: [requireAuth],
     schema: {
       description: 'Update OrgPersonal record',
-      tags: ['orgPersonal'],
+      tags: ['orgPersonal', 'firebird'],
       security: [{ bearerAuth: [] }],
       params: {
         type: 'object',
@@ -551,7 +551,7 @@ export default async function orgPersonalRoutes(app: FastifyInstance) {
     preHandler: [requireAuth],
     schema: {
       description: 'Delete OrgPersonal record',
-      tags: ['orgPersonal'],
+      tags: ['orgPersonal', 'firebird'],
       security: [{ bearerAuth: [] }],
       params: {
         type: 'object',

@@ -15,7 +15,7 @@ export async function afiliadosReportesRoutes(fastify: FastifyInstance) {
     schema: {
       description: 'Obtiene historial de movimientos quincenales ejecutando el stored procedure HISTORIAL_MOVIMIENTOS_QUIN',
       summary: 'Historial Movimientos Quincenales',
-      tags: ['reportes', 'afiliados'],
+      tags: ['reportes', 'afiliados', 'firebird'],
       security: [{ bearerAuth: [] }],
       querystring: {
         type: 'object',
@@ -83,7 +83,7 @@ export async function afiliadosReportesRoutes(fastify: FastifyInstance) {
     schema: {
       description: 'Obtiene historial de movimientos con promedio de sueldo ejecutando el stored procedure HISTORIAL_MOV_PROMEDIO_SDO',
       summary: 'Historial Mov Promedio Sueldo',
-      tags: ['reportes', 'afiliados'],
+      tags: ['reportes', 'afiliados', 'firebird'],
       security: [{ bearerAuth: [] }],
       querystring: {
         type: 'object',

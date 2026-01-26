@@ -77,6 +77,20 @@ async function buildApp() {
     }
   });
 
+  // Permitir body JSON vacío (p.ej. /auth/refresh con Content-Type: application/json)
+  app.addContentTypeParser('application/json', { parseAs: 'string' }, (req, body, done) => {
+    const rawBody = typeof body === 'string' ? body : (body ? String(body) : '');
+    if (!rawBody || rawBody.trim().length === 0) {
+      done(null, null);
+      return;
+    }
+    try {
+      done(null, JSON.parse(rawBody));
+    } catch (err) {
+      done(err as Error, undefined);
+    }
+  });
+
   // plugins
   await app.register(requestLoggerPlugin);
   await app.register(loggerPlugin);

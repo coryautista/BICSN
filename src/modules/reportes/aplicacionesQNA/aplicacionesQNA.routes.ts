@@ -16,6 +16,7 @@ import { GetAplicacionPMPQuery } from './application/queries/GetAplicacionPMPQue
 import { GetAplicacionHIPQuery } from './application/queries/GetAplicacionHIPQuery.js';
 import { GetConcentradoQuery } from './application/queries/GetConcentradoQuery.js';
 import { IAplicacionesQNARepository } from './domain/repositories/IAplicacionesQNARepository.js';
+import { normalizeClaveOrganica } from '../../../utils/organica.js';
 
 export async function aplicacionesQNARoutes(fastify: FastifyInstance) {
   // GET /reportes/aplicaciones-qna/movimientos - HISTORIAL_MOVIMIENTOS_QUIN_IND
@@ -24,7 +25,7 @@ export async function aplicacionesQNARoutes(fastify: FastifyInstance) {
     schema: {
       description: 'Obtiene movimientos quincenales individuales ejecutando el stored procedure HISTORIAL_MOVIMIENTOS_QUIN_IND',
       summary: 'Movimientos quincenales',
-      tags: ['reportes', 'aplicaciones-qna'],
+      tags: ['reportes', 'aplicaciones-qna', 'firebird'],
       security: [{ bearerAuth: [] }],
       querystring: {
         type: 'object',
@@ -120,7 +121,7 @@ export async function aplicacionesQNARoutes(fastify: FastifyInstance) {
     schema: {
       description: 'Obtiene aplicación de aportaciones o fondos ejecutando el stored procedure AP_P_FONDOS. Los usuarios admin pueden consultar cualquier clave orgánica. Los usuarios no admin solo pueden consultar sus propias claves orgánicas del token.',
       summary: 'Aplicación aportaciones/fondos',
-      tags: ['reportes', 'aplicaciones-qna'],
+      tags: ['reportes', 'aplicaciones-qna', 'firebird'],
       security: [{ bearerAuth: [] }],
       querystring: {
         type: 'object',
@@ -227,8 +228,9 @@ export async function aplicacionesQNARoutes(fastify: FastifyInstance) {
 
       const entidades = (user as any).entidades || [false];
       const isEntidad = entidades[0] === true;
-      const userClave0 = user.idOrganica0 || '';
-      const userClave1 = user.idOrganica1 || '';
+      // Normalize org keys to 2 digits
+      const userClave0 = normalizeClaveOrganica(user.idOrganica0) || '';
+      const userClave1 = normalizeClaveOrganica(user.idOrganica1) || '';
 
       // Validar y determinar las claves orgánicas a usar
       let pOrg0: string;
@@ -317,7 +319,7 @@ export async function aplicacionesQNARoutes(fastify: FastifyInstance) {
     schema: {
       description: 'Obtiene aplicación PCP (Préstamos a Corto Plazo) ejecutando el stored procedure AP_S_PCP. Los usuarios admin pueden consultar cualquier clave orgánica. Los usuarios no admin solo pueden consultar sus propias claves orgánicas del token.',
       summary: 'Aplicación PCP',
-      tags: ['reportes', 'aplicaciones-qna'],
+      tags: ['reportes', 'aplicaciones-qna', 'firebird'],
       security: [{ bearerAuth: [] }],
       querystring: {
         type: 'object',
@@ -371,8 +373,9 @@ export async function aplicacionesQNARoutes(fastify: FastifyInstance) {
 
       const entidades = (user as any).entidades || [false];
       const isEntidad = entidades[0] === true;
-      const userClave0 = user.idOrganica0 || '';
-      const userClave1 = user.idOrganica1 || '';
+      // Normalize org keys to 2 digits
+      const userClave0 = normalizeClaveOrganica(user.idOrganica0) || '';
+      const userClave1 = normalizeClaveOrganica(user.idOrganica1) || '';
 
       // Validar y determinar las claves orgánicas a usar
       let pOrg0: string;
@@ -474,7 +477,7 @@ export async function aplicacionesQNARoutes(fastify: FastifyInstance) {
     schema: {
       description: 'Obtiene aplicación PMP (Préstamos a Mediano Plazo) ejecutando el stored procedure AP_S_VIV. Los usuarios admin pueden consultar cualquier clave orgánica. Los usuarios no admin solo pueden consultar sus propias claves orgánicas del token.',
       summary: 'Aplicación PMP',
-      tags: ['reportes', 'aplicaciones-qna'],
+      tags: ['reportes', 'aplicaciones-qna', 'firebird'],
       security: [{ bearerAuth: [] }],
       querystring: {
         type: 'object',
@@ -528,8 +531,9 @@ export async function aplicacionesQNARoutes(fastify: FastifyInstance) {
 
       const entidades = (user as any).entidades || [false];
       const isEntidad = entidades[0] === true;
-      const userClave0 = user.idOrganica0 || '';
-      const userClave1 = user.idOrganica1 || '';
+      // Normalize org keys to 2 digits
+      const userClave0 = normalizeClaveOrganica(user.idOrganica0) || '';
+      const userClave1 = normalizeClaveOrganica(user.idOrganica1) || '';
 
       // Validar y determinar las claves orgánicas a usar
       let pOrg0: string;
@@ -631,7 +635,7 @@ export async function aplicacionesQNARoutes(fastify: FastifyInstance) {
     schema: {
       description: 'Obtiene aplicación HIP (Préstamos Hipotecarios) ejecutando el stored procedure AP_S_HIP_QNA. Los usuarios admin pueden consultar cualquier clave orgánica. Los usuarios no admin solo pueden consultar sus propias claves orgánicas del token.',
       summary: 'Aplicación HIP',
-      tags: ['reportes', 'aplicaciones-qna'],
+      tags: ['reportes', 'aplicaciones-qna', 'firebird'],
       security: [{ bearerAuth: [] }],
       querystring: {
         type: 'object',
@@ -685,8 +689,9 @@ export async function aplicacionesQNARoutes(fastify: FastifyInstance) {
 
       const entidades = (user as any).entidades || [false];
       const isEntidad = entidades[0] === true;
-      const userClave0 = user.idOrganica0 || '';
-      const userClave1 = user.idOrganica1 || '';
+      // Normalize org keys to 2 digits
+      const userClave0 = normalizeClaveOrganica(user.idOrganica0) || '';
+      const userClave1 = normalizeClaveOrganica(user.idOrganica1) || '';
 
       // Validar y determinar las claves orgánicas a usar
       let org0: string;
@@ -788,7 +793,7 @@ export async function aplicacionesQNARoutes(fastify: FastifyInstance) {
     schema: {
       description: 'Obtiene concentrado de adeudos ejecutando el stored procedure ADEUDO_ORGANICA_LAYOUT',
       summary: 'Concentrado de adeudos',
-      tags: ['reportes', 'aplicaciones-qna'],
+      tags: ['reportes', 'aplicaciones-qna', 'firebird'],
       security: [{ bearerAuth: [] }],
       querystring: {
         type: 'object',
@@ -878,7 +883,7 @@ export async function aplicacionesQNARoutes(fastify: FastifyInstance) {
     schema: {
       description: 'Obtiene el período de trabajo desde BitacoraAfectacionOrg usando org0 y org1 del token o parámetros opcionales. Incluye quincena, año, período formateado y fechas de inicio y fin de la quincena',
       summary: 'Período de trabajo',
-      tags: ['reportes', 'aplicaciones-qna'],
+      tags: ['reportes', 'aplicaciones-qna', 'firebird'],
       security: [{ bearerAuth: [] }],
       querystring: {
         type: 'object',
@@ -933,32 +938,22 @@ export async function aplicacionesQNARoutes(fastify: FastifyInstance) {
       let org0: string | undefined = query.org0;
       let org1: string | undefined = query.org1;
 
-      // Si no vienen en query, obtener del token
+      // Normalize org keys: from query params first, fallback to token
       if (!org0 && user?.idOrganica0) {
-        const idOrg0 = user.idOrganica0;
-        org0 = typeof idOrg0 === 'string' 
-          ? idOrg0.padStart(2, '0').substring(0, 2)
-          : String(idOrg0).padStart(2, '0').substring(0, 2);
+        org0 = normalizeClaveOrganica(user.idOrganica0) || undefined;
       }
 
       if (!org1 && user?.idOrganica1) {
-        const idOrg1 = user.idOrganica1;
-        org1 = typeof idOrg1 === 'string'
-          ? idOrg1.padStart(2, '0').substring(0, 2)
-          : String(idOrg1).padStart(2, '0').substring(0, 2);
+        org1 = normalizeClaveOrganica(user.idOrganica1) || undefined;
       }
 
-      // Normalizar org0 y org1 si vienen de query params
+      // Normalize org keys from query params
       if (org0) {
-        org0 = typeof org0 === 'string'
-          ? org0.padStart(2, '0').substring(0, 2)
-          : String(org0).padStart(2, '0').substring(0, 2);
+        org0 = normalizeClaveOrganica(org0) || undefined;
       }
 
       if (org1) {
-        org1 = typeof org1 === 'string'
-          ? org1.padStart(2, '0').substring(0, 2)
-          : String(org1).padStart(2, '0').substring(0, 2);
+        org1 = normalizeClaveOrganica(org1) || undefined;
       }
 
       // Validar que existan org0 y org1

@@ -1,6 +1,6 @@
 import { IOrganicaCascadeRepository } from '../../domain/repositories/IOrganicaCascadeRepository.js';
 import { OrganicaChild } from '../../domain/entities/OrganicaChild.js';
-import { executeSerializedQuery } from '../../../../db/firebird.js';
+import { executeSerializedQuery, decodeFirebirdObject } from '../../../../db/firebird.js';
 
 export class OrganicaCascadeRepository implements IOrganicaCascadeRepository {
   async findOrganica1ByOrganica0(claveOrganica0: string): Promise<OrganicaChild[]> {
@@ -22,7 +22,9 @@ export class OrganicaCascadeRepository implements IOrganicaCascadeRepository {
             reject(err);
             return;
           }
-          const records = result.map((row: any) => ({
+          // Decodificar resultados de Firebird antes de mapear
+          const decodedResult = result.map((row: any) => decodeFirebirdObject(row));
+          const records = decodedResult.map((row: any) => ({
             claveOrganica0: row.CLAVE_ORGANICA_0,
             claveOrganica1: row.CLAVE_ORGANICA_1,
             descripcion: row.DESCRIPCION,
@@ -56,7 +58,9 @@ export class OrganicaCascadeRepository implements IOrganicaCascadeRepository {
             reject(err);
             return;
           }
-          const records = result.map((row: any) => ({
+          // Decodificar resultados de Firebird antes de mapear
+          const decodedResult = result.map((row: any) => decodeFirebirdObject(row));
+          const records = decodedResult.map((row: any) => ({
             claveOrganica0: row.CLAVE_ORGANICA_0,
             claveOrganica1: row.CLAVE_ORGANICA_1,
             claveOrganica2: row.CLAVE_ORGANICA_2,
@@ -92,7 +96,9 @@ export class OrganicaCascadeRepository implements IOrganicaCascadeRepository {
             reject(err);
             return;
           }
-          const records = result.map((row: any) => ({
+          // Decodificar resultados de Firebird antes de mapear
+          const decodedResult = result.map((row: any) => decodeFirebirdObject(row));
+          const records = decodedResult.map((row: any) => ({
             claveOrganica0: row.CLAVE_ORGANICA_0,
             claveOrganica1: row.CLAVE_ORGANICA_1,
             claveOrganica2: row.CLAVE_ORGANICA_2,

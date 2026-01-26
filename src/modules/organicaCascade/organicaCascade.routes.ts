@@ -19,7 +19,7 @@ export default async function organicaCascadeRoutes(app: FastifyInstance) {
           },
           required: ['claveOrganica0']
         },
-        tags: ['Organica Cascade'],
+        tags: ['Organica Cascade', 'firebird'],
         security: [{ bearerAuth: [] }],
         description: 'Get Organica1 children for a given Organica0',
         response: {
@@ -65,7 +65,7 @@ export default async function organicaCascadeRoutes(app: FastifyInstance) {
           },
           required: ['claveOrganica0', 'claveOrganica1']
         },
-        tags: ['Organica Cascade'],
+        tags: ['Organica Cascade', 'firebird'],
         security: [{ bearerAuth: [] }],
         description: 'Get Organica2 children for a given Organica1',
         response: {
@@ -116,7 +116,7 @@ export default async function organicaCascadeRoutes(app: FastifyInstance) {
           },
           required: ['claveOrganica0', 'claveOrganica1', 'claveOrganica2']
         },
-        tags: ['Organica Cascade'],
+        tags: ['Organica Cascade', 'firebird'],
         security: [{ bearerAuth: [] }],
         description: 'Get Organica3 children for a given Organica2',
         response: {

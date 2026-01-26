@@ -8,6 +8,7 @@ import {
 } from './afectacionOrg.schemas.js';
 import { AfectacionOrgService } from './afectacionOrg.service.js';
 import { ok, validationError } from '../../utils/http.js';
+import { normalizeClaveOrganica } from '../../utils/organica.js';
 import { GetBitacoraAfectacionQuery } from './application/queries/GetBitacoraAfectacionQuery.js';
 import { GetEstadosAfectacionQuery } from './application/queries/GetEstadosAfectacionQuery.js';
 import { GetProgresoUsuarioQuery } from './application/queries/GetProgresoUsuarioQuery.js';
@@ -37,10 +38,29 @@ export default async function afectacionOrgRoutes(app: FastifyInstance) {
     ],
     schema: {
       description: 'Register an organizational affectation',
-      tags: ['afectacion-org'],
+      tags: ['afectacion-org', 'firebird'],
       security: [{ bearerAuth: [] }],
-      // No validamos el body aquí, lo hacemos con Zod en el handler para mayor flexibilidad
-      body: false,
+      body: {
+        type: 'object',
+        required: ['anio', 'quincena', 'usuario', 'appName', 'ip'],
+        properties: {
+          fecha: { type: 'string', format: 'date-time', description: 'Fecha de afectación' },
+          entidad: { type: 'string', default: 'AFILIADOS', description: 'Tipo de entidad' },
+          anio: { type: 'number', minimum: 2000, maximum: 2100, description: 'Año de la quincena' },
+          quincena: { type: 'number', minimum: 1, maximum: 24, description: 'Número de quincena' },
+          orgNivel: { type: 'number', minimum: 0, maximum: 3, default: 3, description: 'Nivel orgánico' },
+          org0: { type: 'string', minLength: 1, maxLength: 2, description: 'Clave orgánica 0' },
+          org1: { type: 'string', minLength: 1, maxLength: 2, description: 'Clave orgánica 1' },
+          org2: { type: 'string', minLength: 1, maxLength: 2, description: 'Clave orgánica 2' },
+          org3: { type: 'string', minLength: 1, maxLength: 2, description: 'Clave orgánica 3' },
+          accion: { type: 'string', default: 'APLICAR', description: 'Acción a realizar' },
+          resultado: { type: 'string', default: 'OK', description: 'Resultado esperado' },
+          mensaje: { type: 'string', description: 'Mensaje adicional' },
+          usuario: { type: 'string', description: 'Usuario que realiza la operación' },
+          appName: { type: 'string', description: 'Nombre de la aplicación' },
+          ip: { type: 'string', description: 'IP del cliente' }
+        }
+      },
       response: {
         200: {
           type: 'object',
@@ -95,25 +115,21 @@ export default async function afectacionOrgRoutes(app: FastifyInstance) {
     const body = req.body as any;
     
     try {
-      // 1. Obtener org0, org1, org2, org3 del token si no están en el body (sin verificar orgNivel primero)
+      // 1. Get org0-3 from token if not in body (normalized to 2 digits)
       if (!body.org0 && user?.idOrganica0) {
-        const idOrg0 = user.idOrganica0;
-        body.org0 = typeof idOrg0 === 'string' ? idOrg0.padStart(2, '0') : idOrg0.toString().padStart(2, '0');
+        body.org0 = normalizeClaveOrganica(user.idOrganica0);
       }
       
       if (!body.org1 && user?.idOrganica1) {
-        const idOrg1 = user.idOrganica1;
-        body.org1 = typeof idOrg1 === 'string' ? idOrg1.padStart(2, '0') : idOrg1.toString().padStart(2, '0');
+        body.org1 = normalizeClaveOrganica(user.idOrganica1);
       }
       
       if (!body.org2 && user?.idOrganica2) {
-        const idOrg2 = user.idOrganica2;
-        body.org2 = typeof idOrg2 === 'string' ? idOrg2.padStart(2, '0') : idOrg2.toString().padStart(2, '0');
+        body.org2 = normalizeClaveOrganica(user.idOrganica2);
       }
       
       if (!body.org3 && user?.idOrganica3) {
-        const idOrg3 = user.idOrganica3;
-        body.org3 = typeof idOrg3 === 'string' ? idOrg3.padStart(2, '0') : idOrg3.toString().padStart(2, '0');
+        body.org3 = normalizeClaveOrganica(user.idOrganica3);
       }
       
       // 2. Validar que org0 y org1 estén disponibles (del token o del body)
@@ -671,23 +687,21 @@ export default async function afectacionOrgRoutes(app: FastifyInstance) {
     const user = (req as any).user;
     const query = req.query as any;
     
-    // Si no se proporcionan org0 y org1 en los query params, obtenerlos del token del usuario
+    // Get org0/org1 from token if not in query params (normalized to 2 digits)
     if (!query.org0 && user?.idOrganica0) {
-      const idOrg0 = user.idOrganica0;
-      query.org0 = typeof idOrg0 === 'string' ? idOrg0.padStart(2, '0') : idOrg0.toString().padStart(2, '0');
+      query.org0 = normalizeClaveOrganica(user.idOrganica0);
     }
     
     if (!query.org1 && user?.idOrganica1) {
-      const idOrg1 = user.idOrganica1;
-      query.org1 = typeof idOrg1 === 'string' ? idOrg1.padStart(2, '0') : idOrg1.toString().padStart(2, '0');
+      query.org1 = normalizeClaveOrganica(user.idOrganica1);
     }
     
-    // Asegurar que org0 y org1 tengan formato de 2 caracteres si están presentes
-    if (query.org0 && query.org0.length === 1) {
-      query.org0 = query.org0.padStart(2, '0');
+    // Normalize org keys from query params
+    if (query.org0) {
+      query.org0 = normalizeClaveOrganica(query.org0);
     }
-    if (query.org1 && query.org1.length === 1) {
-      query.org1 = query.org1.padStart(2, '0');
+    if (query.org1) {
+      query.org1 = normalizeClaveOrganica(query.org1);
     }
     
     const parsed = AfectacionOrgQuerySchema.safeParse(query);

@@ -5,6 +5,7 @@ import { GetPlantillaQuery } from './application/queries/GetPlantillaQuery.js';
 import { BusquedaHistoricoQuery } from './application/queries/BusquedaHistoricoQuery.js';
 import { handleAfiliadosPersonalError } from './infrastructure/errorHandler.js';
 import { AfiliadosPersonalAccessDeniedError } from './domain/errors.js';
+import { normalizeClaveOrganica } from '../../utils/organica.js';
 
 export default async function afiliadosPersonalRoutes(app: FastifyInstance) {
 
@@ -118,10 +119,9 @@ export default async function afiliadosPersonalRoutes(app: FastifyInstance) {
         throw new AfiliadosPersonalAccessDeniedError('Usuario no tiene permisos para acceder a esta información', { userId: user?.sub });
       }
 
-      // Normalizar claves orgánicas: deben tener 2 caracteres con padding de ceros a la izquierda
-      // Firebird espera formato "04" no "4"
-      const claveOrganica0 = user.idOrganica0.toString().trim().padStart(2, '0');
-      const claveOrganica1 = user.idOrganica1.toString().trim().padStart(2, '0');
+      // Normalize org keys to 2 digits (Firebird expects "04" not "4")
+      const claveOrganica0 = normalizeClaveOrganica(user.idOrganica0)!;
+      const claveOrganica1 = normalizeClaveOrganica(user.idOrganica1)!;
 
       const records = await getPlantillaQuery.execute(claveOrganica0, claveOrganica1);
       return reply.send(ok(records));

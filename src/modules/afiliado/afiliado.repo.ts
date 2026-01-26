@@ -1,5 +1,5 @@
 import { getPool, sql } from '../../db/mssql.js';
-import { executeSerializedQuery } from '../../db/firebird.js';
+import { executeSerializedQuery, decodeFirebirdObject, executeSelectableProcedure, executeExecutableProcedure, FIREBIRD_TIMEOUTS } from '../../db/firebird.js';
 import type { AfiliadoOrg } from '../afiliadoOrg/afiliadoOrg.repo.js';
 import type { Movimiento } from '../movimiento/movimiento.repo.js';
 import { AfiliadoAlreadyExistsError } from './domain/errors.js';
@@ -145,42 +145,20 @@ export async function getQuincenaAplicacion(
 
       console.log(`No existe quincena para orgánica ${org0}/${org1}/${org2}/${org3}. Consultando Firebird AP_G_APLICADO_TIPO...`);
       
-      // Consultar Firebird para obtener quincena y fecha
-      const firebirdResult = await executeSerializedQuery((db) => {
-        return new Promise<{ QUINCENA: number; FECHA: string }>((resolve, reject) => {
-          try {
-            const sql = `SELECT p.QUINCENA, p.FECHA FROM AP_G_APLICADO_TIPO(?, ?, '01', '01') p`;
-            const params = [org0, org1];
-
-            const timeoutId = setTimeout(() => {
-              reject(new Error('Tiempo de espera agotado en consulta Firebird AP_G_APLICADO_TIPO'));
-            }, 30000); // 30 segundos de timeout
-
-            db.query(sql, params, (err: any, result: any) => {
-              clearTimeout(timeoutId);
-              
-              if (err) {
-                console.error(`Error al consultar AP_G_APLICADO_TIPO en Firebird: ${err.message}`);
-                reject(err);
-                return;
-              }
-
-              if (!result || result.length === 0) {
-                reject(new Error('AP_G_APLICADO_TIPO no retornó resultados'));
-                return;
-              }
-
-              const row = result[0];
-              resolve({
-                QUINCENA: row.QUINCENA,
-                FECHA: row.FECHA
-              });
-            });
-          } catch (error: any) {
-            reject(error);
-          }
-        });
+      // Consultar Firebird para obtener quincena y fecha usando helper de SP
+      const result = await executeSelectableProcedure('AP_G_APLICADO_TIPO', [org0, org1, '01', '01'], {
+        alias: 'p',
+        columns: ['p.QUINCENA', 'p.FECHA']
       });
+
+      if (!result || result.length === 0) {
+        throw new Error('AP_G_APLICADO_TIPO no retornó resultados');
+      }
+
+      const firebirdResult = {
+        QUINCENA: result[0].QUINCENA,
+        FECHA: result[0].FECHA
+      };
 
       // Parsear QUINCENA: formato QQAA (quincena 2 dígitos + año 2 últimos dígitos)
       // Ejemplo: 2125 = quincena 21 del año 2025
@@ -1589,88 +1567,47 @@ export async function ejecutarAP_P_APLICAR(
   logger.info(logContext, 'Iniciando ejecución de AP_P_APLICAR');
   console.log(`[AP_P_APLICAR] Iniciando ejecución con parámetros: org0=${org0}, org1=${org1}, quincenaC=${quincenaC}, quincenaA=${quincenaA}, tipo=${tipo}`);
 
-  return executeSerializedQuery((db) => {
-    return new Promise<void>((resolve, reject) => {
-      try {
-        // En Firebird, los stored procedures ejecutables (sin SUSPEND) se ejecutan con EXECUTE PROCEDURE
-        // AP_P_APLICAR es un stored procedure ejecutable que no retorna resultados
-        const ensureMatch = (value: string, re: RegExp, label: string) => {
-          if (!re.test(value)) {
-            throw new Error(`Parámetro inválido para ${label}: ${value}`);
-          }
-          return value;
-        };
-        const safe = (value: string) => value.replace(/'/g, "''");
+  // Validar parámetros antes de ejecutar
+  const ensureMatch = (value: string, re: RegExp, label: string) => {
+    if (!re.test(value)) {
+      throw new Error(`Parámetro inválido para ${label}: ${value}`);
+    }
+    return value;
+  };
+  
+  ensureMatch(org0, /^\d{2}$/, 'org0');
+  ensureMatch(org1, /^\d{2}$/, 'org1');
+  ensureMatch(quincenaC, /^\d{4}$/, 'quincenaC');
+  ensureMatch(quincenaA, /^\d{4}$/, 'quincenaA');
+  ensureMatch(tipo, /^[A-Z]$/, 'tipo');
 
-        const org0Safe = safe(ensureMatch(org0, /^\d{2}$/, 'org0'));
-        const org1Safe = safe(ensureMatch(org1, /^\d{2}$/, 'org1'));
-        const quincenaCSafe = safe(ensureMatch(quincenaC, /^\d{4}$/, 'quincenaC'));
-        const quincenaASafe = safe(ensureMatch(quincenaA, /^\d{4}$/, 'quincenaA'));
-        const tipoSafe = safe(ensureMatch(tipo, /^[A-Z]$/, 'tipo'));
-
-        // Evitar bind de parámetros con ODBC en este SP (output param rompe el driver)
-        const sql = `EXECUTE PROCEDURE AP_P_APLICAR('${org0Safe}', '${org1Safe}', '${quincenaCSafe}', '${quincenaASafe}', '${tipoSafe}')`;
-
-        const params: any[] = [];
-
-        const timeoutId = setTimeout(() => {
-          logger.error({
-            ...logContext,
-            timeoutMs: 30000
-          }, 'Timeout ejecutando AP_P_APLICAR');
-          reject(new Error('Tiempo de espera agotado en ejecución de AP_P_APLICAR (30s)'));
-        }, 30000); // 30 segundos de timeout
-
-        logger.debug({
-          ...logContext,
-          sql,
-          params
-        }, 'Ejecutando AP_P_APLICAR en Firebird');
-
-        db.query(sql, params, (err: any, result: any) => {
-          clearTimeout(timeoutId);
-          const duration = Date.now() - startTime;
-
-          if (err) {
-            logger.error({
-              ...logContext,
-              error: {
-                message: err.message || String(err),
-                code: err.code,
-                name: err.name,
-                stack: err.stack
-              },
-              duracionMs: duration
-            }, 'Error ejecutando AP_P_APLICAR');
-            console.error(`[AP_P_APLICAR] ❌ Error ejecutando stored procedure: ${err.message || String(err)}`);
-            reject(new Error(`Error al ejecutar AP_P_APLICAR: ${err.message || String(err)}`));
-            return;
-          }
-
-          logger.info({
-            ...logContext,
-            duracionMs: duration,
-            resultado: result ? (Array.isArray(result) ? result.length : 1) : 0
-          }, 'AP_P_APLICAR ejecutado exitosamente');
-          console.log(`[AP_P_APLICAR] ✅ Ejecutado exitosamente en ${duration}ms`);
-          resolve();
-        });
-      } catch (error: any) {
-        const duration = Date.now() - startTime;
-        logger.error({
-          ...logContext,
-          error: {
-            message: error.message,
-            stack: error.stack,
-            name: error.name
-          },
-          duracionMs: duration
-        }, 'Error síncrono ejecutando AP_P_APLICAR');
-        console.error(`[AP_P_APLICAR] ❌ Error síncrono: ${error.message}`);
-        reject(error);
-      }
+  try {
+    // Usar helper de SP executable con timeout de HEAVY_SP
+    await executeExecutableProcedure('AP_P_APLICAR', [org0, org1, quincenaC, quincenaA, tipo], {
+      timeoutMs: FIREBIRD_TIMEOUTS.HEAVY_SP
     });
-  });
+
+    const duration = Date.now() - startTime;
+    logger.info({
+      ...logContext,
+      duracionMs: duration
+    }, 'AP_P_APLICAR ejecutado exitosamente');
+    console.log(`[AP_P_APLICAR] ✅ Ejecutado exitosamente en ${duration}ms`);
+  } catch (error: any) {
+    const duration = Date.now() - startTime;
+    logger.error({
+      ...logContext,
+      error: {
+        message: error.message || String(error),
+        code: error.code,
+        name: error.name,
+        stack: error.stack
+      },
+      duracionMs: duration
+    }, 'Error ejecutando AP_P_APLICAR');
+    console.error(`[AP_P_APLICAR] ❌ Error ejecutando stored procedure: ${error.message || String(error)}`);
+    throw new Error(`Error al ejecutar AP_P_APLICAR: ${error.message || String(error)}`);
+  }
 }
 
 // Ejecutar stored procedure AP_D_ENVIO_LAYOUT en Firebird
@@ -1694,73 +1631,33 @@ export async function ejecutarAP_D_ENVIO_LAYOUT(
   logger.info(logContext, 'Iniciando ejecución de AP_D_ENVIO_LAYOUT');
   console.log(`[AP_D_ENVIO_LAYOUT] Iniciando ejecución con parámetros: quincena=${quincena}, org0=${org0}, org1=${org1}, org2=${org2}, org3=${org3}`);
 
-  return executeSerializedQuery((db) => {
-    return new Promise<void>((resolve, reject) => {
-      try {
-        // En Firebird, los stored procedures ejecutables (sin SUSPEND) se ejecutan con EXECUTE PROCEDURE
-        // AP_D_ENVIO_LAYOUT es un stored procedure ejecutable que no retorna resultados
-        const sql = `EXECUTE PROCEDURE AP_D_ENVIO_LAYOUT(?, ?, ?, ?, ?)`;
-
-        const params = [quincena, org0, org1, org2, org3];
-
-        const timeoutId = setTimeout(() => {
-          logger.error({
-            ...logContext,
-            timeoutMs: 30000
-          }, 'Timeout ejecutando AP_D_ENVIO_LAYOUT');
-          reject(new Error('Tiempo de espera agotado en ejecución de AP_D_ENVIO_LAYOUT (30s)'));
-        }, 30000); // 30 segundos de timeout
-
-        logger.debug({
-          ...logContext,
-          sql,
-          params
-        }, 'Ejecutando AP_D_ENVIO_LAYOUT en Firebird');
-
-        db.query(sql, params, (err: any, result: any) => {
-          clearTimeout(timeoutId);
-          const duration = Date.now() - startTime;
-
-          if (err) {
-            logger.error({
-              ...logContext,
-              error: {
-                message: err.message || String(err),
-                code: err.code,
-                name: err.name,
-                stack: err.stack
-              },
-              duracionMs: duration
-            }, 'Error ejecutando AP_D_ENVIO_LAYOUT');
-            console.error(`[AP_D_ENVIO_LAYOUT] ❌ Error ejecutando stored procedure: ${err.message || String(err)}`);
-            reject(new Error(`Error al ejecutar AP_D_ENVIO_LAYOUT: ${err.message || String(err)}`));
-            return;
-          }
-
-          logger.info({
-            ...logContext,
-            duracionMs: duration,
-            resultado: result ? (Array.isArray(result) ? result.length : 1) : 0
-          }, 'AP_D_ENVIO_LAYOUT ejecutado exitosamente');
-          console.log(`[AP_D_ENVIO_LAYOUT] ✅ Ejecutado exitosamente en ${duration}ms`);
-          resolve();
-        });
-      } catch (error: any) {
-        const duration = Date.now() - startTime;
-        logger.error({
-          ...logContext,
-          error: {
-            message: error.message,
-            stack: error.stack,
-            name: error.name
-          },
-          duracionMs: duration
-        }, 'Error síncrono ejecutando AP_D_ENVIO_LAYOUT');
-        console.error(`[AP_D_ENVIO_LAYOUT] ❌ Error síncrono: ${error.message}`);
-        reject(error);
-      }
+  try {
+    // Usar helper de SP executable con timeout de HEAVY_SP
+    await executeExecutableProcedure('AP_D_ENVIO_LAYOUT', [quincena, org0, org1, org2, org3], {
+      timeoutMs: FIREBIRD_TIMEOUTS.HEAVY_SP
     });
-  });
+
+    const duration = Date.now() - startTime;
+    logger.info({
+      ...logContext,
+      duracionMs: duration
+    }, 'AP_D_ENVIO_LAYOUT ejecutado exitosamente');
+    console.log(`[AP_D_ENVIO_LAYOUT] ✅ Ejecutado exitosamente en ${duration}ms`);
+  } catch (error: any) {
+    const duration = Date.now() - startTime;
+    logger.error({
+      ...logContext,
+      error: {
+        message: error.message || String(error),
+        code: error.code,
+        name: error.name,
+        stack: error.stack
+      },
+      duracionMs: duration
+    }, 'Error ejecutando AP_D_ENVIO_LAYOUT');
+    console.error(`[AP_D_ENVIO_LAYOUT] ❌ Error ejecutando stored procedure: ${error.message || String(error)}`);
+    throw new Error(`Error al ejecutar AP_D_ENVIO_LAYOUT: ${error.message || String(error)}`);
+  }
 }
 
 // Función principal para aplicar BDIsspea que ejecuta todas las operaciones

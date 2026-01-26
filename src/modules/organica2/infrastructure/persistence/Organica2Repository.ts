@@ -244,7 +244,9 @@ export class Organica2Repository implements IOrganica2Repository {
             reject(err);
             return;
           }
-          const count = result[0].COUNT;
+          // Decodificar resultado de Firebird antes de leer valores
+          const decodedRow = result[0] ? decodeFirebirdObject(result[0]) : null;
+          const count = decodedRow?.COUNT || decodedRow?.count || 0;
           resolve(count > 0);
         }
       );

@@ -176,11 +176,22 @@ export async function dynamicQueryOrganica2(query: DynamicQuery): Promise<Organi
     sql += ' WHERE ' + conditions.join(' AND ');
   }
 
-  // Add sorting
+  // Add sorting with whitelist validation
+  const allowedColumns = ['CLAVE_ORGANICA_0', 'CLAVE_ORGANICA_1', 'CLAVE_ORGANICA_2', 'DESCRIPCION', 'TITULAR', 'FECHA_REGISTRO_2', 'FECHA_FIN_2', 'USUARIO', 'ESTATUS'];
   if (query.sortBy) {
     const sortColumn = query.sortBy.toUpperCase();
-    const sortOrder = query.sortOrder || 'ASC';
-    sql += ` ORDER BY ${sortColumn} ${sortOrder}`;
+    // Validate column name against whitelist
+    if (allowedColumns.includes(sortColumn)) {
+      const sortOrder = (query.sortOrder || 'ASC').toUpperCase();
+      // Validate sort order
+      if (sortOrder === 'ASC' || sortOrder === 'DESC') {
+        sql += ` ORDER BY ${sortColumn} ${sortOrder}`;
+      } else {
+        sql += ` ORDER BY ${sortColumn} ASC`;
+      }
+    } else {
+      sql += ' ORDER BY CLAVE_ORGANICA_0, CLAVE_ORGANICA_1, CLAVE_ORGANICA_2';
+    }
   } else {
     sql += ' ORDER BY CLAVE_ORGANICA_0, CLAVE_ORGANICA_1, CLAVE_ORGANICA_2';
   }

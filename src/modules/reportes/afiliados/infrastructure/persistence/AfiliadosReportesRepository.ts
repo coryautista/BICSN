@@ -1,4 +1,4 @@
-import { executeSerializedQuery, decodeFirebirdObject } from '../../../../../db/firebird.js';
+import { executeSerializedQuery, decodeFirebirdObject, executeSelectableProcedure, FIREBIRD_TIMEOUTS } from '../../../../../db/firebird.js';
 import { IAfiliadosReportesRepository } from '../../domain/repositories/IAfiliadosReportesRepository.js';
 import { HistorialMovimientosQuin } from '../../domain/entities/HistorialMovimientosQuin.js';
 import { HistorialMovPromedioSdo } from '../../domain/entities/HistorialMovPromedioSdo.js';

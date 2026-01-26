@@ -1,6 +1,6 @@
 import { ConnectionPool } from 'mssql';
 import { sql } from '../../../../db/mssql.js';
-import { executeSerializedQuery } from '../../../../db/firebird.js';
+import { executeSerializedQuery, decodeFirebirdObject, executeSelectableProcedure } from '../../../../db/firebird.js';
 import { CreateCompleteAfiliadoData, CompleteAfiliadoResult } from '../../domain/entities/CompleteAfiliado.js';
 import { getPool } from '../../../../db/mssql.js';
 import pino from 'pino';
@@ -13,6 +13,19 @@ const logger = pino({
   name: 'createCompleteAfiliadoCommand',
   level: process.env.LOG_LEVEL || 'info'
 });
+
+// Cache para verificar si la columna numQuinquenios existe en afi.AfiliadoOrg
+let cachedHasNumQuinquenios: boolean | null = null;
+
+async function hasNumQuinqueniosColumn(): Promise<boolean> {
+  if (cachedHasNumQuinquenios !== null) return cachedHasNumQuinquenios;
+  const p = await getPool();
+  const r = await p.request().query(`
+    SELECT COL_LENGTH('afi.AfiliadoOrg', 'numQuinquenios') AS len
+  `);
+  cachedHasNumQuinquenios = r.recordset[0]?.len != null;
+  return cachedHasNumQuinquenios;
+}
 
 export class CreateCompleteAfiliadoCommand {
   constructor(private mssqlPool: ConnectionPool) {}
@@ -176,6 +189,9 @@ export class CreateCompleteAfiliadoCommand {
       }, 'Afiliado creado exitosamente');
 
       // Insertar AfiliadoOrg
+      // Verificar si la columna numQuinquenios existe
+      const hasNumQuinquenios = await hasNumQuinqueniosColumn();
+
       const afiliadoOrgRequest = transaction.request()
         .input('afiliadoId', sql.Int, afiliadoId)
         .input('nivel0Id', sql.BigInt, data.afiliadoOrg.nivel0Id)
@@ -201,8 +217,12 @@ export class CreateCompleteAfiliadoCommand {
         .input('dQuinquenios', sql.VarChar(200), data.afiliadoOrg.dQuinquenios)
         .input('aplicar', sql.Bit, data.afiliadoOrg.aplicar)
         .input('bc', sql.VarChar(30), data.afiliadoOrg.bc)
-        .input('porcentaje', sql.Decimal(9, 4), data.afiliadoOrg.porcentaje)
-        .input('numQuinquenios', sql.Int, data.afiliadoOrg.numQuinquenios ?? 1);
+        .input('porcentaje', sql.Decimal(9, 4), data.afiliadoOrg.porcentaje);
+
+      // Agregar numQuinquenios solo si la columna existe
+      if (hasNumQuinquenios) {
+        afiliadoOrgRequest.input('numQuinquenios', sql.Int, data.afiliadoOrg.numQuinquenios ?? 1);
+      }
 
       const afiliadoOrgResult = await afiliadoOrgRequest.query(`
         INSERT INTO afi.AfiliadoOrg (
@@ -210,7 +230,8 @@ export class CreateCompleteAfiliadoCommand {
           claveOrganica0, claveOrganica1, claveOrganica2, claveOrganica3,
           interno, sueldo, otrasPrestaciones, quinquenios, activo,
           fechaMovAlt, orgs1, orgs2, orgs3, orgs4, dSueldo,
-          dOtrasPrestaciones, dQuinquenios, aplicar, bc, porcentaje, numQuinquenios
+          dOtrasPrestaciones, dQuinquenios, aplicar, bc, porcentaje
+          ${hasNumQuinquenios ? ', numQuinquenios' : ''}
         )
         OUTPUT INSERTED.*
         VALUES (
@@ -218,7 +239,8 @@ export class CreateCompleteAfiliadoCommand {
           @claveOrganica0, @claveOrganica1, @claveOrganica2, @claveOrganica3,
           @interno, @sueldo, @otrasPrestaciones, @quinquenios, @activo,
           @fechaMovAlt, @orgs1, @orgs2, @orgs3, @orgs4, @dSueldo,
-          @dOtrasPrestaciones, @dQuinquenios, @aplicar, @bc, @porcentaje, @numQuinquenios
+          @dOtrasPrestaciones, @dQuinquenios, @aplicar, @bc, @porcentaje
+          ${hasNumQuinquenios ? ', @numQuinquenios' : ''}
         )
       `);
 
@@ -431,44 +453,20 @@ export class CreateCompleteAfiliadoCommand {
           org0, org1, org2, org3
         }, 'No existe quincena para orgánica, consultando Firebird AP_G_APLICADO_TIPO...');
         
-        // Consultar Firebird para obtener quincena y fecha
-        const firebirdResult = await executeSerializedQuery((db) => {
-          return new Promise<{ QUINCENA: number; FECHA: string }>((resolve, reject) => {
-            try {
-              const sql = `SELECT p.QUINCENA, p.FECHA FROM AP_G_APLICADO_TIPO(?, ?, '01', '01') p`;
-              const params = [org0, org1];
-
-              const timeoutId = setTimeout(() => {
-                reject(new Error('Tiempo de espera agotado en consulta Firebird AP_G_APLICADO_TIPO'));
-              }, 30000); // 30 segundos de timeout
-
-              db.query(sql, params, (err: any, result: any) => {
-                clearTimeout(timeoutId);
-                
-                if (err) {
-                  logger.error({
-                    org0, org1, error: err.message
-                  }, 'Error al consultar AP_G_APLICADO_TIPO en Firebird');
-                  reject(err);
-                  return;
-                }
-
-                if (!result || result.length === 0) {
-                  reject(new Error('AP_G_APLICADO_TIPO no retornó resultados'));
-                  return;
-                }
-
-                const row = result[0];
-                resolve({
-                  QUINCENA: row.QUINCENA,
-                  FECHA: row.FECHA
-                });
-              });
-            } catch (error: any) {
-              reject(error);
-            }
-          });
+        // Consultar Firebird para obtener quincena y fecha usando helper de SP
+        const result = await executeSelectableProcedure('AP_G_APLICADO_TIPO', [org0, org1, '01', '01'], {
+          alias: 'p',
+          columns: ['p.QUINCENA', 'p.FECHA']
         });
+
+        if (!result || result.length === 0) {
+          throw new Error('AP_G_APLICADO_TIPO no retornó resultados');
+        }
+
+        const firebirdResult = {
+          QUINCENA: result[0].QUINCENA,
+          FECHA: result[0].FECHA
+        };
 
         // Parsear QUINCENA: formato QQAA (quincena 2 dígitos + año 2 últimos dígitos)
         // Ejemplo: 2125 = quincena 21 del año 2025

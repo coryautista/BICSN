@@ -17,7 +17,7 @@ export default async function personalRoutes(app: FastifyInstance) {
     preHandler: [requireAuth],
     schema: {
       description: 'List all Personal records with optional filters by organica0 and organica1',
-      tags: ['personal'],
+      tags: ['personal', 'firebird'],
       security: [{ bearerAuth: [] }],
       querystring: {
         type: 'object',
@@ -102,7 +102,7 @@ export default async function personalRoutes(app: FastifyInstance) {
     preHandler: [requireAuth],
     schema: {
       description: 'Get Personal record by interno',
-      tags: ['personal'],
+      tags: ['personal', 'firebird'],
       security: [{ bearerAuth: [] }],
       params: {
         type: 'object',
@@ -197,7 +197,7 @@ export default async function personalRoutes(app: FastifyInstance) {
     preHandler: [requireAuth],
     schema: {
       description: 'Create new Personal record',
-      tags: ['personal'],
+      tags: ['personal', 'firebird'],
       security: [{ bearerAuth: [] }],
       body: {
         type: 'object',
@@ -322,7 +322,7 @@ export default async function personalRoutes(app: FastifyInstance) {
     preHandler: [requireAuth],
     schema: {
       description: 'Update Personal record',
-      tags: ['personal'],
+      tags: ['personal', 'firebird'],
       security: [{ bearerAuth: [] }],
       params: {
         type: 'object',
@@ -436,7 +436,7 @@ export default async function personalRoutes(app: FastifyInstance) {
     preHandler: [requireAuth],
     schema: {
       description: 'Delete Personal record',
-      tags: ['personal'],
+      tags: ['personal', 'firebird'],
       security: [{ bearerAuth: [] }],
       params: {
         type: 'object',

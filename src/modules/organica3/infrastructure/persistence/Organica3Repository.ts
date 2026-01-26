@@ -310,7 +310,9 @@ export class Organica3Repository implements IOrganica3Repository {
             reject(err);
             return;
           }
-          const count = result[0].COUNT;
+          // Decodificar resultado de Firebird antes de leer valores
+          const decodedRow = result[0] ? decodeFirebirdObject(result[0]) : null;
+          const count = decodedRow?.COUNT || decodedRow?.count || 0;
           resolve(count > 0);
         }
       );
@@ -339,11 +341,22 @@ export class Organica3Repository implements IOrganica3Repository {
       sql += ' WHERE ' + conditions.join(' AND ');
     }
 
-    // Add sorting
+    // Add sorting with whitelist validation
+    const allowedColumns = ['CLAVE_ORGANICA_0', 'CLAVE_ORGANICA_1', 'CLAVE_ORGANICA_2', 'CLAVE_ORGANICA_3', 'DESCRIPCION', 'TITULAR', 'CALLE_NUM', 'FRACCIONAMIENTO', 'CODIGO_POSTAL', 'TELEFONO', 'FAX', 'LOCALIDAD', 'MUNICIPIO', 'ESTADO', 'FECHA_REGISTRO_3', 'FECHA_FIN_3', 'USUARIO', 'ESTATUS'];
     if (query.sortBy) {
       const sortColumn = query.sortBy.toUpperCase();
-      const sortOrder = query.sortOrder || 'ASC';
-      sql += ` ORDER BY ${sortColumn} ${sortOrder}`;
+      // Validate column name against whitelist
+      if (allowedColumns.includes(sortColumn)) {
+        const sortOrder = (query.sortOrder || 'ASC').toUpperCase();
+        // Validate sort order
+        if (sortOrder === 'ASC' || sortOrder === 'DESC') {
+          sql += ` ORDER BY ${sortColumn} ${sortOrder}`;
+        } else {
+          sql += ` ORDER BY ${sortColumn} ASC`;
+        }
+      } else {
+        sql += ' ORDER BY CLAVE_ORGANICA_0, CLAVE_ORGANICA_1, CLAVE_ORGANICA_2, CLAVE_ORGANICA_3';
+      }
     } else {
       sql += ' ORDER BY CLAVE_ORGANICA_0, CLAVE_ORGANICA_1, CLAVE_ORGANICA_2, CLAVE_ORGANICA_3';
     }

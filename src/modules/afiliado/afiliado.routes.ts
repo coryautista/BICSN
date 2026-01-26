@@ -43,7 +43,7 @@ export default async function afiliadoRoutes(app: FastifyInstance) {
     preHandler: [requireAuth, requireRole('admin')],
     schema: {
       description: 'Ejecutar stored procedure sp_ResetAfiliados para resetear afiliados. Requiere rol admin.',
-      tags: ['afiliado', 'admin'],
+      tags: ['afiliado', 'admin', 'firebird'],
       security: [{ bearerAuth: [] }],
       response: {
         200: {
@@ -110,7 +110,7 @@ export default async function afiliadoRoutes(app: FastifyInstance) {
     preHandler: [requireAuth],
     schema: {
       description: 'Listar todos los registros de Afiliado',
-      tags: ['afiliado'],
+      tags: ['afiliado', 'firebird'],
       security: [{ bearerAuth: [] }],
       response: {
         200: {
@@ -194,7 +194,7 @@ export default async function afiliadoRoutes(app: FastifyInstance) {
     preHandler: [requireAuth],
     schema: {
       description: 'Este endpoint solo acepta POST. Use POST en lugar de GET.',
-      tags: ['afiliado'],
+      tags: ['afiliado', 'firebird'],
       security: [{ bearerAuth: [] }],
       response: {
         405: {
@@ -234,7 +234,7 @@ export default async function afiliadoRoutes(app: FastifyInstance) {
     schema: {
       description: 'Genera comandos SQL ejecutables para Firebird del stored procedure DP_EDITA_ENTIDAD para todos los afiliados en numValidacion=2 (Aprobado) o numValidacion=3 (En Revisión) de la orgánica del usuario. NO ejecuta nada, solo genera los comandos SQL.',
       summary: 'Preview de comandos SQL para DP_EDITA_ENTIDAD',
-      tags: ['afiliado'],
+      tags: ['afiliado', 'firebird'],
       security: [{ bearerAuth: [] }],
       body: {
         type: 'object',
@@ -603,7 +603,7 @@ export default async function afiliadoRoutes(app: FastifyInstance) {
     preHandler: [requireAuth],
     schema: {
       description: 'Obtener registro de Afiliado por id',
-      tags: ['afiliado'],
+      tags: ['afiliado', 'firebird'],
       security: [{ bearerAuth: [] }],
       params: {
         type: 'object',
@@ -730,7 +730,7 @@ export default async function afiliadoRoutes(app: FastifyInstance) {
     preHandler: [requireAuth],
     schema: {
       description: 'Actualizar el campo Accion a "TERMINADO" en BitacoraAfectacionOrg usando AfectacionId como parámetro',
-      tags: ['afiliado'],
+      tags: ['afiliado', 'firebird'],
       security: [{ bearerAuth: [] }],
       params: {
         type: 'object',
@@ -835,7 +835,7 @@ export default async function afiliadoRoutes(app: FastifyInstance) {
     preHandler: [requireAuth],
     schema: {
       description: 'Crear nuevo registro de Afiliado',
-      tags: ['afiliado'],
+      tags: ['afiliado', 'firebird'],
       security: [{ bearerAuth: [] }],
       body: {
         type: 'object',
@@ -973,7 +973,7 @@ export default async function afiliadoRoutes(app: FastifyInstance) {
     preHandler: [requireAuth],
     schema: {
       description: 'Actualizar registro de Afiliado',
-      tags: ['afiliado'],
+      tags: ['afiliado', 'firebird'],
       security: [{ bearerAuth: [] }],
       params: {
         type: 'object',
@@ -1090,7 +1090,7 @@ export default async function afiliadoRoutes(app: FastifyInstance) {
     preHandler: [requireAuth],
     schema: {
       description: 'Crear registro completo de Afiliado con AfiliadoOrg y Movimiento. NOTA: claveOrganica0 y claveOrganica1 se obtienen automáticamente del usuario autenticado. claveOrganica2 y claveOrganica3 son opcionales y si se envían en el body se usan esos valores, si no se obtienen del usuario autenticado. orgs1-orgs4 son opcionales y si se envían en el body se usan esos valores, si no se construyen automáticamente concatenando las claveOrganica. nivel0Id a nivel3Id no deben enviarse. tipoMovimientoId es siempre 1. creadoPor es el usuario autenticado. folio, fechaAlta, fechaCarta, fechaMovAlt, quincenaId, fechaMov, folioMov, estatusMov, aplicar, activo, poseeInmuebles y dependientes se calculan/asignan automáticamente.',
-      tags: ['afiliado'],
+      tags: ['afiliado', 'firebird'],
       security: [{ bearerAuth: [] }],
       body: {
         type: 'object',
@@ -1404,7 +1404,7 @@ export default async function afiliadoRoutes(app: FastifyInstance) {
     preHandler: [requireAuth],
     schema: {
       description: 'Crear movimiento de cambio de sueldo (tipoMovimientoId=5). Similar a /afiliado/complete pero para cambios de sueldo. NOTA: claveOrganica0 y claveOrganica1 se obtienen automáticamente del usuario autenticado. claveOrganica2 y claveOrganica3 son opcionales y si se envían en el body se usan esos valores, si no se obtienen del usuario autenticado. orgs1-orgs4 son opcionales y si se envían en el body se usan esos valores, si no se construyen automáticamente concatenando las claveOrganica. El campo expediente es opcional y si no se proporciona se utilizará la CURP como identificador de documentos en el FTP.',
-      tags: ['afiliado'],
+      tags: ['afiliado', 'firebird'],
       security: [{ bearerAuth: [] }],
       body: {
         type: 'object',
@@ -1688,7 +1688,7 @@ export default async function afiliadoRoutes(app: FastifyInstance) {
     preHandler: [requireAuth],
     schema: {
       description: 'Crear movimiento de baja permanente (tipoMovimientoId=2). Similar a /afiliado/complete pero para bajas permanentes. NOTA: claveOrganica0 y claveOrganica1 se obtienen automáticamente del usuario autenticado. claveOrganica2 y claveOrganica3 son opcionales y si se envían en el body se usan esos valores, si no se obtienen del usuario autenticado. orgs1-orgs4 son opcionales y si se envían en el body se usan esos valores, si no se construyen automáticamente concatenando las claveOrganica. El campo expediente es opcional y si no se proporciona se utilizará la CURP como identificador de documentos en el FTP.',
-      tags: ['afiliado'],
+      tags: ['afiliado', 'firebird'],
       security: [{ bearerAuth: [] }],
       body: {
         type: 'object',
@@ -1972,7 +1972,7 @@ export default async function afiliadoRoutes(app: FastifyInstance) {
     preHandler: [requireAuth],
     schema: {
       description: 'Crear movimiento de baja suspensión de afiliación (tipoMovimientoId=3). Similar a /afiliado/complete pero para suspensiones de afiliación. NOTA: claveOrganica0 y claveOrganica1 se obtienen automáticamente del usuario autenticado. claveOrganica2 y claveOrganica3 son opcionales y si se envían en el body se usan esos valores, si no se obtienen del usuario autenticado. orgs1-orgs4 son opcionales y si se envían en el body se usan esos valores, si no se construyen automáticamente concatenando las claveOrganica. El campo expediente es opcional y si no se proporciona se utilizará la CURP como identificador de documentos en el FTP.',
-      tags: ['afiliado'],
+      tags: ['afiliado', 'firebird'],
       security: [{ bearerAuth: [] }],
       body: {
         type: 'object',
@@ -2256,7 +2256,7 @@ export default async function afiliadoRoutes(app: FastifyInstance) {
     preHandler: [requireAuth],
     schema: {
       description: 'Crear movimiento de baja termina suspensión de afiliación (tipoMovimientoId=4). Similar a /afiliado/complete pero para terminación de suspensiones de afiliación. NOTA: claveOrganica0 y claveOrganica1 se obtienen automáticamente del usuario autenticado. claveOrganica2 y claveOrganica3 son opcionales y si se envían en el body se usan esos valores, si no se obtienen del usuario autenticado. orgs1-orgs4 son opcionales y si se envían en el body se usan esos valores, si no se construyen automáticamente concatenando las claveOrganica. El campo expediente es opcional y si no se proporciona se utilizará la CURP como identificador de documentos en el FTP.',
-      tags: ['afiliado'],
+      tags: ['afiliado', 'firebird'],
       security: [{ bearerAuth: [] }],
       body: {
         type: 'object',
@@ -2391,7 +2391,7 @@ export default async function afiliadoRoutes(app: FastifyInstance) {
     preHandler: [requireAuth],
     schema: {
       description: 'Crear movimiento de baja termina suspensión de afiliación y baja (tipoMovimientoId=6). Similar a /afiliado/complete pero para terminación de suspensiones de afiliación y baja simultánea. NOTA: claveOrganica0 y claveOrganica1 se obtienen automáticamente del usuario autenticado. claveOrganica2 y claveOrganica3 son opcionales y si se envían en el body se usan esos valores, si no se obtienen del usuario autenticado. orgs1-orgs4 son opcionales y si se envían en el body se usan esos valores, si no se construyen automáticamente concatenando las claveOrganica. El campo expediente es opcional y si no se proporciona se utilizará la CURP como identificador de documentos en el FTP.',
-      tags: ['afiliado'],
+      tags: ['afiliado', 'firebird'],
       security: [{ bearerAuth: [] }],
       body: {
         type: 'object',
@@ -2526,7 +2526,7 @@ export default async function afiliadoRoutes(app: FastifyInstance) {
     preHandler: [requireAuth],
     schema: {
       description: 'Obtener listado de afiliados, afiliadosOrg y movimientos quincenales filtrados por org0 y org1 del usuario autenticado, donde estatus de afiliado = 1 y estatus de movimientos = "A". Omite campos de control y auditoria.',
-      tags: ['afiliado'],
+      tags: ['afiliado', 'firebird'],
       security: [{ bearerAuth: [] }],
       response: {
         200: {
@@ -2706,7 +2706,7 @@ export default async function afiliadoRoutes(app: FastifyInstance) {
     preHandler: [requireAuth],
     schema: {
       description: 'Eliminar registro de Afiliado',
-      tags: ['afiliado'],
+      tags: ['afiliado', 'firebird'],
       security: [{ bearerAuth: [] }],
       params: {
         type: 'object',
@@ -2771,7 +2771,7 @@ export default async function afiliadoRoutes(app: FastifyInstance) {
     preHandler: [requireAuth],
     schema: {
       description: 'Obtener todos los estados de validación de afiliados disponibles',
-      tags: ['afiliado'],
+      tags: ['afiliado', 'firebird'],
       security: [{ bearerAuth: [] }],
       response: {
         200: {
@@ -2829,7 +2829,7 @@ export default async function afiliadoRoutes(app: FastifyInstance) {
     preHandler: [requireAuth],
     schema: {
       description: 'Obtener lista de afiliados pendientes de aprobación (numValidacion = 1)',
-      tags: ['afiliado'],
+      tags: ['afiliado', 'firebird'],
       security: [{ bearerAuth: [] }],
       response: {
         200: {
@@ -2918,7 +2918,7 @@ export default async function afiliadoRoutes(app: FastifyInstance) {
     preHandler: [requireAuth],
     schema: {
       description: 'Obtener afiliados en estado Registrado',
-      tags: ['afiliado'],
+      tags: ['afiliado', 'firebird'],
       security: [{ bearerAuth: [] }],
       response: {
         200: {
@@ -3001,7 +3001,7 @@ export default async function afiliadoRoutes(app: FastifyInstance) {
     preHandler: [requireAuth],
     schema: {
       description: 'Obtener afiliados en estado Aprobado',
-      tags: ['afiliado'],
+      tags: ['afiliado', 'firebird'],
       security: [{ bearerAuth: [] }],
       querystring: {
         type: 'object',
@@ -3105,7 +3105,7 @@ export default async function afiliadoRoutes(app: FastifyInstance) {
     preHandler: [requireAuth],
     schema: {
       description: 'Obtener afiliados en estado En Revisión',
-      tags: ['afiliado'],
+      tags: ['afiliado', 'firebird'],
       security: [{ bearerAuth: [] }],
       response: {
         200: {
@@ -3188,7 +3188,7 @@ export default async function afiliadoRoutes(app: FastifyInstance) {
     preHandler: [requireAuth],
     schema: {
       description: 'Obtener afiliados en estado Rechazado',
-      tags: ['afiliado'],
+      tags: ['afiliado', 'firebird'],
       security: [{ bearerAuth: [] }],
       response: {
         200: {
@@ -3271,7 +3271,7 @@ export default async function afiliadoRoutes(app: FastifyInstance) {
     preHandler: [requireAuth],
     schema: {
       description: 'Obtener afiliados en estado Suspendido',
-      tags: ['afiliado'],
+      tags: ['afiliado', 'firebird'],
       security: [{ bearerAuth: [] }],
       response: {
         200: {
@@ -3354,7 +3354,7 @@ export default async function afiliadoRoutes(app: FastifyInstance) {
     preHandler: [requireAuth],
     schema: {
       description: 'Obtener afiliados en estado Cancelado',
-      tags: ['afiliado'],
+      tags: ['afiliado', 'firebird'],
       security: [{ bearerAuth: [] }],
       response: {
         200: {
@@ -3436,7 +3436,7 @@ export default async function afiliadoRoutes(app: FastifyInstance) {
     preHandler: [requireAuth],
     schema: {
       description: 'Obtener historial de cambios de status de un afiliado',
-      tags: ['afiliado'],
+      tags: ['afiliado', 'firebird'],
       security: [{ bearerAuth: [] }],
       params: {
         type: 'object',
@@ -3526,7 +3526,7 @@ export default async function afiliadoRoutes(app: FastifyInstance) {
     preHandler: [requireAuth],
     schema: {
       description: 'Cambiar afiliado a estado Registrado',
-      tags: ['afiliado'],
+      tags: ['afiliado', 'firebird'],
       security: [{ bearerAuth: [] }],
       params: {
         type: 'object',
@@ -3578,7 +3578,7 @@ export default async function afiliadoRoutes(app: FastifyInstance) {
     preHandler: [requireAuth],
     schema: {
       description: 'Regresar afiliado al estado inicial Registrado',
-      tags: ['afiliado'],
+      tags: ['afiliado', 'firebird'],
       security: [{ bearerAuth: [] }],
       params: {
         type: 'object',
@@ -3674,7 +3674,7 @@ export default async function afiliadoRoutes(app: FastifyInstance) {
     preHandler: [requireAuth],
     schema: {
       description: 'Cambiar afiliado a estado Aprobado',
-      tags: ['afiliado'],
+      tags: ['afiliado', 'firebird'],
       security: [{ bearerAuth: [] }],
       params: {
         type: 'object',
@@ -3726,7 +3726,7 @@ export default async function afiliadoRoutes(app: FastifyInstance) {
     preHandler: [requireAuth],
     schema: {
       description: 'Cambiar afiliado a estado En Revisión',
-      tags: ['afiliado'],
+      tags: ['afiliado', 'firebird'],
       security: [{ bearerAuth: [] }],
       params: {
         type: 'object',
@@ -3778,7 +3778,7 @@ export default async function afiliadoRoutes(app: FastifyInstance) {
     preHandler: [requireAuth],
     schema: {
       description: 'Cambiar afiliado a estado Rechazado',
-      tags: ['afiliado'],
+      tags: ['afiliado', 'firebird'],
       security: [{ bearerAuth: [] }],
       params: {
         type: 'object',
@@ -3830,7 +3830,7 @@ export default async function afiliadoRoutes(app: FastifyInstance) {
     preHandler: [requireAuth],
     schema: {
       description: 'Cambiar afiliado a estado Suspendido',
-      tags: ['afiliado'],
+      tags: ['afiliado', 'firebird'],
       security: [{ bearerAuth: [] }],
       params: {
         type: 'object',
@@ -3882,7 +3882,7 @@ export default async function afiliadoRoutes(app: FastifyInstance) {
     preHandler: [requireAuth],
     schema: {
       description: 'Cambiar afiliado a estado Cancelado',
-      tags: ['afiliado'],
+      tags: ['afiliado', 'firebird'],
       security: [{ bearerAuth: [] }],
       params: {
         type: 'object',
@@ -3947,7 +3947,7 @@ export default async function afiliadoRoutes(app: FastifyInstance) {
     preHandler: [requireAuth],
     schema: {
       description: 'Aplicar BDIsspea en lote a TODOS los afiliados en numValidacion=2 (Aprobado) o numValidacion=3 (En Revisión) de la orgánica del usuario. Esta operación incluye: 1) Cambiar todos los afiliados elegibles a numValidacion=7, 2) Marcar todos los afiliados de la orgánica como completos (afiliadosComplete=1), 3) Actualizar BitacoraAfectacionOrg de "Aplicar" a "APLICAR"',
-      tags: ['afiliado'],
+      tags: ['afiliado', 'firebird'],
       security: [{ bearerAuth: [] }],
       body: {
         type: 'object',
@@ -4118,7 +4118,7 @@ export default async function afiliadoRoutes(app: FastifyInstance) {
     preHandler: [requireAuth],
     schema: {
       description: 'Ejecutar stored procedures de Firebird para aplicar BDIssspea QNA. Ejecuta: 1) AP_G_APLICADO_TIPO para obtener quincena, 2) AP_P_APLICAR con tipo C, 3) AP_P_APLICAR con tipo F, 4) Actualizar BitacoraAfectacionOrg a TERMINADO',
-      tags: ['afiliado'],
+      tags: ['afiliado', 'firebird'],
       security: [{ bearerAuth: [] }],
       querystring: {
         type: 'object',
@@ -4237,7 +4237,7 @@ export default async function afiliadoRoutes(app: FastifyInstance) {
     preHandler: [requireAuth],
     schema: {
       description: 'Obtener el registro completo más reciente de BitacoraAfectacionOrg para la orgánica del usuario (Entidad=AFILIADOS). Permite conocer en qué acción se encuentra actualmente el proceso.',
-      tags: ['afiliado'],
+      tags: ['afiliado', 'firebird'],
       security: [{ bearerAuth: [] }],
       querystring: {
         type: 'object',
@@ -4358,7 +4358,7 @@ export default async function afiliadoRoutes(app: FastifyInstance) {
     preHandler: [requireAuth],
     schema: {
       description: 'Cambiar múltiples afiliados a estado Registrado en lote',
-      tags: ['afiliado'],
+      tags: ['afiliado', 'firebird'],
       security: [{ bearerAuth: [] }],
       body: {
         type: 'object',
@@ -4405,7 +4405,7 @@ export default async function afiliadoRoutes(app: FastifyInstance) {
     preHandler: [requireAuth],
     schema: {
       description: 'Cambiar múltiples afiliados a estado Aprobado en lote',
-      tags: ['afiliado'],
+      tags: ['afiliado', 'firebird'],
       security: [{ bearerAuth: [] }],
       body: {
         type: 'object',
@@ -4452,7 +4452,7 @@ export default async function afiliadoRoutes(app: FastifyInstance) {
     preHandler: [requireAuth],
     schema: {
       description: 'Cambiar múltiples afiliados a estado En Revisión en lote',
-      tags: ['afiliado'],
+      tags: ['afiliado', 'firebird'],
       security: [{ bearerAuth: [] }],
       body: {
         type: 'object',
@@ -4499,7 +4499,7 @@ export default async function afiliadoRoutes(app: FastifyInstance) {
     preHandler: [requireAuth],
     schema: {
       description: 'Cambiar múltiples afiliados a estado Rechazado en lote',
-      tags: ['afiliado'],
+      tags: ['afiliado', 'firebird'],
       security: [{ bearerAuth: [] }],
       body: {
         type: 'object',
@@ -4546,7 +4546,7 @@ export default async function afiliadoRoutes(app: FastifyInstance) {
     preHandler: [requireAuth],
     schema: {
       description: 'Cambiar múltiples afiliados a estado Suspendido en lote',
-      tags: ['afiliado'],
+      tags: ['afiliado', 'firebird'],
       security: [{ bearerAuth: [] }],
       body: {
         type: 'object',
@@ -4593,7 +4593,7 @@ export default async function afiliadoRoutes(app: FastifyInstance) {
     preHandler: [requireAuth],
     schema: {
       description: 'Cambiar múltiples afiliados a estado Cancelado en lote',
-      tags: ['afiliado'],
+      tags: ['afiliado', 'firebird'],
       security: [{ bearerAuth: [] }],
       body: {
         type: 'object',

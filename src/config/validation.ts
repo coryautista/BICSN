@@ -48,7 +48,11 @@ const firebirdSchema = z.object({
   port: z.number().int().min(1).max(65535).default(3050),
   database: z.string().min(1, 'FIREBIRD_DATABASE is required'),
   user: z.string().min(1, 'FIREBIRD_USER is required'),
-  password: z.string().min(1, 'FIREBIRD_PASSWORD is required')
+  password: z.string().min(1, 'FIREBIRD_PASSWORD is required'),
+  charset: z.string().default('WIN1252'),
+  clientLib: z.string().optional(),
+  /** Default query timeout in milliseconds (default: 30000) */
+  timeoutMs: z.number().int().min(5000).max(300000).default(30000)
 });
 
 /**

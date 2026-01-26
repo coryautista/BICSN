@@ -1,4 +1,4 @@
-import { executeSerializedQuery, decodeFirebirdObject, executeInTransaction, executeQueryInTransaction } from '../../../../db/firebird.js';
+import { executeSafeQuery, executeInTransaction, executeQueryInTransaction } from '../../../../db/firebird.js';
 import { IRetencionesPorCobrarRepository } from '../../domain/repositories/IRetencionesPorCobrarRepository.js';
 import { RetencionPorCobrar } from '../../domain/entities/RetencionPorCobrar.js';
 import { RetencionesPorCobrarError, RetencionesPorCobrarErrorCode } from '../../domain/errors.js';
@@ -19,7 +19,7 @@ export class RetencionesPorCobrarRepository implements IRetencionesPorCobrarRepo
       periodo
     };
 
-    logger.info(logContext, 'Iniciando consulta serializada');
+    logger.info(logContext, 'Iniciando consulta a ORGANICAS_INT_MORATORIO_GEN');
 
     // Asegurar que los parámetros sean strings y estén limpios
     const clave0 = String(org0).trim().padStart(2, '0');
@@ -28,106 +28,68 @@ export class RetencionesPorCobrarRepository implements IRetencionesPorCobrarRepo
 
     const sql = `
       SELECT 
-        r.CLAVE_ORGANICA_0, 
-        r.CLAVE_ORGANICA_1, 
-        r.CLAVE_ORGANICA_2,
-        r.CLAVE_ORGANICA_3, 
-        r.PERIODO, 
-        r.FECHA_GENERACION, 
-        r.USER_ALTA, 
-        r.TIPO
-      FROM ORGANICAS_INT_MORATORIO_GEN r
-      WHERE r.CLAVE_ORGANICA_0 = ? 
-        AND r.CLAVE_ORGANICA_1 = ? 
-        AND r.PERIODO = ?
+        CLAVE_ORGANICA_0, 
+        CLAVE_ORGANICA_1, 
+        CLAVE_ORGANICA_2,
+        CLAVE_ORGANICA_3, 
+        PERIODO, 
+        FECHA_GENERACION, 
+        USER_ALTA, 
+        TIPO
+      FROM ORGANICAS_INT_MORATORIO_GEN
+      WHERE CLAVE_ORGANICA_0 = ? 
+        AND CLAVE_ORGANICA_1 = ? 
+        AND PERIODO = ?
     `;
 
-    return executeSerializedQuery((db) => {
-      return new Promise<RetencionPorCobrar[]>((resolve, reject) => {
-        logger.info(logContext, 'Ejecutando consulta a ORGANICAS_INT_MORATORIO_GEN');
+    try {
+      // Usar executeSafeQuery con parámetros bind (odbc 2.4.9 debería funcionar correctamente)
+      const result = await executeSafeQuery(sql, [clave0, clave1, periodoStr]);
+      const duration = Date.now() - startTime;
 
-        if (!db || typeof db.query !== 'function') {
-          logger.error(logContext, 'Conexión Firebird inválida');
-          reject(new RetencionesPorCobrarError(
-            'Conexión a Firebird no disponible o inválida',
-            RetencionesPorCobrarErrorCode.FIREBIRD_CONNECTION_ERROR
-          ));
-          return;
-        }
+      if (!result || result.length === 0) {
+        logger.info({ ...logContext, duracionMs: duration }, 'No se encontraron registros');
+        return [];
+      }
 
-        try {
-          db.query(
-            sql,
-            [clave0, clave1, periodoStr],
-            (err: any, result: any) => {
-              const duration = Date.now() - startTime;
+      logger.info({ ...logContext, totalRegistros: result.length }, 'Mapeando resultados');
 
-              if (err) {
-                logger.error({
-                  ...logContext,
-                  error: err.message || String(err),
-                  errorCode: err.code,
-                  errorName: err.name,
-                  stack: err.stack,
-                  duracionMs: duration
-                }, 'Error ejecutando consulta');
-                reject(new RetencionesPorCobrarError(
-                  `Error al ejecutar consulta ORGANICAS_INT_MORATORIO_GEN: ${err.message || String(err)}`,
-                  RetencionesPorCobrarErrorCode.FIREBIRD_QUERY_ERROR
-                ));
-                return;
-              }
+      // executeSafeQuery ya aplica decodeValue a cada fila
+      const retenciones: RetencionPorCobrar[] = result.map((row: any) => ({
+        claveOrganica0: String(row.CLAVE_ORGANICA_0 || ''),
+        claveOrganica1: String(row.CLAVE_ORGANICA_1 || ''),
+        claveOrganica2: row.CLAVE_ORGANICA_2 ? String(row.CLAVE_ORGANICA_2) : null,
+        claveOrganica3: row.CLAVE_ORGANICA_3 ? String(row.CLAVE_ORGANICA_3) : null,
+        periodo: String(row.PERIODO || ''),
+        fechaGeneracion: row.FECHA_GENERACION ? new Date(row.FECHA_GENERACION) : null,
+        userAlta: row.USER_ALTA ? String(row.USER_ALTA) : null,
+        tipo: String(row.TIPO || '').trim()
+      }));
 
-              if (!result) {
-                logger.warn({ ...logContext, duracionMs: duration }, 'Resultado nulo recibido');
-                resolve([]);
-                return;
-              }
+      logger.info({
+        ...logContext,
+        recordCount: retenciones.length,
+        duracionMs: duration
+      }, 'Consulta completada exitosamente');
 
-              if (result.length === 0) {
-                logger.info({ ...logContext, duracionMs: duration }, 'No se encontraron registros');
-                resolve([]);
-                return;
-              }
-
-              logger.info({ ...logContext, totalRegistros: result.length }, 'Mapeando resultados');
-
-              // Decodificar resultados de Firebird antes de mapear
-              const decodedResult = result.map((row: any) => decodeFirebirdObject(row));
-
-              const retenciones: RetencionPorCobrar[] = decodedResult.map((row: any) => ({
-                claveOrganica0: String(row.CLAVE_ORGANICA_0 || ''),
-                claveOrganica1: String(row.CLAVE_ORGANICA_1 || ''),
-                claveOrganica2: row.CLAVE_ORGANICA_2 ? String(row.CLAVE_ORGANICA_2) : null,
-                claveOrganica3: row.CLAVE_ORGANICA_3 ? String(row.CLAVE_ORGANICA_3) : null,
-                periodo: String(row.PERIODO || ''),
-                fechaGeneracion: row.FECHA_GENERACION ? new Date(row.FECHA_GENERACION) : null,
-                userAlta: row.USER_ALTA ? String(row.USER_ALTA) : null,
-                tipo: String(row.TIPO || '').trim()
-              }));
-
-              logger.info({
-                ...logContext,
-                recordCount: retenciones.length,
-                duracionMs: duration
-              }, 'Consulta completada exitosamente');
-
-              resolve(retenciones);
-            }
-          );
-        } catch (syncError: any) {
-          logger.error({
-            ...logContext,
-            error: syncError.message || String(syncError),
-            stack: syncError.stack
-          }, 'Error síncrono ejecutando consulta');
-          reject(new RetencionesPorCobrarError(
-            `Error síncrono al ejecutar consulta ORGANICAS_INT_MORATORIO_GEN: ${syncError.message || String(syncError)}`,
-            RetencionesPorCobrarErrorCode.FIREBIRD_QUERY_ERROR
-          ));
-        }
-      });
-    });
+      return retenciones;
+    } catch (error: any) {
+      const duration = Date.now() - startTime;
+      logger.error({
+        ...logContext,
+        error: error.message || String(error),
+        errorCode: error.code,
+        errorName: error.name,
+        odbcErrors: error.odbcErrors,
+        stack: error.stack,
+        duracionMs: duration
+      }, 'Error ejecutando consulta');
+      
+      throw new RetencionesPorCobrarError(
+        `Error al ejecutar consulta ORGANICAS_INT_MORATORIO_GEN: ${error.message || String(error)}`,
+        RetencionesPorCobrarErrorCode.FIREBIRD_QUERY_ERROR
+      );
+    }
   }
 
   async createRetencionesMoratorio(

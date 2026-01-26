@@ -20,6 +20,7 @@ import { GetPrestamosQuery } from '../aportacionesFondos/application/queries/Get
 import { GetPrestamosMedianoPlazoQuery } from '../aportacionesFondos/application/queries/GetPrestamosMedianoPlazoQuery.js';
 import { GetPrestamosHipotecariosQuery } from '../aportacionesFondos/application/queries/GetPrestamosHipotecariosQuery.js';
 import { IAportacionFondoRepository } from '../aportacionesFondos/domain/repositories/IAportacionFondoRepository.js';
+import { normalizeClaveOrganica } from '../../utils/organica.js';
 
 export default async function aplicacionQuincenalRoutes(app: FastifyInstance) {
   // GET /aplicacion-quincenal/AportacionQuincenalResumen
@@ -778,8 +779,9 @@ export default async function aplicacionQuincenalRoutes(app: FastifyInstance) {
       const getPensionNominaTransitorioQuery = request.diScope.resolve<GetPensionNominaTransitorioQuery>('getPensionNominaTransitorioQuery');
       const getAportacionGuarderiasQuery = request.diScope.resolve<GetAportacionGuarderiasQuery>('getAportacionGuarderiasQuery');
 
-      const userClave0 = (user as any).idOrganica0 || '';
-      const userClave1 = (user as any).idOrganica1 || '';
+      // Normalize org keys to 2 digits
+      const userClave0 = normalizeClaveOrganica((user as any).idOrganica0) || '';
+      const userClave1 = normalizeClaveOrganica((user as any).idOrganica1) || '';
 
       const [
         ahorroData,
@@ -934,8 +936,8 @@ export default async function aplicacionQuincenalRoutes(app: FastifyInstance) {
           clave_organica_1: org1,
           quincena: typeof quincena === 'number' ? quincena : parseInt(String(quincena || '1'), 10),
           anio: typeof anio === 'number' ? anio : parseInt(String(anio || '2000'), 10),
-          fpension: Number.isInteger(d.fpension) ? d.fpension : (typeof d.fpension === 'number' ? Math.floor(d.fpension) : (d.fpension ? Math.floor(Number(d.fpension)) || 0 : 0)),
-          interno: Number.isInteger(d.interno) ? d.interno : (typeof d.interno === 'number' ? Math.floor(d.interno) : (d.interno ? Math.floor(Number(d.interno)) || 0 : 0)),
+          fpension: (typeof d.fpension === 'number' && Number.isInteger(d.fpension)) ? d.fpension : (typeof d.fpension === 'number' ? Math.floor(d.fpension) : (d.fpension ? Math.floor(Number(d.fpension)) || 0 : 0)),
+          interno: (typeof d.interno === 'number' && Number.isInteger(d.interno)) ? d.interno : (typeof d.interno === 'number' ? Math.floor(d.interno) : (d.interno ? Math.floor(Number(d.interno)) || 0 : 0)),
           nombres: d.nombres || '',
           nonombre: d.nonombre || null,
           rfc: d.rfc || '',
@@ -1243,18 +1245,9 @@ export default async function aplicacionQuincenalRoutes(app: FastifyInstance) {
       const getPrestamosMedianoPlazoQuery = request.diScope.resolve<GetPrestamosMedianoPlazoQuery>('getPrestamosMedianoPlazoQuery');
       const getPrestamosHipotecariosQuery = request.diScope.resolve<GetPrestamosHipotecariosQuery>('getPrestamosHipotecariosQuery');
 
-      // Normalizar claves del usuario a string de 2 dígitos (evita errores tipo: userClave0.trim is not a function)
-      // Si el usuario no tiene claves en token (caso no-entidad/admin), usamos las claves objetivo para pasar validación del query.
-      const rawUserClave0 = (user as any).idOrganica0;
-      const rawUserClave1 = (user as any).idOrganica1;
-      const userClave0 =
-        rawUserClave0 !== undefined && rawUserClave0 !== null && String(rawUserClave0).trim().length > 0
-          ? String(rawUserClave0).trim().padStart(2, '0').substring(0, 2)
-          : org0;
-      const userClave1 =
-        rawUserClave1 !== undefined && rawUserClave1 !== null && String(rawUserClave1).trim().length > 0
-          ? String(rawUserClave1).trim().padStart(2, '0').substring(0, 2)
-          : org1;
+      // Normalize user org keys to 2 digits. If not available, fallback to target org keys.
+      const userClave0 = normalizeClaveOrganica((user as any).idOrganica0) || org0;
+      const userClave1 = normalizeClaveOrganica((user as any).idOrganica1) || org1;
 
       const [
         prestamosCortoPlazoData,

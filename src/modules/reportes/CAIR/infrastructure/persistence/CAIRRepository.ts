@@ -1,4 +1,4 @@
-import { executeSerializedQuery, decodeFirebirdObject } from '../../../../../db/firebird.js';
+import { executeSerializedQuery, decodeFirebirdObject, executeSelectableProcedure, FIREBIRD_TIMEOUTS } from '../../../../../db/firebird.js';
 import { ICAIRRepository } from '../../domain/repositories/ICAIRRepository.js';
 import { EstadoCuentaCAIR } from '../../domain/entities/EstadoCuentaCAIR.js';
 import { CAIREntregado } from '../../domain/entities/CAIREntregado.js';

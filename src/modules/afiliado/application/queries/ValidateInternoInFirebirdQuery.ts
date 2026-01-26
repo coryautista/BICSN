@@ -1,4 +1,4 @@
-import { connectFirebirdDatabase } from '../../../../db/firebird.js';
+import { executeSerializedQuery } from '../../../../db/firebird.js';
 import pino from 'pino';
 import {
   InvalidInternoError,
@@ -27,58 +27,58 @@ export class ValidateInternoInFirebirdQuery {
     }
 
     try {
-      const db = await connectFirebirdDatabase();
-
-      return new Promise((resolve, reject) => {
-        // First check if interno exists in PERSONAL table
-        db.query('SELECT FIRST 1 INTERNO FROM PERSONAL WHERE INTERNO = ?', [interno], (err, personalResult) => {
-          if (err) {
-            logger.error({
-              ...logContext,
-              error: err.message,
-              table: 'PERSONAL'
-            }, 'Error al validar interno en tabla PERSONAL');
-            reject(new AfiliadoQueryError('Error validating interno in PERSONAL table', {
-              interno,
-              table: 'PERSONAL',
-              originalError: err.message
-            }));
-            return;
-          }
-
-          if (!personalResult || personalResult.length === 0) {
-            logger.warn({
-              ...logContext,
-              table: 'PERSONAL'
-            }, 'Interno no encontrado en tabla PERSONAL');
-            resolve(false);
-            return;
-          }
-
-          // If exists in PERSONAL, check ORG_PERSONAL table
-          db.query('SELECT FIRST 1 INTERNO FROM ORG_PERSONAL WHERE INTERNO = ?', [interno], (err2, orgPersonalResult) => {
-            if (err2) {
+      return await executeSerializedQuery((db) => {
+        return new Promise<boolean>((resolve, reject) => {
+          // First check if interno exists in PERSONAL table
+          db.query('SELECT FIRST 1 INTERNO FROM PERSONAL WHERE INTERNO = ?', [interno], (err: any, personalResult: any) => {
+            if (err) {
               logger.error({
                 ...logContext,
-                error: err2.message,
-                table: 'ORG_PERSONAL'
-              }, 'Error al validar interno en tabla ORG_PERSONAL');
-              reject(new AfiliadoQueryError('Error validating interno in ORG_PERSONAL table', {
+                error: err.message,
+                table: 'PERSONAL'
+              }, 'Error al validar interno en tabla PERSONAL');
+              reject(new AfiliadoQueryError('Error validating interno in PERSONAL table', {
                 interno,
-                table: 'ORG_PERSONAL',
-                originalError: err2.message
+                table: 'PERSONAL',
+                originalError: err.message
               }));
               return;
             }
 
-            const exists = !!(orgPersonalResult && orgPersonalResult.length > 0);
-            logger.info({
-              ...logContext,
-              exists,
-              table: 'ORG_PERSONAL'
-            }, 'Validación de interno en Firebird completada');
+            if (!personalResult || personalResult.length === 0) {
+              logger.warn({
+                ...logContext,
+                table: 'PERSONAL'
+              }, 'Interno no encontrado en tabla PERSONAL');
+              resolve(false);
+              return;
+            }
 
-            resolve(exists);
+            // If exists in PERSONAL, check ORG_PERSONAL table
+            db.query('SELECT FIRST 1 INTERNO FROM ORG_PERSONAL WHERE INTERNO = ?', [interno], (err2: any, orgPersonalResult: any) => {
+              if (err2) {
+                logger.error({
+                  ...logContext,
+                  error: err2.message,
+                  table: 'ORG_PERSONAL'
+                }, 'Error al validar interno en tabla ORG_PERSONAL');
+                reject(new AfiliadoQueryError('Error validating interno in ORG_PERSONAL table', {
+                  interno,
+                  table: 'ORG_PERSONAL',
+                  originalError: err2.message
+                }));
+                return;
+              }
+
+              const exists = !!(orgPersonalResult && orgPersonalResult.length > 0);
+              logger.info({
+                ...logContext,
+                exists,
+                table: 'ORG_PERSONAL'
+              }, 'Validación de interno en Firebird completada');
+
+              resolve(exists);
+            });
           });
         });
       });

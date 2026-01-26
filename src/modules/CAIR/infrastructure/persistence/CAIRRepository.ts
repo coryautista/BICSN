@@ -1,4 +1,4 @@
-import { executeSerializedQuery, decodeFirebirdObject } from '../../../../db/firebird.js';
+import { executeSerializedQuery, decodeFirebirdObject, executeSelectableProcedure, FIREBIRD_TIMEOUTS } from '../../../../db/firebird.js';
 import { ICAIRRepository } from '../../domain/repositories/ICAIRRepository.js';
 import { DevueltoTipo } from '../../domain/entities/DevueltoTipo.js';
 import { ChequeLeyenda } from '../../domain/entities/ChequeLeyenda.js';
