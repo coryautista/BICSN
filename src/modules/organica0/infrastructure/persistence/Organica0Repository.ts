@@ -214,7 +214,9 @@ export class Organica0Repository implements IOrganica0Repository {
           return;
         }
 
-        const totalDependents = result[0]?.TOTAL_DEPENDENTS || 0;
+        // Decodificar resultado de Firebird antes de leer valores
+        const decodedRow = result[0] ? decodeFirebirdObject(result[0]) : null;
+        const totalDependents = decodedRow?.TOTAL_DEPENDENTS || decodedRow?.total_dependents || 0;
         const inUse = totalDependents > 0;
 
         logger.debug({

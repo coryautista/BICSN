@@ -1,20 +1,35 @@
 import { ConnectionPool } from 'mssql';
-import { sql } from '../../../../db/mssql.js';
+import { sql, getPool } from '../../../../db/mssql.js';
 import { AfiliadoOrg, CreateAfiliadoOrgData, UpdateAfiliadoOrgData } from '../../domain/entities/AfiliadoOrg.js';
 import { IAfiliadoOrgRepository } from '../../domain/repositories/IAfiliadoOrgRepository.js';
+
+// Cache para verificar si la columna numQuinquenios existe en afi.AfiliadoOrg
+let cachedHasNumQuinquenios: boolean | null = null;
+
+async function hasNumQuinqueniosColumn(): Promise<boolean> {
+  if (cachedHasNumQuinquenios !== null) return cachedHasNumQuinquenios;
+  const p = await getPool();
+  const r = await p.request().query(`
+    SELECT COL_LENGTH('afi.AfiliadoOrg', 'numQuinquenios') AS len
+  `);
+  cachedHasNumQuinquenios = r.recordset[0]?.len != null;
+  return cachedHasNumQuinquenios;
+}
 
 export class AfiliadoOrgRepository implements IAfiliadoOrgRepository {
   constructor(private mssqlPool: ConnectionPool) {}
 
   async findAll(): Promise<AfiliadoOrg[]> {
+    const hasNumQuinquenios = await hasNumQuinqueniosColumn();
     const r = await this.mssqlPool.request().query(`
       SELECT
         id, afiliadoId, nivel0Id, nivel1Id, nivel2Id, nivel3Id,
         claveOrganica0, claveOrganica1, claveOrganica2, claveOrganica3,
         interno, sueldo, otrasPrestaciones, quinquenios, activo,
         fechaMovAlt, orgs1, orgs2, orgs3, orgs4, dSueldo,
-        dOtrasPrestaciones, dQuinquenios, aplicar, bc, porcentaje,
-        numQuinquenios, createdAt, updatedAt
+        dOtrasPrestaciones, dQuinquenios, aplicar, bc, porcentaje
+        ${hasNumQuinquenios ? ', numQuinquenios' : ''}
+        , createdAt, updatedAt
       FROM afi.AfiliadoOrg
       ORDER BY id
     `);
@@ -45,13 +60,14 @@ export class AfiliadoOrgRepository implements IAfiliadoOrgRepository {
       aplicar: row.aplicar === 1 || row.aplicar === true ? true : row.aplicar === 0 || row.aplicar === false ? false : null,
       bc: row.bc,
       porcentaje: row.porcentaje,
-      numQuinquenios: row.numQuinquenios,
+      numQuinquenios: hasNumQuinquenios ? row.numQuinquenios : null,
       createdAt: row.createdAt?.toISOString() || new Date().toISOString(),
       updatedAt: row.updatedAt?.toISOString() || new Date().toISOString()
     }));
   }
 
   async findById(id: number): Promise<AfiliadoOrg | undefined> {
+    const hasNumQuinquenios = await hasNumQuinqueniosColumn();
     const r = await this.mssqlPool.request()
       .input('id', sql.BigInt, id)
       .query(`
@@ -60,8 +76,9 @@ export class AfiliadoOrgRepository implements IAfiliadoOrgRepository {
           claveOrganica0, claveOrganica1, claveOrganica2, claveOrganica3,
           interno, sueldo, otrasPrestaciones, quinquenios, activo,
           fechaMovAlt, orgs1, orgs2, orgs3, orgs4, dSueldo,
-          dOtrasPrestaciones, dQuinquenios, aplicar, bc, porcentaje,
-          createdAt, updatedAt
+          dOtrasPrestaciones, dQuinquenios, aplicar, bc, porcentaje
+          ${hasNumQuinquenios ? ', numQuinquenios' : ''}
+          , createdAt, updatedAt
         FROM afi.AfiliadoOrg
         WHERE id = @id
       `);
@@ -94,7 +111,7 @@ export class AfiliadoOrgRepository implements IAfiliadoOrgRepository {
       aplicar: row.aplicar === 1 || row.aplicar === true ? true : row.aplicar === 0 || row.aplicar === false ? false : null,
       bc: row.bc,
       porcentaje: row.porcentaje,
-      numQuinquenios: row.numQuinquenios,
+      numQuinquenios: hasNumQuinquenios ? row.numQuinquenios : null,
       createdAt: row.createdAt?.toISOString() || new Date().toISOString(),
       updatedAt: row.updatedAt?.toISOString() || new Date().toISOString()
     };
@@ -148,7 +165,9 @@ export class AfiliadoOrgRepository implements IAfiliadoOrgRepository {
   }
 
   async create(data: CreateAfiliadoOrgData): Promise<AfiliadoOrg> {
-    const r = await this.mssqlPool.request()
+    const hasNumQuinquenios = await hasNumQuinqueniosColumn();
+    
+    const request = this.mssqlPool.request()
       .input('afiliadoId', sql.Int, data.afiliadoId)
       .input('nivel0Id', sql.BigInt, data.nivel0Id)
       .input('nivel1Id', sql.BigInt, data.nivel1Id)
@@ -173,15 +192,20 @@ export class AfiliadoOrgRepository implements IAfiliadoOrgRepository {
       .input('dQuinquenios', sql.VarChar(200), data.dQuinquenios)
       .input('aplicar', sql.Bit, data.aplicar)
       .input('bc', sql.VarChar(30), data.bc)
-      .input('porcentaje', sql.Decimal(9, 4), data.porcentaje)
-      .input('numQuinquenios', sql.Int, data.numQuinquenios ?? 1)
-      .query(`
+      .input('porcentaje', sql.Decimal(9, 4), data.porcentaje);
+
+    if (hasNumQuinquenios) {
+      request.input('numQuinquenios', sql.Int, data.numQuinquenios ?? 1);
+    }
+
+    const r = await request.query(`
         INSERT INTO afi.AfiliadoOrg (
           afiliadoId, nivel0Id, nivel1Id, nivel2Id, nivel3Id,
           claveOrganica0, claveOrganica1, claveOrganica2, claveOrganica3,
           interno, sueldo, otrasPrestaciones, quinquenios, activo,
           fechaMovAlt, orgs1, orgs2, orgs3, orgs4, dSueldo,
-          dOtrasPrestaciones, dQuinquenios, aplicar, bc, porcentaje, numQuinquenios
+          dOtrasPrestaciones, dQuinquenios, aplicar, bc, porcentaje
+          ${hasNumQuinquenios ? ', numQuinquenios' : ''}
         )
         OUTPUT INSERTED.*
         VALUES (
@@ -189,7 +213,8 @@ export class AfiliadoOrgRepository implements IAfiliadoOrgRepository {
           @claveOrganica0, @claveOrganica1, @claveOrganica2, @claveOrganica3,
           @interno, @sueldo, @otrasPrestaciones, @quinquenios, @activo,
           @fechaMovAlt, @orgs1, @orgs2, @orgs3, @orgs4, @dSueldo,
-          @dOtrasPrestaciones, @dQuinquenios, @aplicar, @bc, @porcentaje, @numQuinquenios
+          @dOtrasPrestaciones, @dQuinquenios, @aplicar, @bc, @porcentaje
+          ${hasNumQuinquenios ? ', @numQuinquenios' : ''}
         )
       `);
     const row = r.recordset[0];
@@ -220,13 +245,14 @@ export class AfiliadoOrgRepository implements IAfiliadoOrgRepository {
       aplicar: row.aplicar === 1 || row.aplicar === true ? true : row.aplicar === 0 || row.aplicar === false ? false : null,
       bc: row.bc,
       porcentaje: row.porcentaje,
-      numQuinquenios: row.numQuinquenios,
+      numQuinquenios: hasNumQuinquenios ? row.numQuinquenios : null,
       createdAt: row.createdAt?.toISOString() || new Date().toISOString(),
       updatedAt: row.updatedAt?.toISOString() || new Date().toISOString()
     };
   }
 
   async update(data: UpdateAfiliadoOrgData): Promise<AfiliadoOrg> {
+    const hasNumQuinquenios = await hasNumQuinqueniosColumn();
     const updates: string[] = [];
     const request = this.mssqlPool.request().input('id', sql.BigInt, data.id);
 
@@ -330,7 +356,7 @@ export class AfiliadoOrgRepository implements IAfiliadoOrgRepository {
       updates.push('porcentaje = @porcentaje');
       request.input('porcentaje', sql.Decimal(9, 4), data.porcentaje);
     }
-    if (data.numQuinquenios !== undefined) {
+    if (hasNumQuinquenios && data.numQuinquenios !== undefined) {
       updates.push('numQuinquenios = @numQuinquenios');
       request.input('numQuinquenios', sql.Int, data.numQuinquenios);
     }
@@ -374,7 +400,7 @@ export class AfiliadoOrgRepository implements IAfiliadoOrgRepository {
       aplicar: row.aplicar === 1 || row.aplicar === true ? true : row.aplicar === 0 || row.aplicar === false ? false : null,
       bc: row.bc,
       porcentaje: row.porcentaje,
-      numQuinquenios: row.numQuinquenios,
+      numQuinquenios: hasNumQuinquenios ? row.numQuinquenios : null,
       createdAt: row.createdAt?.toISOString() || new Date().toISOString(),
       updatedAt: row.updatedAt?.toISOString() || new Date().toISOString()
     };

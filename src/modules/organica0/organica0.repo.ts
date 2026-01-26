@@ -1,4 +1,4 @@
-import { executeSerializedQuery, executeSafeQuery } from '../../db/firebird.js';
+import { executeSerializedQuery, executeSafeQuery, decodeFirebirdObject } from '../../db/firebird.js';
 import { Organica0, CreateOrganica0, UpdateOrganica0 } from './organica0.schemas.js';
 
 // [FIREBIRD] Repository for ORGANICA_0 table operations
@@ -17,7 +17,8 @@ export async function findOrganica0ById(claveOrganica: string): Promise<Organica
             resolve(undefined);
             return;
           }
-          const row = result[0];
+          // Decodificar resultados de Firebird antes de mapear
+          const row = decodeFirebirdObject(result[0]);
           resolve({
             claveOrganica: row.CLAVE_ORGANICA,
             nombreOrganica: row.NOMBRE_ORGANICA,
@@ -39,21 +40,22 @@ export async function listOrganica0(limit?: number, offset?: number): Promise<Or
   console.log(`[DEBUG] [${requestId}] listOrganica0: Starting query at ${new Date().toISOString()}`);
   console.log(`[DEBUG] [${requestId}] listOrganica0: Request params - limit: ${limit}, offset: ${offset}`);
   
-  // Build query with optional pagination
+  // Build query with optional pagination (Firebird syntax)
   let query = 'SELECT CLAVE_ORGANICA, NOMBRE_ORGANICA, USUARIO, FECHA_REGISTRO, FECHA_FIN, ESTATUS FROM ORGANICA_0';
   let params: any[] = [];
   
+  query += ' ORDER BY CLAVE_ORGANICA';
+  
   if (limit && limit > 0) {
-    query += ' ORDER BY CLAVE_ORGANICA';
     if (offset && offset > 0) {
-      query += ' OFFSET ? ROWS FETCH NEXT ? ROWS ONLY';
-      params = [offset, limit];
+      // Firebird ROWS syntax: ROWS start TO end
+      query += ' ROWS ? TO ?';
+      params = [offset + 1, offset + limit];
     } else {
-      query += ' FETCH FIRST ? ROWS ONLY';
+      // Firebird ROWS syntax: ROWS count
+      query += ' ROWS ?';
       params = [limit];
     }
-  } else {
-    query += ' ORDER BY CLAVE_ORGANICA';
   } 
   
   console.log(`[DEBUG] [${requestId}] listOrganica0: Query built: ${query.substring(0, 100)}...`);
@@ -81,7 +83,9 @@ export async function listOrganica0(limit?: number, offset?: number): Promise<Or
         }
         
         const mapStartTime = Date.now();
-        const records = result.map((row: any) => ({
+        // Decodificar resultados de Firebird antes de mapear
+        const decodedResult = result.map((row: any) => decodeFirebirdObject(row));
+        const records = decodedResult.map((row: any) => ({
           claveOrganica: row.CLAVE_ORGANICA,
           nombreOrganica: row.NOMBRE_ORGANICA,
           usuario: row.USUARIO,
@@ -129,7 +133,9 @@ export async function countOrganica0(): Promise<number> {
         }
         
         const totalDuration = Date.now() - startTime;
-        const total = result[0]?.TOTAL || 0;
+        // Decodificar resultado de Firebird antes de leer valores (aunque COUNT retorna números, es buena práctica)
+        const decodedRow = result[0] ? decodeFirebirdObject(result[0]) : null;
+        const total = decodedRow?.TOTAL || decodedRow?.total || 0;
         console.log(`[DEBUG] [${requestId}] countOrganica0: Total count: ${total}, completed in ${totalDuration}ms`);
         
         resolve(total);

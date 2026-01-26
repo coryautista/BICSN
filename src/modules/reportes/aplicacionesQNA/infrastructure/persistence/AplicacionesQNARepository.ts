@@ -1,4 +1,4 @@
-import { executeSerializedQuery } from '../../../../../db/firebird.js';
+import { executeSerializedQuery, executeSelectableProcedure, FIREBIRD_TIMEOUTS } from '../../../../../db/firebird.js';
 import { getPool, sql } from '../../../../../db/mssql.js';
 import { IAplicacionesQNARepository, PeriodoTrabajo } from '../../domain/repositories/IAplicacionesQNARepository.js';
 import { MovimientoQuincenal } from '../../domain/entities/MovimientoQuincenal.js';

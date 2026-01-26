@@ -36,16 +36,16 @@ export class AfiliadoPersonalRepository implements IAfiliadoPersonalRepository {
     const clave0 = String(claveOrganica0).trim().padStart(2, '0');
     const clave1 = String(claveOrganica1).trim().padStart(2, '0');
     
-    // Query SQL con CAST explícito para asegurar comparación correcta
+    // Query SQL optimizada: sin CAST innecesarios para aprovechar índices
     const sql = `
       SELECT
         p.INTERNO,
         p.CURP,
         p.RFC,
         p.NOEMPLEADO,
-        CAST(p.NOMBRE AS VARCHAR(200) CHARACTER SET WIN1252) AS NOMBRE,
-        CAST(p.APELLIDO_PATERNO AS VARCHAR(200) CHARACTER SET WIN1252) AS APELLIDO_PATERNO,
-        CAST(p.APELLIDO_MATERNO AS VARCHAR(200) CHARACTER SET WIN1252) AS APELLIDO_MATERNO,
+        p.NOMBRE,
+        p.APELLIDO_PATERNO,
+        p.APELLIDO_MATERNO,
         p.FECHA_NACIMIENTO,
         p.SEGURO_SOCIAL,
         p.CALLE_NUMERO,
@@ -91,21 +91,21 @@ export class AfiliadoPersonalRepository implements IAfiliadoPersonalRepository {
       INNER JOIN ORG_PERSONAL o
         ON o.INTERNO = p.INTERNO
        AND o.ACTIVO IN ('A', 'L')
-       AND CAST(o.CLAVE_ORGANICA_0 AS VARCHAR(20)) = ?
-       AND CAST(o.CLAVE_ORGANICA_1 AS VARCHAR(20)) = ?
+       AND o.CLAVE_ORGANICA_0 = ?
+       AND o.CLAVE_ORGANICA_1 = ?
        AND o.FECHA_MOV_ALT = (
              SELECT MAX(x.FECHA_MOV_ALT)
              FROM ORG_PERSONAL x
              WHERE x.INTERNO = p.INTERNO
-               AND CAST(x.CLAVE_ORGANICA_0 AS VARCHAR(20)) = ?
-               AND CAST(x.CLAVE_ORGANICA_1 AS VARCHAR(20)) = ?
+               AND x.CLAVE_ORGANICA_0 = ?
+               AND x.CLAVE_ORGANICA_1 = ?
            )
        AND o.ORGS = (
              SELECT MAX(x2.ORGS)
              FROM ORG_PERSONAL x2
              WHERE x2.INTERNO = p.INTERNO
-               AND CAST(x2.CLAVE_ORGANICA_0 AS VARCHAR(20)) = ?
-               AND CAST(x2.CLAVE_ORGANICA_1 AS VARCHAR(20)) = ?
+               AND x2.CLAVE_ORGANICA_0 = ?
+               AND x2.CLAVE_ORGANICA_1 = ?
                AND x2.FECHA_MOV_ALT = o.FECHA_MOV_ALT
            )
     `;
@@ -247,14 +247,16 @@ export class AfiliadoPersonalRepository implements IAfiliadoPersonalRepository {
 
     if (searchTerm && searchTerm.trim()) {
       const searchValue = searchTerm.trim().toUpperCase();
-      const escapedSearch = searchValue.replace(/'/g, "''");
+      // Usar parámetros bind para ODBC - CONTAINING funciona con parámetros en Firebird
       sql += `
-        WHERE (UPPER(p.RFC) CONTAINING '${escapedSearch}'
-            OR UPPER(p.CURP) CONTAINING '${escapedSearch}'
-            OR UPPER(p.INTERNO) CONTAINING '${escapedSearch}'
-            OR UPPER(p.NOEMPLEADO) CONTAINING '${escapedSearch}'
-            OR UPPER(p.FULLNAME) CONTAINING '${escapedSearch}')
+        WHERE (UPPER(p.RFC) CONTAINING ?
+            OR UPPER(p.CURP) CONTAINING ?
+            OR CAST(p.INTERNO AS VARCHAR(20)) CONTAINING ?
+            OR UPPER(p.NOEMPLEADO) CONTAINING ?
+            OR UPPER(p.FULLNAME) CONTAINING ?)
       `;
+      // Agregar el mismo valor para cada condición
+      params.push(searchValue, searchValue, searchValue, searchValue, searchValue);
     }
 
     logger.debug({ ...logContext, sql, params }, 'Ejecutando consulta SQL');

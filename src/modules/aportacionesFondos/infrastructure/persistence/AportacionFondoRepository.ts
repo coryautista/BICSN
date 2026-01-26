@@ -9,7 +9,7 @@ import { Aguinaldo } from '../../domain/entities/Aguinaldo.js';
 import { AportacionFondoDomainError, AportacionFondoError, AportacionFondoErrorMessages } from '../../domain/errors.js';
 import { getOrgPersonalByClavesOrganicas } from '../../../orgPersonal/orgPersonal.repo.js';
 import { getPool, sql } from '../../../../db/mssql.js';
-import { executeSerializedQuery, decodeFirebirdObject } from '../../../../db/firebird.js';
+import { executeSerializedQuery, decodeFirebirdObject, executeSelectableProcedure, FIREBIRD_TIMEOUTS } from '../../../../db/firebird.js';
 import { normalizeTextDeep } from '../../../../utils/encoding.js';
 
 export class AportacionFondoRepository implements IAportacionFondoRepository {

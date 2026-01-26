@@ -1,5 +1,5 @@
 import { getPool, sql } from '../../../../db/mssql.js';
-import { executeSerializedQuery } from '../../../../db/firebird.js';
+import { executeSerializedQuery, executeSelectableProcedure, FIREBIRD_TIMEOUTS } from '../../../../db/firebird.js';
 import { getTipoMovimientoById } from '../../../tipoMovimiento/tipoMovimiento.repo.js';
 import { getAfiliadoOrgByAfiliadoId } from '../../../afiliadoOrg/afiliadoOrg.repo.js';
 import { getAfiliadoById, actualizarInternoAfiliado } from '../../afiliado.repo.js';
@@ -587,7 +587,7 @@ export async function ejecutarDPEditaPersonal(afiliado: Afiliado): Promise<numbe
             return;
           }
 
-            // El stored procedure retorna INTERNO
+            // El stored procedure retorna INTERNO - db.query already decodes via executeSafeQuery
             let interno = 0;
 
           if (result && Array.isArray(result) && result.length > 0) {
@@ -806,7 +806,7 @@ async function buscarInternoEnFirebird(
               return;
             }
 
-            // Procesar resultado
+            // Procesar resultado - db.query already decodes via executeSafeQuery
             let interno: number | null = null;
 
             if (result && Array.isArray(result) && result.length > 0) {
@@ -1263,6 +1263,7 @@ export async function ejecutarDPEditaEntidad(
               }
 
               // El stored procedure retorna CVE_ERROR y NOM_ERROR
+              // db.query already decodes via executeSafeQuery
               let cveError = 0;
               let nomError: string | null = null;
 

@@ -11,7 +11,7 @@ import {
   OrgHierarchyValidationError
 } from './domain/errors.js';
 import { DatabaseError } from '../../utils/errors.js';
-import { executeSerializedQuery } from '../../db/firebird.js';
+import { executeSerializedQuery, decodeFirebirdObject, executeSelectableProcedure } from '../../db/firebird.js';
 import pino from 'pino';
 
 // Logger específico del módulo
@@ -506,42 +506,20 @@ export class AfectacionOrgService {
         throw new Error('org0 y org1 son requeridos para consultar Firebird');
       }
 
-      // Consultar Firebird para obtener quincena y fecha
-      const firebirdResult = await executeSerializedQuery((db) => {
-        return new Promise<{ QUINCENA: number; FECHA: string }>((resolve, reject) => {
-          try {
-            const sql = `SELECT p.QUINCENA, p.FECHA FROM AP_G_APLICADO_TIPO(?, ?, ?, ?) p`;
-            const params = [org0, org1, org2Final, org3Final];
-
-            const timeoutId = setTimeout(() => {
-              reject(new Error('Tiempo de espera agotado en consulta Firebird AP_G_APLICADO_TIPO'));
-            }, 30000); // 30 segundos de timeout
-
-            db.query(sql, params, (err: any, result: any) => {
-              clearTimeout(timeoutId);
-              
-              if (err) {
-                logger.error({ ...logContext, error: err.message }, 'Error al consultar AP_G_APLICADO_TIPO en Firebird');
-                reject(err);
-                return;
-              }
-
-              if (!result || result.length === 0) {
-                reject(new Error('AP_G_APLICADO_TIPO no retornó resultados'));
-                return;
-              }
-
-              const row = result[0];
-              resolve({
-                QUINCENA: row.QUINCENA,
-                FECHA: row.FECHA
-              });
-            });
-          } catch (error: any) {
-            reject(error);
-          }
-        });
+      // Consultar Firebird para obtener quincena y fecha usando helper de SP
+      const spResult = await executeSelectableProcedure('AP_G_APLICADO_TIPO', [org0, org1, org2Final, org3Final], {
+        alias: 'p',
+        columns: ['p.QUINCENA', 'p.FECHA']
       });
+
+      if (!spResult || spResult.length === 0) {
+        throw new Error('AP_G_APLICADO_TIPO no retornó resultados');
+      }
+
+      const firebirdResult = {
+        QUINCENA: spResult[0].QUINCENA,
+        FECHA: spResult[0].FECHA
+      };
 
       // Parsear QUINCENA: formato QQAA (quincena 2 dígitos + año 2 últimos dígitos)
       // Ejemplo: 2125 = quincena 21 del año 2025
@@ -600,14 +578,14 @@ export class AfectacionOrgService {
         }
       }
 
-      const result = {
+      const quincenaResult = {
         quincena: quincenaParsed,
         anio: anioFinal,
         fecha: fechaStr
       };
 
-      logger.info({ ...logContext, result }, 'Quincena obtenida exitosamente desde Firebird');
-      return result;
+      logger.info({ ...logContext, result: quincenaResult }, 'Quincena obtenida exitosamente desde Firebird');
+      return quincenaResult;
     } catch (error: any) {
       logger.error({ ...logContext, error: error.message, stack: error.stack }, 'Error al obtener quincena desde Firebird');
       const errorMessage = error.message || 'Error desconocido al consultar Firebird';

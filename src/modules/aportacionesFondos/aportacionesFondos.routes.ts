@@ -2,6 +2,7 @@ import { FastifyInstance } from 'fastify';
 import { requireAuth } from '../auth/auth.middleware.js';
 import { AportacionesIndividualesSchema, AportacionesCompletasSchema } from './aportacionesFondos.schemas.js';
 import { ok, fail, unauthorized } from '../../utils/http.js';
+import { normalizeClaveOrganica } from '../../utils/organica.js';
 import { GetAportacionesIndividualesQuery } from './application/queries/GetAportacionesIndividualesQuery.js';
 import { GetAportacionesCompletasQuery } from './application/queries/GetAportacionesCompletasQuery.js';
 import { GetPrestamosQuery } from './application/queries/GetPrestamosQuery.js';
@@ -20,7 +21,7 @@ export default async function aportacionesFondosRoutes(app: FastifyInstance) {
     preHandler: [requireAuth],
     schema: {
       description: 'Get individual fund contributions by type',
-      tags: ['aportacionesFondos'],
+      tags: ['aportacionesFondos', 'firebird'],
       security: [{ bearerAuth: [] }],
       params: {
         type: 'object',
@@ -132,9 +133,9 @@ export default async function aportacionesFondosRoutes(app: FastifyInstance) {
         return reply.send(unauthorized('Usuario no autenticado'));
       }
 
-      // Extract user organica keys and entity status
-      const userClave0 = (user as any).idOrganica0 || '';
-      const userClave1 = (user as any).idOrganica1 || '';
+      // Extract user organica keys and entity status (normalized to 2 digits)
+      const userClave0 = normalizeClaveOrganica((user as any).idOrganica0) || '';
+      const userClave1 = normalizeClaveOrganica((user as any).idOrganica1) || '';
       const entidades = (user as any).entidades || [false];
       const isEntidad = entidades[0] === true; // Check first role's isEntidad status
 
@@ -161,7 +162,7 @@ export default async function aportacionesFondosRoutes(app: FastifyInstance) {
     preHandler: [requireAuth],
     schema: {
       description: 'Get all fund contributions combined',
-      tags: ['aportacionesFondos'],
+      tags: ['aportacionesFondos', 'firebird'],
       security: [{ bearerAuth: [] }],
       querystring: {
         type: 'object',
@@ -243,9 +244,9 @@ export default async function aportacionesFondosRoutes(app: FastifyInstance) {
         return reply.send(unauthorized('Usuario no autenticado'));
       }
 
-      // Extract user organica keys and entity status
-      const userClave0 = (user as any).idOrganica0 || '';
-      const userClave1 = (user as any).idOrganica1 || '';
+      // Extract user organica keys and entity status (normalized to 2 digits)
+      const userClave0 = normalizeClaveOrganica((user as any).idOrganica0) || '';
+      const userClave1 = normalizeClaveOrganica((user as any).idOrganica1) || '';
       const entidades = (user as any).entidades || [false];
       const isEntidad = entidades[0] === true; // Check first role's isEntidad status
 
@@ -271,7 +272,7 @@ export default async function aportacionesFondosRoutes(app: FastifyInstance) {
     preHandler: [requireAuth],
     schema: {
       description: 'Get short-term loans (préstamos a corto plazo) by executing AP_S_PCP stored procedure',
-      tags: ['aportacionesFondos'],
+      tags: ['aportacionesFondos', 'firebird'],
       security: [{ bearerAuth: [] }],
       querystring: {
         type: 'object',
@@ -373,9 +374,9 @@ export default async function aportacionesFondosRoutes(app: FastifyInstance) {
         return reply.send(unauthorized('Usuario no autenticado'));
       }
 
-      // Extract user organica keys and entity status
-      const userClave0 = (user as any).idOrganica0 || '';
-      const userClave1 = (user as any).idOrganica1 || '';
+      // Extract user organica keys and entity status (normalized to 2 digits)
+      const userClave0 = normalizeClaveOrganica((user as any).idOrganica0) || '';
+      const userClave1 = normalizeClaveOrganica((user as any).idOrganica1) || '';
       const entidades = (user as any).entidades || [false];
       const isEntidad = entidades[0] === true; // Check first role's isEntidad status
 
@@ -421,7 +422,7 @@ export default async function aportacionesFondosRoutes(app: FastifyInstance) {
     preHandler: [requireAuth],
     schema: {
       description: 'Get medium-term loans (préstamos a mediano plazo) by executing AP_S_VIV stored procedure',
-      tags: ['aportacionesFondos'],
+      tags: ['aportacionesFondos', 'firebird'],
       security: [{ bearerAuth: [] }],
       querystring: {
         type: 'object',
@@ -531,9 +532,9 @@ export default async function aportacionesFondosRoutes(app: FastifyInstance) {
         return reply.send(unauthorized('Usuario no autenticado'));
       }
 
-      // Extract user organica keys and entity status
-      const userClave0 = (user as any).idOrganica0 || '';
-      const userClave1 = (user as any).idOrganica1 || '';
+      // Extract user organica keys and entity status (normalized to 2 digits)
+      const userClave0 = normalizeClaveOrganica((user as any).idOrganica0) || '';
+      const userClave1 = normalizeClaveOrganica((user as any).idOrganica1) || '';
       const entidades = (user as any).entidades || [false];
       const isEntidad = entidades[0] === true; // Check first role's isEntidad status
 
@@ -579,7 +580,7 @@ export default async function aportacionesFondosRoutes(app: FastifyInstance) {
     preHandler: [requireAuth],
     schema: {
       description: 'Get mortgage loans (préstamos hipotecarios) by executing AP_S_HIP_QNA or AP_S_COMP_QNA stored procedure',
-      tags: ['aportacionesFondos'],
+      tags: ['aportacionesFondos', 'firebird'],
       security: [{ bearerAuth: [] }],
       querystring: {
         type: 'object',
@@ -696,9 +697,9 @@ export default async function aportacionesFondosRoutes(app: FastifyInstance) {
         return reply.send(unauthorized('Usuario no autenticado'));
       }
 
-      // Extract user organica keys and entity status
-      const userClave0 = (user as any).idOrganica0 || '';
-      const userClave1 = (user as any).idOrganica1 || '';
+      // Extract user organica keys and entity status (normalized to 2 digits)
+      const userClave0 = normalizeClaveOrganica((user as any).idOrganica0) || '';
+      const userClave1 = normalizeClaveOrganica((user as any).idOrganica1) || '';
       const entidades = (user as any).entidades || [false];
       const isEntidad = entidades[0] === true; // Check first role's isEntidad status
 
@@ -764,7 +765,7 @@ export default async function aportacionesFondosRoutes(app: FastifyInstance) {
     preHandler: [requireAuth],
     schema: {
       description: 'Get aportación guarderías by executing EBI2_RECIBOS_IMPRIMIR function',
-      tags: ['aportacionesFondos'],
+      tags: ['aportacionesFondos', 'firebird'],
       security: [{ bearerAuth: [] }],
       querystring: {
         type: 'object',
@@ -868,9 +869,9 @@ export default async function aportacionesFondosRoutes(app: FastifyInstance) {
         return reply.send(unauthorized('Usuario no autenticado'));
       }
 
-      // Extract user organica keys and entity status
-      const userClave0 = (user as any).idOrganica0 || '';
-      const userClave1 = (user as any).idOrganica1 || '';
+      // Extract user organica keys and entity status (normalized to 2 digits)
+      const userClave0 = normalizeClaveOrganica((user as any).idOrganica0) || '';
+      const userClave1 = normalizeClaveOrganica((user as any).idOrganica1) || '';
       const entidades = (user as any).entidades || [false];
       const isEntidad = entidades[0] === true; // Check first role's isEntidad status
 
@@ -917,7 +918,7 @@ export default async function aportacionesFondosRoutes(app: FastifyInstance) {
     preHandler: [requireAuth],
     schema: {
       description: 'Get pensión nómina transitorio by executing PENSION_NOMINA_QNAL_TRANSITORIO function',
-      tags: ['aportacionesFondos'],
+      tags: ['aportacionesFondos', 'firebird'],
       security: [{ bearerAuth: [] }],
       querystring: {
         type: 'object',
@@ -1055,9 +1056,9 @@ export default async function aportacionesFondosRoutes(app: FastifyInstance) {
         return reply.send(unauthorized('Usuario no autenticado'));
       }
 
-      // Extract user organica keys and entity status
-      const userClave0 = (user as any).idOrganica0 || '';
-      const userClave1 = (user as any).idOrganica1 || '';
+      // Extract user organica keys and entity status (normalized to 2 digits)
+      const userClave0 = normalizeClaveOrganica((user as any).idOrganica0) || '';
+      const userClave1 = normalizeClaveOrganica((user as any).idOrganica1) || '';
       const entidades = (user as any).entidades || [false];
       const isEntidad = entidades[0] === true; // Check first role's isEntidad status
 
@@ -1104,7 +1105,7 @@ export default async function aportacionesFondosRoutes(app: FastifyInstance) {
     preHandler: [requireAuth],
     schema: {
       description: 'Get aguinaldo by executing AGUINALDO_ORGANICAS function',
-      tags: ['aportacionesFondos'],
+      tags: ['aportacionesFondos', 'firebird'],
       security: [{ bearerAuth: [] }],
       querystring: {
         type: 'object',
@@ -1220,9 +1221,9 @@ export default async function aportacionesFondosRoutes(app: FastifyInstance) {
         return reply.send(unauthorized('Usuario no autenticado'));
       }
 
-      // Extract user organica keys and entity status
-      const userClave0 = (user as any).idOrganica0 || '';
-      const userClave1 = (user as any).idOrganica1 || '';
+      // Extract user organica keys and entity status (normalized to 2 digits)
+      const userClave0 = normalizeClaveOrganica((user as any).idOrganica0) || '';
+      const userClave1 = normalizeClaveOrganica((user as any).idOrganica1) || '';
       const entidades = (user as any).entidades || [false];
       const isEntidad = entidades[0] === true; // Check first role's isEntidad status
 

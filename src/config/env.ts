@@ -34,7 +34,9 @@ export const env = {
     database: process.env.FIREBIRD_DATABASE!,
     user: process.env.FIREBIRD_USER!,
     password: process.env.FIREBIRD_PASSWORD!,
-    charset: process.env.FIREBIRD_CHARSET ?? 'WIN1252' // OCTETS (force buffer for manual decoding), NONE, UTF8, WIN1252
+    charset: process.env.FIREBIRD_CHARSET ?? 'WIN1252', // OCTETS (force buffer for manual decoding), NONE, UTF8, WIN1252
+    clientLib: process.env.FIREBIRD_CLIENT_LIB, // Ruta a fbclient.dll/.so (opcional, usa default si no se especifica)
+    timeoutMs: Number(process.env.FIREBIRD_TIMEOUT_MS ?? 30000) // Default query timeout in ms
   },
   ftp: {
     host: process.env.FTP_HOST ?? 'codigosingular.com',

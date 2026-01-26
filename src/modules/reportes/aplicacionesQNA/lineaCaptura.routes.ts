@@ -3,6 +3,7 @@ import { requireAuth } from '../../auth/auth.middleware.js';
 import { handleAplicacionesQNAError } from './infrastructure/errorHandler.js';
 import { LineaCapturaParamsSchema } from './aplicacionesQNA.schemas.js';
 import { GenerateLineaCapturaQuery } from './application/queries/GenerateLineaCapturaQuery.js';
+import { normalizeClaveOrganica } from '../../../utils/organica.js';
 
 export async function lineaCapturaRoutes(fastify: FastifyInstance) {
   // POST /aplicaciones-qna/linea-captura - Genera referencia SPEI de 15 posiciones
@@ -107,36 +108,17 @@ export async function lineaCapturaRoutes(fastify: FastifyInstance) {
         });
       }
 
-      // Obtener org0 y org1: primero de body params, si no del token
-      let org0: string | undefined = body.idOrg0;
-      let org1: string | undefined = body.idOrg1;
+      // Get org0/org1: from body first, fallback to token (normalized to 2 digits)
+      let org0: string | undefined = normalizeClaveOrganica(body.idOrg0) || undefined;
+      let org1: string | undefined = normalizeClaveOrganica(body.idOrg1) || undefined;
 
-      // Si no vienen en body, obtener del token
+      // If not in body, get from token
       if (!org0 && user?.idOrganica0) {
-        const idOrg0 = user.idOrganica0;
-        org0 = typeof idOrg0 === 'string' 
-          ? idOrg0.padStart(2, '0').substring(0, 2)
-          : String(idOrg0).padStart(2, '0').substring(0, 2);
+        org0 = normalizeClaveOrganica(user.idOrganica0) || undefined;
       }
 
       if (!org1 && user?.idOrganica1) {
-        const idOrg1 = user.idOrganica1;
-        org1 = typeof idOrg1 === 'string'
-          ? idOrg1.padStart(2, '0').substring(0, 2)
-          : String(idOrg1).padStart(2, '0').substring(0, 2);
-      }
-
-      // Normalizar org0 y org1 si vienen de body params
-      if (org0) {
-        org0 = typeof org0 === 'string'
-          ? org0.padStart(2, '0').substring(0, 2)
-          : String(org0).padStart(2, '0').substring(0, 2);
-      }
-
-      if (org1) {
-        org1 = typeof org1 === 'string'
-          ? org1.padStart(2, '0').substring(0, 2)
-          : String(org1).padStart(2, '0').substring(0, 2);
+        org1 = normalizeClaveOrganica(user.idOrganica1) || undefined;
       }
 
       // Validar que existan org0 y org1

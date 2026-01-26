@@ -9,7 +9,7 @@ import {
 } from './afiliado.repo.js';
 import type { AfiliadoOrg } from '../afiliadoOrg/afiliadoOrg.repo.js';
 import type { Movimiento } from '../movimiento/movimiento.repo.js';
-import { connectFirebirdDatabase } from '../../db/firebird.js';
+import { executeSerializedQuery } from '../../db/firebird.js';
 import { getPool, sql } from '../../db/mssql.js';
 import pino from 'pino';
 import {
@@ -43,34 +43,34 @@ export async function validateInternoInFirebird(interno: number): Promise<boolea
     throw new InvalidInternoError(interno);
   }
 
-  const db = await connectFirebirdDatabase();
-
-  return new Promise((resolve, reject) => {
-    // First check if interno exists in PERSONAL table
-    db.query('SELECT FIRST 1 INTERNO FROM PERSONAL WHERE INTERNO = ?', [interno], (err, personalResult) => {
-      if (err) {
-        logger.error({ ...logContext, error: err.message, stack: err.stack }, 'Error al consultar tabla PERSONAL en Firebird');
-        reject(new InternoNotFoundInFirebirdError(interno));
-        return;
-      }
-
-      if (!personalResult || personalResult.length === 0) {
-        logger.warn(logContext, 'Interno no encontrado en tabla PERSONAL');
-        resolve(false);
-        return;
-      }
-
-      // If exists in PERSONAL, check ORG_PERSONAL table
-      db.query('SELECT FIRST 1 INTERNO FROM ORG_PERSONAL WHERE INTERNO = ?', [interno], (err2, orgPersonalResult) => {
-        if (err2) {
-          logger.error({ ...logContext, error: err2.message, stack: err2.stack }, 'Error al consultar tabla ORG_PERSONAL en Firebird');
+  return executeSerializedQuery((db) => {
+    return new Promise<boolean>((resolve, reject) => {
+      // First check if interno exists in PERSONAL table
+      db.query('SELECT FIRST 1 INTERNO FROM PERSONAL WHERE INTERNO = ?', [interno], (err: any, personalResult: any) => {
+        if (err) {
+          logger.error({ ...logContext, error: err.message, stack: err.stack }, 'Error al consultar tabla PERSONAL en Firebird');
           reject(new InternoNotFoundInFirebirdError(interno));
           return;
         }
 
-        const exists = !!(orgPersonalResult && orgPersonalResult.length > 0);
-        logger.info({ ...logContext, exists }, 'Validación de interno completada');
-        resolve(exists);
+        if (!personalResult || personalResult.length === 0) {
+          logger.warn(logContext, 'Interno no encontrado en tabla PERSONAL');
+          resolve(false);
+          return;
+        }
+
+        // If exists in PERSONAL, check ORG_PERSONAL table
+        db.query('SELECT FIRST 1 INTERNO FROM ORG_PERSONAL WHERE INTERNO = ?', [interno], (err2: any, orgPersonalResult: any) => {
+          if (err2) {
+            logger.error({ ...logContext, error: err2.message, stack: err2.stack }, 'Error al consultar tabla ORG_PERSONAL en Firebird');
+            reject(new InternoNotFoundInFirebirdError(interno));
+            return;
+          }
+
+          const exists = !!(orgPersonalResult && orgPersonalResult.length > 0);
+          logger.info({ ...logContext, exists }, 'Validación de interno completada');
+          resolve(exists);
+        });
       });
     });
   });

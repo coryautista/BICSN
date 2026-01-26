@@ -1,5 +1,5 @@
 import { FastifyRequest } from 'fastify';
-import { executeSerializedQuery, decodeFirebirdObject } from '../../../../db/firebird.js';
+import { executeSerializedQuery, decodeFirebirdObject, executeSelectableProcedure, FIREBIRD_TIMEOUTS } from '../../../../db/firebird.js';
 import { withDbContext, sql } from '../../../../db/context.js';
 import { IAplicacionQuincenalRepository, GuardarHistoricoAportacionesResult, GuardarHistoricoRetencionesResult } from '../../domain/repositories/IAplicacionQuincenalRepository.js';
 import { AportacionQuincenalResumen } from '../../domain/entities/AportacionQuincenalResumen.js';

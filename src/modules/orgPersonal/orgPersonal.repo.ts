@@ -1,5 +1,21 @@
-import { executeSerializedQuery } from '../../db/firebird.js';
-import { executeSafeQuery } from '../../db/firebird.js';
+import { executeSerializedQuery, executeSafeQuery } from '../../db/firebird.js';
+
+const toIsoString = (value: any): string | null => {
+  if (!value) return null;
+  if (value instanceof Date) return value.toISOString();
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (!trimmed) return null;
+    if (/^\d{4}-\d{2}-\d{2}T/.test(trimmed)) return trimmed;
+    const parsed = new Date(trimmed);
+    return Number.isNaN(parsed.getTime()) ? trimmed : parsed.toISOString();
+  }
+  try {
+    return String(value);
+  } catch {
+    return null;
+  }
+};
 
 export type OrgPersonal = {
   interno: number;
@@ -48,7 +64,7 @@ export async function getAllOrgPersonal(): Promise<OrgPersonal[]> {
       otras_prestaciones: row.OTRAS_PRESTACIONES || null,
       quinquenios: row.QUINQUENIOS || null,
       activo: row.ACTIVO || null,
-      fecha_mov_alt: row.FECHA_MOV_ALT ? row.FECHA_MOV_ALT.toISOString() : null,
+      fecha_mov_alt: toIsoString(row.FECHA_MOV_ALT),
       orgs1: row.ORGS1 || null,
       orgs2: row.ORGS2 || null,
       orgs3: row.ORGS3 || null,
@@ -108,6 +124,7 @@ export async function createOrgPersonal(data: Partial<OrgPersonal>): Promise<Org
           reject(err);
           return;
         }
+        // db.query already decodes via executeSafeQuery
         resolve(result[0]);
       });
     });
@@ -148,6 +165,7 @@ export async function updateOrgPersonal(interno: number, data: Partial<OrgPerson
           reject(err);
           return;
         }
+        // db.query already decodes via executeSafeQuery
         resolve(result[0]);
       });
     });
@@ -158,6 +176,7 @@ export async function getOrgPersonalById(interno: number): Promise<OrgPersonal |
   try {
     const sql = 'SELECT * FROM ORG_PERSONAL WHERE INTERNO = ?';
     const result = await executeSafeQuery(sql, [interno]);
+    // executeSafeQuery ya decodifica internamente, solo retornar el resultado
     return result[0] || null;
   } catch (error) {
     console.error('Error in getOrgPersonalById:', error);
@@ -203,8 +222,7 @@ export async function getOrgPersonalByClavesOrganicas(
           otras_prestaciones: row.OTRAS_PRESTACIONES || row.otras_prestaciones || null,
           quinquenios: row.QUINQUENIOS || row.quinquenios || null,
           activo: row.ACTIVO || row.activo || null,
-          fecha_mov_alt: (row.FECHA_MOV_ALT || row.fecha_mov_alt) ? 
-            (row.FECHA_MOV_ALT || row.fecha_mov_alt).toISOString() : null,
+          fecha_mov_alt: toIsoString(row.FECHA_MOV_ALT || row.fecha_mov_alt),
           orgs1: row.ORGS1 || row.orgs1 || null,
           orgs2: row.ORGS2 || row.orgs2 || null,
           orgs3: row.ORGS3 || row.orgs3 || null,
@@ -291,12 +309,6 @@ export async function getOrgPersonalBySearch(searchTerm: string): Promise<OrgPer
   }
   
   const row = result[0];
-  const fechaMovAltIso = (() => {
-    if (!row.FECHA_MOV_ALT) return null;
-    if (row.FECHA_MOV_ALT instanceof Date) return row.FECHA_MOV_ALT.toISOString();
-    const parsed = new Date(row.FECHA_MOV_ALT);
-    return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString();
-  })();
   const record: OrgPersonal = {
     interno: row.INTERNO,
     clave_organica_0: row.CLAVE_ORGANICA_0 || null,
@@ -307,7 +319,7 @@ export async function getOrgPersonalBySearch(searchTerm: string): Promise<OrgPer
     otras_prestaciones: row.OTRAS_PRESTACIONES || null,
     quinquenios: row.QUINQUENIOS || null,
     activo: row.ACTIVO || null,
-    fecha_mov_alt: fechaMovAltIso,
+    fecha_mov_alt: toIsoString(row.FECHA_MOV_ALT),
     orgs1: row.ORGS1 || null,
     orgs2: row.ORGS2 || null,
     orgs3: row.ORGS3 || null,
@@ -368,10 +380,11 @@ export async function getOrgPersonalByNombreApellidosFechaNac(
       WHERE TRIM(UPPER(P.NOMBRE)) = TRIM(UPPER(?))
         AND TRIM(UPPER(P.APELLIDO_PATERNO)) = TRIM(UPPER(?))
         AND TRIM(UPPER(P.APELLIDO_MATERNO)) = TRIM(UPPER(?))
-        AND CAST(P.FECHA_NACIMIENTO AS DATE) = CAST(? AS DATE)
+        AND P.FECHA_NACIMIENTO >= CAST(? AS DATE)
+        AND P.FECHA_NACIMIENTO < DATEADD(1 DAY TO CAST(? AS DATE))
       ORDER BY OP.FECHA_MOV_ALT DESC
     `;
-    params = [nombreTrimmed, apellidoPaternoTrimmed, apellidoMaternoTrimmed, fechaFormateada];
+    params = [nombreTrimmed, apellidoPaternoTrimmed, apellidoMaternoTrimmed, fechaFormateada, fechaFormateada];
   } else {
     // Búsqueda sin apellido materno
     sql = `
@@ -385,10 +398,11 @@ export async function getOrgPersonalByNombreApellidosFechaNac(
       WHERE TRIM(UPPER(P.NOMBRE)) = TRIM(UPPER(?))
         AND TRIM(UPPER(P.APELLIDO_PATERNO)) = TRIM(UPPER(?))
         AND (P.APELLIDO_MATERNO IS NULL OR TRIM(P.APELLIDO_MATERNO) = '')
-        AND CAST(P.FECHA_NACIMIENTO AS DATE) = CAST(? AS DATE)
+        AND P.FECHA_NACIMIENTO >= CAST(? AS DATE)
+        AND P.FECHA_NACIMIENTO < DATEADD(1 DAY TO CAST(? AS DATE))
       ORDER BY OP.FECHA_MOV_ALT DESC
     `;
-    params = [nombreTrimmed, apellidoPaternoTrimmed, fechaFormateada];
+    params = [nombreTrimmed, apellidoPaternoTrimmed, fechaFormateada, fechaFormateada];
   }
   
   // Usar executeSafeQuery que aplica automáticamente la decodificación
@@ -409,7 +423,7 @@ export async function getOrgPersonalByNombreApellidosFechaNac(
     otras_prestaciones: row.OTRAS_PRESTACIONES || null,
     quinquenios: row.QUINQUENIOS || null,
     activo: row.ACTIVO || null,
-    fecha_mov_alt: row.FECHA_MOV_ALT ? row.FECHA_MOV_ALT.toISOString() : null,
+    fecha_mov_alt: toIsoString(row.FECHA_MOV_ALT),
     orgs1: row.ORGS1 || null,
     orgs2: row.ORGS2 || null,
     orgs3: row.ORGS3 || null,

@@ -1,78 +1,122 @@
-// src/db/firebird-odbc.ts
-import odbc from "odbc";
+// src/db/firebird.ts
+//
+// Driver nativo de Firebird vía fbclient (node-firebird-driver-native).
+// Optimizado para:
+// - Transacciones consistentes (executeInTransaction usa el mismo tx)
+// - SET NAMES una sola vez por attachment (al conectar/reconectar)
+// - Reconexión robusta si el attachment queda inválido
+//
 import { env as config } from "../config/env.js";
 import iconv from "iconv-lite";
-
-/**
- * ODBC + Firebird
- * En ODBC normalmente NO necesitas iconv si configuras bien CHARSET en la conexión.
- *
- * Recomendación:
- * - Si tu DB_CHARSET = NONE pero los bytes reales son WIN1252: usa CHARSET=WIN1252 en el connection string.
- * - Si aún ves mojibake (MU´┐¢OZ, ¥, etc.), entonces el problema es legacy CP850/DOS en datos antiguos.
- *   Eso ya es “calidad de datos” y conviene corregir en BD o aplicar una corrección puntual por campo.
- */
+import { createNativeClient, getDefaultLibraryFilename } from "node-firebird-driver-native";
+import type { Attachment, Transaction } from "node-firebird-driver";
 
 const POOL_SIZE = Number((config.firebird as any).poolSize || 5);
 const SERIALIZE_ALL = Boolean((config.firebird as any).serialize) || false;
+const FIREBIRD_CHARSET = config.firebird.charset || "WIN1252";
+/** Default query timeout in ms (configurable via FIREBIRD_TIMEOUT_MS env var) */
+const DEFAULT_TIMEOUT_MS = Number(config.firebird.timeoutMs) || 30000;
 
-// Ajusta según tu caso real:
-const FIREBIRD_CHARSET = config.firebird.charset; // <- ajustado por config
+const FIREBIRD_CLIENT_LIB = process.env.FIREBIRD_CLIENT_LIB || getDefaultLibraryFilename();
+const client = createNativeClient(FIREBIRD_CLIENT_LIB);
 
-// Puedes usar DSN o DSN-less
-const USE_DSN = Boolean((config.firebird as any).dsn);
+// Estado global del attachment
+let attachment: Attachment | null = null;
+let charsetApplied = false; // Indica si ya aplicamos SET NAMES al attachment actual
 
-// Si usas DSN (recomendado en Windows):
-// config.firebird.dsn = "FB3_MiBase"
-function buildConnectionString(): string {
-  if (USE_DSN) {
-    const dsn = (config.firebird as any).dsn;
-    if (!dsn) throw new Error("Falta config.firebird.dsn");
-    // UID/PWD pueden ir en DSN o aquí
-    return `DSN=${dsn};UID=${config.firebird.user};PWD=${config.firebird.password};CHARSET=${FIREBIRD_CHARSET};`;
-  }
-
-  // DSN-less (sin crear DSN)
-  // OdbcFb suele aceptar: Driver / Dbname / UID / PWD / CHARSET
-  // Dbname en formato host:filepath
+function buildUri(): string {
   const host = config.firebird.host || "localhost";
   const port = config.firebird.port || 3050;
-  const db = config.firebird.database; // ej C:\data\mi.fdb
-
-  // Algunos drivers aceptan "Dbname=host/port:db" o "host:db" + "Port="
-  // OdbcFb comúnmente trabaja con host:db y port separado o embebido.
-  return (
-    `Driver={Firebird ODBC Driver};` +
-    `Dbname=${host}:${db};` +
-    `Port=${port};` +
-    `Uid=${config.firebird.user};` +
-    `Pwd=${config.firebird.password};` +
-    `Charset=${FIREBIRD_CHARSET};` +
-    `CHARSET=${FIREBIRD_CHARSET};` +
-    `CharacterSet=${FIREBIRD_CHARSET};` +
-    `LC_CTYPE=${FIREBIRD_CHARSET};`
-  );
+  const db = config.firebird.database;
+  return `${host}/${port}:${db}`;
 }
 
-const CONNECTION_STRING = buildConnectionString();
+/**
+ * Obtener attachment válido, reconectando si es necesario.
+ * Aplica SET NAMES una sola vez por conexión.
+ */
+async function getAttachment(): Promise<Attachment> {
+  // Si el attachment no es válido, reconectar
+  if (!attachment || !attachment.isValid) {
+    attachment = await client.connect(buildUri(), {
+      username: config.firebird.user,
+      password: config.firebird.password,
+    });
+    charsetApplied = false;
+  }
 
-// Pool nativo del paquete odbc
-// Nota: las typings de `odbc` varían por versión; usamos `any` para mantener compatibilidad.
-const pool: any = await (odbc as any).pool(CONNECTION_STRING, {
-  initialSize: Math.min(POOL_SIZE, 2),
-  maxSize: POOL_SIZE,
-});
+  // Aplicar SET NAMES una vez por attachment
+  if (!charsetApplied && attachment.isValid) {
+    try {
+      // SET NAMES requiere una transacción; usamos una temporal breve
+      const tempTx = await attachment.startTransaction();
+      try {
+        await attachment.execute(tempTx, `SET NAMES ${FIREBIRD_CHARSET}`);
+        await tempTx.commit();
+        charsetApplied = true;
+      } catch {
+        // Si falla, intentamos rollback y marcamos como no aplicado
+        try { if (tempTx.isValid) await tempTx.rollback(); } catch { /* ignore */ }
+        charsetApplied = false;
+      }
+    } catch {
+      charsetApplied = false;
+    }
+  }
 
-async function prepareConnection(cn: any): Promise<void> {
-  // Fuerza el charset de la sesión. Esto es importante porque en algunos setups el driver ODBC
-  // ignora el charset en el connection string y el attachment queda en ISO8859_13, causando "�".
+  return attachment;
+}
+
+/**
+ * Invalida el attachment actual (fuerza reconexión en próxima operación)
+ */
+function invalidateAttachment(): void {
+  if (attachment) {
+    try {
+      if (attachment.isValid) attachment.disconnect().catch(() => undefined);
+    } catch { /* ignore */ }
+  }
+  attachment = null;
+  charsetApplied = false;
+}
+
+/**
+ * Wrapper de transacción que maneja reconexión en caso de error de conexión
+ */
+async function withTransaction<T>(fn: (att: Attachment, tx: Transaction) => Promise<T>): Promise<T> {
+  let att: Attachment;
+  let tx: Transaction;
+
   try {
-    await cn.query(`SET NAMES ${FIREBIRD_CHARSET}`);
-  } catch {
-    // best-effort
+    att = await getAttachment();
+    tx = await att.startTransaction();
+  } catch (connectError: any) {
+    // Error al conectar/iniciar tx: invalidar y reintentar una vez
+    invalidateAttachment();
+    att = await getAttachment();
+    tx = await att.startTransaction();
+  }
+
+  try {
+    const res = await fn(att, tx);
+    await tx.commit();
+    return res;
+  } catch (e: any) {
+    // Rollback si la tx sigue válida
+    try {
+      if (tx.isValid) await tx.rollback();
+    } catch { /* ignore */ }
+
+    // Si el error indica conexión perdida, invalidar para reconexión futura
+    const errMsg = String(e?.message || e || "").toLowerCase();
+    if (errMsg.includes("connection") || errMsg.includes("invalid") || errMsg.includes("closed")) {
+      invalidateAttachment();
+    }
+    throw e;
   }
 }
 
+// Mutex para serialización opcional
 let queryMutex: Promise<void> = Promise.resolve();
 const runSerialized = async <T>(fn: () => Promise<T>): Promise<T> => {
   if (!SERIALIZE_ALL) return fn();
@@ -100,7 +144,7 @@ let database: FirebirdDbCompat | null = null;
 
 /**
  * Compatibilidad: devuelve un objeto con `query(sql, params, cb)`.
- * Internamente usa executeSafeQuery (ODBC).
+ * Internamente usa executeSafeQuery (driver nativo).
  */
 export async function connectFirebirdDatabase(): Promise<FirebirdDbCompat> {
   await testFirebirdConnection();
@@ -148,7 +192,7 @@ export function decodeFirebirdObject(obj: any): any {
 function decodeValue(v: any): any {
   if (v == null) return v;
   if (v instanceof Date) return v;
-  // Con CAST(... CHARACTER SET OCTETS) algunos drivers/odbc devuelven bytes como Buffer/Uint8Array/ArrayBuffer
+  // Con CAST(... CHARACTER SET OCTETS) algunos drivers devuelven bytes como Buffer/Uint8Array/ArrayBuffer
   const isArrayBuffer = typeof ArrayBuffer !== "undefined" && v instanceof ArrayBuffer;
   const isUint8Array = typeof Uint8Array !== "undefined" && v instanceof Uint8Array;
   const isArrayBufferView = typeof ArrayBuffer !== "undefined" && typeof ArrayBuffer.isView === "function" && ArrayBuffer.isView(v);
@@ -185,98 +229,113 @@ function decodeValue(v: any): any {
 export async function testFirebirdConnection(): Promise<boolean> {
   try {
     await runSerialized(async () => {
-      const cn = await pool.connect();
-      try {
-        await prepareConnection(cn);
-        await cn.query("SELECT 1 AS OK FROM RDB$DATABASE");
-      } finally {
-        await cn.close();
-      }
+      await withTransaction(async (att, tx) => {
+        await att.executeSingletonAsObject(tx, "SELECT 1 AS OK FROM RDB$DATABASE");
+      });
     });
     return true;
   } catch (e) {
-    console.error("[FIREBIRD/ODBC] test failed:", e);
+    console.error("[FIREBIRD/NATIVE] test failed:", e);
     return false;
   }
 }
 
 /**
- * Query segura con timeout y decodificación
+ * Helper interno: ejecutar query dentro de un (att, tx) existente.
+ * Usado por executeInTransaction para NO crear nueva transacción.
  */
-export async function executeSafeQuery(sql: string, params: any[] = []): Promise<any[]> {
-  return runSerialized(async () => {
-    const cn = await pool.connect();
-    const timeoutMs = 30000;
-
+async function executeQueryOn(att: Attachment, tx: Transaction, sql: string, params: any[] = []): Promise<any[]> {
+  try {
+    const rs = await att.executeQuery(tx, sql, params);
     try {
-      await prepareConnection(cn);
-      const p: Promise<any> = (cn as any).query(sql, params);
-      const r: any = await Promise.race([
-        p as any,
-        new Promise<any>((_, rej) => setTimeout(() => rej(new Error("Tiempo de espera agotado en consulta Firebird")), timeoutMs)),
-      ]);
-
-      const rows = Array.isArray(r) ? r : (typeof r?.toArray === 'function' ? r.toArray() : []);
+      const rows = await rs.fetchAsObject<any>({ fetchSize: 1000 });
       return rows.map((row: any) => decodeValue(row));
     } finally {
-      await cn.close();
+      await rs.close().catch(() => undefined);
     }
-  });
+  } catch (_e) {
+    // Fallback: sentencia sin resultset (INSERT/UPDATE/DDL)
+    await att.execute(tx, sql, params);
+    return [];
+  }
 }
 
 /**
- * Transacciones ODBC
+ * Query segura con timeout y decodificación (crea su propia transacción)
+ * @param sql - SQL query string
+ * @param params - Query parameters
+ * @param timeoutMs - Optional timeout in ms (default: FIREBIRD_TIMEOUT_MS env or 30000)
  */
-export async function executeInTransaction<T>(fn: (tx: odbc.Connection) => Promise<T>): Promise<T> {
+export async function executeSafeQuery(sql: string, params: any[] = [], timeoutMs?: number): Promise<any[]> {
+  const timeout = timeoutMs ?? DEFAULT_TIMEOUT_MS;
   return runSerialized(async () => {
-    const cn = await pool.connect();
-    try {
-      await cn.beginTransaction();
-      const res = await fn(cn);
-      await cn.commit();
-      return res;
-    } catch (e) {
-      try {
-        await cn.rollback();
-      } catch { }
-      throw e;
-    } finally {
-      await cn.close();
-    }
+    return await Promise.race([
+      withTransaction(async (att, tx) => {
+        return await executeQueryOn(att, tx, sql, params);
+      }),
+      new Promise<any[]>((_, rej) => setTimeout(() => rej(new Error(`Tiempo de espera agotado en consulta Firebird (${timeout}ms)`)), timeout)),
+    ]);
   });
 }
 
 /**
- * Ejecutar query dentro de una transacción (recibes cn en executeInTransaction)
+ * Transacciones nativas: ejecuta fn con un (att, tx) compartido.
+ * Las queries dentro de fn deben usar executeQueryInTransaction para reutilizar el mismo tx.
+ */
+export async function executeInTransaction<T>(fn: (tx: any) => Promise<T>): Promise<T> {
+  return runSerialized(async () => {
+    return await withTransaction(async (att, tx) => {
+      // Exponemos un "tx" compatible que ejecuta queries en el mismo (att, tx)
+      const compatTx = {
+        attachment: att,
+        transaction: tx,
+        // Ejecutar query dentro de esta transacción (NO crea nueva tx)
+        query: async (sqlText: string, params: any[] = []) => {
+          return await executeQueryOn(att, tx, sqlText, params);
+        },
+        execute: async (sqlText: string, params: any[] = []) => {
+          return await executeQueryOn(att, tx, sqlText, params);
+        },
+      };
+      return await fn(compatTx);
+    });
+  });
+}
+
+/**
+ * Ejecutar query dentro de una transacción (recibes cn de executeInTransaction).
+ * Si cn tiene query (compatTx), usa el mismo tx; de lo contrario, crea tx nueva vía executeSafeQuery.
  */
 export async function executeQueryInTransaction(
-  cn: odbc.Connection,
+  cn: any,
   sql: string,
   params: any[] = []
 ): Promise<any[]> {
-  const r: any = await (cn as any).query(sql, params);
-  const rows = Array.isArray(r) ? r : (typeof r?.toArray === 'function' ? r.toArray() : []);
-  return rows.map((row: any) => decodeValue(row));
+  // Si nos pasaron el compatTx, usamos su método query (mismo tx)
+  if (cn?.query && typeof cn.query === "function") {
+    const rows = await cn.query(sql, params);
+    return Array.isArray(rows) ? rows : [];
+  }
+  // Fallback: si no hay compatTx válido, crear transacción nueva
+  return await executeSafeQuery(sql, params);
 }
 
 /**
- * Ejecutar procedimiento (ODBC usa CALL)
- * Ejemplo: CALL MI_PROC(?, ?, ?)
+ * Ejecutar procedimiento
+ * Ejemplo: EXECUTE PROCEDURE MI_PROC(?, ?, ?)
  */
 export async function executeProcedureInTransaction(
-  cn: odbc.Connection,
+  cn: any,
   procedureName: string,
   params: any[] = []
 ): Promise<any[]> {
   const placeholders = params.map(() => "?").join(", ");
-  const sql = `CALL ${procedureName}(${placeholders})`;
-  const r: any = await (cn as any).query(sql, params);
-  const rows = Array.isArray(r) ? r : (typeof r?.toArray === 'function' ? r.toArray() : []);
-  return rows.map((row: any) => decodeValue(row));
+  const sql = `EXECUTE PROCEDURE ${procedureName} ${placeholders ? "(" + placeholders + ")" : ""}`;
+  return await executeQueryInTransaction(cn, sql, params);
 }
 
 export async function closeFirebirdPool(): Promise<void> {
-  await pool.close();
+  invalidateAttachment();
   database = null;
 }
 
@@ -286,7 +345,7 @@ export async function closeFirebirdPool(): Promise<void> {
  */
 export async function checkFirebirdCharset(): Promise<number> {
   try {
-    // Intentar obtener el charset de la conexión actual (más confiable con ODBC)
+    // Intentar obtener el charset de la conexión actual
     const rows = await executeSafeQuery(
       `SELECT
          a.mon$character_set_id AS charset_id
@@ -321,12 +380,143 @@ export async function checkFirebirdCharset(): Promise<number> {
 // Alias compat
 export const closeFirebirdConnection = closeFirebirdPool;
 
+/**
+ * Ejecuta una consulta creando una conexión NUEVA (sin usar el attachment global).
+ * Útil para casos donde se necesita aislamiento total.
+ * @param sql - SQL query string
+ * @param params - Query parameters
+ * @param timeoutMs - Optional timeout in ms (default: FIREBIRD_TIMEOUT_MS env or 30000)
+ */
+export async function executeQueryWithNewConnection(sql: string, params: any[] = [], timeoutMs?: number): Promise<any[]> {
+  const timeout = timeoutMs ?? DEFAULT_TIMEOUT_MS;
+  return await Promise.race([
+    (async () => {
+      const att = await client.connect(buildUri(), {
+        username: config.firebird.user,
+        password: config.firebird.password,
+      });
+      try {
+        // Aplicar SET NAMES en la nueva conexión
+        const initTx = await att.startTransaction();
+        try {
+          await att.execute(initTx, `SET NAMES ${FIREBIRD_CHARSET}`);
+          await initTx.commit();
+        } catch {
+          try { if (initTx.isValid) await initTx.rollback(); } catch { /* ignore */ }
+        }
+
+        const tx = await att.startTransaction();
+        try {
+          const rs = await att.executeQuery(tx, sql, params);
+          try {
+            const rows = await rs.fetchAsObject<any>({ fetchSize: 1000 });
+            await tx.commit();
+            return rows.map((row: any) => decodeValue(row));
+          } finally {
+            await rs.close().catch(() => undefined);
+          }
+        } catch (e) {
+          try {
+            if (tx.isValid) await tx.rollback();
+          } catch { /* ignore */ }
+          throw e;
+        }
+      } finally {
+        await att.disconnect().catch(() => undefined);
+      }
+    })(),
+    new Promise<any[]>((_, rej) => setTimeout(() => rej(new Error(`Tiempo de espera agotado en consulta Firebird (${timeout}ms)`)), timeout)),
+  ]);
+}
+
 export const firebirdRuntimeInfo = {
   poolSize: POOL_SIZE,
   serializeAll: SERIALIZE_ALL,
   charset: FIREBIRD_CHARSET,
+  defaultTimeoutMs: DEFAULT_TIMEOUT_MS,
   host: config.firebird.host,
   port: config.firebird.port,
   database: config.firebird.database,
-  usingDsn: USE_DSN,
+  usingNativeDriver: true,
+  uri: buildUri(),
 };
+
+// Timeout constants for heavy operations (can be passed to executeSafeQuery)
+export const FIREBIRD_TIMEOUTS = {
+  DEFAULT: DEFAULT_TIMEOUT_MS,
+  /** For heavy SPs like DP_EDITA_PERSONAL, DP_EDITA_ENTIDAD */
+  HEAVY_SP: 60000,
+  /** For batch operations and large reports (HIP, Concentrado, etc.) */
+  BATCH_OPERATION: 120000,
+};
+
+// ============================================================================
+// SP Helpers - Estandarización de ejecución de Stored Procedures
+// ============================================================================
+
+/**
+ * Opciones para ejecutar un SP selectable
+ */
+export interface SelectableProcedureOptions {
+  /** Timeout en ms (default: DEFAULT_TIMEOUT_MS) */
+  timeoutMs?: number;
+  /** Alias para el SP en la query (ej: 'p' genera 'SELECT ... FROM SP(...) p') */
+  alias?: string;
+  /** Columnas específicas a seleccionar (default: '*') */
+  columns?: string[];
+}
+
+/**
+ * Ejecuta un SP "selectable" (que retorna filas).
+ * Genera: SELECT [columns] FROM procedureName(?, ?, ...) [alias]
+ * 
+ * @example
+ * // SELECT * FROM DP_EDITA_PERSONAL(?, ?, ...) p
+ * const rows = await executeSelectableProcedure('DP_EDITA_PERSONAL', params, { alias: 'p', timeoutMs: FIREBIRD_TIMEOUTS.HEAVY_SP });
+ * 
+ * @example
+ * // SELECT p.INTERNO, p.CURP FROM MI_SP(?, ?) p
+ * const rows = await executeSelectableProcedure('MI_SP', [a, b], { alias: 'p', columns: ['p.INTERNO', 'p.CURP'] });
+ */
+export async function executeSelectableProcedure(
+  procedureName: string,
+  params: any[] = [],
+  options: SelectableProcedureOptions = {}
+): Promise<any[]> {
+  const { timeoutMs, alias, columns } = options;
+  const placeholders = params.map(() => "?").join(", ");
+  const selectColumns = columns && columns.length > 0 ? columns.join(", ") : "*";
+  const aliasClause = alias ? ` ${alias}` : "";
+  
+  const sql = `SELECT ${selectColumns} FROM ${procedureName}(${placeholders})${aliasClause}`;
+  
+  return await executeSafeQuery(sql, params, timeoutMs);
+}
+
+/**
+ * Opciones para ejecutar un SP executable
+ */
+export interface ExecutableProcedureOptions {
+  /** Timeout en ms (default: DEFAULT_TIMEOUT_MS) */
+  timeoutMs?: number;
+}
+
+/**
+ * Ejecuta un SP "executable" (que ejecuta una acción, retorna singleton o nada).
+ * Genera: EXECUTE PROCEDURE procedureName(?, ?, ...)
+ * 
+ * @example
+ * // EXECUTE PROCEDURE AP_P_APLICAR(?, ?, ?, ?)
+ * await executeExecutableProcedure('AP_P_APLICAR', params, { timeoutMs: FIREBIRD_TIMEOUTS.HEAVY_SP });
+ */
+export async function executeExecutableProcedure(
+  procedureName: string,
+  params: any[] = [],
+  options: ExecutableProcedureOptions = {}
+): Promise<any[]> {
+  const { timeoutMs } = options;
+  const placeholders = params.map(() => "?").join(", ");
+  const sql = `EXECUTE PROCEDURE ${procedureName}${placeholders ? "(" + placeholders + ")" : ""}`;
+  
+  return await executeSafeQuery(sql, params, timeoutMs);
+}
