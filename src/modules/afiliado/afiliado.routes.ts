@@ -1,6 +1,6 @@
 import { FastifyInstance } from 'fastify';
 import { requireAuth, requireRole } from '../auth/auth.middleware.js';
-import { CreateAfiliadoSchema, UpdateAfiliadoSchema, CreateAfiliadoAfiliadoOrgMovimientoSchema, CreateCambioSueldoSchema, CreateBajaPermanenteSchema, CreateBajaSuspensionSchema, CreateBajaTerminaSuspensionSchema, CreateBajaTerminaSuspensionYBajaSchema, AplicarBDIsspeaLoteSchema, UpdateBitacoraAfectacionOrgTerminadoSchema } from './afiliado.schemas.js';
+import { CreateAfiliadoSchema, UpdateAfiliadoSchema, CreateAfiliadoAfiliadoOrgMovimientoSchema, CreateCambioSueldoSchema, CreateBajaPermanenteSchema, CreateBajaSuspensionSchema, CreateBajaTerminaSuspensionSchema, CreateBajaTerminaSuspensionYBajaSchema, AplicarBDIsspeaLoteSchema, UpdateBitacoraAfectacionOrgTerminadoSchema, CargarSemanasExtemporaneasLoteSchema } from './afiliado.schemas.js';
 import {
   createAfiliadoAfiliadoOrgMovimientoService
 } from './afiliado.service.js';
@@ -16,6 +16,8 @@ import { CreateCompleteAfiliadoCommand } from './application/commands/CreateComp
 import { AplicarBDIsspeaLoteCommand } from './application/commands/AplicarBDIsspeaLoteCommand.js';
 import { AplicarBDIssspeaQNACommand } from './application/commands/AplicarBDIssspeaQNACommand.js';
 import { UpdateBitacoraAfectacionOrgTerminadoCommand } from './application/commands/UpdateBitacoraAfectacionOrgTerminadoCommand.js';
+import { CargarSemanasExtemporaneasLoteCommand } from './application/commands/CargarSemanasExtemporaneasLoteCommand.js';
+import { GetSemanasExtemporaneasQuery } from './application/queries/GetSemanasExtemporaneasQuery.js';
 import { handleAfiliadoError } from './infrastructure/errorHandler.js';
 import { 
   prepararLogEjecucionDPEditaEntidad, 
@@ -102,6 +104,268 @@ export default async function afiliadoRoutes(app: FastifyInstance) {
       }));
     } catch (error: any) {
       return handleAfiliadoError(error, reply, { operation: 'resetAfiliados', user: req.user?.sub });
+    }
+  });
+
+  // GET /afiliado/semanas-extemporaneas - Listar semanas extemporáneas por org0, org1 y periodo
+  app.get('/afiliado/semanas-extemporaneas', {
+    preHandler: [requireAuth],
+    schema: {
+      description: 'Obtiene los registros de semanas extemporáneas (los mismos que se insertan en carga-semanas-extemporaneas) filtrados por org0, org1 y periodo (QnaAplica).',
+      summary: 'Listar semanas extemporáneas',
+      tags: ['afiliado', 'semanas-extemporaneas'],
+      security: [{ bearerAuth: [] }],
+      querystring: {
+        type: 'object',
+        required: ['org0', 'org1', 'periodo'],
+        properties: {
+          org0: {
+            type: 'string',
+            pattern: '^[0-9]{2}$',
+            description: 'Clave orgánica nivel 0 (2 dígitos, ej: 02)'
+          },
+          org1: {
+            type: 'string',
+            pattern: '^[0-9]{2}$',
+            description: 'Clave orgánica nivel 1 (2 dígitos, ej: 01)'
+          },
+          periodo: {
+            type: 'integer',
+            minimum: 1,
+            description: 'Quincena de aplicación / QnaAplica (ej: 1025)'
+          }
+        }
+      },
+      response: {
+        200: {
+          type: 'object',
+          description: 'Lista de registros de semanas extemporáneas',
+          properties: {
+            ok: { type: 'boolean', example: true },
+            data: {
+              type: 'array',
+              items: {
+                type: 'object',
+                properties: {
+                  id: { type: 'number', description: 'ID del registro' },
+                  qnaAplica: { type: 'number' },
+                  interno: { type: 'number' },
+                  org0: { type: 'string' },
+                  org1: { type: 'string' },
+                  org2: { type: 'string' },
+                  org3: { type: 'string' },
+                  qnasPlus: { type: 'number' },
+                  cair: { type: 'number' },
+                  fra: { type: 'number' },
+                  fre: { type: 'number' },
+                  fh: { type: 'number' },
+                  fv: { type: 'number' },
+                  faa: { type: 'number' },
+                  fae: { type: 'number' },
+                  usuario: { type: 'string' }
+                }
+              }
+            }
+          }
+        },
+        400: { type: 'object' },
+        401: { type: 'object' },
+        500: { type: 'object' }
+      }
+    }
+  }, async (req, reply) => {
+    try {
+      const query = req.query as { org0: string; org1: string; periodo: string };
+      const org0 = query.org0?.trim();
+      const org1 = query.org1?.trim();
+      const periodo = parseInt(query.periodo, 10);
+
+      if (!org0 || org0.length !== 2) {
+        return reply.code(400).send({
+          ok: false,
+          error: { code: 'VALIDATION_ERROR', message: 'org0 es requerido y debe tener 2 caracteres' }
+        });
+      }
+      if (!org1 || org1.length !== 2) {
+        return reply.code(400).send({
+          ok: false,
+          error: { code: 'VALIDATION_ERROR', message: 'org1 es requerido y debe tener 2 caracteres' }
+        });
+      }
+      if (isNaN(periodo) || periodo < 1) {
+        return reply.code(400).send({
+          ok: false,
+          error: { code: 'VALIDATION_ERROR', message: 'periodo es requerido y debe ser un número positivo' }
+        });
+      }
+
+      const getSemanasExtemporaneasQuery = req.diScope.resolve<GetSemanasExtemporaneasQuery>('getSemanasExtemporaneasQuery');
+      const registros = await getSemanasExtemporaneasQuery.execute({ org0, org1, periodo });
+      return reply.send(ok(registros));
+    } catch (error: any) {
+      return handleAfiliadoError(error, reply, { operation: 'getSemanasExtemporaneas', user: req.user?.sub });
+    }
+  });
+
+  // POST /afiliado/carga-semanas-extemporaneas - Carga en lote de semanas extemporáneas (solo admin)
+  app.post('/afiliado/carga-semanas-extemporaneas', {
+    preHandler: [requireAuth, requireRole('admin')],
+    schema: {
+      description: 'Carga en lote de semanas extemporáneas. Valida que no existan duplicados en el lote ni en BD (Interno + QnaAplica). Solo rol admin.',
+      summary: 'Cargar semanas extemporáneas en lote',
+      tags: ['afiliado', 'admin', 'semanas-extemporaneas'],
+      security: [{ bearerAuth: [] }],
+      body: {
+        type: 'object',
+        required: ['registros'],
+        properties: {
+          registros: {
+            type: 'array',
+            minItems: 1,
+            maxItems: 500,
+            description: 'Array de registros de semanas extemporáneas (máximo 500)',
+            items: {
+              type: 'object',
+              required: ['qnaAplica', 'interno', 'org0', 'org1', 'org2', 'org3', 'qnasPlus', 'cair', 'fra', 'fre', 'fh', 'fv', 'faa', 'fae', 'usuario'],
+              properties: {
+                qnaAplica: { type: 'integer', minimum: 1, description: 'Quincena de aplicación (ej: 1025)' },
+                interno: { type: 'integer', minimum: 1, description: 'Número interno del afiliado (ej: 84741)' },
+                org0: { type: 'string', minLength: 2, maxLength: 2, description: 'Código orgánico nivel 0 (ej: 02)' },
+                org1: { type: 'string', minLength: 2, maxLength: 2, description: 'Código orgánico nivel 1 (ej: 01)' },
+                org2: { type: 'string', minLength: 2, maxLength: 2, description: 'Código orgánico nivel 2 (ej: 00)' },
+                org3: { type: 'string', minLength: 2, maxLength: 2, description: 'Código orgánico nivel 3 (ej: 00)' },
+                qnasPlus: { type: 'integer', minimum: 0, description: 'Quincenas adicionales (ej: 171)' },
+                cair: { type: 'number', minimum: 0, description: 'Monto CAIR (ej: 8309.85)' },
+                fra: { type: 'number', minimum: 0, description: 'Monto FRA (ej: 16620.45)' },
+                fre: { type: 'number', minimum: 0, description: 'Monto FRE (ej: 108634.93)' },
+                fh: { type: 'number', minimum: 0, description: 'Monto FH (ej: 1454.28)' },
+                fv: { type: 'number', minimum: 0, description: 'Monto FV (ej: 5817.27)' },
+                faa: { type: 'number', minimum: 0, description: 'Monto FAA (ej: 20774.97)' },
+                fae: { type: 'number', minimum: 0, description: 'Monto FAE (ej: 10387.77)' },
+                usuario: { type: 'string', minLength: 1, maxLength: 50, description: 'Usuario que realiza la carga (ej: DACERO)' }
+              }
+            }
+          }
+        }
+      },
+      response: {
+        200: {
+          type: 'object',
+          description: 'Carga exitosa',
+          properties: {
+            ok: { type: 'boolean', example: true },
+            data: {
+              type: 'object',
+              properties: {
+                insertados: { type: 'integer', description: 'Cantidad de registros insertados' },
+                total: { type: 'integer', description: 'Total de registros en el lote' }
+              }
+            }
+          }
+        },
+        400: {
+          type: 'object',
+          description: 'Error de validación o duplicados en lote',
+          properties: {
+            ok: { type: 'boolean', example: false },
+            error: {
+              type: 'object',
+              properties: {
+                code: { type: 'string', example: 'DUPLICADOS_EN_LOTE' },
+                message: { type: 'string' },
+                duplicados: {
+                  type: 'array',
+                  items: {
+                    type: 'object',
+                    properties: {
+                      interno: { type: 'integer' },
+                      qnaAplica: { type: 'integer' }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        403: {
+          type: 'object',
+          description: 'Sin permisos (requiere rol admin)',
+          properties: {
+            ok: { type: 'boolean', example: false },
+            error: {
+              type: 'object',
+              properties: {
+                code: { type: 'string', example: 'FORBIDDEN' },
+                message: { type: 'string' }
+              }
+            }
+          }
+        },
+        409: {
+          type: 'object',
+          description: 'Registros ya existen en BD',
+          properties: {
+            ok: { type: 'boolean', example: false },
+            error: {
+              type: 'object',
+              properties: {
+                code: { type: 'string', example: 'DUPLICADOS_EN_BD' },
+                message: { type: 'string' },
+                duplicados: {
+                  type: 'array',
+                  items: {
+                    type: 'object',
+                    properties: {
+                      interno: { type: 'integer' },
+                      qnaAplica: { type: 'integer' }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        500: {
+          type: 'object',
+          properties: {
+            ok: { type: 'boolean' },
+            error: {
+              type: 'object',
+              properties: {
+                code: { type: 'string' },
+                message: { type: 'string' }
+              }
+            }
+          }
+        }
+      }
+    }
+  }, async (req, reply) => {
+    try {
+      // Validar body con Zod
+      const parsed = CargarSemanasExtemporaneasLoteSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return reply.code(400).send({
+          ok: false,
+          error: {
+            code: 'VALIDATION_ERROR',
+            message: 'Datos de entrada inválidos',
+            details: parsed.error.issues
+          }
+        });
+      }
+
+      // Resolver el command desde el contenedor DI
+      const cargarSemanasExtemporaneasLoteCommand = req.diScope.resolve<CargarSemanasExtemporaneasLoteCommand>('cargarSemanasExtemporaneasLoteCommand');
+      
+      // Ejecutar la carga
+      const resultado = await cargarSemanasExtemporaneasLoteCommand.execute({
+        registros: parsed.data.registros
+      });
+
+      return reply.send(ok(resultado));
+    } catch (error: any) {
+      return handleAfiliadoError(error, reply, { operation: 'cargarSemanasExtemporaneas', user: req.user?.sub });
     }
   });
 

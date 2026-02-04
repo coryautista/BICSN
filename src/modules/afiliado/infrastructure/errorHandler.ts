@@ -25,7 +25,10 @@ import {
   AfiliadoValidationError,
   AplicarBDIsspeaError,
   OrganicaNoConfiguradaError,
-  NoAfiliadosElegiblesError
+  NoAfiliadosElegiblesError,
+  FormatoExtemporaneaDuplicadosEnBDError,
+  FormatoExtemporaneaDuplicadosEnLoteError,
+  FormatoExtemporaneaInsertError
 } from '../domain/errors.js';
 
 const logger = pino({
@@ -68,8 +71,32 @@ export function handleAfiliadoError(error: any, reply: FastifyReply, context?: a
       error instanceof InvalidInternoError ||
       error instanceof InternoNotFoundInFirebirdError ||
       error instanceof AfiliadoValidationError ||
-      error instanceof OrganicaNoConfiguradaError) {
+      error instanceof OrganicaNoConfiguradaError ||
+      error instanceof FormatoExtemporaneaDuplicadosEnLoteError) {
+    // Para errores de duplicados en lote, incluir los pares duplicados
+    if (error instanceof FormatoExtemporaneaDuplicadosEnLoteError) {
+      return reply.code(400).send({
+        ok: false,
+        error: {
+          code: 'DUPLICADOS_EN_LOTE',
+          message: error.message,
+          duplicados: error.duplicados
+        }
+      });
+    }
     return reply.code(400).send(fail(error.code || 'VALIDATION_ERROR', error.message));
+  }
+
+  // Errores de duplicados en BD para semanas extemporáneas (409)
+  if (error instanceof FormatoExtemporaneaDuplicadosEnBDError) {
+    return reply.code(409).send({
+      ok: false,
+      error: {
+        code: 'DUPLICADOS_EN_BD',
+        message: error.message,
+        duplicados: error.duplicados
+      }
+    });
   }
 
   // Errores de permisos (403)
@@ -102,7 +129,8 @@ export function handleAfiliadoError(error: any, reply: FastifyReply, context?: a
       error instanceof AfiliadoDeletionError ||
       error instanceof AfiliadoQueryError ||
       error instanceof MovimientosQuincenalesQueryError ||
-      error instanceof AplicarBDIsspeaError) {
+      error instanceof AplicarBDIsspeaError ||
+      error instanceof FormatoExtemporaneaInsertError) {
     return reply.code(500).send(fail('DATABASE_ERROR', 'Error interno del servidor al procesar la solicitud de afiliado'));
   }
 

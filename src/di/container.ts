@@ -57,6 +57,7 @@ import { GetAllAfiliadosQuery } from '../modules/afiliado/application/queries/Ge
 import { GetAfiliadoByIdQuery } from '../modules/afiliado/application/queries/GetAfiliadoByIdQuery.js';
 import { ValidateInternoInFirebirdQuery } from '../modules/afiliado/application/queries/ValidateInternoInFirebirdQuery.js';
 import { GetMovimientosQuincenalesQuery } from '../modules/afiliado/application/queries/GetMovimientosQuincenalesQuery.js';
+import { GetSemanasExtemporaneasQuery } from '../modules/afiliado/application/queries/GetSemanasExtemporaneasQuery.js';
 import { CreateAfiliadoCommand } from '../modules/afiliado/application/commands/CreateAfiliadoCommand.js';
 import { UpdateAfiliadoCommand } from '../modules/afiliado/application/commands/UpdateAfiliadoCommand.js';
 import { DeleteAfiliadoCommand } from '../modules/afiliado/application/commands/DeleteAfiliadoCommand.js';
@@ -64,6 +65,8 @@ import { CreateCompleteAfiliadoCommand } from '../modules/afiliado/application/c
 import { AplicarBDIsspeaLoteCommand } from '../modules/afiliado/application/commands/AplicarBDIsspeaLoteCommand.js';
 import { AplicarBDIssspeaQNACommand } from '../modules/afiliado/application/commands/AplicarBDIssspeaQNACommand.js';
 import { UpdateBitacoraAfectacionOrgTerminadoCommand } from '../modules/afiliado/application/commands/UpdateBitacoraAfectacionOrgTerminadoCommand.js';
+import { CargarSemanasExtemporaneasLoteCommand } from '../modules/afiliado/application/commands/CargarSemanasExtemporaneasLoteCommand.js';
+import { FormatoExtemporaneaRepository } from '../modules/afiliado/infrastructure/persistence/FormatoExtemporaneaRepository.js';
 
 // AfiliadoOrg Module
 import { AfiliadoOrgRepository } from '../modules/afiliadoOrg/infrastructure/persistence/AfiliadoOrgRepository.js';
@@ -561,12 +564,14 @@ container.register({
   
   // Repositories (Scoped)
   afiliadoRepo: asClass(AfiliadoRepository).scoped(),
+  formatoExtemporaneaRepo: asClass(FormatoExtemporaneaRepository).scoped(),
   
   // Queries (Scoped)
   getAllAfiliadosQuery: asClass(GetAllAfiliadosQuery).scoped(),
   getAfiliadoByIdQuery: asClass(GetAfiliadoByIdQuery).scoped(),
   validateInternoInFirebirdQuery: asClass(ValidateInternoInFirebirdQuery).scoped(),
   getMovimientosQuincenalesQuery: asClass(GetMovimientosQuincenalesQuery).scoped(),
+  getSemanasExtemporaneasQuery: asClass(GetSemanasExtemporaneasQuery).scoped(),
   
   // Commands (Scoped)
   createAfiliadoCommand: asClass(CreateAfiliadoCommand).scoped(),
@@ -576,6 +581,7 @@ container.register({
   aplicarBDIsspeaLoteCommand: asClass(AplicarBDIsspeaLoteCommand).scoped(),
   aplicarBDIssspeaQNACommand: asClass(AplicarBDIssspeaQNACommand).scoped(),
   updateBitacoraAfectacionOrgTerminadoCommand: asClass(UpdateBitacoraAfectacionOrgTerminadoCommand).scoped(),
+  cargarSemanasExtemporaneasLoteCommand: asClass(CargarSemanasExtemporaneasLoteCommand).scoped(),
   
   // ============================================================================
   // AFILIADO ORG MODULE

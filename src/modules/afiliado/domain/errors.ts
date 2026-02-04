@@ -153,3 +153,37 @@ export class NoAfiliadosElegiblesError extends BusinessRuleViolationError {
     });
   }
 }
+
+/**
+ * Errores específicos para carga de semanas extemporáneas
+ */
+
+export class FormatoExtemporaneaDuplicadosEnBDError extends BusinessRuleViolationError {
+  public readonly duplicados: Array<{ interno: number; qnaAplica: number }>;
+  
+  constructor(duplicados: Array<{ interno: number; qnaAplica: number }>) {
+    super(
+      `Los siguientes registros ya existen en la base de datos (${duplicados.length} duplicado(s))`,
+      { duplicados }
+    );
+    this.duplicados = duplicados;
+  }
+}
+
+export class FormatoExtemporaneaDuplicadosEnLoteError extends ValidationError {
+  public readonly duplicados: Array<{ interno: number; qnaAplica: number }>;
+  
+  constructor(duplicados: Array<{ interno: number; qnaAplica: number }>) {
+    super(
+      `El lote contiene registros duplicados (mismo Interno y QnaAplica): ${duplicados.length} par(es) repetido(s)`,
+      { duplicados }
+    );
+    this.duplicados = duplicados;
+  }
+}
+
+export class FormatoExtemporaneaInsertError extends DatabaseError {
+  constructor(message: string, details?: any) {
+    super(`Error al insertar semanas extemporáneas: ${message}`, details);
+  }
+}

@@ -42,23 +42,23 @@ export default async function afectacionOrgRoutes(app: FastifyInstance) {
       security: [{ bearerAuth: [] }],
       body: {
         type: 'object',
-        required: ['anio', 'quincena', 'usuario', 'appName', 'ip'],
+        required: [],
         properties: {
           fecha: { type: 'string', format: 'date-time', description: 'Fecha de afectación' },
           entidad: { type: 'string', default: 'AFILIADOS', description: 'Tipo de entidad' },
-          anio: { type: 'number', minimum: 2000, maximum: 2100, description: 'Año de la quincena' },
-          quincena: { type: 'number', minimum: 1, maximum: 24, description: 'Número de quincena' },
+          anio: { type: 'number', minimum: 2000, maximum: 2100, description: 'Año de la quincena (opcional, se obtiene de Firebird si no se proporciona)' },
+          quincena: { type: 'number', minimum: 1, maximum: 24, description: 'Número de quincena (opcional, se obtiene de Firebird si no se proporciona)' },
           orgNivel: { type: 'number', minimum: 0, maximum: 3, default: 3, description: 'Nivel orgánico' },
-          org0: { type: 'string', minLength: 1, maxLength: 2, description: 'Clave orgánica 0' },
-          org1: { type: 'string', minLength: 1, maxLength: 2, description: 'Clave orgánica 1' },
-          org2: { type: 'string', minLength: 1, maxLength: 2, description: 'Clave orgánica 2' },
-          org3: { type: 'string', minLength: 1, maxLength: 2, description: 'Clave orgánica 3' },
+          org0: { type: 'string', minLength: 1, maxLength: 2, description: 'Clave orgánica 0 (opcional, se obtiene del token si no se proporciona)' },
+          org1: { type: 'string', minLength: 1, maxLength: 2, description: 'Clave orgánica 1 (opcional, se obtiene del token si no se proporciona)' },
+          org2: { type: 'string', minLength: 1, maxLength: 2, description: 'Clave orgánica 2 (opcional, se obtiene del token si no se proporciona)' },
+          org3: { type: 'string', minLength: 1, maxLength: 2, description: 'Clave orgánica 3 (opcional, se obtiene del token si no se proporciona)' },
           accion: { type: 'string', default: 'APLICAR', description: 'Acción a realizar' },
           resultado: { type: 'string', default: 'OK', description: 'Resultado esperado' },
           mensaje: { type: 'string', description: 'Mensaje adicional' },
-          usuario: { type: 'string', description: 'Usuario que realiza la operación' },
-          appName: { type: 'string', description: 'Nombre de la aplicación' },
-          ip: { type: 'string', description: 'IP del cliente' }
+          usuario: { type: 'string', description: 'Usuario que realiza la operación (opcional, se obtiene del token si no se proporciona)' },
+          appName: { type: 'string', description: 'Nombre de la aplicación (opcional, por defecto: BICSN-API)' },
+          ip: { type: 'string', description: 'IP del cliente (opcional, se obtiene del request si no se proporciona)' }
         }
       },
       response: {

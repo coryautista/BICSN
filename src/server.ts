@@ -173,6 +173,14 @@ async function buildApp() {
       'http://187.233.247.69:3000',
       'http://187.233.247.69:4000',       // IP interna frontend
       'http://187.233.234.212:3000',           // IP externa adicional
+      'http://187.233.246.149:4000',           // IP externa adicional
+      'http://187.233.246.149:3000',           // IP externa adicional
+      'http://187.233.231.176:3000',           // IP externa adicional
+      'http://187.233.231.176:4000',           // IP externa adicional
+      /^http:\/\/187\.233\.231\.176:\d+$/,     // Regex para cualquier puerto en esa IP
+      'http://187.233.255.163:3000',
+      'http://187.233.255.163:4000',
+      /^http:\/\/187\.233\.255\.163:\d+$/,     // Regex para cualquier puerto en esa IP
       /^http:\/\/187\.233\.212\.215:\d+$/, // Regex para cualquier puerto en esa IP
       /^http:\/\/187\.233\.222\.216:\d+$/, // Regex para cualquier puerto en esa IP
       /^http:\/\/localhost:\d+$/        // localhost con cualquier puerto
@@ -200,7 +208,7 @@ async function buildApp() {
         {
           //url: 'http://187.233.247.69:4000/v1',
           //url: 'http://187.233.234.212:4000/v1',
-          url: 'http://187.233.240.171:4000/v1',
+          url: 'http://187.233.246.149:4000/v1',
           description: 'Servidor de producción'
         }
       ],

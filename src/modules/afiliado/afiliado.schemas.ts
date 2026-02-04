@@ -286,3 +286,33 @@ export const AplicarBDIsspeaLoteSchema = z.object({
 export const UpdateBitacoraAfectacionOrgTerminadoSchema = z.object({
   afectacionId: z.number().int().positive('El AfectacionId debe ser un número entero positivo')
 });
+
+// ============================================================================
+// SCHEMAS PARA CARGA DE SEMANAS EXTEMPORÁNEAS
+// ============================================================================
+
+// Schema para un item individual del lote de semanas extemporáneas
+export const FormatoExtemporaneaItemSchema = z.object({
+  qnaAplica: z.number().int().positive('QnaAplica debe ser un número entero positivo'),
+  interno: z.number().int().positive('Interno debe ser un número entero positivo'),
+  org0: z.string().length(2, 'Org0 debe tener exactamente 2 caracteres'),
+  org1: z.string().length(2, 'Org1 debe tener exactamente 2 caracteres'),
+  org2: z.string().length(2, 'Org2 debe tener exactamente 2 caracteres'),
+  org3: z.string().length(2, 'Org3 debe tener exactamente 2 caracteres'),
+  qnasPlus: z.number().int().nonnegative('QnasPlus debe ser un número entero no negativo'),
+  cair: z.number().nonnegative('Cair debe ser un número no negativo'),
+  fra: z.number().nonnegative('Fra debe ser un número no negativo'),
+  fre: z.number().nonnegative('Fre debe ser un número no negativo'),
+  fh: z.number().nonnegative('Fh debe ser un número no negativo'),
+  fv: z.number().nonnegative('Fv debe ser un número no negativo'),
+  faa: z.number().nonnegative('Faa debe ser un número no negativo'),
+  fae: z.number().nonnegative('Fae debe ser un número no negativo'),
+  usuario: z.string().min(1, 'Usuario es requerido').max(50, 'Usuario no debe exceder 50 caracteres')
+});
+
+// Schema para el body de la carga en lote
+export const CargarSemanasExtemporaneasLoteSchema = z.object({
+  registros: z.array(FormatoExtemporaneaItemSchema)
+    .min(1, 'Debe proporcionar al menos un registro')
+    .max(500, 'El lote no puede exceder 500 registros')
+});

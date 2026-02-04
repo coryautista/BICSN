@@ -1,6 +1,7 @@
 import { FastifyRequest } from 'fastify';
 import { executeSerializedQuery, decodeFirebirdObject, executeSelectableProcedure, FIREBIRD_TIMEOUTS } from '../../../../db/firebird.js';
 import { withDbContext, sql } from '../../../../db/context.js';
+import { getPool } from '../../../../db/mssql.js';
 import { IAplicacionQuincenalRepository, GuardarHistoricoAportacionesResult, GuardarHistoricoRetencionesResult } from '../../domain/repositories/IAplicacionQuincenalRepository.js';
 import { AportacionQuincenalResumen } from '../../domain/entities/AportacionQuincenalResumen.js';
 import { ResumenOrgQnaAll } from '../../domain/entities/ResumenOrgQnaAll.js';
@@ -1723,6 +1724,264 @@ export class AplicacionQuincenalRepository implements IAplicacionQuincenalReposi
     request.input('Detalle', sql.TVP, detalleTable);
     request.input('Modo', sql.NVarChar(50), 'REPLACE');
     await request.execute('retenciones.spGuardarPrestamosHipotecariosHistorico_Lote');
+  }
+
+  // ============================================================================
+  // Métodos de consulta de históricos
+  // ============================================================================
+
+  async obtenerHistoricoAportaciones(
+    org0: string,
+    org1: string,
+    quincena: number,
+    anio: number
+  ): Promise<{
+    ahorro: any[];
+    vivienda: any[];
+    prestaciones: any[];
+    cair: any[];
+    transitorio: any[];
+    guarderias: any[];
+    aguinaldo: any[];
+  }> {
+    const startTime = Date.now();
+    const logContext = {
+      operation: 'obtenerHistoricoAportaciones',
+      org0,
+      org1,
+      quincena,
+      anio
+    };
+
+    logger.info(logContext, 'Iniciando consulta de histórico de aportaciones');
+
+    try {
+      const p = await getPool();
+
+      // Ejecutar todas las consultas en paralelo
+      const [
+        ahorroResult,
+        viviendaResult,
+        prestacionesResult,
+        cairResult,
+        transitorioResult,
+        guarderiasResult,
+        aguinaldoResult
+      ] = await Promise.all([
+        // Ahorro
+        p.request()
+          .input('org0', sql.Char(2), org0)
+          .input('org1', sql.Char(2), org1)
+          .input('quincena', sql.Int, quincena)
+          .input('anio', sql.Int, anio)
+          .query(`
+            SELECT * FROM aportaciones.IndividualesAhorroHistorico
+            WHERE clave_organica_0 = @org0 AND clave_organica_1 = @org1
+              AND quincena = @quincena AND anio = @anio
+          `),
+        // Vivienda
+        p.request()
+          .input('org0', sql.Char(2), org0)
+          .input('org1', sql.Char(2), org1)
+          .input('quincena', sql.Int, quincena)
+          .input('anio', sql.Int, anio)
+          .query(`
+            SELECT * FROM aportaciones.IndividualesViviendaHistorico
+            WHERE clave_organica_0 = @org0 AND clave_organica_1 = @org1
+              AND quincena = @quincena AND anio = @anio
+          `),
+        // Prestaciones
+        p.request()
+          .input('org0', sql.Char(2), org0)
+          .input('org1', sql.Char(2), org1)
+          .input('quincena', sql.Int, quincena)
+          .input('anio', sql.Int, anio)
+          .query(`
+            SELECT * FROM aportaciones.IndividualesPrestacionesHistorico
+            WHERE clave_organica_0 = @org0 AND clave_organica_1 = @org1
+              AND quincena = @quincena AND anio = @anio
+          `),
+        // Cair
+        p.request()
+          .input('org0', sql.Char(2), org0)
+          .input('org1', sql.Char(2), org1)
+          .input('quincena', sql.Int, quincena)
+          .input('anio', sql.Int, anio)
+          .query(`
+            SELECT * FROM aportaciones.IndividualesCairHistorico
+            WHERE clave_organica_0 = @org0 AND clave_organica_1 = @org1
+              AND quincena = @quincena AND anio = @anio
+          `),
+        // Transitorio
+        p.request()
+          .input('org0', sql.Char(2), org0)
+          .input('org1', sql.Char(2), org1)
+          .input('quincena', sql.Int, quincena)
+          .input('anio', sql.Int, anio)
+          .query(`
+            SELECT * FROM aportaciones.PensionNominaTransitorioHistorico
+            WHERE clave_organica_0 = @org0 AND clave_organica_1 = @org1
+              AND quincena = @quincena AND anio = @anio
+          `),
+        // Guarderias
+        p.request()
+          .input('org0', sql.Char(2), org0)
+          .input('org1', sql.Char(2), org1)
+          .input('quincena', sql.Int, quincena)
+          .input('anio', sql.Int, anio)
+          .query(`
+            SELECT * FROM aportaciones.GuarderiasHistorico
+            WHERE clave_organica_0 = @org0 AND clave_organica_1 = @org1
+              AND quincena = @quincena AND anio = @anio
+          `),
+        // Aguinaldo
+        p.request()
+          .input('org0', sql.Char(2), org0)
+          .input('org1', sql.Char(2), org1)
+          .input('quincena', sql.Int, quincena)
+          .input('anio', sql.Int, anio)
+          .query(`
+            SELECT * FROM aportaciones.AguinaldoHistorico
+            WHERE clave_organica_0 = @org0 AND clave_organica_1 = @org1
+              AND quincena = @quincena AND anio = @anio
+          `)
+      ]);
+
+      const duration = Date.now() - startTime;
+      logger.info({
+        ...logContext,
+        duracionMs: duration,
+        registros: {
+          ahorro: ahorroResult.recordset.length,
+          vivienda: viviendaResult.recordset.length,
+          prestaciones: prestacionesResult.recordset.length,
+          cair: cairResult.recordset.length,
+          transitorio: transitorioResult.recordset.length,
+          guarderias: guarderiasResult.recordset.length,
+          aguinaldo: aguinaldoResult.recordset.length
+        }
+      }, 'Consulta de histórico de aportaciones completada');
+
+      return {
+        ahorro: ahorroResult.recordset,
+        vivienda: viviendaResult.recordset,
+        prestaciones: prestacionesResult.recordset,
+        cair: cairResult.recordset,
+        transitorio: transitorioResult.recordset,
+        guarderias: guarderiasResult.recordset,
+        aguinaldo: aguinaldoResult.recordset
+      };
+    } catch (error: any) {
+      const duration = Date.now() - startTime;
+      logger.error({
+        ...logContext,
+        error: error.message || String(error),
+        stack: error.stack,
+        duracionMs: duration
+      }, 'Error al consultar histórico de aportaciones');
+
+      throw new AplicacionQuincenalError(
+        `Error al consultar histórico de aportaciones: ${error.message || String(error)}`,
+        AplicacionQuincenalErrorCode.SQL_SERVER_ERROR
+      );
+    }
+  }
+
+  async obtenerHistoricoRetenciones(
+    org0: string,
+    org1: string,
+    quincena: number,
+    anio: number
+  ): Promise<{
+    prestamosCortoPlazo: any[];
+    prestamosMedianoPlazo: any[];
+    prestamosHipotecarios: any[];
+  }> {
+    const startTime = Date.now();
+    const logContext = {
+      operation: 'obtenerHistoricoRetenciones',
+      org0,
+      org1,
+      quincena,
+      anio
+    };
+
+    logger.info(logContext, 'Iniciando consulta de histórico de retenciones');
+
+    try {
+      const p = await getPool();
+
+      // Ejecutar todas las consultas en paralelo
+      const [
+        cortoPlazoResult,
+        medianoPlazoResult,
+        hipotecariosResult
+      ] = await Promise.all([
+        // Préstamos Corto Plazo
+        p.request()
+          .input('org0', sql.Char(2), org0)
+          .input('org1', sql.Char(2), org1)
+          .input('quincena', sql.Int, quincena)
+          .input('anio', sql.Int, anio)
+          .query(`
+            SELECT * FROM retenciones.PrestamosCortoPlazoHistorico
+            WHERE clave_organica_0 = @org0 AND clave_organica_1 = @org1
+              AND quincena = @quincena AND anio = @anio
+          `),
+        // Préstamos Mediano Plazo
+        p.request()
+          .input('org0', sql.Char(2), org0)
+          .input('org1', sql.Char(2), org1)
+          .input('quincena', sql.Int, quincena)
+          .input('anio', sql.Int, anio)
+          .query(`
+            SELECT * FROM retenciones.PrestamosMedianoPlazoHistorico
+            WHERE clave_organica_0 = @org0 AND clave_organica_1 = @org1
+              AND quincena = @quincena AND anio = @anio
+          `),
+        // Préstamos Hipotecarios
+        p.request()
+          .input('org0', sql.Char(2), org0)
+          .input('org1', sql.Char(2), org1)
+          .input('quincena', sql.Int, quincena)
+          .input('anio', sql.Int, anio)
+          .query(`
+            SELECT * FROM retenciones.PrestamosHipotecariosHistorico
+            WHERE clave_organica_0 = @org0 AND clave_organica_1 = @org1
+              AND quincena = @quincena AND anio = @anio
+          `)
+      ]);
+
+      const duration = Date.now() - startTime;
+      logger.info({
+        ...logContext,
+        duracionMs: duration,
+        registros: {
+          prestamosCortoPlazo: cortoPlazoResult.recordset.length,
+          prestamosMedianoPlazo: medianoPlazoResult.recordset.length,
+          prestamosHipotecarios: hipotecariosResult.recordset.length
+        }
+      }, 'Consulta de histórico de retenciones completada');
+
+      return {
+        prestamosCortoPlazo: cortoPlazoResult.recordset,
+        prestamosMedianoPlazo: medianoPlazoResult.recordset,
+        prestamosHipotecarios: hipotecariosResult.recordset
+      };
+    } catch (error: any) {
+      const duration = Date.now() - startTime;
+      logger.error({
+        ...logContext,
+        error: error.message || String(error),
+        stack: error.stack,
+        duracionMs: duration
+      }, 'Error al consultar histórico de retenciones');
+
+      throw new AplicacionQuincenalError(
+        `Error al consultar histórico de retenciones: ${error.message || String(error)}`,
+        AplicacionQuincenalErrorCode.SQL_SERVER_ERROR
+      );
+    }
   }
 }
 

@@ -1455,5 +1455,291 @@ export default async function aplicacionQuincenalRoutes(app: FastifyInstance) {
       return handleAplicacionQuincenalError(error, reply);
     }
   });
+
+  // GET /aplicacion-quincenal/historico-aportaciones
+  app.get('/aplicacion-quincenal/historico-aportaciones', {
+    preHandler: [requireAuth],
+    schema: {
+      description: '[SQL SERVER] Consulta el histórico de aportaciones guardado. Si no se proporcionan org0, org1 o periodo, se obtienen del token y de BitacoraAfectacionOrg.',
+      summary: 'Consultar Histórico de Aportaciones',
+      tags: ['aplicacion-quincenal', 'sql-server'],
+      security: [{ bearerAuth: [] }],
+      querystring: {
+        type: 'object',
+        properties: {
+          org0: {
+            type: 'string',
+            description: 'Clave orgánica 0 (opcional, se obtiene del token si no se proporciona)',
+            minLength: 1,
+            maxLength: 2
+          },
+          org1: {
+            type: 'string',
+            description: 'Clave orgánica 1 (opcional, se obtiene del token si no se proporciona)',
+            minLength: 1,
+            maxLength: 2
+          },
+          periodo: {
+            type: 'string',
+            description: 'Período en formato QQAA (ej: "0125" = quincena 01, año 2025). Opcional, se obtiene de BitacoraAfectacionOrg si no se proporciona.',
+            minLength: 4,
+            maxLength: 4
+          }
+        }
+      },
+      response: {
+        200: {
+          description: 'Histórico consultado exitosamente',
+          type: 'object',
+          properties: {
+            ok: { type: 'boolean' },
+            data: {
+              type: 'object',
+              properties: {
+                org0: { type: 'string' },
+                org1: { type: 'string' },
+                quincena: { type: 'number' },
+                anio: { type: 'number' },
+                periodo: { type: 'string' },
+                ahorro: { type: 'array', items: { type: 'object' } },
+                vivienda: { type: 'array', items: { type: 'object' } },
+                prestaciones: { type: 'array', items: { type: 'object' } },
+                cair: { type: 'array', items: { type: 'object' } },
+                transitorio: { type: 'array', items: { type: 'object' } },
+                guarderias: { type: 'array', items: { type: 'object' } },
+                aguinaldo: { type: 'array', items: { type: 'object' } }
+              }
+            }
+          }
+        },
+        400: { type: 'object' },
+        401: { type: 'object' },
+        500: { type: 'object' }
+      }
+    }
+  }, async (request, reply) => {
+    try {
+      const user = (request as any).user;
+      const query = request.query as { org0?: string; org1?: string; periodo?: string };
+
+      // Obtener org0 y org1: primero de query params, si no del token
+      let org0: string | undefined = query.org0;
+      let org1: string | undefined = query.org1;
+
+      if (!org0 && user?.idOrganica0) {
+        org0 = normalizeClaveOrganica(user.idOrganica0) || undefined;
+      }
+      if (!org1 && user?.idOrganica1) {
+        org1 = normalizeClaveOrganica(user.idOrganica1) || undefined;
+      }
+
+      // Normalizar org keys
+      if (org0) org0 = normalizeClaveOrganica(org0) || undefined;
+      if (org1) org1 = normalizeClaveOrganica(org1) || undefined;
+
+      // Validar que existan org0 y org1
+      if (!org0 || !org1) {
+        return reply.code(400).send({
+          ok: false,
+          error: {
+            code: 'MISSING_ORGANICA_KEYS',
+            message: 'org0 y org1 son requeridos. Deben proporcionarse en query string o estar disponibles en el token del usuario.',
+            timestamp: new Date().toISOString()
+          }
+        });
+      }
+
+      // Obtener quincena y año
+      let quincena: number;
+      let anio: number;
+      let periodo: string;
+
+      if (query.periodo && query.periodo.length === 4) {
+        // Convertir periodo (QQAA) a quincena y año
+        periodo = query.periodo;
+        quincena = parseInt(periodo.slice(0, 2), 10);
+        const anio2 = periodo.slice(2, 4);
+        anio = parseInt('20' + anio2, 10);
+      } else {
+        // Obtener periodo desde BitacoraAfectacionOrg
+        const aportacionFondoRepo = request.diScope.resolve<IAportacionFondoRepository>('aportacionFondoRepo');
+        try {
+          const periodoData = await aportacionFondoRepo.obtenerPeriodoAplicacion(org0, org1);
+          periodo = periodoData.periodo;
+          quincena = parseInt(periodo.slice(0, 2), 10);
+          const anio2 = periodo.slice(2, 4);
+          anio = parseInt('20' + anio2, 10);
+        } catch (err: any) {
+          return reply.code(400).send({
+            ok: false,
+            error: {
+              code: 'PERIODO_NOT_FOUND',
+              message: `No se pudo obtener el período desde BitacoraAfectacionOrg para org0=${org0}, org1=${org1}. Proporcione el parámetro 'periodo' en la consulta.`,
+              timestamp: new Date().toISOString()
+            }
+          });
+        }
+      }
+
+      // Consultar el histórico
+      const repository = request.diScope.resolve<AplicacionQuincenalRepository>('aplicacionQuincenalRepo');
+      const historico = await repository.obtenerHistoricoAportaciones(org0, org1, quincena, anio);
+
+      return reply.code(200).send({
+        ok: true,
+        data: {
+          org0,
+          org1,
+          quincena,
+          anio,
+          periodo,
+          ...historico
+        }
+      });
+    } catch (error: any) {
+      return handleAplicacionQuincenalError(error, reply);
+    }
+  });
+
+  // GET /aplicacion-quincenal/historico-retenciones
+  app.get('/aplicacion-quincenal/historico-retenciones', {
+    preHandler: [requireAuth],
+    schema: {
+      description: '[SQL SERVER] Consulta el histórico de retenciones (préstamos) guardado. Si no se proporcionan org0, org1 o periodo, se obtienen del token y de BitacoraAfectacionOrg.',
+      summary: 'Consultar Histórico de Retenciones',
+      tags: ['aplicacion-quincenal', 'sql-server'],
+      security: [{ bearerAuth: [] }],
+      querystring: {
+        type: 'object',
+        properties: {
+          org0: {
+            type: 'string',
+            description: 'Clave orgánica 0 (opcional, se obtiene del token si no se proporciona)',
+            minLength: 1,
+            maxLength: 2
+          },
+          org1: {
+            type: 'string',
+            description: 'Clave orgánica 1 (opcional, se obtiene del token si no se proporciona)',
+            minLength: 1,
+            maxLength: 2
+          },
+          periodo: {
+            type: 'string',
+            description: 'Período en formato QQAA (ej: "0125" = quincena 01, año 2025). Opcional, se obtiene de BitacoraAfectacionOrg si no se proporciona.',
+            minLength: 4,
+            maxLength: 4
+          }
+        }
+      },
+      response: {
+        200: {
+          description: 'Histórico consultado exitosamente',
+          type: 'object',
+          properties: {
+            ok: { type: 'boolean' },
+            data: {
+              type: 'object',
+              properties: {
+                org0: { type: 'string' },
+                org1: { type: 'string' },
+                quincena: { type: 'number' },
+                anio: { type: 'number' },
+                periodo: { type: 'string' },
+                prestamosCortoPlazo: { type: 'array', items: { type: 'object' } },
+                prestamosMedianoPlazo: { type: 'array', items: { type: 'object' } },
+                prestamosHipotecarios: { type: 'array', items: { type: 'object' } }
+              }
+            }
+          }
+        },
+        400: { type: 'object' },
+        401: { type: 'object' },
+        500: { type: 'object' }
+      }
+    }
+  }, async (request, reply) => {
+    try {
+      const user = (request as any).user;
+      const query = request.query as { org0?: string; org1?: string; periodo?: string };
+
+      // Obtener org0 y org1: primero de query params, si no del token
+      let org0: string | undefined = query.org0;
+      let org1: string | undefined = query.org1;
+
+      if (!org0 && user?.idOrganica0) {
+        org0 = normalizeClaveOrganica(user.idOrganica0) || undefined;
+      }
+      if (!org1 && user?.idOrganica1) {
+        org1 = normalizeClaveOrganica(user.idOrganica1) || undefined;
+      }
+
+      // Normalizar org keys
+      if (org0) org0 = normalizeClaveOrganica(org0) || undefined;
+      if (org1) org1 = normalizeClaveOrganica(org1) || undefined;
+
+      // Validar que existan org0 y org1
+      if (!org0 || !org1) {
+        return reply.code(400).send({
+          ok: false,
+          error: {
+            code: 'MISSING_ORGANICA_KEYS',
+            message: 'org0 y org1 son requeridos. Deben proporcionarse en query string o estar disponibles en el token del usuario.',
+            timestamp: new Date().toISOString()
+          }
+        });
+      }
+
+      // Obtener quincena y año
+      let quincena: number;
+      let anio: number;
+      let periodo: string;
+
+      if (query.periodo && query.periodo.length === 4) {
+        // Convertir periodo (QQAA) a quincena y año
+        periodo = query.periodo;
+        quincena = parseInt(periodo.slice(0, 2), 10);
+        const anio2 = periodo.slice(2, 4);
+        anio = parseInt('20' + anio2, 10);
+      } else {
+        // Obtener periodo desde BitacoraAfectacionOrg
+        const aportacionFondoRepo = request.diScope.resolve<IAportacionFondoRepository>('aportacionFondoRepo');
+        try {
+          const periodoData = await aportacionFondoRepo.obtenerPeriodoAplicacion(org0, org1);
+          periodo = periodoData.periodo;
+          quincena = parseInt(periodo.slice(0, 2), 10);
+          const anio2 = periodo.slice(2, 4);
+          anio = parseInt('20' + anio2, 10);
+        } catch (err: any) {
+          return reply.code(400).send({
+            ok: false,
+            error: {
+              code: 'PERIODO_NOT_FOUND',
+              message: `No se pudo obtener el período desde BitacoraAfectacionOrg para org0=${org0}, org1=${org1}. Proporcione el parámetro 'periodo' en la consulta.`,
+              timestamp: new Date().toISOString()
+            }
+          });
+        }
+      }
+
+      // Consultar el histórico
+      const repository = request.diScope.resolve<AplicacionQuincenalRepository>('aplicacionQuincenalRepo');
+      const historico = await repository.obtenerHistoricoRetenciones(org0, org1, quincena, anio);
+
+      return reply.code(200).send({
+        ok: true,
+        data: {
+          org0,
+          org1,
+          quincena,
+          anio,
+          periodo,
+          ...historico
+        }
+      });
+    } catch (error: any) {
+      return handleAplicacionQuincenalError(error, reply);
+    }
+  });
 }
 
