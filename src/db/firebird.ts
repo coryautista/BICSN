@@ -245,18 +245,24 @@ export async function testFirebirdConnection(): Promise<boolean> {
  * Usado por executeInTransaction para NO crear nueva transacción.
  */
 async function executeQueryOn(att: Attachment, tx: Transaction, sql: string, params: any[] = []): Promise<any[]> {
-  try {
-    const rs = await att.executeQuery(tx, sql, params);
-    try {
-      const rows = await rs.fetchAsObject<any>({ fetchSize: 1000 });
-      return rows.map((row: any) => decodeValue(row));
-    } finally {
-      await rs.close().catch(() => undefined);
-    }
-  } catch (_e) {
-    // Fallback: sentencia sin resultset (INSERT/UPDATE/DDL)
+  // Detectar si es una sentencia que NO devuelve resultset (INSERT/UPDATE/DELETE/EXECUTE/MERGE/CREATE/ALTER/DROP)
+  const trimmed = sql.trimStart().toUpperCase();
+  const isNonQuery = /^(INSERT|UPDATE|DELETE|EXECUTE|MERGE|CREATE|ALTER|DROP|SET)\b/.test(trimmed);
+
+  if (isNonQuery) {
+    // Usar att.execute directamente; NO usar executeQuery que ejecuta y luego falla al abrir cursor,
+    // causando doble ejecución al caer en el catch
     await att.execute(tx, sql, params);
     return [];
+  }
+
+  // SELECT u otras sentencias que devuelven resultset
+  const rs = await att.executeQuery(tx, sql, params);
+  try {
+    const rows = await rs.fetchAsObject<any>({ fetchSize: 1000 });
+    return rows.map((row: any) => decodeValue(row));
+  } finally {
+    await rs.close().catch(() => undefined);
   }
 }
 
@@ -407,6 +413,15 @@ export async function executeQueryWithNewConnection(sql: string, params: any[] =
 
         const tx = await att.startTransaction();
         try {
+          const trimmed = sql.trimStart().toUpperCase();
+          const isNonQuery = /^(INSERT|UPDATE|DELETE|EXECUTE|MERGE|CREATE|ALTER|DROP|SET)\b/.test(trimmed);
+
+          if (isNonQuery) {
+            await att.execute(tx, sql, params);
+            await tx.commit();
+            return [];
+          }
+
           const rs = await att.executeQuery(tx, sql, params);
           try {
             const rows = await rs.fetchAsObject<any>({ fetchSize: 1000 });

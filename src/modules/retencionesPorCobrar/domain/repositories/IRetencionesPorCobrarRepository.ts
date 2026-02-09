@@ -4,7 +4,9 @@ export interface IRetencionesPorCobrarRepository {
   getRetencionesPorCobrar(
     org0: string,
     org1: string,
-    periodo: string
+    periodo: string,
+    org2?: string,
+    org3?: string
   ): Promise<RetencionPorCobrar[]>;
   
   createRetencionesMoratorio(

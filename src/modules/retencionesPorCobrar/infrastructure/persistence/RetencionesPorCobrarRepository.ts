@@ -21,29 +21,30 @@ export class RetencionesPorCobrarRepository implements IRetencionesPorCobrarRepo
 
     logger.info(logContext, 'Iniciando consulta a ORGANICAS_INT_MORATORIO_GEN');
 
-    // Asegurar que los parámetros sean strings y estén limpios
+    // Asegurar que los parámetros sean strings; claves 2 dígitos, periodo 4 dígitos (0226 no 226)
     const clave0 = String(org0).trim().padStart(2, '0');
     const clave1 = String(org1).trim().padStart(2, '0');
-    const periodoStr = String(periodo).trim();
+    const periodoStr = String(periodo).trim().padStart(4, '0');
 
+    // Comparar como texto; en BD PERIODO puede ser INTEGER (226) o CHAR; normalizamos con LPAD
     const sql = `
       SELECT 
-        CLAVE_ORGANICA_0, 
-        CLAVE_ORGANICA_1, 
-        CLAVE_ORGANICA_2,
-        CLAVE_ORGANICA_3, 
-        PERIODO, 
-        FECHA_GENERACION, 
-        USER_ALTA, 
-        TIPO
-      FROM ORGANICAS_INT_MORATORIO_GEN
-      WHERE CLAVE_ORGANICA_0 = ? 
-        AND CLAVE_ORGANICA_1 = ? 
-        AND PERIODO = ?
+        r.CLAVE_ORGANICA_0, 
+        r.CLAVE_ORGANICA_1, 
+        r.CLAVE_ORGANICA_2,
+        r.CLAVE_ORGANICA_3, 
+        r.PERIODO, 
+        r.FECHA_GENERACION, 
+        r.USER_ALTA, 
+        r.TIPO
+      FROM ORGANICAS_INT_MORATORIO_GEN r
+      WHERE LPAD(TRIM(CAST(r.CLAVE_ORGANICA_0 AS VARCHAR(10))), 2, '0') = ?
+        AND LPAD(TRIM(CAST(r.CLAVE_ORGANICA_1 AS VARCHAR(10))), 2, '0') = ?
+        AND LPAD(TRIM(CAST(r.PERIODO AS VARCHAR(10))), 4, '0') = ?
     `;
 
     try {
-      // Usar executeSafeQuery con parámetros bind (odbc 2.4.9 debería funcionar correctamente)
+      // executeSafeQuery ya incluye serialización, timeout, y decodificación
       const result = await executeSafeQuery(sql, [clave0, clave1, periodoStr]);
       const duration = Date.now() - startTime;
 
@@ -80,7 +81,6 @@ export class RetencionesPorCobrarRepository implements IRetencionesPorCobrarRepo
         error: error.message || String(error),
         errorCode: error.code,
         errorName: error.name,
-        odbcErrors: error.odbcErrors,
         stack: error.stack,
         duracionMs: duration
       }, 'Error ejecutando consulta');
@@ -118,82 +118,100 @@ export class RetencionesPorCobrarRepository implements IRetencionesPorCobrarRepo
     const clave1 = String(org1).trim().padStart(2, '0');
     const clave2 = String(org2).trim().padStart(2, '0');
     const clave3 = String(org3).trim().padStart(2, '0');
-    const periodoStr = String(periodo).trim();
+    // Periodo siempre 4 dígitos con cero a la izquierda (ej. 226 -> 0226)
+    const periodoStr = String(periodo).trim().padStart(4, '0');
     const userAltaStr = String(userAlta).trim();
 
-    // Verificar si ya existen registros para estas claves orgánicas y periodo
-    logger.info(logContext, 'Verificando si ya existen registros');
-    const registrosExistentes = await this.getRetencionesPorCobrar(clave0, clave1, periodoStr);
-    
-    if (registrosExistentes.length > 0) {
-      logger.warn({
-        ...logContext,
-        existingRecordsCount: registrosExistentes.length
-      }, 'Ya existen registros para estas claves orgánicas y periodo');
-      
-      throw new RetencionesPorCobrarError(
-        `Ya existen registros para las claves orgánicas ${clave0}-${clave1} y periodo ${periodoStr}`,
-        RetencionesPorCobrarErrorCode.RECORDS_ALREADY_EXIST,
-        409 // Conflict
-      );
-    }
-
-    // Tipos de retención a crear
-    const tipos = ['PPV', 'PMP', 'PCP'];
+    const tiposRequeridos = ['PPV', 'PMP', 'PCP'];
 
     return executeInTransaction(async (transaction) => {
-      const registrosCreados: RetencionPorCobrar[] = [];
+      // Consultar por org0, org1 y periodo solamente; el filtro exacto (org2, org3) lo hacemos en código
+      // para evitar que Firebird no coincida por tipo/formato de columnas
+      const sqlExistentes = `
+        SELECT r.CLAVE_ORGANICA_0, r.CLAVE_ORGANICA_1, r.CLAVE_ORGANICA_2, r.CLAVE_ORGANICA_3,
+               r.PERIODO, r.FECHA_GENERACION, r.USER_ALTA, r.TIPO
+        FROM ORGANICAS_INT_MORATORIO_GEN r
+        WHERE LPAD(TRIM(CAST(r.CLAVE_ORGANICA_0 AS VARCHAR(10))), 2, '0') = ?
+          AND LPAD(TRIM(CAST(r.CLAVE_ORGANICA_1 AS VARCHAR(10))), 2, '0') = ?
+          AND LPAD(TRIM(CAST(r.PERIODO AS VARCHAR(10))), 4, '0') = ?
+      `;
+      const filasBrutas = await executeQueryInTransaction(transaction, sqlExistentes, [
+        clave0, clave1, periodoStr
+      ]);
 
-      for (const tipo of tipos) {
+      const getCol = (row: any, name: string): any => {
+        if (row[name] !== undefined && row[name] !== null) return row[name];
+        const lower = name.toLowerCase();
+        if (row[lower] !== undefined && row[lower] !== null) return row[lower];
+        return undefined;
+      };
+
+      const mapRow = (row: any): RetencionPorCobrar => ({
+        claveOrganica0: String(getCol(row, 'CLAVE_ORGANICA_0') ?? ''),
+        claveOrganica1: String(getCol(row, 'CLAVE_ORGANICA_1') ?? ''),
+        claveOrganica2: getCol(row, 'CLAVE_ORGANICA_2') != null ? String(getCol(row, 'CLAVE_ORGANICA_2')) : null,
+        claveOrganica3: getCol(row, 'CLAVE_ORGANICA_3') != null ? String(getCol(row, 'CLAVE_ORGANICA_3')) : null,
+        periodo: String(getCol(row, 'PERIODO') ?? ''),
+        fechaGeneracion: getCol(row, 'FECHA_GENERACION') ? new Date(getCol(row, 'FECHA_GENERACION')) : null,
+        userAlta: getCol(row, 'USER_ALTA') != null ? String(getCol(row, 'USER_ALTA')) : null,
+        tipo: String(getCol(row, 'TIPO') ?? '').trim()
+      });
+
+      const todosMapeados = (filasBrutas || []).map(mapRow);
+      const registrosExistentes = todosMapeados.filter((r) => {
+        const r2 = (r.claveOrganica2 ?? '').trim().padStart(2, '0');
+        const r3 = (r.claveOrganica3 ?? '').trim().padStart(2, '0');
+        const p = (r.periodo ?? '').trim().padStart(4, '0');
+        return r2 === clave2 && r3 === clave3 && p === periodoStr;
+      });
+
+      const tiposExistentes = new Set(registrosExistentes.map(r => r.tipo.toUpperCase().trim()));
+      const tiposAFaltantes = tiposRequeridos.filter(t => !tiposExistentes.has(t));
+
+      logger.info({
+        ...logContext,
+        filasOrgPeriodo: filasBrutas?.length ?? 0,
+        filasMismaClave: registrosExistentes.length,
+        tiposEncontrados: [...tiposExistentes],
+        tiposAFaltantes
+      }, 'Estado después de consultar existentes');
+
+      if (tiposAFaltantes.length > 0) {
+        logger.info({
+          ...logContext,
+          existentes: registrosExistentes.length,
+          tiposAFaltantes
+        }, 'Insertando solo los tipos que faltan');
+      }
+
+      const registrosCreados: RetencionPorCobrar[] = [...registrosExistentes];
+
+      for (const tipo of tiposAFaltantes) {
         const fechaGeneracion = new Date();
-        
         const sql = `
           INSERT INTO ORGANICAS_INT_MORATORIO_GEN 
-            (CLAVE_ORGANICA_0, CLAVE_ORGANICA_1, CLAVE_ORGANICA_2, CLAVE_ORGANICA_3, 
-             PERIODO, FECHA_GENERACION, USER_ALTA, TIPO) 
+            (CLAVE_ORGANICA_0, CLAVE_ORGANICA_1, CLAVE_ORGANICA_2, CLAVE_ORGANICA_3,
+             PERIODO, FECHA_GENERACION, USER_ALTA, TIPO)
           VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         `;
+        const params = [clave0, clave1, clave2, clave3, periodoStr, fechaGeneracion, userAltaStr, tipo];
 
-        const params = [
-          clave0,
-          clave1,
-          clave2,
-          clave3,
-          periodoStr,
-          fechaGeneracion,
-          userAltaStr,
-          tipo
-        ];
-
-        logger.debug({
-          ...logContext,
-          tipo,
-          fechaGeneracion: fechaGeneracion.toISOString()
-        }, 'Insertando registro');
+        logger.debug({ ...logContext, tipo }, 'Insertando registro');
 
         try {
           await executeQueryInTransaction(transaction, sql, params);
-
-          // Crear objeto del registro insertado
-          const registro: RetencionPorCobrar = {
+          registrosCreados.push({
             claveOrganica0: clave0,
             claveOrganica1: clave1,
             claveOrganica2: clave2,
             claveOrganica3: clave3,
             periodo: periodoStr,
-            fechaGeneracion: fechaGeneracion,
+            fechaGeneracion,
             userAlta: userAltaStr,
-            tipo: tipo
-          };
-
-          registrosCreados.push(registro);
+            tipo
+          });
         } catch (error: any) {
-          logger.error({
-            ...logContext,
-            tipo,
-            error: error.message || String(error),
-            stack: error.stack
-          }, 'Error insertando registro');
+          logger.error({ ...logContext, tipo, error: error.message || String(error), stack: error.stack }, 'Error insertando registro');
           throw new RetencionesPorCobrarError(
             `Error al insertar registro ${tipo} en ORGANICAS_INT_MORATORIO_GEN: ${error.message || String(error)}`,
             RetencionesPorCobrarErrorCode.FIREBIRD_QUERY_ERROR
@@ -204,9 +222,10 @@ export class RetencionesPorCobrarRepository implements IRetencionesPorCobrarRepo
       const duration = Date.now() - startTime;
       logger.info({
         ...logContext,
-        recordCount: registrosCreados.length,
+        totalRegistros: registrosCreados.length,
+        insertados: tiposAFaltantes.length,
         duracionMs: duration
-      }, 'Retenciones moratorio creadas exitosamente');
+      }, 'Retenciones moratorio creadas/actualizadas');
 
       return registrosCreados;
     });
