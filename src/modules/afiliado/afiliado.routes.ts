@@ -1400,6 +1400,7 @@ export default async function afiliadoRoutes(app: FastifyInstance) {
           dSueldo: { type: 'string', maxLength: 200, nullable: true },
           dOtrasPrestaciones: { type: 'string', maxLength: 200, nullable: true },
           dQuinquenios: { type: 'string', maxLength: 200, nullable: true },
+          numQuinquenios: { type: 'number', minimum: 1, nullable: true, description: 'Número de quinquenio (1, 2, 3...)' },
           bc: { type: 'string', maxLength: 30, nullable: true },
           porcentaje: { type: 'number', nullable: true },
           // Campos orgánicos opcionales (si no se envían, se obtienen del usuario autenticado)
@@ -1482,6 +1483,7 @@ export default async function afiliadoRoutes(app: FastifyInstance) {
                     sueldo: { type: 'number', nullable: true },
                     otrasPrestaciones: { type: 'number', nullable: true },
                     quinquenios: { type: 'number', nullable: true },
+                    numQuinquenios: { type: 'number', nullable: true },
                     activo: { type: 'boolean', nullable: true },
                     fechaMovAlt: { type: 'string', nullable: true },
                     orgs1: { type: 'string', nullable: true },
@@ -1642,6 +1644,7 @@ export default async function afiliadoRoutes(app: FastifyInstance) {
           dSueldo: parsed.data.dSueldo ?? null,
           dOtrasPrestaciones: parsed.data.dOtrasPrestaciones ?? null,
           dQuinquenios: parsed.data.dQuinquenios ?? null,
+          numQuinquenios: parsed.data.numQuinquenios ?? 1,
           aplicar: true,
           bc: parsed.data.bc ?? null,
           porcentaje: parsed.data.porcentaje ?? null
@@ -1714,6 +1717,7 @@ export default async function afiliadoRoutes(app: FastifyInstance) {
           dSueldo: { type: 'string', maxLength: 200, nullable: true },
           dOtrasPrestaciones: { type: 'string', maxLength: 200, nullable: true },
           dQuinquenios: { type: 'string', maxLength: 200, nullable: true },
+          numQuinquenios: { type: 'number', minimum: 1, nullable: true, description: 'Número de quinquenio (1, 2, 3...)' },
           bc: { type: 'string', maxLength: 30, nullable: true },
           porcentaje: { type: 'number', nullable: true },
           // Campos orgánicos opcionales (si no se envían, se obtienen del usuario autenticado)
@@ -1796,6 +1800,7 @@ export default async function afiliadoRoutes(app: FastifyInstance) {
                     sueldo: { type: 'number', nullable: true },
                     otrasPrestaciones: { type: 'number', nullable: true },
                     quinquenios: { type: 'number', nullable: true },
+                    numQuinquenios: { type: 'number', nullable: true },
                     activo: { type: 'boolean', nullable: true },
                     fechaMovAlt: { type: 'string', nullable: true },
                     orgs1: { type: 'string', nullable: true },
@@ -1998,6 +2003,7 @@ export default async function afiliadoRoutes(app: FastifyInstance) {
           dSueldo: { type: 'string', maxLength: 200, nullable: true },
           dOtrasPrestaciones: { type: 'string', maxLength: 200, nullable: true },
           dQuinquenios: { type: 'string', maxLength: 200, nullable: true },
+          numQuinquenios: { type: 'number', minimum: 1, nullable: true, description: 'Número de quinquenio (1, 2, 3...)' },
           bc: { type: 'string', maxLength: 30, nullable: true },
           porcentaje: { type: 'number', nullable: true },
           // Campos orgánicos opcionales (si no se envían, se obtienen del usuario autenticado)
@@ -2080,6 +2086,7 @@ export default async function afiliadoRoutes(app: FastifyInstance) {
                     sueldo: { type: 'number', nullable: true },
                     otrasPrestaciones: { type: 'number', nullable: true },
                     quinquenios: { type: 'number', nullable: true },
+                    numQuinquenios: { type: 'number', nullable: true },
                     activo: { type: 'boolean', nullable: true },
                     fechaMovAlt: { type: 'string', nullable: true },
                     orgs1: { type: 'string', nullable: true },
@@ -2282,6 +2289,7 @@ export default async function afiliadoRoutes(app: FastifyInstance) {
           dSueldo: { type: 'string', maxLength: 200, nullable: true },
           dOtrasPrestaciones: { type: 'string', maxLength: 200, nullable: true },
           dQuinquenios: { type: 'string', maxLength: 200, nullable: true },
+          numQuinquenios: { type: 'number', minimum: 1, nullable: true, description: 'Número de quinquenio (1, 2, 3...)' },
           bc: { type: 'string', maxLength: 30, nullable: true },
           porcentaje: { type: 'number', nullable: true },
           // Campos orgánicos opcionales (si no se envían, se obtienen del usuario autenticado)
@@ -2364,6 +2372,7 @@ export default async function afiliadoRoutes(app: FastifyInstance) {
                     sueldo: { type: 'number', nullable: true },
                     otrasPrestaciones: { type: 'number', nullable: true },
                     quinquenios: { type: 'number', nullable: true },
+                    numQuinquenios: { type: 'number', nullable: true },
                     activo: { type: 'boolean', nullable: true },
                     fechaMovAlt: { type: 'string', nullable: true },
                     orgs1: { type: 'string', nullable: true },
@@ -2564,6 +2573,7 @@ export default async function afiliadoRoutes(app: FastifyInstance) {
           dSueldo: { type: 'string', maxLength: 200, nullable: true },
           dOtrasPrestaciones: { type: 'string', maxLength: 200, nullable: true },
           dQuinquenios: { type: 'string', maxLength: 200, nullable: true },
+          numQuinquenios: { type: 'number', minimum: 1, nullable: true, description: 'Número de quinquenio (1, 2, 3...)' },
           bc: { type: 'string', maxLength: 30, nullable: true },
           porcentaje: { type: 'number', nullable: true },
           // Campos orgánicos opcionales (si no se envían, se obtienen del usuario autenticado)
@@ -2699,6 +2709,7 @@ export default async function afiliadoRoutes(app: FastifyInstance) {
           dSueldo: { type: 'string', maxLength: 200, nullable: true },
           dOtrasPrestaciones: { type: 'string', maxLength: 200, nullable: true },
           dQuinquenios: { type: 'string', maxLength: 200, nullable: true },
+          numQuinquenios: { type: 'number', minimum: 1, nullable: true, description: 'Número de quinquenio (1, 2, 3...)' },
           bc: { type: 'string', maxLength: 30, nullable: true },
           porcentaje: { type: 'number', nullable: true },
           // Campos orgánicos opcionales (si no se envían, se obtienen del usuario autenticado)
@@ -2865,6 +2876,7 @@ export default async function afiliadoRoutes(app: FastifyInstance) {
                       sueldo: { type: 'number', nullable: true },
                       otrasPrestaciones: { type: 'number', nullable: true },
                       quinquenios: { type: 'number', nullable: true },
+                      numQuinquenios: { type: 'number', nullable: true },
                       activo: { type: 'boolean', nullable: true },
                       fechaMovAlt: { type: 'string', nullable: true },
                       orgs1: { type: 'string', nullable: true },

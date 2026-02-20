@@ -101,6 +101,12 @@ async function buildApp() {
       'http://187.233.240.171:3000',    // IP externa para frontend
       'http://10.20.1.90:3000',         // IP interna para frontend
       'http://10.20.1.90:3001',         // IP interna para frontend
+      'http://187.233.255.163',
+      'https://187.233.255.163',
+      'http://187.233.255.163:3000',
+      'http://187.233.255.163:4000',
+      /^http:\/\/187\.233\.255\.163:\d+$/,  // Regex para cualquier puerto en esa IP (http)
+      /^https:\/\/187\.233\.255\.163:\d+$/, // Regex para cualquier puerto en esa IP (https)
       /^http:\/\/187\.233\.212\.215:\d+$/, // Regex para cualquier puerto en esa IP
       /^http:\/\/localhost:\d+$/        // localhost con cualquier puerto
     ],

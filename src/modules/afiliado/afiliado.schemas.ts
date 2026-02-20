@@ -95,6 +95,7 @@ export const CreateAfiliadoAfiliadoOrgMovimientoSchema = z.object({
   dSueldo: z.string().max(200).nullable().optional(),
   dOtrasPrestaciones: z.string().max(200).nullable().optional(),
   dQuinquenios: z.string().max(200).nullable().optional(),
+  numQuinquenios: z.number().int().min(1).nullable().optional(),
   aplicar: z.boolean().nullable().optional(),
   bc: z.string().max(30).nullable().optional(),
   porcentaje: z.number().nullable().optional(),

@@ -2828,73 +2828,48 @@ export async function createAfiliadoAfiliadoOrgMovimiento(data: {
   movimiento: Omit<Movimiento, 'id' | 'afiliadoId' | 'createdAt'>;
 }): Promise<{ afiliado: Afiliado; afiliadoOrg: AfiliadoOrg; movimiento: Movimiento }> {
   const p = await getPool();
-  
-  // Validar que no exista ya un afiliado activo (estatus = 1) con el mismo CURP, RFC o NSS
-  // Si numeroSeguroSocial es 0, vacío o null, no se incluye en la búsqueda
-  const request = p.request();
-  const conditions: string[] = [];
-  
-  // Agregar CURP si tiene valor
-  if (data.afiliado.curp) {
-    request.input('curp', sql.VarChar(18), data.afiliado.curp);
-    conditions.push('(curp = @curp AND curp IS NOT NULL)');
-  }
-  
-  // Agregar RFC si tiene valor
-  if (data.afiliado.rfc) {
-    request.input('rfc', sql.VarChar(13), data.afiliado.rfc);
-    conditions.push('(rfc = @rfc AND rfc IS NOT NULL)');
-  }
-  
-  // Agregar numeroSeguroSocial solo si tiene valor válido (no 0, no vacío, no null, no undefined)
-  const nss = data.afiliado.numeroSeguroSocial;
-  const nssIsValid = nss !== null && 
-                     nss !== undefined && 
-                     nss !== '' && 
-                     nss !== '0' && 
-                     String(nss).trim() !== '' && 
-                     String(nss).trim() !== '0';
-  
-  if (nssIsValid) {
-    request.input('numeroSeguroSocial', sql.VarChar(50), nss);
-    conditions.push('(numeroSeguroSocial = @numeroSeguroSocial AND numeroSeguroSocial IS NOT NULL)');
-  }
-  
-  // Si no hay condiciones válidas, no hacer la validación
-  if (conditions.length === 0) {
-    // No hay campos para validar, continuar sin validación
-  } else {
-    const whereClause = conditions.join(' OR ');
-    const query = `
-      SELECT id, curp, rfc, numeroSeguroSocial, estatus
-      FROM afi.Afiliado
-      WHERE (${whereClause})
-        AND estatus = 1
-    `;
-    
-    const validationResult = await request.query(query);
 
-    if (validationResult.recordset.length > 0) {
-      const existing = validationResult.recordset[0];
-      let duplicateField = '';
-      let duplicateValue = '';
-      if (data.afiliado.curp && existing.curp === data.afiliado.curp) {
-        duplicateField = 'CURP';
-        duplicateValue = existing.curp;
-      } else if (data.afiliado.rfc && existing.rfc === data.afiliado.rfc) {
-        duplicateField = 'RFC';
-        duplicateValue = existing.rfc;
-      } else if (nssIsValid && existing.numeroSeguroSocial === data.afiliado.numeroSeguroSocial) {
-        duplicateField = 'Número de Seguro Social';
-        duplicateValue = existing.numeroSeguroSocial;
-      }
-      
+  // Calcular quincenaAplicacion y anioAplicacion basado en la orgánica (se necesita antes de validar duplicados)
+  let quincenaAplicacion = data.afiliado.quincenaAplicacion;
+  let anioAplicacion = data.afiliado.anioAplicacion;
+  
+  if (quincenaAplicacion === null || quincenaAplicacion === undefined || 
+      anioAplicacion === null || anioAplicacion === undefined) {
+    const calculatedValues = await getQuincenaAplicacion(
+      data.afiliadoOrg.claveOrganica0 || '',
+      data.afiliadoOrg.claveOrganica1,
+      data.afiliadoOrg.claveOrganica2,
+      data.afiliadoOrg.claveOrganica3,
+      data.movimiento.creadoPor ?? undefined
+    );
+    quincenaAplicacion = calculatedValues.quincena;
+    anioAplicacion = calculatedValues.anio;
+    
+    console.log(`Quincena calculada para orgánica ${data.afiliadoOrg.claveOrganica0}/${data.afiliadoOrg.claveOrganica1}/${data.afiliadoOrg.claveOrganica2}/${data.afiliadoOrg.claveOrganica3}: ${quincenaAplicacion}, Año: ${anioAplicacion}`);
+  }
+
+  // Validar que no exista ya un registro para el mismo interno en la misma quincena y año
+  const interno = data.afiliado.interno;
+  if (interno != null && interno > 0 && quincenaAplicacion != null && anioAplicacion != null) {
+    const dupResult = await p.request()
+      .input('interno', sql.Int, interno)
+      .input('quincenaAplicacion', sql.TinyInt, quincenaAplicacion)
+      .input('anioAplicacion', sql.SmallInt, anioAplicacion)
+      .query(`
+        SELECT id, interno, quincenaAplicacion, anioAplicacion
+        FROM afi.Afiliado
+        WHERE interno = @interno
+          AND quincenaAplicacion = @quincenaAplicacion
+          AND anioAplicacion = @anioAplicacion
+          AND estatus = 1
+      `);
+
+    if (dupResult.recordset.length > 0) {
       const error = new AfiliadoAlreadyExistsError({
-        field: duplicateField,
-        value: duplicateValue
+        field: 'interno',
+        value: String(interno)
       });
-      // Sobrescribir el mensaje con uno más específico
-      error.message = `Ya existe un afiliado activo registrado con el mismo ${duplicateField}: ${duplicateValue}`;
+      error.message = `Ya existe un registro para el interno ${interno} en la quincena ${quincenaAplicacion} del año ${anioAplicacion}`;
       throw error;
     }
   }
@@ -2913,26 +2888,6 @@ export async function createAfiliadoAfiliadoOrgMovimiento(data: {
       `);
       folio = folioResult.recordset[0].nextFolio;
       console.log(`Folio auto-generado: ${folio}`);
-    }
-
-    // Calcular quincenaAplicacion y anioAplicacion basado en la orgánica si no se proporcionan
-    let quincenaAplicacion = data.afiliado.quincenaAplicacion;
-    let anioAplicacion = data.afiliado.anioAplicacion;
-    
-    if (quincenaAplicacion === null || quincenaAplicacion === undefined || 
-        anioAplicacion === null || anioAplicacion === undefined) {
-      // Usar los datos de orgánica para consultar la quincena específica
-      const calculatedValues = await getQuincenaAplicacion(
-        data.afiliadoOrg.claveOrganica0 || '',
-        data.afiliadoOrg.claveOrganica1,
-        data.afiliadoOrg.claveOrganica2,
-        data.afiliadoOrg.claveOrganica3,
-        data.movimiento.creadoPor ?? undefined
-      );
-      quincenaAplicacion = calculatedValues.quincena;
-      anioAplicacion = calculatedValues.anio;
-      
-      console.log(`Quincena calculada para orgánica ${data.afiliadoOrg.claveOrganica0}/${data.afiliadoOrg.claveOrganica1}/${data.afiliadoOrg.claveOrganica2}/${data.afiliadoOrg.claveOrganica3}: ${quincenaAplicacion}, Año: ${anioAplicacion}`);
     }
 
     // Create Afiliado con las nuevas columnas
@@ -3009,7 +2964,11 @@ export async function createAfiliadoAfiliadoOrgMovimiento(data: {
     console.log(`Afiliado creado - ID: ${afiliadoId}, Folio: ${afiliadoRow.folio}, QuincenaAplicacion: ${afiliadoRow.quincenaAplicacion}, AnioAplicacion: ${afiliadoRow.anioAplicacion}`);
 
     // Create AfiliadoOrg
-    const afiliadoOrgRequest = transaction.request()
+    const hasNumQuinquenios = (await p.request().query(`
+      SELECT COL_LENGTH('afi.AfiliadoOrg', 'numQuinquenios') AS len
+    `)).recordset[0]?.len != null;
+
+    let afiliadoOrgRequest = transaction.request()
       .input('afiliadoId', sql.Int, afiliadoId)
       .input('nivel0Id', sql.BigInt, data.afiliadoOrg.nivel0Id)
       .input('nivel1Id', sql.BigInt, data.afiliadoOrg.nivel1Id)
@@ -3036,13 +2995,20 @@ export async function createAfiliadoAfiliadoOrgMovimiento(data: {
       .input('bc', sql.VarChar(30), data.afiliadoOrg.bc)
       .input('porcentaje', sql.Decimal(9, 4), data.afiliadoOrg.porcentaje);
 
+    if (hasNumQuinquenios) {
+      afiliadoOrgRequest = afiliadoOrgRequest.input('numQuinquenios', sql.Int, data.afiliadoOrg.numQuinquenios ?? 1);
+    }
+
+    const numQuinCols = hasNumQuinquenios ? ', numQuinquenios' : '';
+    const numQuinVals = hasNumQuinquenios ? ', @numQuinquenios' : '';
+
     const afiliadoOrgResult = await afiliadoOrgRequest.query(`
       INSERT INTO afi.AfiliadoOrg (
         afiliadoId, nivel0Id, nivel1Id, nivel2Id, nivel3Id,
         claveOrganica0, claveOrganica1, claveOrganica2, claveOrganica3,
         interno, sueldo, otrasPrestaciones, quinquenios, activo,
         fechaMovAlt, orgs1, orgs2, orgs3, orgs4, dSueldo,
-        dOtrasPrestaciones, dQuinquenios, aplicar, bc, porcentaje
+        dOtrasPrestaciones, dQuinquenios, aplicar, bc, porcentaje${numQuinCols}
       )
       OUTPUT INSERTED.*
       VALUES (
@@ -3050,7 +3016,7 @@ export async function createAfiliadoAfiliadoOrgMovimiento(data: {
         @claveOrganica0, @claveOrganica1, @claveOrganica2, @claveOrganica3,
         @interno, @sueldo, @otrasPrestaciones, @quinquenios, @activo,
         @fechaMovAlt, @orgs1, @orgs2, @orgs3, @orgs4, @dSueldo,
-        @dOtrasPrestaciones, @dQuinquenios, @aplicar, @bc, @porcentaje
+        @dOtrasPrestaciones, @dQuinquenios, @aplicar, @bc, @porcentaje${numQuinVals}
       )
     `);
 

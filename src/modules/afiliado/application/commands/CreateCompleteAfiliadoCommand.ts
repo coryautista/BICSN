@@ -41,31 +41,56 @@ export class CreateCompleteAfiliadoCommand {
 
     logger.info(logContext, 'Iniciando creación completa de afiliado');
 
-    // Validar duplicados de CURP, RFC o NSS
-    const duplicateQuery = await this.mssqlPool.request()
-      .input('curp', sql.VarChar(18), data.afiliado.curp)
-      .input('rfc', sql.VarChar(13), data.afiliado.rfc)
-      .input('numeroSeguroSocial', sql.VarChar(50), data.afiliado.numeroSeguroSocial)
-      .query(`
-        SELECT id, curp, rfc, numeroSeguroSocial
-        FROM afi.Afiliado
-        WHERE (curp = @curp AND curp IS NOT NULL)
-           OR (rfc = @rfc AND rfc IS NOT NULL)
-           OR (numeroSeguroSocial = @numeroSeguroSocial AND numeroSeguroSocial IS NOT NULL)
-      `);
+    // Calcular quincena y año antes de validar duplicados
+    let quincenaAplicacion = data.afiliado.quincenaAplicacion;
+    let anioAplicacion = data.afiliado.anioAplicacion;
+    
+    if (!quincenaAplicacion || !anioAplicacion) {
+      const quincenaData = await this.getQuincenaAplicacion(
+        data.afiliadoOrg.claveOrganica0 || '',
+        data.afiliadoOrg.claveOrganica1,
+        data.afiliadoOrg.claveOrganica2,
+        data.afiliadoOrg.claveOrganica3,
+        data.movimiento.creadoPor || undefined
+      );
+      quincenaAplicacion = quincenaData.quincena;
+      anioAplicacion = quincenaData.anio;
+      logger.info({
+        ...logContext,
+        quincenaAplicacion,
+        anioAplicacion,
+        claveOrganica0: data.afiliadoOrg.claveOrganica0,
+        claveOrganica1: data.afiliadoOrg.claveOrganica1,
+        claveOrganica2: data.afiliadoOrg.claveOrganica2,
+        claveOrganica3: data.afiliadoOrg.claveOrganica3
+      }, 'Quincena calculada para orgánica');
+    }
 
-    if (duplicateQuery.recordset.length > 0) {
-      const duplicate = duplicateQuery.recordset[0];
-      const duplicateField = duplicate.curp === data.afiliado.curp ? 'CURP'
-        : duplicate.rfc === data.afiliado.rfc ? 'RFC'
-        : 'NSS';
+    // Validar que no exista ya un registro para el mismo interno en la misma quincena y año
+    const interno = data.afiliado.interno;
+    if (interno != null && interno > 0 && quincenaAplicacion != null && anioAplicacion != null) {
+      const dupResult = await this.mssqlPool.request()
+        .input('interno', sql.Int, interno)
+        .input('quincenaAplicacion', sql.TinyInt, quincenaAplicacion)
+        .input('anioAplicacion', sql.SmallInt, anioAplicacion)
+        .query(`
+          SELECT id, interno, quincenaAplicacion, anioAplicacion
+          FROM afi.Afiliado
+          WHERE interno = @interno
+            AND quincenaAplicacion = @quincenaAplicacion
+            AND anioAplicacion = @anioAplicacion
+            AND estatus = 1
+        `);
 
-      logger.warn({ ...logContext, duplicateField, duplicateId: duplicate.id }, `Afiliado ya existe con ${duplicateField}`);
-      throw new AfiliadoAlreadyExistsError({
-        field: duplicateField,
-        value: duplicate[duplicateField.toLowerCase()],
-        existingId: duplicate.id
-      });
+      if (dupResult.recordset.length > 0) {
+        logger.warn({ ...logContext, interno, quincenaAplicacion, anioAplicacion, duplicateId: dupResult.recordset[0].id }, 'Ya existe registro para este interno en la misma quincena/año');
+        const error = new AfiliadoAlreadyExistsError({
+          field: 'interno',
+          value: String(interno)
+        });
+        error.message = `Ya existe un registro para el interno ${interno} en la quincena ${quincenaAplicacion} del año ${anioAplicacion}`;
+        throw error;
+      }
     }
 
     // Iniciar transacción
@@ -83,31 +108,6 @@ export class CreateCompleteAfiliadoCommand {
         `);
         folio = folioResult.recordset[0].nextFolio;
         logger.info({ ...logContext, folio }, 'Folio auto-generado para afiliado');
-      }
-
-      // Calcular quincena y año si no se proporcionan
-      let quincenaAplicacion = data.afiliado.quincenaAplicacion;
-      let anioAplicacion = data.afiliado.anioAplicacion;
-      
-      if (!quincenaAplicacion || !anioAplicacion) {
-        const quincenaData = await this.getQuincenaAplicacion(
-          data.afiliadoOrg.claveOrganica0 || '',
-          data.afiliadoOrg.claveOrganica1,
-          data.afiliadoOrg.claveOrganica2,
-          data.afiliadoOrg.claveOrganica3,
-          data.movimiento.creadoPor || undefined
-        );
-        quincenaAplicacion = quincenaData.quincena;
-        anioAplicacion = quincenaData.anio;
-        logger.info({
-          ...logContext,
-          quincenaAplicacion,
-          anioAplicacion,
-          claveOrganica0: data.afiliadoOrg.claveOrganica0,
-          claveOrganica1: data.afiliadoOrg.claveOrganica1,
-          claveOrganica2: data.afiliadoOrg.claveOrganica2,
-          claveOrganica3: data.afiliadoOrg.claveOrganica3
-        }, 'Quincena calculada para orgánica');
       }
 
       // Insertar Afiliado

@@ -492,6 +492,7 @@ export async function createAfiliadoAfiliadoOrgMovimientoService(data: {
   dSueldo?: string | null;
   dOtrasPrestaciones?: string | null;
   dQuinquenios?: string | null;
+  numQuinquenios?: number | null;
   aplicar?: boolean | null;
   bc?: string | null;
   porcentaje?: number | null;
@@ -596,6 +597,7 @@ export async function createAfiliadoAfiliadoOrgMovimientoService(data: {
       dSueldo: data.dSueldo ?? null,
       dOtrasPrestaciones: data.dOtrasPrestaciones ?? null,
       dQuinquenios: data.dQuinquenios ?? null,
+      numQuinquenios: data.numQuinquenios ?? 1,
       aplicar: data.aplicar ?? null,
       bc: data.bc ?? null,
       porcentaje: data.porcentaje ?? null
