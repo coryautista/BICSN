@@ -1,0 +1,216 @@
+@echo off
+setlocal EnableExtensions EnableDelayedExpansion
+
+set "APP_NAME=BICSN"
+set "ROOT=%~dp0"
+set "DIST_DIR=%ROOT%dist-deploy"
+set "PACKAGE_DIR=%DIST_DIR%\%APP_NAME%"
+set "TOOLS_DIR=%ROOT%tools"
+set "LOCAL_PSCP=%TOOLS_DIR%\pscp.exe"
+set "LOCAL_PLINK=%TOOLS_DIR%\plink.exe"
+set "SSH_HOST=10.20.1.90"
+set "SSH_USER=des"
+set "SSH_PASS=Desarroll0."
+set "SSH_TARGET=/home/des/back/"
+for /f %%i in ('powershell -NoProfile -Command "Get-Date -Format yyyyMMdd-HHmm"') do set "TIMESTAMP=%%i"
+set "RAR_NAME=%APP_NAME%-deploy-%TIMESTAMP%.rar"
+set "RAR_PATH=%DIST_DIR%\%RAR_NAME%"
+set "LOG_PATH=%DIST_DIR%\deploy-%TIMESTAMP%.log"
+
+where rar.exe >nul 2>nul
+if %ERRORLEVEL% EQU 0 (
+  set "RAR_CMD=rar.exe"
+  goto :rar_found
+)
+
+if exist "C:\Program Files\WinRAR\Rar.exe" (
+  set "RAR_CMD=C:\Program Files\WinRAR\Rar.exe"
+  goto :rar_found
+)
+
+if exist "C:\Program Files (x86)\WinRAR\Rar.exe" (
+  set "RAR_CMD=C:\Program Files (x86)\WinRAR\Rar.exe"
+  goto :rar_found
+)
+
+echo No se encontro WinRAR/RAR en el equipo.
+echo Instala WinRAR o agrega rar.exe al PATH para generar el archivo .rar.
+goto :error_exit
+
+:rar_found
+echo Preparando paquete de backend...
+if exist "%DIST_DIR%" rmdir /s /q "%DIST_DIR%"
+mkdir "%PACKAGE_DIR%"
+
+robocopy "%ROOT%src" "%PACKAGE_DIR%\src" /E /NFL /NDL /NJH /NJS /NP >nul
+if %ERRORLEVEL% GEQ 8 (
+  echo Error copiando src.
+  goto :error_exit
+)
+
+robocopy "%ROOT%types" "%PACKAGE_DIR%\types" /E /NFL /NDL /NJH /NJS /NP >nul
+if %ERRORLEVEL% GEQ 8 (
+  echo Error copiando types.
+  goto :error_exit
+)
+
+copy "%ROOT%package.json" "%PACKAGE_DIR%\package.json" >nul
+if %ERRORLEVEL% NEQ 0 (
+  echo Error copiando package.json.
+  goto :error_exit
+)
+
+copy "%ROOT%package-lock.json" "%PACKAGE_DIR%\package-lock.json" >nul
+if %ERRORLEVEL% NEQ 0 (
+  echo Error copiando package-lock.json.
+  goto :error_exit
+)
+
+copy "%ROOT%tsconfig.json" "%PACKAGE_DIR%\tsconfig.json" >nul
+if %ERRORLEVEL% NEQ 0 (
+  echo Error copiando tsconfig.json.
+  goto :error_exit
+)
+
+if exist "%ROOT%Dockerfile" copy "%ROOT%Dockerfile" "%PACKAGE_DIR%\Dockerfile" >nul
+if exist "%ROOT%docker-compose.yml" copy "%ROOT%docker-compose.yml" "%PACKAGE_DIR%\docker-compose.yml" >nul
+
+echo node_modules/> "%PACKAGE_DIR%\.dockerignore"
+echo dist/>> "%PACKAGE_DIR%\.dockerignore"
+echo dist-deploy/>> "%PACKAGE_DIR%\.dockerignore"
+echo logs/>> "%PACKAGE_DIR%\.dockerignore"
+echo .git/>> "%PACKAGE_DIR%\.dockerignore"
+echo *.rar>> "%PACKAGE_DIR%\.dockerignore"
+echo .env>> "%PACKAGE_DIR%\.dockerignore"
+
+echo # Paquete para backend> "%PACKAGE_DIR%\README-DEPLOY.txt"
+echo Este RAR contiene solo los archivos necesarios para instalar y construir el backend en el servidor.>> "%PACKAGE_DIR%\README-DEPLOY.txt"
+echo No incluye node_modules, dist, dist-deploy, logs ni .env.>> "%PACKAGE_DIR%\README-DEPLOY.txt"
+echo Configura las variables de entorno en el servidor antes de construir/ejecutar.>> "%PACKAGE_DIR%\README-DEPLOY.txt"
+
+echo Generando archivo RAR...
+pushd "%DIST_DIR%" >nul
+"%RAR_CMD%" a -r -ep1 "%RAR_PATH%" "%APP_NAME%\*" >nul
+if %ERRORLEVEL% NEQ 0 (
+  popd >nul
+  echo Error generando el archivo RAR.
+  goto :error_exit
+)
+popd >nul
+
+echo Archivo generado correctamente:
+echo "%RAR_PATH%"
+
+where pscp.exe >nul 2>nul
+if %ERRORLEVEL% EQU 0 (
+  set "PSCP_CMD=pscp.exe"
+  goto :pscp_found
+)
+
+if exist "C:\Program Files\PuTTY\pscp.exe" (
+  set "PSCP_CMD=C:\Program Files\PuTTY\pscp.exe"
+  goto :pscp_found
+)
+
+if exist "C:\Program Files (x86)\PuTTY\pscp.exe" (
+  set "PSCP_CMD=C:\Program Files (x86)\PuTTY\pscp.exe"
+  goto :pscp_found
+)
+
+if exist "%LOCAL_PSCP%" (
+  set "PSCP_CMD=%LOCAL_PSCP%"
+  goto :pscp_found
+)
+
+echo No se encontro pscp.exe. Descargando PuTTY PSCP localmente...
+if not exist "%TOOLS_DIR%" mkdir "%TOOLS_DIR%"
+powershell -NoProfile -ExecutionPolicy Bypass -Command "Invoke-WebRequest -Uri 'https://the.earth.li/~sgtatham/putty/latest/w64/pscp.exe' -OutFile '%LOCAL_PSCP%'" > "%LOG_PATH%" 2>&1
+if %ERRORLEVEL% NEQ 0 (
+  echo No se pudo descargar pscp.exe.
+  echo Detalle del error:
+  type "%LOG_PATH%"
+  echo El archivo quedo generado localmente en:
+  echo "%RAR_PATH%"
+  goto :error_exit
+)
+
+set "PSCP_CMD=%LOCAL_PSCP%"
+
+:pscp_found
+where plink.exe >nul 2>nul
+if %ERRORLEVEL% EQU 0 (
+  set "PLINK_CMD=plink.exe"
+  goto :plink_found
+)
+
+if exist "C:\Program Files\PuTTY\plink.exe" (
+  set "PLINK_CMD=C:\Program Files\PuTTY\plink.exe"
+  goto :plink_found
+)
+
+if exist "C:\Program Files (x86)\PuTTY\plink.exe" (
+  set "PLINK_CMD=C:\Program Files (x86)\PuTTY\plink.exe"
+  goto :plink_found
+)
+
+if exist "%LOCAL_PLINK%" (
+  set "PLINK_CMD=%LOCAL_PLINK%"
+  goto :plink_found
+)
+
+echo No se encontro plink.exe. Descargando PuTTY PLINK localmente...
+if not exist "%TOOLS_DIR%" mkdir "%TOOLS_DIR%"
+powershell -NoProfile -ExecutionPolicy Bypass -Command "Invoke-WebRequest -Uri 'https://the.earth.li/~sgtatham/putty/latest/w64/plink.exe' -OutFile '%LOCAL_PLINK%'" > "%LOG_PATH%" 2>&1
+if %ERRORLEVEL% NEQ 0 (
+  echo No se pudo descargar plink.exe para ajustar permisos remotos.
+  echo Detalle del error:
+  type "%LOG_PATH%"
+  echo El archivo quedo generado localmente en:
+  echo "%RAR_PATH%"
+  goto :error_exit
+)
+
+set "PLINK_CMD=%LOCAL_PLINK%"
+
+:plink_found
+echo Ajustando permisos de %SSH_TARGET% en el servidor...
+echo y| "%PLINK_CMD%" -ssh -pw "%SSH_PASS%" "%SSH_USER%@%SSH_HOST%" "echo %SSH_PASS% | sudo -S mkdir -p %SSH_TARGET% && echo %SSH_PASS% | sudo -S chown %SSH_USER%:%SSH_USER% %SSH_TARGET% && chmod 755 %SSH_TARGET%" > "%LOG_PATH%" 2>&1
+if %ERRORLEVEL% NEQ 0 (
+  echo Error ajustando permisos del directorio remoto.
+  echo Detalle del error:
+  type "%LOG_PATH%"
+  echo El archivo quedo generado localmente en:
+  echo "%RAR_PATH%"
+  goto :error_exit
+)
+
+echo Copiando RAR a %SSH_USER%@%SSH_HOST%:%SSH_TARGET% ...
+echo Comando: "%PSCP_CMD%" -pw ***** "%RAR_PATH%" "%SSH_USER%@%SSH_HOST%:%SSH_TARGET%"
+echo y| "%PSCP_CMD%" -pw "%SSH_PASS%" "%RAR_PATH%" "%SSH_USER%@%SSH_HOST%:%SSH_TARGET%" > "%LOG_PATH%" 2>&1
+if %ERRORLEVEL% NEQ 0 (
+  echo Error copiando el RAR al servidor.
+  echo Detalle del error:
+  type "%LOG_PATH%"
+  echo El archivo quedo generado localmente en:
+  echo "%RAR_PATH%"
+  echo Log guardado en:
+  echo "%LOG_PATH%"
+  goto :error_exit
+)
+
+echo Archivo copiado correctamente a %SSH_USER%@%SSH_HOST%:%SSH_TARGET%
+echo Log guardado en:
+echo "%LOG_PATH%"
+goto :success_exit
+
+:error_exit
+echo.
+echo Proceso terminado con error. Presiona una tecla para cerrar...
+pause >nul
+exit /b 1
+
+:success_exit
+echo.
+echo Proceso terminado correctamente. Presiona una tecla para cerrar...
+pause >nul
+exit /b 0

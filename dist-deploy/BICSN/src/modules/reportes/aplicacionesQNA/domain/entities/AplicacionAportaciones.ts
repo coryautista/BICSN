@@ -1,0 +1,50 @@
+export interface AplicacionAportaciones {
+  interno: number;
+  nombre: string;
+  sueldom: number;
+  otrasPrestaciones: number;
+  quinquenios: number;
+  sueldoq: number;
+  opq: number;
+  qq: number;
+  sare: number;
+  fra: number;
+  fre: number;
+  fhe: number;
+  fve: number;
+  faa: number;
+  fae: number;
+  fat: number;
+  fai: number;
+  sFra: number;
+  sFre: number;
+  sFhe: number;
+  sFve: number;
+  sFaa: number;
+  sFae: number;
+  sFat: number;
+  sFai: number;
+  tFra: number;
+  tFre: number;
+  tFhe: number;
+  tFve: number;
+  tFaa: number;
+  tFae: number;
+  tFat: number;
+  tFai: number;
+  org0: string;
+  org1: string;
+  rfc: string;
+  // Campos calculados de aportaciones
+  sueldoBase?: number;
+  aportacionAhorro?: number;
+  aportacionAhorroPatron?: number;
+  aportacionAhorroEmpleado?: number;
+  aportacionVivienda?: number;
+  aportacionPrestaciones?: number;
+  aportacionPrestacionesPatron?: number;
+  aportacionPrestacionesEmpleado?: number;
+  aportacionCair?: number;
+  totalAportaciones?: number;
+}
+
