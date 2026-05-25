@@ -68,7 +68,9 @@ export default async function aportacionesFondosRoutes(app: FastifyInstance) {
                       afpe: { type: 'number' },
                       afpa: { type: 'number' },
                       total: { type: 'number' },
-                      tipo: { type: 'string' }
+                      tipo: { type: 'string' },
+                      dias_laborados: { type: 'number' },
+                      dias_laborados_origen: { type: 'string', enum: ['nomina', 'default'] }
                     }
                   }
                 },
@@ -148,7 +150,8 @@ export default async function aportacionesFondosRoutes(app: FastifyInstance) {
         isEntidad,
         parsed.data.clave_organica_0,
         parsed.data.clave_organica_1,
-        user.sub?.toString()
+        user.sub?.toString(),
+        String((req.query as any)?.usarDiasLaboradosNomina || '') === '1'
       );
 
       return reply.send(ok(result));
@@ -815,7 +818,9 @@ export default async function aportacionesFondosRoutes(app: FastifyInstance) {
                       menor_rfc: { type: 'string', nullable: true },
                       menor_nivel: { type: 'string', nullable: true },
                       menor_sala: { type: 'string', nullable: true },
-                      estatus: { type: 'string', nullable: true }
+                      estatus: { type: 'string', nullable: true },
+                      dias_laborados: { type: 'number' },
+                      dias_laborados_origen: { type: 'string', enum: ['nomina', 'default'] }
                     }
                   }
                 }
@@ -891,7 +896,8 @@ export default async function aportacionesFondosRoutes(app: FastifyInstance) {
         isEntidad,
         (req.query as any)?.clave_organica_0,
         (req.query as any)?.clave_organica_1,
-        user.sub?.toString()
+        user.sub?.toString(),
+        String((req.query as any)?.usarDiasLaboradosNomina || '') === '1'
       );
 
       const duration = Date.now() - startTime;
@@ -1002,7 +1008,9 @@ export default async function aportacionesFondosRoutes(app: FastifyInstance) {
                       transorg0: { type: 'string', nullable: true },
                       transorg1: { type: 'string', nullable: true },
                       transnorg0: { type: 'string', nullable: true },
-                      transnorg1: { type: 'string', nullable: true }
+                      transnorg1: { type: 'string', nullable: true },
+                      dias_laborados: { type: 'number' },
+                      dias_laborados_origen: { type: 'string', enum: ['nomina', 'default'] }
                     }
                   }
                 }
@@ -1078,7 +1086,8 @@ export default async function aportacionesFondosRoutes(app: FastifyInstance) {
         isEntidad,
         (req.query as any)?.clave_organica_0,
         (req.query as any)?.clave_organica_1,
-        user.sub?.toString()
+        user.sub?.toString(),
+        String((req.query as any)?.usarDiasLaboradosNomina || '') === '1'
       );
 
       const duration = Date.now() - startTime;
@@ -1167,7 +1176,9 @@ export default async function aportacionesFondosRoutes(app: FastifyInstance) {
                       norg0: { type: 'string', nullable: true },
                       norg1: { type: 'string', nullable: true },
                       norg2: { type: 'string', nullable: true },
-                      norg3: { type: 'string', nullable: true }
+                      norg3: { type: 'string', nullable: true },
+                      dias_laborados: { type: 'number' },
+                      dias_laborados_origen: { type: 'string', enum: ['nomina', 'default'] }
                     }
                   }
                 }
@@ -1243,7 +1254,8 @@ export default async function aportacionesFondosRoutes(app: FastifyInstance) {
         isEntidad,
         (req.query as any)?.clave_organica_0,
         (req.query as any)?.clave_organica_1,
-        user.sub?.toString()
+        user.sub?.toString(),
+        String((req.query as any)?.usarDiasLaboradosNomina || '') === '1'
       );
 
       const duration = Date.now() - startTime;

@@ -27,7 +27,7 @@ export const AfiliadoOrgSchema = z.object({
   aplicar: z.boolean().nullable(),
   bc: z.string().max(30).nullable(),
   porcentaje: z.number().nullable(),
-  numQuinquenios: z.number().int().nullable(),
+  numQuinquenios: z.number().int().min(0).nullable(),
   createdAt: z.string().datetime(),
   updatedAt: z.string().datetime()
 });
@@ -58,7 +58,7 @@ export const CreateAfiliadoOrgSchema = z.object({
   aplicar: z.boolean().nullable().optional(),
   bc: z.string().max(30).nullable().optional(),
   porcentaje: z.number().nullable().optional(),
-  numQuinquenios: z.number().int().nullable().optional()
+  numQuinquenios: z.number().int().min(0).nullable().optional()
 });
 
 export const UpdateAfiliadoOrgSchema = z.object({
@@ -86,7 +86,7 @@ export const UpdateAfiliadoOrgSchema = z.object({
   aplicar: z.boolean().nullable().optional(),
   bc: z.string().max(30).nullable().optional(),
   porcentaje: z.number().nullable().optional(),
-  numQuinquenios: z.number().int().nullable().optional()
+  numQuinquenios: z.number().int().min(0).nullable().optional()
 }).refine(
   (data) => Object.keys(data).length > 0,
   { message: 'At least one field must be provided for update' }

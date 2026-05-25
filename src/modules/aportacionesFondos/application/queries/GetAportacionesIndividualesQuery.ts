@@ -11,7 +11,8 @@ export class GetAportacionesIndividualesQuery {
     isEntidad: boolean,
     claveOrganica0?: string,
     claveOrganica1?: string,
-    userId?: string
+    userId?: string,
+    usarDiasLaboradosNomina = false
   ): Promise<AportacionIndividual> {
     console.log(`[APORTACIONES_FONDOS] Consultando aportaciones individuales - Tipo: ${tipo}, Usuario: ${userId || 'desconocido'}`);
 
@@ -28,7 +29,8 @@ export class GetAportacionesIndividualesQuery {
       const result = await this.aportacionFondoRepo.obtenerAportacionesIndividuales(
         tipo,
         claves.clave0,
-        claves.clave1
+        claves.clave1,
+        usarDiasLaboradosNomina
       );
 
       console.log(`[APORTACIONES_FONDOS] Se encontraron ${result.datos.length} registros para tipo ${tipo}`);

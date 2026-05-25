@@ -11,7 +11,8 @@ export class GetPensionNominaTransitorioQuery {
     isEntidad: boolean,
     claveOrganica0?: string,
     claveOrganica1?: string,
-    userId?: string
+    userId?: string,
+    usarDiasLaboradosNomina = false
   ): Promise<PensionNominaTransitorioResponse> {
     const startTime = Date.now();
     const logContext = {
@@ -76,7 +77,8 @@ export class GetPensionNominaTransitorioQuery {
         org1Pension,
         org2Pension,
         org3Pension,
-        periodo
+        periodo,
+        usarDiasLaboradosNomina
       );
 
       const duration = Date.now() - startTime;
@@ -186,4 +188,3 @@ export class GetPensionNominaTransitorioQuery {
     }
   }
 }
-

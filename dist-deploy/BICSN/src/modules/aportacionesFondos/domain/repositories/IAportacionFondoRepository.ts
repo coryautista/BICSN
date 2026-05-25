@@ -11,7 +11,8 @@ export interface IAportacionFondoRepository {
   obtenerAportacionesIndividuales(
     tipo: TipoFondo,
     claveOrganica0: string,
-    claveOrganica1: string
+    claveOrganica1: string,
+    usarDiasLaboradosNomina?: boolean
   ): Promise<AportacionIndividual>;
   
   // Obtener aportaciones combinadas de todos los tipos
@@ -52,7 +53,8 @@ export interface IAportacionFondoRepository {
   obtenerAportacionGuarderias(
     org0: string,
     org1: string,
-    periodo: string
+    periodo: string,
+    usarDiasLaboradosNomina?: boolean
   ): Promise<AportacionGuarderia[]>;
   
   // Obtener pensión nómina transitorio ejecutando función PENSION_NOMINA_QNAL_TRANSITORIO
@@ -61,14 +63,16 @@ export interface IAportacionFondoRepository {
     org1: string,
     org2: string,
     org3: string,
-    periodo: string
+    periodo: string,
+    usarDiasLaboradosNomina?: boolean
   ): Promise<PensionNominaTransitorio[]>;
   
   // Obtener aguinaldo ejecutando función AGUINALDO_ORGANICAS
   obtenerAguinaldo(
     org0: string,
     org1: string,
-    periodo: string
+    periodo: string,
+    usarDiasLaboradosNomina?: boolean
   ): Promise<Aguinaldo[]>;
   
   // Validar si el usuario puede acceder a las claves orgánicas especificadas

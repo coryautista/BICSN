@@ -307,7 +307,7 @@ export default async function afiliadoOrgRoutes(app: FastifyInstance) {
           aplicar: { type: 'boolean' },
           bc: { type: 'string', maxLength: 30 },
           porcentaje: { type: 'number' },
-          numQuinquenios: { type: 'number' }
+          numQuinquenios: { type: 'number', minimum: 0 }
         }
       },
       response: {
@@ -428,7 +428,7 @@ export default async function afiliadoOrgRoutes(app: FastifyInstance) {
           aplicar: { type: 'boolean' },
           bc: { type: 'string', maxLength: 30 },
           porcentaje: { type: 'number' },
-          numQuinquenios: { type: 'number' }
+          numQuinquenios: { type: 'number', minimum: 0 }
         }
       },
       response: {

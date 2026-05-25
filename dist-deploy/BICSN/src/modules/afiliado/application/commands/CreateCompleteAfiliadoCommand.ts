@@ -349,6 +349,7 @@ export class CreateCompleteAfiliadoCommand {
           sueldo: afiliadoOrgRow.sueldo,
           otrasPrestaciones: afiliadoOrgRow.otrasPrestaciones,
           quinquenios: afiliadoOrgRow.quinquenios,
+          numQuinquenios: hasNumQuinquenios ? afiliadoOrgRow.numQuinquenios : null,
           activo: afiliadoOrgRow.activo === 1 || afiliadoOrgRow.activo === true,
           fechaMovAlt: afiliadoOrgRow.fechaMovAlt?.toISOString().split('T')[0] || null,
           orgs1: afiliadoOrgRow.orgs1,

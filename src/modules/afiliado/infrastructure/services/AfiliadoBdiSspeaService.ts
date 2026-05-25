@@ -46,7 +46,7 @@ export async function actualizarBitacoraAfectacionOrg(
     .input('org0', sql.VarChar(30), org0)
     .input('org1', sql.VarChar(30), org1)
     .query(`
-      SELECT TOP 1 Id, Entidad, Anio, Quincena, Accion, Org0, Org1
+      SELECT TOP 1 AfectacionId AS Id, Entidad, Anio, Quincena, Accion, Org0, Org1
       FROM afec.BitacoraAfectacionOrg
       WHERE Org0 = @org0
         AND Org1 = @org1
@@ -72,7 +72,7 @@ export async function actualizarBitacoraAfectacionOrg(
           Resultado = 'OK',
           Mensaje = 'Proceso de afiliación completado - Estado aplicado a Movimientos BDIsspea'
       OUTPUT INSERTED.*
-      WHERE Id = @id
+      WHERE AfectacionId = @id
     `);
 
   const registrosAfectados = updateResult.rowsAffected[0] || 0;
@@ -105,7 +105,7 @@ export async function actualizarBitacoraAfectacionOrgTerminado(
     .input('org0', sql.VarChar(30), org0)
     .input('org1', sql.VarChar(30), org1)
     .query(`
-      SELECT TOP 1 Id, Entidad, Anio, Quincena, Accion, Org0, Org1, CreatedAt
+      SELECT TOP 1 AfectacionId AS Id, Entidad, Anio, Quincena, Accion, Org0, Org1, CreatedAt
       FROM afec.BitacoraAfectacionOrg
       WHERE Org0 = @org0
         AND Org1 = @org1
@@ -142,7 +142,7 @@ export async function actualizarBitacoraAfectacionOrgTerminado(
           Resultado = 'OK',
           Mensaje = @mensaje
       OUTPUT INSERTED.*
-      WHERE Id = @id
+      WHERE AfectacionId = @id
     `);
 
   const registrosAfectados = updateResult.rowsAffected[0] || 0;

@@ -11,7 +11,8 @@ export class GetAguinaldoQuery {
     isEntidad: boolean,
     claveOrganica0?: string,
     claveOrganica1?: string,
-    userId?: string
+    userId?: string,
+    usarDiasLaboradosNomina = false
   ): Promise<AguinaldoResponse> {
     const startTime = Date.now();
     const logContext = {
@@ -69,7 +70,8 @@ export class GetAguinaldoQuery {
       const aguinaldos = await this.aportacionFondoRepo.obtenerAguinaldo(
         org0Normalized,
         org1Normalized,
-        periodo
+        periodo,
+        usarDiasLaboradosNomina
       );
 
       const duration = Date.now() - startTime;

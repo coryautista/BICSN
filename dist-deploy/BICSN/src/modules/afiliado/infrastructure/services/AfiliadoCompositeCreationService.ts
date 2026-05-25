@@ -241,6 +241,7 @@ export async function createAfiliadoAfiliadoOrgMovimiento(data: {
       },
       afiliadoOrg: {
         ...afiliadoOrgRow,
+        numQuinquenios: hasNumQuinquenios ? afiliadoOrgRow.numQuinquenios : null,
         activo: afiliadoOrgRow.activo === 1 || afiliadoOrgRow.activo === true,
         fechaMovAlt: afiliadoOrgRow.fechaMovAlt?.toISOString().split('T')[0] || null,
         aplicar: afiliadoOrgRow.aplicar === 1 || afiliadoOrgRow.aplicar === true ? true : afiliadoOrgRow.aplicar === 0 || afiliadoOrgRow.aplicar === false ? false : null,

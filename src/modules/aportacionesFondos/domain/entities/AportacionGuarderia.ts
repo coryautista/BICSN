@@ -25,6 +25,8 @@ export interface AportacionGuarderia {
   menor_nivel: string | null;
   menor_sala: string | null;
   estatus: string | null;
+  dias_laborados?: number;
+  dias_laborados_origen?: 'nomina' | 'default';
 }
 
 // Response structure for aportación guarderías endpoint
@@ -35,4 +37,3 @@ export interface AportacionGuarderiasResponse {
   accion: string;
   aportaciones: AportacionGuarderia[];
 }
-

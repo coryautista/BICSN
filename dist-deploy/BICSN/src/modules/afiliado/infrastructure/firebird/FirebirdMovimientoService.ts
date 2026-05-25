@@ -77,6 +77,29 @@ export interface LogEjecucionDPEditaPersonal {
   listoParaEjecutar: boolean;
 }
 
+function parseFirebirdDateParam(fecha: string | Date | null | undefined): Date | null {
+  if (!fecha) return null;
+  if (fecha instanceof Date) return isNaN(fecha.getTime()) ? null : fecha;
+
+  const value = String(fecha).trim();
+  const mmddyy = value.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2}|\d{4})$/);
+  if (mmddyy) {
+    const [, monthRaw, dayRaw, yearRaw] = mmddyy;
+    const yearNumber = Number(yearRaw);
+    const fullYear = yearRaw.length === 2 ? 2000 + yearNumber : yearNumber;
+    const parsed = new Date(fullYear, Number(monthRaw) - 1, Number(dayRaw));
+    return isNaN(parsed.getTime()) ? null : parsed;
+  }
+
+  const parsed = new Date(value);
+  return isNaN(parsed.getTime()) ? null : parsed;
+}
+
+function normalizarBaseConfianza(value: unknown): 'B' | 'C' {
+  const normalized = String(value ?? '').trim().toUpperCase();
+  return normalized === 'C' ? 'C' : 'B';
+}
+
 /**
  * Obtiene el INTERNO para un afiliado
  * 1. Busca en tabla Afiliado (SQL Server)
@@ -260,32 +283,24 @@ export function mapearDatosAfiliadoParaDPEditaPersonal(afiliado: Afiliado): Arra
   };
 
   // Helper para formatear fecha a formato mm/dd/yy (para DP_EDITA_PERSONAL)
-  const formatearFechaParaFirebird = (fecha: string | null | undefined): string | null => {
+  const formatearFechaParaFirebird = (fecha: string | null | undefined): Date | null => {
     if (!fecha) return null;
     try {
       const date = new Date(fecha);
       if (isNaN(date.getTime())) return null;
-      // Formato mm/dd/yy
-      const mes = String(date.getMonth() + 1).padStart(2, '0');
-      const dia = String(date.getDate()).padStart(2, '0');
-      const anio = String(date.getFullYear()).slice(-2);
-      return `${mes}/${dia}/${anio}`;
+      return date;
     } catch {
       return null;
     }
   };
 
   // Helper para formatear fecha de nacimiento (date) - formato mm/dd/yy
-  const formatearFechaNacimiento = (fecha: string | null | undefined): string | null => {
+  const formatearFechaNacimiento = (fecha: string | null | undefined): Date | null => {
     if (!fecha) return null;
     try {
       const date = new Date(fecha);
       if (isNaN(date.getTime())) return null;
-      // Formato mm/dd/yy
-      const mes = String(date.getMonth() + 1).padStart(2, '0');
-      const dia = String(date.getDate()).padStart(2, '0');
-      const anio = String(date.getFullYear()).slice(-2);
-      return `${mes}/${dia}/${anio}`;
+      return date;
     } catch {
       return null;
     }
@@ -1213,7 +1228,7 @@ export async function ejecutarDPEditaEntidad(
               datos.retroactivas, // RETROACTIVAS (siempre 0)
               datos.periodo, // PERIODO
               datos.movimiento, // MOVIMIENTO
-              datos.fecha, // FECHA
+              parseFirebirdDateParam(datos.fecha), // FECHA
               datos.bc, // BC (Base/Confianza)
               datos.porc // PORC (Porcentaje)
             ];
@@ -1471,10 +1486,10 @@ export async function prepararLogEjecucionDPEditaEntidad(
 
     // 5. Validar porcentaje
     const porc = datosParciales.porc ?? 0;
-    if (porc < 60 || porc > 100) {
+    if (porc < 0 || porc > 100) {
       log.validaciones.porcentaje = {
         valido: false,
-        mensaje: `Porcentaje inválido: ${porc}. Debe estar entre 60 y 100`,
+        mensaje: `Porcentaje inválido: ${porc}. Debe estar entre 0 y 100`,
         valor: porc
       };
       log.errores.push(`Porcentaje inválido: ${porc}`);
@@ -1482,17 +1497,8 @@ export async function prepararLogEjecucionDPEditaEntidad(
     }
     log.validaciones.porcentaje = { valido: true, valor: porc };
 
-    // 6. Validar base/confianza
-    const bc = datosParciales.bc ?? 'C';
-    if (bc !== 'C' && bc !== 'B') {
-      log.validaciones.baseConfianza = {
-        valido: false,
-        mensaje: `Base/Confianza inválido: ${bc}. Debe ser 'C' o 'B'`,
-        valor: bc
-      };
-      log.errores.push(`Base/Confianza inválido: ${bc}`);
-      return log;
-    }
+    // 6. Normalizar base/confianza: solo C se conserva; cualquier otro valor se trata como B.
+    const bc = normalizarBaseConfianza(datosParciales.bc);
     log.validaciones.baseConfianza = { valido: true, valor: bc };
 
     // 7. Construir datos completos con nuevo formato
@@ -1828,9 +1834,9 @@ export async function migrarMovimientoAFirebird(
       };
     }
 
-    // 5. Validar porcentaje (debe estar entre 60 y 100)
+    // 5. Validar porcentaje (debe estar entre 0 y 100)
     const porc = datosParciales.porc ?? 0;
-    if (porc < 60 || porc > 100) {
+    if (porc < 0 || porc > 100) {
       logger.error({
         operation: 'migrarMovimientoAFirebird',
         step: 'validarPorcentaje',
@@ -1839,42 +1845,21 @@ export async function migrarMovimientoAFirebird(
         tipoMovimientoId: movimiento.tipoMovimientoId,
         codigoMovimiento,
         valorInvalido: porc,
-        rangoEsperado: '60-100',
+        rangoEsperado: '0-100',
         timestamp: new Date().toISOString()
       }, 'Porcentaje fuera de rango válido');
       return {
         exito: false,
         cveError: -1,
-        nomError: `Porcentaje inválido: ${porc}. Debe estar entre 60 y 100`,
+        nomError: `Porcentaje inválido: ${porc}. Debe estar entre 0 y 100`,
         movimientoId: movimiento.id,
         tipoMovimientoId: movimiento.tipoMovimientoId,
         codigoMovimiento
       };
     }
 
-    // 6. Validar base/confianza (debe ser 'C' o 'B')
-    const bc = datosParciales.bc ?? 'C';
-    if (bc !== 'C' && bc !== 'B') {
-      logger.error({
-        operation: 'migrarMovimientoAFirebird',
-        step: 'validarBaseConfianza',
-        movimientoId: movimiento.id,
-        afiliadoId: movimiento.afiliadoId,
-        tipoMovimientoId: movimiento.tipoMovimientoId,
-        codigoMovimiento,
-        valorInvalido: bc,
-        valoresEsperados: ['C', 'B'],
-        timestamp: new Date().toISOString()
-      }, 'Base/Confianza inválido');
-      return {
-        exito: false,
-        cveError: -1,
-        nomError: `Base/Confianza inválido: ${bc}. Debe ser 'C' o 'B'`,
-        movimientoId: movimiento.id,
-        tipoMovimientoId: movimiento.tipoMovimientoId,
-        codigoMovimiento
-      };
-    }
+    // 6. Normalizar base/confianza: solo C se conserva; cualquier otro valor se trata como B.
+    const bc = normalizarBaseConfianza(datosParciales.bc);
 
     // 7. Normalizar orgánicas (eliminar espacios y asegurar formato correcto)
     // Usar las orgánicas pasadas como parámetro en lugar de las de la BD

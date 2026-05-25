@@ -11,7 +11,8 @@ export class GetAportacionGuarderiasQuery {
     isEntidad: boolean,
     claveOrganica0?: string,
     claveOrganica1?: string,
-    userId?: string
+    userId?: string,
+    usarDiasLaboradosNomina = false
   ): Promise<AportacionGuarderiasResponse> {
     const startTime = Date.now();
     const logContext = {
@@ -60,7 +61,8 @@ export class GetAportacionGuarderiasQuery {
       const aportaciones = await this.aportacionFondoRepo.obtenerAportacionGuarderias(
         claves.clave0,
         claves.clave1,
-        periodo
+        periodo,
+        usarDiasLaboradosNomina
       );
 
       const duration = Date.now() - startTime;
@@ -169,4 +171,3 @@ export class GetAportacionGuarderiasQuery {
     }
   }
 }
-

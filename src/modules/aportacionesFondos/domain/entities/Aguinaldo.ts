@@ -37,6 +37,8 @@ export interface Aguinaldo {
   norg1: string | null;
   norg2: string | null;
   norg3: string | null;
+  dias_laborados?: number;
+  dias_laborados_origen?: 'nomina' | 'default';
 }
 
 // Response structure for aguinaldo endpoint

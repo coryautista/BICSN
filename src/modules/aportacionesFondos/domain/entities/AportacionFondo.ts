@@ -13,6 +13,8 @@ export interface AportacionFondo {
   afpa?: number; // Prestaciones - employee contribution
   total: number;
   tipo: string;
+  dias_laborados: number;
+  dias_laborados_origen: 'nomina' | 'default';
 }
 
 // Individual contribution result

@@ -59,6 +59,8 @@ export interface PensionNominaTransitorio {
   transorg1: string | null;
   transnorg0: string | null;
   transnorg1: string | null;
+  dias_laborados?: number;
+  dias_laborados_origen?: 'nomina' | 'default';
 }
 
 // Response structure for pensión nómina transitorio endpoint
@@ -69,4 +71,3 @@ export interface PensionNominaTransitorioResponse {
   accion: string;
   registros: PensionNominaTransitorio[];
 }
-

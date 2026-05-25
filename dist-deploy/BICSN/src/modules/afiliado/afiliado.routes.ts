@@ -1378,6 +1378,33 @@ export default async function afiliadoRoutes(app: FastifyInstance) {
     }
   });
 
+  // GET /afiliado/complete - Explicit guard to avoid matching /afiliado/:id
+  app.get('/afiliado/complete', {
+    preHandler: [requireAuth],
+    schema: {
+      description: 'Ruta no permitida. Use POST /afiliado/complete para crear un afiliado completo.',
+      tags: ['afiliado', 'firebird'],
+      security: [{ bearerAuth: [] }],
+      response: {
+        405: {
+          type: 'object',
+          properties: {
+            ok: { type: 'boolean' },
+            error: {
+              type: 'object',
+              properties: {
+                code: { type: 'string' },
+                message: { type: 'string' }
+              }
+            }
+          }
+        }
+      }
+    }
+  }, async (_req, reply) => {
+    return reply.code(405).send(fail('METHOD_NOT_ALLOWED: Use POST /afiliado/complete para crear un afiliado completo'));
+  });
+
   // PUT /afiliado/:id - Update record
   app.put('/afiliado/:id', {
     preHandler: [requireAuth],
@@ -1546,7 +1573,7 @@ export default async function afiliadoRoutes(app: FastifyInstance) {
           dSueldo: { type: 'string', maxLength: 200, nullable: true },
           dOtrasPrestaciones: { type: 'string', maxLength: 200, nullable: true },
           dQuinquenios: { type: 'string', maxLength: 200, nullable: true },
-          numQuinquenios: { type: 'number', minimum: 1, nullable: true, description: 'Número de quinquenio (1, 2, 3...)' },
+          numQuinquenios: { type: 'number', minimum: 0, nullable: true, description: 'Número de quinquenio (0, 1, 2, 3...)' },
           bc: { type: 'string', maxLength: 30, nullable: true },
           porcentaje: { type: 'number', nullable: true },
           // Campos orgánicos opcionales (si no se envían, se obtienen del usuario autenticado)
@@ -1863,7 +1890,7 @@ export default async function afiliadoRoutes(app: FastifyInstance) {
           dSueldo: { type: 'string', maxLength: 200, nullable: true },
           dOtrasPrestaciones: { type: 'string', maxLength: 200, nullable: true },
           dQuinquenios: { type: 'string', maxLength: 200, nullable: true },
-          numQuinquenios: { type: 'number', minimum: 1, nullable: true, description: 'Número de quinquenio (1, 2, 3...)' },
+          numQuinquenios: { type: 'number', minimum: 0, nullable: true, description: 'Número de quinquenio (0, 1, 2, 3...)' },
           bc: { type: 'string', maxLength: 30, nullable: true },
           porcentaje: { type: 'number', nullable: true },
           // Campos orgánicos opcionales (si no se envían, se obtienen del usuario autenticado)
@@ -2149,7 +2176,7 @@ export default async function afiliadoRoutes(app: FastifyInstance) {
           dSueldo: { type: 'string', maxLength: 200, nullable: true },
           dOtrasPrestaciones: { type: 'string', maxLength: 200, nullable: true },
           dQuinquenios: { type: 'string', maxLength: 200, nullable: true },
-          numQuinquenios: { type: 'number', minimum: 1, nullable: true, description: 'Número de quinquenio (1, 2, 3...)' },
+          numQuinquenios: { type: 'number', minimum: 0, nullable: true, description: 'Número de quinquenio (0, 1, 2, 3...)' },
           bc: { type: 'string', maxLength: 30, nullable: true },
           porcentaje: { type: 'number', nullable: true },
           // Campos orgánicos opcionales (si no se envían, se obtienen del usuario autenticado)
@@ -2435,7 +2462,7 @@ export default async function afiliadoRoutes(app: FastifyInstance) {
           dSueldo: { type: 'string', maxLength: 200, nullable: true },
           dOtrasPrestaciones: { type: 'string', maxLength: 200, nullable: true },
           dQuinquenios: { type: 'string', maxLength: 200, nullable: true },
-          numQuinquenios: { type: 'number', minimum: 1, nullable: true, description: 'Número de quinquenio (1, 2, 3...)' },
+          numQuinquenios: { type: 'number', minimum: 0, nullable: true, description: 'Número de quinquenio (0, 1, 2, 3...)' },
           bc: { type: 'string', maxLength: 30, nullable: true },
           porcentaje: { type: 'number', nullable: true },
           // Campos orgánicos opcionales (si no se envían, se obtienen del usuario autenticado)
@@ -2719,7 +2746,7 @@ export default async function afiliadoRoutes(app: FastifyInstance) {
           dSueldo: { type: 'string', maxLength: 200, nullable: true },
           dOtrasPrestaciones: { type: 'string', maxLength: 200, nullable: true },
           dQuinquenios: { type: 'string', maxLength: 200, nullable: true },
-          numQuinquenios: { type: 'number', minimum: 1, nullable: true, description: 'Número de quinquenio (1, 2, 3...)' },
+          numQuinquenios: { type: 'number', minimum: 0, nullable: true, description: 'Número de quinquenio (0, 1, 2, 3...)' },
           bc: { type: 'string', maxLength: 30, nullable: true },
           porcentaje: { type: 'number', nullable: true },
           // Campos orgánicos opcionales (si no se envían, se obtienen del usuario autenticado)
@@ -2855,7 +2882,7 @@ export default async function afiliadoRoutes(app: FastifyInstance) {
           dSueldo: { type: 'string', maxLength: 200, nullable: true },
           dOtrasPrestaciones: { type: 'string', maxLength: 200, nullable: true },
           dQuinquenios: { type: 'string', maxLength: 200, nullable: true },
-          numQuinquenios: { type: 'number', minimum: 1, nullable: true, description: 'Número de quinquenio (1, 2, 3...)' },
+          numQuinquenios: { type: 'number', minimum: 0, nullable: true, description: 'Número de quinquenio (0, 1, 2, 3...)' },
           bc: { type: 'string', maxLength: 30, nullable: true },
           porcentaje: { type: 'number', nullable: true },
           // Campos orgánicos opcionales (si no se envían, se obtienen del usuario autenticado)

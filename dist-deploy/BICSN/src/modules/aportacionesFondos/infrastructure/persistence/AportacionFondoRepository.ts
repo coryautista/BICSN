@@ -13,6 +13,8 @@ import { executeSerializedQuery, decodeFirebirdObject, executeSelectableProcedur
 import { normalizeTextDeep } from '../../../../utils/encoding.js';
 
 export class AportacionFondoRepository implements IAportacionFondoRepository {
+  private readonly DIAS_LABORADOS_DEFAULT = 15;
+
   /**
    * Convierte un valor a número de forma segura, evitando NaN.
    * Si el valor no es convertible a número válido, retorna null.
@@ -40,7 +42,8 @@ export class AportacionFondoRepository implements IAportacionFondoRepository {
   async obtenerAportacionesIndividuales(
     tipo: TipoFondo,
     claveOrganica0: string,
-    claveOrganica1: string
+    claveOrganica1: string,
+    usarDiasLaboradosNomina = false
   ): Promise<AportacionIndividual> {
     try {
       // Validar tipo de fondo
@@ -72,7 +75,15 @@ export class AportacionFondoRepository implements IAportacionFondoRepository {
       }
 
       // Calcular aportaciones según el tipo
-      const datos = await this.calcularAportaciones(registros, tipo);
+      const periodoInfo = usarDiasLaboradosNomina ? await this.obtenerPeriodoAplicacion(claveOrganica0, claveOrganica1) : null;
+      const datos = await this.calcularAportaciones(
+        registros,
+        tipo,
+        usarDiasLaboradosNomina,
+        periodoInfo?.periodo,
+        claveOrganica0,
+        claveOrganica1
+      );
 
       // Debug (solo LOG_LEVEL=debug): verificar que los datos tengan nombre después del cálculo
       if (process.env.LOG_LEVEL === 'debug' && datos.length > 0) {
@@ -1025,6 +1036,7 @@ export class AportacionFondoRepository implements IAportacionFondoRepository {
         o.APLICAR,
         o.BC,
         o.PORCENTAJE,
+        p.RFC,
         COALESCE(p.FULLNAME, p.NOMBRE) AS NOMBRE_EMPLEADO
       FROM ORG_PERSONAL o
       INNER JOIN PERSONAL p ON p.INTERNO = o.INTERNO
@@ -1168,6 +1180,7 @@ export class AportacionFondoRepository implements IAportacionFondoRepository {
               aplicar: row.APLICAR || row.aplicar || null,
               bc: row.BC || row.bc || null,
               porcentaje: row.PORCENTAJE || row.porcentaje || null,
+              rfc: row.RFC || row.rfc || null,
               nombre: nombreValue || null
             };
           });
@@ -1187,14 +1200,31 @@ export class AportacionFondoRepository implements IAportacionFondoRepository {
     });
   }
 
-  private async calcularAportaciones(registros: any[], tipo: TipoFondo): Promise<AportacionFondo[]> {
+  private async calcularAportaciones(
+    registros: any[],
+    tipo: TipoFondo,
+    usarDiasLaboradosNomina = false,
+    periodo?: string,
+    org0?: string,
+    org1?: string
+  ): Promise<AportacionFondo[]> {
+    const diasMap = usarDiasLaboradosNomina && periodo && org0 && org1
+      ? await this.obtenerDiasLaboradosNominaMap(
+          registros.map((registro) => registro.rfc).filter(Boolean),
+          periodo,
+          org0,
+          org1
+        )
+      : new Map<string, { dias: number; origen: 'nomina' | 'default' }>();
+
     return registros.map(registro => {
       const sueldo = registro.sueldo || 0;
       const otrasPrestaciones = registro.otras_prestaciones || 0;
       const quinquenios = registro.quinquenios || 0;
+      const diasInfo = this.resolveDiasLaborados(registro.rfc, diasMap, usarDiasLaboradosNomina);
       
       // Calcular sueldo base (misma para todos los tipos)
-      const sueldoBase = ((sueldo + otrasPrestaciones + quinquenios) / 30) * 15;
+      const sueldoBase = ((sueldo + otrasPrestaciones + quinquenios) / 30) * diasInfo.dias;
 
       // Debug: verificar que el nombre esté presente
       const nombre = registro.nombre || null;
@@ -1221,7 +1251,9 @@ export class AportacionFondoRepository implements IAportacionFondoRepository {
         otras_prestaciones: registro.otras_prestaciones,
         sueldo_base: sueldoBase,
         total: 0, // Initialize total
-        tipo
+        tipo,
+        dias_laborados: diasInfo.dias,
+        dias_laborados_origen: diasInfo.origen
       };
       
       // Debug (solo LOG_LEVEL=debug): verificar que el nombre se asignó correctamente
@@ -1235,13 +1267,13 @@ export class AportacionFondoRepository implements IAportacionFondoRepository {
 
       switch (tipo) {
         case 'ahorro':
-          aportacion.afae = ((sueldo / 30) * 15) * 0.0250; // Patron contribution
-          aportacion.afaa = ((sueldo / 30) * 15) * 0.050;  // Employee contribution
+          aportacion.afae = ((sueldo / 30) * diasInfo.dias) * 0.0250; // Patron contribution
+          aportacion.afaa = ((sueldo / 30) * diasInfo.dias) * 0.050;  // Employee contribution
           aportacion.total = (aportacion.afae || 0) + (aportacion.afaa || 0);
           break;
         
         case 'vivienda':
-          aportacion.afe = ((sueldo / 30) * 15) * 0.0175; // Patron contribution
+          aportacion.afe = ((sueldo / 30) * diasInfo.dias) * 0.0175; // Patron contribution
           aportacion.total = aportacion.afe || 0;
           break;
         
@@ -1252,12 +1284,112 @@ export class AportacionFondoRepository implements IAportacionFondoRepository {
           break;
         
         case 'cair':
-          aportacion.afe = ((sueldo / 30) * 15) * 0.020; // Patron contribution
+          aportacion.afe = ((sueldo / 30) * diasInfo.dias) * 0.020; // Patron contribution
           aportacion.total = aportacion.afe || 0;
           break;
       }
 
       return aportacion;
+    });
+  }
+
+  private resolveDiasLaborados(
+    rfc: string | null | undefined,
+    diasMap: Map<string, { dias: number; origen: 'nomina' | 'default' }>,
+    usarDiasLaboradosNomina: boolean
+  ): { dias: number; origen: 'nomina' | 'default' } {
+    if (!usarDiasLaboradosNomina) {
+      return { dias: this.DIAS_LABORADOS_DEFAULT, origen: 'default' };
+    }
+
+    const key = this.normalizeRfc(rfc);
+    const found = key ? diasMap.get(key) : undefined;
+    if (!found || found.dias == null || !Number.isFinite(found.dias) || found.dias <= 0) {
+      return { dias: this.DIAS_LABORADOS_DEFAULT, origen: 'default' };
+    }
+
+    return found;
+  }
+
+  private async obtenerDiasLaboradosNominaMap(
+    rfcs: Array<string | null | undefined>,
+    periodo: string,
+    org0: string,
+    org1: string
+  ): Promise<Map<string, { dias: number; origen: 'nomina' | 'default' }>> {
+    const map = new Map<string, { dias: number; origen: 'nomina' | 'default' }>();
+    const uniqueRfcs = [...new Set(rfcs.map((rfc) => this.normalizeRfc(rfc)).filter((rfc): rfc is string => !!rfc))];
+    if (uniqueRfcs.length === 0 || !/^\d{4}$/.test(periodo)) {
+      return map;
+    }
+
+    const quincena = Number(periodo.slice(0, 2));
+    const anio = 2000 + Number(periodo.slice(2, 4));
+    if (!Number.isInteger(quincena) || quincena < 1 || quincena > 24) {
+      return map;
+    }
+
+    const pool = await getPool();
+    for (let i = 0; i < uniqueRfcs.length; i += 500) {
+      const batch = uniqueRfcs.slice(i, i + 500);
+      const request = pool.request()
+        .input('anio', sql.SmallInt, anio)
+        .input('quincena', sql.TinyInt, quincena)
+        .input('org0', sql.VarChar(2), org0)
+        .input('org1', sql.VarChar(2), org1);
+      const placeholders = batch.map((rfc, index) => {
+        const name = `rfc${index}`;
+        request.input(name, sql.VarChar(13), rfc);
+        return `@${name}`;
+      }).join(', ');
+
+      const result = await request.query(`
+        SELECT UPPER(LTRIM(RTRIM(RFC))) AS RFC, DiasLaborados
+        FROM dbo.NominaAplicacionQnalDetalle
+        WHERE Anio = @anio
+          AND Quincena = @quincena
+          AND Organica0 = @org0
+          AND Organica1 = @org1
+          AND UPPER(LTRIM(RTRIM(RFC))) IN (${placeholders})
+          AND DiasLaborados IS NOT NULL
+      `);
+
+      for (const row of result.recordset) {
+        const key = this.normalizeRfc(row.RFC);
+        const dias = this.safeNumber(row.DiasLaborados);
+        if (key && dias != null && dias > 0) {
+          map.set(key, { dias, origen: 'nomina' });
+        }
+      }
+    }
+
+    return map;
+  }
+
+  private normalizeRfc(rfc: string | null | undefined): string | null {
+    const normalized = String(rfc || '').trim().toUpperCase();
+    return normalized || null;
+  }
+
+  private async enriquecerConDiasLaborados<T>(
+    registros: T[],
+    periodo: string,
+    org0: string,
+    org1: string,
+    usarDiasLaboradosNomina: boolean,
+    getRfc: (registro: T) => string | null | undefined
+  ): Promise<Array<T & { dias_laborados: number; dias_laborados_origen: 'nomina' | 'default' }>> {
+    const diasMap = usarDiasLaboradosNomina
+      ? await this.obtenerDiasLaboradosNominaMap(registros.map(getRfc), periodo, org0, org1)
+      : new Map<string, { dias: number; origen: 'nomina' | 'default' }>();
+
+    return registros.map((registro) => {
+      const dias = this.resolveDiasLaborados(getRfc(registro), diasMap, usarDiasLaboradosNomina);
+      return {
+        ...registro,
+        dias_laborados: dias.dias,
+        dias_laborados_origen: dias.origen
+      };
     });
   }
 
@@ -1370,7 +1502,8 @@ export class AportacionFondoRepository implements IAportacionFondoRepository {
   async obtenerAportacionGuarderias(
     org0: string,
     org1: string,
-    periodo: string
+    periodo: string,
+    usarDiasLaboradosNomina = false
   ): Promise<AportacionGuarderia[]> {
     const logContext = {
       org0,
@@ -1535,13 +1668,21 @@ export class AportacionFondoRepository implements IAportacionFondoRepository {
                 estatus: row.ESTATUS || null
               }));
 
-              console.log('[APORTACIONES_FONDOS] [APORTACION_GUARDERIAS] Consulta completada exitosamente', {
+              this.enriquecerConDiasLaborados(
+                aportaciones,
+                periodo,
+                org0,
+                org1,
+                usarDiasLaboradosNomina,
+                (registro) => registro.titular_rfc
+              ).then((aportacionesEnriquecidas) => {
+                console.log('[APORTACIONES_FONDOS] [APORTACION_GUARDERIAS] Consulta completada exitosamente', {
                 ...logContext,
                 totalAportaciones: aportaciones.length,
                 duracionMs: duration
-              });
-
-              resolve(aportaciones);
+                });
+                resolve(aportacionesEnriquecidas);
+              }).catch(reject);
             }
           );
         } catch (error: any) {
@@ -1570,7 +1711,8 @@ export class AportacionFondoRepository implements IAportacionFondoRepository {
     org1: string,
     org2: string,
     org3: string,
-    periodo: string
+    periodo: string,
+    usarDiasLaboradosNomina = false
   ): Promise<PensionNominaTransitorio[]> {
     const logContext = {
       org0,
@@ -1833,13 +1975,21 @@ export class AportacionFondoRepository implements IAportacionFondoRepository {
                 transnorg1: row.TRANSNORG1 || null
               }));
 
-              console.log('[APORTACIONES_FONDOS] [PENSION_NOMINA_TRANSITORIO] Consulta completada exitosamente', {
-                ...logContext,
-                totalRegistros: registros.length,
-                duracionMs: duration
-              });
-
-              resolve(registros);
+              this.enriquecerConDiasLaborados(
+                registros,
+                periodo,
+                org0,
+                org1,
+                usarDiasLaboradosNomina,
+                (registro) => registro.rfc
+              ).then((registrosEnriquecidos) => {
+                console.log('[APORTACIONES_FONDOS] [PENSION_NOMINA_TRANSITORIO] Consulta completada exitosamente', {
+                  ...logContext,
+                  totalRegistros: registros.length,
+                  duracionMs: duration
+                });
+                resolve(registrosEnriquecidos);
+              }).catch(reject);
             }
           );
         } catch (error: any) {
@@ -1865,7 +2015,8 @@ export class AportacionFondoRepository implements IAportacionFondoRepository {
   async obtenerAguinaldo(
     org0: string,
     org1: string,
-    periodo: string
+    periodo: string,
+    usarDiasLaboradosNomina = false
   ): Promise<Aguinaldo[]> {
     const logContext = {
       org0,
@@ -2060,13 +2211,21 @@ export class AportacionFondoRepository implements IAportacionFondoRepository {
                 norg3: row.NORG3 || null
               }));
 
-              console.log('[APORTACIONES_FONDOS] [AGUINALDO] Consulta completada exitosamente', {
-                ...logContext,
-                totalRegistros: aguinaldos.length,
-                duracionMs: duration
-              });
-
-              resolve(aguinaldos);
+              this.enriquecerConDiasLaborados(
+                aguinaldos,
+                periodo,
+                org0,
+                org1,
+                usarDiasLaboradosNomina,
+                (registro) => registro.rfc
+              ).then((aguinaldosEnriquecidos) => {
+                console.log('[APORTACIONES_FONDOS] [AGUINALDO] Consulta completada exitosamente', {
+                  ...logContext,
+                  totalRegistros: aguinaldos.length,
+                  duracionMs: duration
+                });
+                resolve(aguinaldosEnriquecidos);
+              }).catch(reject);
             }
           );
         } catch (error: any) {
