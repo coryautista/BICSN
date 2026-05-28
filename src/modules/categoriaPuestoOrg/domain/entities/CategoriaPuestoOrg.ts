@@ -16,6 +16,9 @@ export interface CategoriaPuestoOrg {
   updatedBy: string | null;
   baseConfianza: string | null;
   porcentaje: number | null;
+  sindicalizado: boolean | null;
+  diasAguinaldo: number | null;
+  diasAguinaldoSindicalizado: number | null;
 }
 
 export interface CreateCategoriaPuestoOrgData {
@@ -32,6 +35,9 @@ export interface CreateCategoriaPuestoOrgData {
   userId?: string;
   baseConfianza?: string;
   porcentaje?: number;
+  sindicalizado?: boolean | null;
+  diasAguinaldo?: number | null;
+  diasAguinaldoSindicalizado?: number | null;
 }
 
 export interface UpdateCategoriaPuestoOrgData {
@@ -42,6 +48,9 @@ export interface UpdateCategoriaPuestoOrgData {
   userId?: string;
   baseConfianza?: string;
   porcentaje?: number;
+  sindicalizado?: boolean | null;
+  diasAguinaldo?: number | null;
+  diasAguinaldoSindicalizado?: number | null;
 }
 
 export interface DeleteCategoriaPuestoOrgData {

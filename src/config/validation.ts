@@ -49,6 +49,7 @@ const firebirdSchema = z.object({
   database: z.string().min(1, 'FIREBIRD_DATABASE is required'),
   user: z.string().min(1, 'FIREBIRD_USER is required'),
   password: z.string().min(1, 'FIREBIRD_PASSWORD is required'),
+  role: z.string().optional(),
   charset: z.string().default('WIN1252'),
   clientLib: z.string().optional(),
   /** Default query timeout in milliseconds (default: 30000) */
@@ -59,10 +60,11 @@ const firebirdSchema = z.object({
  * FTP configuration schema
  */
 const ftpSchema = z.object({
-  host: z.string().min(1).default('codigosingular.com'),
-  port: z.number().int().min(1).max(65535).default(2222),
-  user: z.string().min(1).default('cory'),
-  password: z.string().min(1).default('Documentos123')
+  host: z.string().min(1).default('10.20.1.17'),
+  port: z.number().int().min(1).max(65535).default(22),
+  user: z.string().min(1).default('Des'),
+  password: z.string().min(1).default('sy?FAWI1'),
+  basePath: z.string().min(1).default('/Autodeterminacion/Desarrollo')
 });
 
 /**

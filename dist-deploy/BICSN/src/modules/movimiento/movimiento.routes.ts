@@ -355,6 +355,7 @@ export default async function movimientoRoutes(app: FastifyInstance) {
         afiliadoId: parsed.data.afiliadoId,
         fecha: parsed.data.fecha ?? null,
         observaciones: parsed.data.observaciones ?? null,
+        entregaRendimiento: parsed.data.entregaRendimiento ?? null,
         folio: parsed.data.folio ?? null,
         estatus: parsed.data.estatus ?? null,
         creadoPor: parsed.data.creadoPor ?? null,
@@ -388,6 +389,7 @@ export default async function movimientoRoutes(app: FastifyInstance) {
           afiliadoId: { type: 'number' },
           fecha: { type: 'string', format: 'date' },
           observaciones: { type: 'string', maxLength: 1024 },
+          entregaRendimiento: { type: 'string', enum: ['Si', 'No'], nullable: true },
           folio: { type: 'string', maxLength: 100 },
           estatus: { type: 'string', maxLength: 30 },
           creadoPor: { type: 'number' }

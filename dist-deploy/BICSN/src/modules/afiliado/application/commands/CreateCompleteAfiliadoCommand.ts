@@ -262,17 +262,18 @@ export class CreateCompleteAfiliadoCommand {
         .input('folio', sql.VarChar(100), data.movimiento.folio)
         .input('estatus', sql.VarChar(30), data.movimiento.estatus)
         .input('creadoPor', sql.Int, data.movimiento.creadoPor)
-        .input('creadoPorUid', sql.UniqueIdentifier, data.movimiento.creadoPorUid);
+        .input('creadoPorUid', sql.UniqueIdentifier, data.movimiento.creadoPorUid)
+        .input('entregaRendimiento', sql.VarChar(2), data.movimiento.entregaRendimiento);
 
       const movimientoResult = await movimientoRequest.query(`
         INSERT INTO afi.Movimiento (
           quincenaId, tipoMovimientoId, afiliadoId, fecha,
-          observaciones, folio, estatus, creadoPor, creadoPorUid
+          observaciones, folio, estatus, creadoPor, creadoPorUid, entregaRendimiento
         )
         OUTPUT INSERTED.*
         VALUES (
           @quincenaId, @tipoMovimientoId, @afiliadoId, @fecha,
-          @observaciones, @folio, @estatus, @creadoPor, @creadoPorUid
+          @observaciones, @folio, @estatus, @creadoPor, @creadoPorUid, @entregaRendimiento
         )
       `);
 
@@ -372,6 +373,7 @@ export class CreateCompleteAfiliadoCommand {
           afiliadoId: movimientoRow.afiliadoId,
           fecha: movimientoRow.fecha?.toISOString().split('T')[0] || null,
           observaciones: movimientoRow.observaciones,
+          entregaRendimiento: movimientoRow.entregaRendimiento ?? null,
           folio: movimientoRow.folio,
           estatus: movimientoRow.estatus,
           creadoPor: movimientoRow.creadoPor,

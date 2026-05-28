@@ -54,13 +54,15 @@ export const _legacyEnv = {
     port: Number(process.env.FIREBIRD_PORT ?? 3050),
     database: process.env.FIREBIRD_DATABASE!,
     user: process.env.FIREBIRD_USER!,
-    password: process.env.FIREBIRD_PASSWORD!
+    password: process.env.FIREBIRD_PASSWORD!,
+    role: process.env.FIREBIRD_ROLE
   },
   ftp: {
-    host: process.env.FTP_HOST ?? 'codigosingular.com',
-    port: Number(process.env.FTP_PORT ?? 2222),
-    user: process.env.FTP_USER ?? 'cory',
-    password: process.env.FTP_PASS ?? 'Documentos123'
+    host: process.env.FTP_HOST ?? '10.20.1.17',
+    port: Number(process.env.FTP_PORT ?? 22),
+    user: process.env.FTP_USER ?? 'Des',
+    password: process.env.FTP_PASS ?? 'sy?FAWI1',
+    basePath: process.env.FTP_BASE_PATH ?? '/Autodeterminacion/Desarrollo'
   }
 };
 

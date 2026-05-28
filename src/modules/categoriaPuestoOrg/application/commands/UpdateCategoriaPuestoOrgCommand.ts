@@ -148,5 +148,21 @@ export class UpdateCategoriaPuestoOrgCommand {
         throw new InvalidCategoriaPuestoOrgDataError('porcentaje', 'Debe ser un entero entre 0 y 100');
       }
     }
+
+    if (data.sindicalizado !== undefined && data.sindicalizado !== null && typeof data.sindicalizado !== 'boolean') {
+      throw new InvalidCategoriaPuestoOrgDataError('sindicalizado', 'Debe ser un valor booleano');
+    }
+
+    if (data.diasAguinaldo !== undefined && data.diasAguinaldo !== null) {
+      if (typeof data.diasAguinaldo !== 'number' || !Number.isInteger(data.diasAguinaldo) || data.diasAguinaldo < 0 || data.diasAguinaldo > 365) {
+        throw new InvalidCategoriaPuestoOrgDataError('diasAguinaldo', 'Debe ser un entero entre 0 y 365');
+      }
+    }
+
+    if (data.diasAguinaldoSindicalizado !== undefined && data.diasAguinaldoSindicalizado !== null) {
+      if (typeof data.diasAguinaldoSindicalizado !== 'number' || !Number.isInteger(data.diasAguinaldoSindicalizado) || data.diasAguinaldoSindicalizado < 0 || data.diasAguinaldoSindicalizado > 365) {
+        throw new InvalidCategoriaPuestoOrgDataError('diasAguinaldoSindicalizado', 'Debe ser un entero entre 0 y 365');
+      }
+    }
   }
 }

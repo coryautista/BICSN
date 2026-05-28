@@ -9,6 +9,7 @@ export interface Movimiento {
   estatus: string | null;
   creadoPor: number | null;
   creadoPorUid: string | null;
+  entregaRendimiento: 'Si' | 'No' | null;
   createdAt: string;
 }
 

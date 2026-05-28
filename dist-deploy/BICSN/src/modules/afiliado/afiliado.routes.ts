@@ -1584,7 +1584,8 @@ export default async function afiliadoRoutes(app: FastifyInstance) {
           orgs3: { type: 'string', maxLength: 200, nullable: true },
           orgs4: { type: 'string', maxLength: 200, nullable: true },
           // Movimiento fields
-          observaciones: { type: 'string', maxLength: 1024, nullable: true }
+          observaciones: { type: 'string', maxLength: 1024, nullable: true },
+          entregaRendimiento: { type: 'string', enum: ['Si', 'No'], nullable: true, description: 'Indica si se entrega rendimiento' }
         }
       },
       response: {
@@ -1682,6 +1683,7 @@ export default async function afiliadoRoutes(app: FastifyInstance) {
                     afiliadoId: { type: 'number' },
                     fecha: { type: 'string', nullable: true },
                     observaciones: { type: 'string', nullable: true },
+                    entregaRendimiento: { type: 'string', enum: ['Si', 'No'], nullable: true },
                     folio: { type: 'string', nullable: true },
                     estatus: { type: 'string' },
                     creadoPor: { type: 'number', nullable: true },
@@ -1827,6 +1829,7 @@ export default async function afiliadoRoutes(app: FastifyInstance) {
           tipoMovimientoId: 1,
           fecha: null,
           observaciones: parsed.data.observaciones ?? null,
+          entregaRendimiento: parsed.data.entregaRendimiento ?? null,
           folio: '',
           estatus: 'A',
           creadoPor: userId ?? 1,
@@ -1901,7 +1904,8 @@ export default async function afiliadoRoutes(app: FastifyInstance) {
           orgs3: { type: 'string', maxLength: 200, nullable: true },
           orgs4: { type: 'string', maxLength: 200, nullable: true },
           // Movimiento fields
-          observaciones: { type: 'string', maxLength: 1024, nullable: true }
+          observaciones: { type: 'string', maxLength: 1024, nullable: true },
+          entregaRendimiento: { type: 'string', enum: ['Si', 'No'], nullable: true, description: 'Indica si se entrega rendimiento' }
         }
       },
       response: {
@@ -1999,6 +2003,7 @@ export default async function afiliadoRoutes(app: FastifyInstance) {
                     afiliadoId: { type: 'number' },
                     fecha: { type: 'string', nullable: true },
                     observaciones: { type: 'string', nullable: true },
+                    entregaRendimiento: { type: 'string', enum: ['Si', 'No'], nullable: true },
                     folio: { type: 'string', nullable: true },
                     estatus: { type: 'string' },
                     creadoPor: { type: 'number', nullable: true },
@@ -2097,6 +2102,7 @@ export default async function afiliadoRoutes(app: FastifyInstance) {
         interno: parsed.data.interno, // Usar el interno del body (obligatorio)
         creadoPor: userId ?? 1,
         creadoPorUid: userUid,
+        entregaRendimiento: parsed.data.entregaRendimiento ?? null,
         tipoMovimientoId: 5, // CAMBIO DE SUELDO
         domicilioNumeroInterior: parsed.data.domicilioNumeroInterior ?? '',
         bc: parsed.data.bc ?? '',
@@ -2187,7 +2193,8 @@ export default async function afiliadoRoutes(app: FastifyInstance) {
           orgs3: { type: 'string', maxLength: 200, nullable: true },
           orgs4: { type: 'string', maxLength: 200, nullable: true },
           // Movimiento fields
-          observaciones: { type: 'string', maxLength: 1024, nullable: true }
+          observaciones: { type: 'string', maxLength: 1024, nullable: true },
+          entregaRendimiento: { type: 'string', enum: ['Si', 'No'], nullable: true, description: 'Indica si se entrega rendimiento' }
         }
       },
       response: {
@@ -2285,6 +2292,7 @@ export default async function afiliadoRoutes(app: FastifyInstance) {
                     afiliadoId: { type: 'number' },
                     fecha: { type: 'string', nullable: true },
                     observaciones: { type: 'string', nullable: true },
+                    entregaRendimiento: { type: 'string', enum: ['Si', 'No'], nullable: true },
                     folio: { type: 'string', nullable: true },
                     estatus: { type: 'string' },
                     creadoPor: { type: 'number', nullable: true },
@@ -2383,6 +2391,7 @@ export default async function afiliadoRoutes(app: FastifyInstance) {
         interno: parsed.data.interno, // Usar el interno del body (obligatorio)
         creadoPor: userId ?? 1,
         creadoPorUid: userUid,
+        entregaRendimiento: parsed.data.entregaRendimiento ?? null,
         tipoMovimientoId: 2, // BAJA PERMANENTE
         domicilioNumeroInterior: parsed.data.domicilioNumeroInterior ?? '',
         bc: parsed.data.bc ?? '',
@@ -2473,7 +2482,8 @@ export default async function afiliadoRoutes(app: FastifyInstance) {
           orgs3: { type: 'string', maxLength: 200, nullable: true },
           orgs4: { type: 'string', maxLength: 200, nullable: true },
           // Movimiento fields
-          observaciones: { type: 'string', maxLength: 1024, nullable: true }
+          observaciones: { type: 'string', maxLength: 1024, nullable: true },
+          entregaRendimiento: { type: 'string', enum: ['Si', 'No'], nullable: true, description: 'Indica si se entrega rendimiento' }
         }
       },
       response: {
@@ -2571,6 +2581,7 @@ export default async function afiliadoRoutes(app: FastifyInstance) {
                     afiliadoId: { type: 'number' },
                     fecha: { type: 'string', nullable: true },
                     observaciones: { type: 'string', nullable: true },
+                    entregaRendimiento: { type: 'string', enum: ['Si', 'No'], nullable: true },
                     folio: { type: 'string', nullable: true },
                     estatus: { type: 'string' },
                     creadoPor: { type: 'number', nullable: true },
@@ -2669,6 +2680,7 @@ export default async function afiliadoRoutes(app: FastifyInstance) {
         interno: parsed.data.interno, // Usar el interno del body (obligatorio)
         creadoPor: userId ?? 1,
         creadoPorUid: userUid,
+        entregaRendimiento: parsed.data.entregaRendimiento ?? null,
         tipoMovimientoId: 3, // BAJA SUSPENSIÓN DE AFILIACIÓN
         domicilioNumeroInterior: parsed.data.domicilioNumeroInterior ?? '',
         bc: parsed.data.bc ?? '',
@@ -2756,7 +2768,8 @@ export default async function afiliadoRoutes(app: FastifyInstance) {
           orgs2: { type: 'string', maxLength: 200, nullable: true },
           orgs3: { type: 'string', maxLength: 200, nullable: true },
           orgs4: { type: 'string', maxLength: 200, nullable: true },
-          observaciones: { type: 'string', maxLength: 1024, nullable: true }
+          observaciones: { type: 'string', maxLength: 1024, nullable: true },
+          entregaRendimiento: { type: 'string', enum: ['Si', 'No'], nullable: true, description: 'Indica si se entrega rendimiento' }
         }
       }
     }
@@ -2805,6 +2818,7 @@ export default async function afiliadoRoutes(app: FastifyInstance) {
         interno: parsed.data.interno,
         creadoPor: userId ?? 1,
         creadoPorUid: userUid,
+        entregaRendimiento: parsed.data.entregaRendimiento ?? null,
         tipoMovimientoId: 4,
         domicilioNumeroInterior: parsed.data.domicilioNumeroInterior ?? '',
         bc: parsed.data.bc ?? '',
@@ -2892,7 +2906,8 @@ export default async function afiliadoRoutes(app: FastifyInstance) {
           orgs2: { type: 'string', maxLength: 200, nullable: true },
           orgs3: { type: 'string', maxLength: 200, nullable: true },
           orgs4: { type: 'string', maxLength: 200, nullable: true },
-          observaciones: { type: 'string', maxLength: 1024, nullable: true }
+          observaciones: { type: 'string', maxLength: 1024, nullable: true },
+          entregaRendimiento: { type: 'string', enum: ['Si', 'No'], nullable: true, description: 'Indica si se entrega rendimiento' }
         }
       }
     }
@@ -2941,6 +2956,7 @@ export default async function afiliadoRoutes(app: FastifyInstance) {
         interno: parsed.data.interno,
         creadoPor: userId ?? 1,
         creadoPorUid: userUid,
+        entregaRendimiento: parsed.data.entregaRendimiento ?? null,
         tipoMovimientoId: 6,
         domicilioNumeroInterior: parsed.data.domicilioNumeroInterior ?? '',
         bc: parsed.data.bc ?? '',
@@ -3076,6 +3092,7 @@ export default async function afiliadoRoutes(app: FastifyInstance) {
                       afiliadoId: { type: 'number' },
                       fecha: { type: 'string', nullable: true },
                       observaciones: { type: 'string', nullable: true },
+                      entregaRendimiento: { type: 'string', enum: ['Si', 'No'], nullable: true },
                       folio: { type: 'string', nullable: true },
                       estatus: { type: 'string' },
                       creadoPor: { type: 'number', nullable: true },

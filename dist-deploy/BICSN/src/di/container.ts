@@ -198,6 +198,13 @@ import { GetPrestamosHipotecariosQuery } from '../modules/aportacionesFondos/app
 import { GetAportacionGuarderiasQuery } from '../modules/aportacionesFondos/application/queries/GetAportacionGuarderiasQuery.js';
 import { GetPensionNominaTransitorioQuery } from '../modules/aportacionesFondos/application/queries/GetPensionNominaTransitorioQuery.js';
 import { GetAguinaldoQuery } from '../modules/aportacionesFondos/application/queries/GetAguinaldoQuery.js';
+import { CatalogoPorcentajeFondoRepository } from '../modules/catalogoPorcentajeFondo/infrastructure/persistence/CatalogoPorcentajeFondoRepository.js';
+import { GetAllCatalogoPorcentajeFondoQuery } from '../modules/catalogoPorcentajeFondo/application/queries/GetAllCatalogoPorcentajeFondoQuery.js';
+import { GetCatalogoPorcentajeFondoByIdQuery } from '../modules/catalogoPorcentajeFondo/application/queries/GetCatalogoPorcentajeFondoByIdQuery.js';
+import { GetUltimoPorcentajeFondoVigenteQuery } from '../modules/catalogoPorcentajeFondo/application/queries/GetUltimoPorcentajeFondoVigenteQuery.js';
+import { CreateCatalogoPorcentajeFondoCommand } from '../modules/catalogoPorcentajeFondo/application/commands/CreateCatalogoPorcentajeFondoCommand.js';
+import { UpdateCatalogoPorcentajeFondoCommand } from '../modules/catalogoPorcentajeFondo/application/commands/UpdateCatalogoPorcentajeFondoCommand.js';
+import { DeleteCatalogoPorcentajeFondoCommand } from '../modules/catalogoPorcentajeFondo/application/commands/DeleteCatalogoPorcentajeFondoCommand.js';
 import { UpdateColoniaCommand } from '../modules/colonias/application/commands/UpdateColoniaCommand.js';
 import { DeleteColoniaCommand } from '../modules/colonias/application/commands/DeleteColoniaCommand.js';
 
@@ -1250,7 +1257,18 @@ container.register({
   getPrestamosHipotecariosQuery: asClass(GetPrestamosHipotecariosQuery).scoped(),
   getAportacionGuarderiasQuery: asClass(GetAportacionGuarderiasQuery).scoped(),
   getPensionNominaTransitorioQuery: asClass(GetPensionNominaTransitorioQuery).scoped(),
-  getAguinaldoQuery: asClass(GetAguinaldoQuery).scoped()
+  getAguinaldoQuery: asClass(GetAguinaldoQuery).scoped(),
+
+  // ============================================================================
+  // CATALOGO PORCENTAJE FONDO MODULE
+  // ============================================================================
+  catalogoPorcentajeFondoRepo: asClass(CatalogoPorcentajeFondoRepository).scoped(),
+  getAllCatalogoPorcentajeFondoQuery: asClass(GetAllCatalogoPorcentajeFondoQuery).scoped(),
+  getCatalogoPorcentajeFondoByIdQuery: asClass(GetCatalogoPorcentajeFondoByIdQuery).scoped(),
+  getUltimoPorcentajeFondoVigenteQuery: asClass(GetUltimoPorcentajeFondoVigenteQuery).scoped(),
+  createCatalogoPorcentajeFondoCommand: asClass(CreateCatalogoPorcentajeFondoCommand).scoped(),
+  updateCatalogoPorcentajeFondoCommand: asClass(UpdateCatalogoPorcentajeFondoCommand).scoped(),
+  deleteCatalogoPorcentajeFondoCommand: asClass(DeleteCatalogoPorcentajeFondoCommand).scoped()
 });
 
 /**

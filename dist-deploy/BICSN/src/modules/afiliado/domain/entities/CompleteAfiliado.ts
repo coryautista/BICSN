@@ -78,6 +78,7 @@ export interface CreateCompleteAfiliadoData {
     estatus: string | null;
     creadoPor: number | null;
     creadoPorUid: string | null;
+    entregaRendimiento: 'Si' | 'No' | null;
   };
 }
 

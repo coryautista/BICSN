@@ -18,7 +18,8 @@ const TIPOS_VALIDOS = [
   'ALTA_BAJA_CAMBIO',
   'PAGO',
   'HIPOTECARIO',
-  'INTERESES_MORATORIOS'
+  'INTERESES_MORATORIOS',
+  'REPORTES'
 ];
 
 export class GetEventoCalendariosByDateRangeQuery {

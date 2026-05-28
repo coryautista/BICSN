@@ -10,7 +10,7 @@ export class MovimientoRepository implements IMovimientoRepository {
     const r = await this.mssqlPool.request().query(`
       SELECT
         id, quincenaId, tipoMovimientoId, afiliadoId, fecha,
-        observaciones, folio, estatus, creadoPor, creadoPorUid, createdAt
+        observaciones, folio, estatus, creadoPor, creadoPorUid, entregaRendimiento, createdAt
       FROM afi.Movimiento
       ORDER BY id
     `);
@@ -25,6 +25,7 @@ export class MovimientoRepository implements IMovimientoRepository {
       estatus: row.estatus,
       creadoPor: row.creadoPor,
       creadoPorUid: row.creadoPorUid,
+      entregaRendimiento: row.entregaRendimiento ?? null,
       createdAt: row.createdAt?.toISOString() || new Date().toISOString()
     }));
   }
@@ -35,7 +36,7 @@ export class MovimientoRepository implements IMovimientoRepository {
       .query(`
         SELECT
           id, quincenaId, tipoMovimientoId, afiliadoId, fecha,
-          observaciones, folio, estatus, creadoPor, creadoPorUid, createdAt
+          observaciones, folio, estatus, creadoPor, creadoPorUid, entregaRendimiento, createdAt
         FROM afi.Movimiento
         WHERE id = @id
       `);
@@ -52,6 +53,7 @@ export class MovimientoRepository implements IMovimientoRepository {
       estatus: row.estatus,
       creadoPor: row.creadoPor,
       creadoPorUid: row.creadoPorUid,
+      entregaRendimiento: row.entregaRendimiento ?? null,
       createdAt: row.createdAt?.toISOString() || new Date().toISOString()
     };
   }
@@ -62,7 +64,7 @@ export class MovimientoRepository implements IMovimientoRepository {
       .query(`
         SELECT
           id, quincenaId, tipoMovimientoId, afiliadoId, fecha,
-          observaciones, folio, estatus, creadoPor, creadoPorUid, createdAt
+          observaciones, folio, estatus, creadoPor, creadoPorUid, entregaRendimiento, createdAt
         FROM afi.Movimiento
         WHERE afiliadoId = @afiliadoId
         ORDER BY id
@@ -78,6 +80,7 @@ export class MovimientoRepository implements IMovimientoRepository {
       estatus: row.estatus,
       creadoPor: row.creadoPor,
       creadoPorUid: row.creadoPorUid,
+      entregaRendimiento: row.entregaRendimiento ?? null,
       createdAt: row.createdAt?.toISOString() || new Date().toISOString()
     }));
   }
@@ -88,7 +91,7 @@ export class MovimientoRepository implements IMovimientoRepository {
       .query(`
         SELECT
           id, quincenaId, tipoMovimientoId, afiliadoId, fecha,
-          observaciones, folio, estatus, creadoPor, creadoPorUid, createdAt
+          observaciones, folio, estatus, creadoPor, creadoPorUid, entregaRendimiento, createdAt
         FROM afi.Movimiento
         WHERE tipoMovimientoId = @tipoMovimientoId
         ORDER BY id
@@ -104,6 +107,7 @@ export class MovimientoRepository implements IMovimientoRepository {
       estatus: row.estatus,
       creadoPor: row.creadoPor,
       creadoPorUid: row.creadoPorUid,
+      entregaRendimiento: row.entregaRendimiento ?? null,
       createdAt: row.createdAt?.toISOString() || new Date().toISOString()
     }));
   }
@@ -114,7 +118,7 @@ export class MovimientoRepository implements IMovimientoRepository {
       .query(`
         SELECT
           id, quincenaId, tipoMovimientoId, afiliadoId, fecha,
-          observaciones, folio, estatus, creadoPor, creadoPorUid, createdAt
+          observaciones, folio, estatus, creadoPor, creadoPorUid, entregaRendimiento, createdAt
         FROM afi.Movimiento
         WHERE folio = @folio
       `);
@@ -131,6 +135,7 @@ export class MovimientoRepository implements IMovimientoRepository {
       estatus: row.estatus,
       creadoPor: row.creadoPor,
       creadoPorUid: row.creadoPorUid,
+      entregaRendimiento: row.entregaRendimiento ?? null,
       createdAt: row.createdAt?.toISOString() || new Date().toISOString()
     };
   }
@@ -146,15 +151,16 @@ export class MovimientoRepository implements IMovimientoRepository {
       .input('estatus', sql.VarChar(30), data.estatus)
       .input('creadoPor', sql.Int, data.creadoPor)
       .input('creadoPorUid', sql.UniqueIdentifier, data.creadoPorUid)
+      .input('entregaRendimiento', sql.VarChar(2), data.entregaRendimiento)
       .query(`
         INSERT INTO afi.Movimiento (
           quincenaId, tipoMovimientoId, afiliadoId, fecha,
-          observaciones, folio, estatus, creadoPor, creadoPorUid
+          observaciones, folio, estatus, creadoPor, creadoPorUid, entregaRendimiento
         )
         OUTPUT INSERTED.*
         VALUES (
           @quincenaId, @tipoMovimientoId, @afiliadoId, @fecha,
-          @observaciones, @folio, @estatus, @creadoPor, @creadoPorUid
+          @observaciones, @folio, @estatus, @creadoPor, @creadoPorUid, @entregaRendimiento
         )
       `);
     const row = r.recordset[0];
@@ -169,6 +175,7 @@ export class MovimientoRepository implements IMovimientoRepository {
       estatus: row.estatus,
       creadoPor: row.creadoPor,
       creadoPorUid: row.creadoPorUid,
+      entregaRendimiento: row.entregaRendimiento ?? null,
       createdAt: row.createdAt?.toISOString() || new Date().toISOString()
     };
   }
@@ -213,6 +220,10 @@ export class MovimientoRepository implements IMovimientoRepository {
       updates.push('creadoPorUid = @creadoPorUid');
       request.input('creadoPorUid', sql.UniqueIdentifier, data.creadoPorUid);
     }
+    if (data.entregaRendimiento !== undefined) {
+      updates.push('entregaRendimiento = @entregaRendimiento');
+      request.input('entregaRendimiento', sql.VarChar(2), data.entregaRendimiento);
+    }
 
     const r = await request.query(`
       UPDATE afi.Movimiento
@@ -235,6 +246,7 @@ export class MovimientoRepository implements IMovimientoRepository {
       estatus: row.estatus,
       creadoPor: row.creadoPor,
       creadoPorUid: row.creadoPorUid,
+      entregaRendimiento: row.entregaRendimiento ?? null,
       createdAt: row.createdAt?.toISOString() || new Date().toISOString()
     };
   }

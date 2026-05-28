@@ -38,10 +38,16 @@ function buildUri(): string {
 async function getAttachment(): Promise<Attachment> {
   // Si el attachment no es válido, reconectar
   if (!attachment || !attachment.isValid) {
-    attachment = await client.connect(buildUri(), {
+    const connectOptions: any = {
       username: config.firebird.user,
       password: config.firebird.password,
-    });
+    };
+
+    if (config.firebird.role) {
+      connectOptions.role = config.firebird.role;
+    }
+
+    attachment = await client.connect(buildUri(), connectOptions);
     charsetApplied = false;
   }
 

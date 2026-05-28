@@ -13,6 +13,7 @@ export interface FTPConfig {
 
 export class FTPService {
   private config: FTPConfig;
+  private basePath: string;
 
   constructor() {
     this.config = {
@@ -21,6 +22,20 @@ export class FTPService {
       username: env.ftp.user,
       password: env.ftp.password
     };
+    this.basePath = env.ftp.basePath;
+  }
+
+  private joinRemotePath(...segments: string[]): string {
+    const normalizedSegments = segments
+      .filter((segment) => segment.length > 0)
+      .map((segment, index) => {
+        const withoutTrailingSlash = segment.replace(/\/+$/g, '');
+        return index === 0
+          ? withoutTrailingSlash
+          : withoutTrailingSlash.replace(/^\/+/, '');
+      });
+
+    return normalizedSegments.join('/');
   }
 
   /**
@@ -140,13 +155,13 @@ export class FTPService {
    * @returns string
    */
   generateExpedientePath(curp: string, fileName: string): string {
-    // Format: upload/expedientes/{CURP}/{timestamp}_{filename}
+    // Format: {FTP_BASE_PATH}/expedientes/{CURP}/{timestamp}_{filename}
     const timestamp = Date.now();
     const fileExt = path.extname(fileName);
     const baseName = path.basename(fileName, fileExt);
     const newFileName = `${timestamp}_${baseName}${fileExt}`;
 
-    return `upload/expedientes/${curp}/${newFileName}`;
+    return this.joinRemotePath(this.basePath, 'expedientes', curp, newFileName);
   }
 
   /**

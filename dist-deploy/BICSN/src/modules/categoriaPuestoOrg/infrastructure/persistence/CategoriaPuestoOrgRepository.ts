@@ -25,7 +25,10 @@ export class CategoriaPuestoOrgRepository implements ICategoriaPuestoOrgReposito
       createdBy: row.createdBy ?? null,
       updatedBy: row.updatedBy ?? null,
       baseConfianza: row.BaseConfianza,
-      porcentaje: row.Porcentaje
+      porcentaje: row.Porcentaje,
+      sindicalizado: row.Sindicalizado === null || row.Sindicalizado === undefined ? null : row.Sindicalizado === 1 || row.Sindicalizado === true,
+      diasAguinaldo: row.DiasAguinaldo ?? null,
+      diasAguinaldoSindicalizado: row.DiasAguinaldoSindicalizado ?? null
     };
   }
 
@@ -46,7 +49,10 @@ export class CategoriaPuestoOrgRepository implements ICategoriaPuestoOrgReposito
           VigenciaInicio,
           VigenciaFin,
           BaseConfianza,
-          Porcentaje
+          Porcentaje,
+          Sindicalizado,
+          DiasAguinaldo,
+          DiasAguinaldoSindicalizado
         FROM afi.CategoriaPuestoOrg
         WHERE CategoriaPuestoOrgId = @categoriaPuestoOrgId
       `);
@@ -70,7 +76,10 @@ export class CategoriaPuestoOrgRepository implements ICategoriaPuestoOrgReposito
         VigenciaInicio,
         VigenciaFin,
         BaseConfianza,
-        Porcentaje
+        Porcentaje,
+        Sindicalizado,
+        DiasAguinaldo,
+        DiasAguinaldoSindicalizado
       FROM afi.CategoriaPuestoOrg
       WHERE 1=1
     `;
@@ -125,11 +134,14 @@ export class CategoriaPuestoOrgRepository implements ICategoriaPuestoOrgReposito
       .input('vigenciaFin', sql.DateTime2, data.vigenciaFin ?? null)
       .input('baseConfianza', sql.NVarChar(1), data.baseConfianza ?? null)
       .input('porcentaje', sql.Int, data.porcentaje ?? null)
+      .input('sindicalizado', sql.Bit, data.sindicalizado ?? null)
+      .input('diasAguinaldo', sql.SmallInt, data.diasAguinaldo ?? null)
+      .input('diasAguinaldoSindicalizado', sql.SmallInt, data.diasAguinaldoSindicalizado ?? null)
       .query(`
         INSERT INTO afi.CategoriaPuestoOrg (
           Nivel, Org0, Org1, Org2, Org3, Categoria, NombreCategoria,
           IngresoBrutoMensual, VigenciaInicio, VigenciaFin,
-          BaseConfianza, Porcentaje
+          BaseConfianza, Porcentaje, Sindicalizado, DiasAguinaldo, DiasAguinaldoSindicalizado
         )
         OUTPUT
           INSERTED.CategoriaPuestoOrgId,
@@ -144,11 +156,14 @@ export class CategoriaPuestoOrgRepository implements ICategoriaPuestoOrgReposito
           INSERTED.VigenciaInicio,
           INSERTED.VigenciaFin,
           INSERTED.BaseConfianza,
-          INSERTED.Porcentaje
+          INSERTED.Porcentaje,
+          INSERTED.Sindicalizado,
+          INSERTED.DiasAguinaldo,
+          INSERTED.DiasAguinaldoSindicalizado
         VALUES (
           @nivel, @org0, @org1, @org2, @org3, @categoria, @nombreCategoria,
           @ingresoBrutoMensual, @vigenciaInicio, @vigenciaFin,
-          @baseConfianza, @porcentaje
+          @baseConfianza, @porcentaje, @sindicalizado, @diasAguinaldo, @diasAguinaldoSindicalizado
         )
       `);
 
@@ -179,6 +194,18 @@ export class CategoriaPuestoOrgRepository implements ICategoriaPuestoOrgReposito
       request.input('porcentaje', sql.Int, data.porcentaje);
       sets.push('Porcentaje = @porcentaje');
     }
+    if (data.sindicalizado !== undefined) {
+      request.input('sindicalizado', sql.Bit, data.sindicalizado);
+      sets.push('Sindicalizado = @sindicalizado');
+    }
+    if (data.diasAguinaldo !== undefined) {
+      request.input('diasAguinaldo', sql.SmallInt, data.diasAguinaldo);
+      sets.push('DiasAguinaldo = @diasAguinaldo');
+    }
+    if (data.diasAguinaldoSindicalizado !== undefined) {
+      request.input('diasAguinaldoSindicalizado', sql.SmallInt, data.diasAguinaldoSindicalizado);
+      sets.push('DiasAguinaldoSindicalizado = @diasAguinaldoSindicalizado');
+    }
 
     if (sets.length === 0) {
       throw new InvalidCategoriaPuestoOrgDataError('body', 'Debe proporcionar al menos un campo para actualizar');
@@ -200,7 +227,10 @@ export class CategoriaPuestoOrgRepository implements ICategoriaPuestoOrgReposito
         INSERTED.VigenciaInicio,
         INSERTED.VigenciaFin,
         INSERTED.BaseConfianza,
-        INSERTED.Porcentaje
+        INSERTED.Porcentaje,
+        INSERTED.Sindicalizado,
+        INSERTED.DiasAguinaldo,
+        INSERTED.DiasAguinaldoSindicalizado
       WHERE CategoriaPuestoOrgId = @categoriaPuestoOrgId
     `;
 

@@ -79,7 +79,10 @@ export default async function categoriaPuestoOrgRoutes(app: FastifyInstance) {
                   vigenciaInicio: { type: 'string', description: 'Fecha de inicio de vigencia', example: '2025-11-18' },
                   vigenciaFin: { type: 'string', nullable: true, description: 'Fecha de fin de vigencia', example: '2030-11-18' },
                   baseConfianza: { type: 'string', nullable: true, description: 'Base de confianza (1 carácter alfanumérico). Opcional', example: null },
-                  porcentaje: { type: 'number', nullable: true, description: 'Porcentaje (0-100). Opcional', example: null }
+                  porcentaje: { type: 'number', nullable: true, description: 'Porcentaje (0-100). Opcional', example: null },
+                  sindicalizado: { type: 'boolean', nullable: true, description: 'Indica si el puesto es sindicalizado', example: false },
+                  diasAguinaldo: { type: 'number', nullable: true, description: 'Días de aguinaldo de referencia', example: 40 },
+                  diasAguinaldoSindicalizado: { type: 'number', nullable: true, description: 'Días de aguinaldo para puesto sindicalizado', example: 45 }
                 }
               }
             }
@@ -151,7 +154,10 @@ export default async function categoriaPuestoOrgRoutes(app: FastifyInstance) {
                   vigenciaInicio: { type: 'string', description: 'Fecha de inicio de vigencia', example: '2025-11-18' },
                   vigenciaFin: { type: 'string', nullable: true, description: 'Fecha de fin de vigencia', example: '2030-11-18' },
                   baseConfianza: { type: 'string', nullable: true, description: 'Base de confianza (1 carácter alfanumérico). Opcional', example: null },
-                  porcentaje: { type: 'number', nullable: true, description: 'Porcentaje (0-100). Opcional', example: null }
+                  porcentaje: { type: 'number', nullable: true, description: 'Porcentaje (0-100). Opcional', example: null },
+                  sindicalizado: { type: 'boolean', nullable: true, description: 'Indica si el puesto es sindicalizado', example: false },
+                  diasAguinaldo: { type: 'number', nullable: true, description: 'Días de aguinaldo de referencia', example: 40 },
+                  diasAguinaldoSindicalizado: { type: 'number', nullable: true, description: 'Días de aguinaldo para puesto sindicalizado', example: 45 }
                 }
               }
             }
@@ -261,7 +267,10 @@ export default async function categoriaPuestoOrgRoutes(app: FastifyInstance) {
                 vigenciaInicio: { type: 'string', description: 'Fecha de inicio de vigencia', example: '2025-11-18' },
                 vigenciaFin: { type: 'string', nullable: true, description: 'Fecha de fin de vigencia', example: '2030-11-18' },
                 baseConfianza: { type: 'string', nullable: true, description: 'Base de confianza (1 carácter alfanumérico). Opcional', example: null },
-                porcentaje: { type: 'number', nullable: true, description: 'Porcentaje (0-100). Opcional', example: null }
+                porcentaje: { type: 'number', nullable: true, description: 'Porcentaje (0-100). Opcional', example: null },
+                sindicalizado: { type: 'boolean', nullable: true, description: 'Indica si el puesto es sindicalizado', example: false },
+                diasAguinaldo: { type: 'number', nullable: true, description: 'Días de aguinaldo de referencia', example: 40 },
+                diasAguinaldoSindicalizado: { type: 'number', nullable: true, description: 'Días de aguinaldo para puesto sindicalizado', example: 45 }
               }
             }
           }
@@ -408,6 +417,25 @@ export default async function categoriaPuestoOrgRoutes(app: FastifyInstance) {
             maximum: 100,
             nullable: true,
             description: 'Porcentaje (0-100). Opcional'
+          },
+          sindicalizado: {
+            type: 'boolean',
+            nullable: true,
+            description: 'Indica si el puesto es sindicalizado. Opcional'
+          },
+          diasAguinaldo: {
+            type: 'number',
+            minimum: 0,
+            maximum: 365,
+            nullable: true,
+            description: 'Días de aguinaldo de referencia. Opcional'
+          },
+          diasAguinaldoSindicalizado: {
+            type: 'number',
+            minimum: 0,
+            maximum: 365,
+            nullable: true,
+            description: 'Días de aguinaldo para puesto sindicalizado. Opcional'
           }
         }
       },
@@ -432,7 +460,10 @@ export default async function categoriaPuestoOrgRoutes(app: FastifyInstance) {
                 vigenciaInicio: { type: 'string', description: 'Fecha de inicio de vigencia', example: '2025-11-18' },
                 vigenciaFin: { type: 'string', nullable: true, description: 'Fecha de fin de vigencia', example: '2030-11-18' },
                   baseConfianza: { type: 'string', nullable: true, description: 'Base de confianza (1 carácter alfanumérico). Opcional', example: null },
-                  porcentaje: { type: 'number', nullable: true, description: 'Porcentaje (0-100). Opcional', example: null }
+                  porcentaje: { type: 'number', nullable: true, description: 'Porcentaje (0-100). Opcional', example: null },
+                  sindicalizado: { type: 'boolean', nullable: true, description: 'Indica si el puesto es sindicalizado', example: false },
+                  diasAguinaldo: { type: 'number', nullable: true, description: 'Días de aguinaldo de referencia', example: 40 },
+                  diasAguinaldoSindicalizado: { type: 'number', nullable: true, description: 'Días de aguinaldo para puesto sindicalizado', example: 45 }
               }
             }
           }
@@ -549,6 +580,25 @@ export default async function categoriaPuestoOrgRoutes(app: FastifyInstance) {
             maximum: 100,
             nullable: true,
             description: 'Porcentaje (0-100). Opcional'
+          },
+          sindicalizado: {
+            type: 'boolean',
+            nullable: true,
+            description: 'Indica si el puesto es sindicalizado. Opcional'
+          },
+          diasAguinaldo: {
+            type: 'number',
+            minimum: 0,
+            maximum: 365,
+            nullable: true,
+            description: 'Días de aguinaldo de referencia. Opcional'
+          },
+          diasAguinaldoSindicalizado: {
+            type: 'number',
+            minimum: 0,
+            maximum: 365,
+            nullable: true,
+            description: 'Días de aguinaldo para puesto sindicalizado. Opcional'
           }
         }
       },
@@ -573,7 +623,10 @@ export default async function categoriaPuestoOrgRoutes(app: FastifyInstance) {
                 vigenciaInicio: { type: 'string', description: 'Fecha de inicio de vigencia', example: '2025-11-18' },
                 vigenciaFin: { type: 'string', nullable: true, description: 'Fecha de fin de vigencia', example: '2035-11-18' },
                 baseConfianza: { type: 'string', nullable: true, description: 'Base de confianza (1 carácter alfanumérico). Opcional', example: 'A' },
-                porcentaje: { type: 'number', nullable: true, description: 'Porcentaje (0-100). Opcional', example: 10 }
+                porcentaje: { type: 'number', nullable: true, description: 'Porcentaje (0-100). Opcional', example: 10 },
+                sindicalizado: { type: 'boolean', nullable: true, description: 'Indica si el puesto es sindicalizado', example: false },
+                diasAguinaldo: { type: 'number', nullable: true, description: 'Días de aguinaldo de referencia', example: 40 },
+                diasAguinaldoSindicalizado: { type: 'number', nullable: true, description: 'Días de aguinaldo para puesto sindicalizado', example: 45 }
               }
             }
           }

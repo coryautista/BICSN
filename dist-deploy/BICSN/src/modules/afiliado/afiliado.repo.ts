@@ -2124,6 +2124,7 @@ export async function createAfiliadoAfiliadoOrgMovimiento(data: {
         afiliadoId: movimientoRow.afiliadoId,
         fecha: movimientoRow.fecha?.toISOString().split('T')[0] || null,
         observaciones: movimientoRow.observaciones,
+        entregaRendimiento: movimientoRow.entregaRendimiento ?? null,
         folio: movimientoRow.folio,
         estatus: movimientoRow.estatus,
         creadoPor: movimientoRow.creadoPor,

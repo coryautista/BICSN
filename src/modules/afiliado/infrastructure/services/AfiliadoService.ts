@@ -318,6 +318,7 @@ export async function getMovimientosQuincenalesService(userOrg0: string, userOrg
           m.afiliadoId as movimiento_afiliadoId,
           m.fecha,
           m.observaciones,
+          m.entregaRendimiento,
           m.folio as movimiento_folio,
           m.estatus as movimiento_estatus,
           m.creadoPor,
@@ -419,6 +420,7 @@ export async function getMovimientosQuincenalesService(userOrg0: string, userOrg
         afiliadoId: parseInt(row.movimiento_afiliadoId) || 0,
         fecha: row.fecha?.toISOString().split('T')[0] || null,
         observaciones: row.observaciones,
+        entregaRendimiento: row.entregaRendimiento ?? null,
         folio: row.movimiento_folio,
         estatus: row.movimiento_estatus,
         creadoPor: row.creadoPor ? parseInt(row.creadoPor) : null,
@@ -503,6 +505,7 @@ export async function createAfiliadoAfiliadoOrgMovimientoService(data: {
   observaciones?: string | null;
   folioMov?: string | null;
   estatusMov?: string | null;
+  entregaRendimiento?: 'Si' | 'No' | null;
   creadoPor?: number | null;
   creadoPorUid?: string | null;
 }): Promise<{ afiliado: Afiliado; afiliadoOrg: AfiliadoOrg; movimiento: Movimiento }> {
@@ -608,6 +611,7 @@ export async function createAfiliadoAfiliadoOrgMovimientoService(data: {
       observaciones: data.observaciones ?? null,
       folio: data.folioMov ?? null,
       estatus: data.estatusMov ?? null,
+      entregaRendimiento: data.entregaRendimiento ?? null,
       creadoPor: data.creadoPor ?? null,
       creadoPorUid: data.creadoPorUid ?? null
     }

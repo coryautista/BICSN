@@ -47,6 +47,7 @@ import { lineaCapturaRoutes } from '../modules/reportes/aplicacionesQNA/lineaCap
 import afectacionOrgRoutes from '../modules/afectacionOrg/afectacionOrg.routes.js';
 import organicaCascadeRoutes from '../modules/organicaCascade/organicaCascade.routes.js';
 import aportacionesFondosRoutes from '../modules/aportacionesFondos/aportacionesFondos.routes.js';
+import catalogoPorcentajeFondoRoutes from '../modules/catalogoPorcentajeFondo/catalogoPorcentajeFondo.routes.js';
 import nominaRoutes from '../modules/nomina/nomina.routes.js';
 import historicosQuincenalesRoutes from '../modules/historicosQuincenales/historicosQuincenales.routes.js';
 
@@ -322,6 +323,11 @@ const ROUTE_CONFIGS: RouteConfig[] = [
   // Financial contributions
   {
     plugin: aportacionesFondosRoutes,
+    prefix: '/v1',
+    options: { group: ROUTE_GROUPS.AFILIADOS }
+  },
+  {
+    plugin: catalogoPorcentajeFondoRoutes,
     prefix: '/v1',
     options: { group: ROUTE_GROUPS.AFILIADOS }
   },

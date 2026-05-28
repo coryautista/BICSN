@@ -7,7 +7,8 @@ const TipoEventoEnum = z.enum([
   'ALTA_BAJA_CAMBIO',
   'PAGO',
   'HIPOTECARIO',
-  'INTERESES_MORATORIOS'
+  'INTERESES_MORATORIOS',
+  'REPORTES'
 ]);
 
 export const CreateEventoCalendarioSchema = z.object({

@@ -22,6 +22,15 @@ function convertDateFormat(dateString: string | null | undefined): string | null
   return dateString;
 }
 
+const EntregaRendimientoSchema = z.preprocess((value) => {
+  if (value === null || value === undefined || value === '') return value;
+  if (typeof value !== 'string') return value;
+  const normalized = value.trim().toLowerCase();
+  if (normalized === 'si' || normalized === 'sí') return 'Si';
+  if (normalized === 'no') return 'No';
+  return value;
+}, z.enum(['Si', 'No']).nullable().optional());
+
 export const CreateAfiliadoAfiliadoOrgMovimientoSchema = z.object({
   // Afiliado fields
   folio: z.number().int().nullable().optional(),
@@ -105,6 +114,7 @@ export const CreateAfiliadoAfiliadoOrgMovimientoSchema = z.object({
   tipoMovimientoId: z.number().int().optional().default(1),
   fechaMov: z.union([z.string().date(), z.null()]).optional(),
   observaciones: z.string().max(1024).nullable().optional(),
+  entregaRendimiento: EntregaRendimientoSchema,
   folioMov: z.string().max(100).nullable().optional(),
   estatusMov: z.string().max(30).nullable().optional(),
   creadoPor: z.number().int().nullable().optional()

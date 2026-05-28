@@ -1208,6 +1208,7 @@ export class AportacionFondoRepository implements IAportacionFondoRepository {
     org0?: string,
     org1?: string
   ): Promise<AportacionFondo[]> {
+    const porcentajes = await this.obtenerPorcentajeFondoVigente(tipo);
     const diasMap = usarDiasLaboradosNomina && periodo && org0 && org1
       ? await this.obtenerDiasLaboradosNominaMap(
           registros.map((registro) => registro.rfc).filter(Boolean),
@@ -1267,30 +1268,52 @@ export class AportacionFondoRepository implements IAportacionFondoRepository {
 
       switch (tipo) {
         case 'ahorro':
-          aportacion.afae = ((sueldo / 30) * diasInfo.dias) * 0.0250; // Patron contribution
-          aportacion.afaa = ((sueldo / 30) * diasInfo.dias) * 0.050;  // Employee contribution
+          aportacion.afae = ((sueldo / 30) * diasInfo.dias) * porcentajes.porcentajePatron; // Patron contribution
+          aportacion.afaa = ((sueldo / 30) * diasInfo.dias) * (porcentajes.porcentajeAfiliado ?? 0);  // Employee contribution
           aportacion.total = (aportacion.afae || 0) + (aportacion.afaa || 0);
           break;
         
         case 'vivienda':
-          aportacion.afe = ((sueldo / 30) * diasInfo.dias) * 0.0175; // Patron contribution
+          aportacion.afe = ((sueldo / 30) * diasInfo.dias) * porcentajes.porcentajePatron; // Patron contribution
           aportacion.total = aportacion.afe || 0;
           break;
         
         case 'prestaciones':
-          aportacion.afpe = ((sueldoBase) * 0.2225); // Patron contribution
-          aportacion.afpa = ((sueldoBase) * 0.0450); // Employee contribution
+          aportacion.afpe = ((sueldoBase) * porcentajes.porcentajePatron); // Patron contribution
+          aportacion.afpa = ((sueldoBase) * (porcentajes.porcentajeAfiliado ?? 0)); // Employee contribution
           aportacion.total = (aportacion.afpe || 0) + (aportacion.afpa || 0);
           break;
         
         case 'cair':
-          aportacion.afe = ((sueldo / 30) * diasInfo.dias) * 0.020; // Patron contribution
+          aportacion.afe = ((sueldo / 30) * diasInfo.dias) * porcentajes.porcentajePatron; // Patron contribution
           aportacion.total = aportacion.afe || 0;
           break;
       }
 
       return aportacion;
     });
+  }
+
+  private async obtenerPorcentajeFondoVigente(tipo: TipoFondo): Promise<{ porcentajePatron: number; porcentajeAfiliado: number | null }> {
+    const pool = await getPool();
+    const result = await pool.request()
+      .input('tipoFondo', sql.VarChar(30), tipo)
+      .query(`
+        SELECT TOP 1 PorcentajePatron, PorcentajeAfiliado
+        FROM aportaciones.CatalogoPorcentajeFondo
+        WHERE TipoFondo = @tipoFondo AND Vigente = 1
+        ORDER BY AnioVigencia DESC, CatalogoPorcentajeFondoId DESC
+      `);
+
+    const row = result.recordset[0];
+    if (!row) {
+      throw new Error(`No existe porcentaje vigente para el fondo ${tipo}`);
+    }
+
+    return {
+      porcentajePatron: Number(row.PorcentajePatron),
+      porcentajeAfiliado: row.PorcentajeAfiliado == null ? null : Number(row.PorcentajeAfiliado)
+    };
   }
 
   private resolveDiasLaborados(

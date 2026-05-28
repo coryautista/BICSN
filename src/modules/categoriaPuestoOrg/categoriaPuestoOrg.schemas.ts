@@ -12,7 +12,10 @@ export const CreateCategoriaPuestoOrgSchema = z.object({
   vigenciaInicio: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'La fecha de inicio de vigencia debe tener formato YYYY-MM-DD'),
   vigenciaFin: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'La fecha de fin de vigencia debe tener formato YYYY-MM-DD').optional(),
   baseConfianza: z.string().length(1, 'BaseConfianza debe tener exactamente 1 carácter').optional(),
-  porcentaje: z.number().int().min(0).max(100, 'El porcentaje debe estar entre 0 y 100').optional()
+  porcentaje: z.number().int().min(0).max(100, 'El porcentaje debe estar entre 0 y 100').optional(),
+  sindicalizado: z.boolean().nullable().optional(),
+  diasAguinaldo: z.number().int().min(0).max(365, 'Los días de aguinaldo deben estar entre 0 y 365').nullable().optional(),
+  diasAguinaldoSindicalizado: z.number().int().min(0).max(365, 'Los días de aguinaldo sindicalizado deben estar entre 0 y 365').nullable().optional()
 }).refine(data => {
   if (data.nivel === 0) {
     return (data.org2 === undefined || data.org2 === "") && (data.org3 === undefined || data.org3 === "");
@@ -33,7 +36,10 @@ export const UpdateCategoriaPuestoOrgSchema = z.object({
   ingresoBrutoMensual: z.number().positive('El ingreso bruto mensual debe ser mayor a 0').optional(),
   vigenciaFin: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'La fecha de fin de vigencia debe tener formato YYYY-MM-DD').optional(),
   baseConfianza: z.string().length(1, 'BaseConfianza debe tener exactamente 1 carácter').optional(),
-  porcentaje: z.number().int().min(0).max(100, 'El porcentaje debe estar entre 0 y 100').optional()
+  porcentaje: z.number().int().min(0).max(100, 'El porcentaje debe estar entre 0 y 100').optional(),
+  sindicalizado: z.boolean().nullable().optional(),
+  diasAguinaldo: z.number().int().min(0).max(365, 'Los días de aguinaldo deben estar entre 0 y 365').nullable().optional(),
+  diasAguinaldoSindicalizado: z.number().int().min(0).max(365, 'Los días de aguinaldo sindicalizado deben estar entre 0 y 365').nullable().optional()
 }).refine(data => Object.keys(data).length > 0, {
   message: 'Debe proporcionar al menos un campo para actualizar'
 });
