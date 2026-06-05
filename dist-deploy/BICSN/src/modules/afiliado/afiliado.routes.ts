@@ -1,6 +1,6 @@
 import { FastifyInstance } from 'fastify';
 import { requireAuth, requireRole } from '../auth/auth.middleware.js';
-import { CreateAfiliadoSchema, UpdateAfiliadoSchema, CreateAfiliadoAfiliadoOrgMovimientoSchema, CreateCambioSueldoSchema, CreateBajaPermanenteSchema, CreateBajaSuspensionSchema, CreateBajaTerminaSuspensionSchema, CreateBajaTerminaSuspensionYBajaSchema, AplicarBDIsspeaLoteSchema, UpdateBitacoraAfectacionOrgTerminadoSchema, CargarSemanasExtemporaneasLoteSchema } from './afiliado.schemas.js';
+import { CreateAfiliadoSchema, UpdateAfiliadoSchema, CreateAfiliadoAfiliadoOrgMovimientoSchema, CreateCambioSueldoSchema, CreateBajaPermanenteSchema, CreateBajaSuspensionSchema, CreateBajaTerminaSuspensionSchema, CreateBajaTerminaSuspensionYBajaSchema, AplicarBDIsspeaIndividualSchema, AplicarBDIsspeaLoteSchema, UpdateBitacoraAfectacionOrgTerminadoSchema, CargarSemanasExtemporaneasLoteSchema } from './afiliado.schemas.js';
 import {
   createAfiliadoAfiliadoOrgMovimientoService
 } from './infrastructure/services/AfiliadoService.js';
@@ -24,6 +24,7 @@ import { CreateAfiliadoCommand } from './application/commands/CreateAfiliadoComm
 import { UpdateAfiliadoCommand } from './application/commands/UpdateAfiliadoCommand.js';
 import { DeleteAfiliadoCommand } from './application/commands/DeleteAfiliadoCommand.js';
 import { CreateCompleteAfiliadoCommand } from './application/commands/CreateCompleteAfiliadoCommand.js';
+import { AplicarBDIsspeaIndividualCommand } from './application/commands/AplicarBDIsspeaIndividualCommand.js';
 import { AplicarBDIsspeaLoteCommand } from './application/commands/AplicarBDIsspeaLoteCommand.js';
 import { AplicarBDIssspeaQNACommand } from './application/commands/AplicarBDIssspeaQNACommand.js';
 import { UpdateBitacoraAfectacionOrgTerminadoCommand } from './application/commands/UpdateBitacoraAfectacionOrgTerminadoCommand.js';
@@ -46,6 +47,12 @@ const logger = pino({
   name: 'afiliado-routes',
   level: process.env.LOG_LEVEL || 'info'
 });
+
+function getTokenUserForMovimiento(user: any): { userId: number | null; userUid: string | null } {
+  const userUid = user?.sub ? String(user.sub) : null;
+  const userId = userUid && /^\d+$/.test(userUid) ? Number(userUid) : null;
+  return { userId, userUid };
+}
 
 // Routes for Afiliado CRUD operations
 export default async function afiliadoRoutes(app: FastifyInstance) {
@@ -1576,6 +1583,7 @@ export default async function afiliadoRoutes(app: FastifyInstance) {
           numQuinquenios: { type: 'number', minimum: 0, nullable: true, description: 'Número de quinquenio (0, 1, 2, 3...)' },
           bc: { type: 'string', maxLength: 30, nullable: true },
           porcentaje: { type: 'number', nullable: true },
+          categoriaPuestoOrgId: { type: 'number', nullable: true, description: 'Categoría de puesto usada para llenar sueldo en nómina al alta' },
           // Campos orgánicos opcionales (si no se envían, se obtienen del usuario autenticado)
           claveOrganica2: { type: 'string', maxLength: 30, nullable: true },
           claveOrganica3: { type: 'string', maxLength: 30, nullable: true },
@@ -1584,6 +1592,7 @@ export default async function afiliadoRoutes(app: FastifyInstance) {
           orgs3: { type: 'string', maxLength: 200, nullable: true },
           orgs4: { type: 'string', maxLength: 200, nullable: true },
           // Movimiento fields
+          fechaMovimiento: { type: 'string', format: 'date', nullable: true, description: 'Fecha efectiva del alta para calcular días laborados' },
           observaciones: { type: 'string', maxLength: 1024, nullable: true },
           entregaRendimiento: { type: 'string', enum: ['Si', 'No'], nullable: true, description: 'Indica si se entrega rendimiento' }
         }
@@ -1682,6 +1691,7 @@ export default async function afiliadoRoutes(app: FastifyInstance) {
                     tipoMovimientoId: { type: 'number' },
                     afiliadoId: { type: 'number' },
                     fecha: { type: 'string', nullable: true },
+                    fechaMovimiento: { type: 'string', nullable: true },
                     observaciones: { type: 'string', nullable: true },
                     entregaRendimiento: { type: 'string', enum: ['Si', 'No'], nullable: true },
                     folio: { type: 'string', nullable: true },
@@ -1730,9 +1740,14 @@ export default async function afiliadoRoutes(app: FastifyInstance) {
     }
 
     try {
-      // Obtener userId del token
-      const userId = req.user?.sub ? parseInt(req.user.sub, 10) : null;
-      const userUid = req.user?.sub ?? null; // UUID del usuario
+      if (!parsed.data.fechaMovimiento) {
+        return reply.code(400).send(fail('FECHA_MOVIMIENTO_REQUIRED: fechaMovimiento es requerida para alta'));
+      }
+      if (!parsed.data.categoriaPuestoOrgId) {
+        return reply.code(400).send(fail('CATEGORIA_PUESTO_ORG_REQUIRED: categoriaPuestoOrgId es requerida para alta'));
+      }
+
+      const { userId, userUid } = getTokenUserForMovimiento(req.user);
 
       // Obtener claveOrganica0 a claveOrganica3 del body o del usuario autenticado
       // Si se envían en el body, se usan esos valores; si no, se obtienen del usuario
@@ -1822,17 +1837,19 @@ export default async function afiliadoRoutes(app: FastifyInstance) {
           numQuinquenios: parsed.data.numQuinquenios ?? 1,
           aplicar: true,
           bc: parsed.data.bc ?? null,
-          porcentaje: parsed.data.porcentaje ?? null
+          porcentaje: parsed.data.porcentaje ?? null,
+          categoriaPuestoOrgId: parsed.data.categoriaPuestoOrgId ?? null
         },
         movimiento: {
           quincenaId: undefined, // Se calcula automáticamente
           tipoMovimientoId: 1,
           fecha: null,
+          fechaMovimiento: parsed.data.fechaMovimiento ?? null,
           observaciones: parsed.data.observaciones ?? null,
           entregaRendimiento: parsed.data.entregaRendimiento ?? null,
           folio: '',
           estatus: 'A',
-          creadoPor: userId ?? 1,
+          creadoPor: userId,
           creadoPorUid: userUid
         }
       });
@@ -1904,6 +1921,7 @@ export default async function afiliadoRoutes(app: FastifyInstance) {
           orgs3: { type: 'string', maxLength: 200, nullable: true },
           orgs4: { type: 'string', maxLength: 200, nullable: true },
           // Movimiento fields
+          fechaMovimiento: { type: 'string', format: 'date', nullable: true, description: 'Fecha efectiva del cambio; no afecta nómina' },
           observaciones: { type: 'string', maxLength: 1024, nullable: true },
           entregaRendimiento: { type: 'string', enum: ['Si', 'No'], nullable: true, description: 'Indica si se entrega rendimiento' }
         }
@@ -2002,6 +2020,7 @@ export default async function afiliadoRoutes(app: FastifyInstance) {
                     tipoMovimientoId: { type: 'number' },
                     afiliadoId: { type: 'number' },
                     fecha: { type: 'string', nullable: true },
+                    fechaMovimiento: { type: 'string', nullable: true },
                     observaciones: { type: 'string', nullable: true },
                     entregaRendimiento: { type: 'string', enum: ['Si', 'No'], nullable: true },
                     folio: { type: 'string', nullable: true },
@@ -2070,9 +2089,7 @@ export default async function afiliadoRoutes(app: FastifyInstance) {
         return reply.code(404).send(fail('INTERNO_NOT_FOUND_IN_FIREBIRD: El número de interno no existe en las tablas PERSONAL y ORG_PERSONAL'));
       }
 
-      // Obtener userId del token
-      const userId = req.user?.sub ? parseInt(req.user.sub, 10) : null;
-      const userUid = req.user?.sub ?? null; // UUID del usuario
+      const { userId, userUid } = getTokenUserForMovimiento(req.user);
       
       // Obtener claveOrganica0 a claveOrganica3 del body o del usuario autenticado
       // Si se envían en el body, se usan esos valores; si no, se obtienen del usuario
@@ -2100,7 +2117,7 @@ export default async function afiliadoRoutes(app: FastifyInstance) {
         ...parsed.data,
         estatus: parsed.data.estatus ?? true,
         interno: parsed.data.interno, // Usar el interno del body (obligatorio)
-        creadoPor: userId ?? 1,
+        creadoPor: userId,
         creadoPorUid: userUid,
         entregaRendimiento: parsed.data.entregaRendimiento ?? null,
         tipoMovimientoId: 5, // CAMBIO DE SUELDO
@@ -2120,6 +2137,7 @@ export default async function afiliadoRoutes(app: FastifyInstance) {
         nivel1Id: null,
         nivel2Id: null,
         nivel3Id: null,
+        fechaMovimiento: parsed.data.fechaMovimiento ?? null,
         orgs1: orgs1 || null,
         orgs2: orgs2 || null,
         orgs3: orgs3 || null,
@@ -2193,6 +2211,7 @@ export default async function afiliadoRoutes(app: FastifyInstance) {
           orgs3: { type: 'string', maxLength: 200, nullable: true },
           orgs4: { type: 'string', maxLength: 200, nullable: true },
           // Movimiento fields
+          fechaMovimiento: { type: 'string', format: 'date', nullable: true, description: 'Fecha efectiva de la baja para calcular días laborados' },
           observaciones: { type: 'string', maxLength: 1024, nullable: true },
           entregaRendimiento: { type: 'string', enum: ['Si', 'No'], nullable: true, description: 'Indica si se entrega rendimiento' }
         }
@@ -2291,6 +2310,7 @@ export default async function afiliadoRoutes(app: FastifyInstance) {
                     tipoMovimientoId: { type: 'number' },
                     afiliadoId: { type: 'number' },
                     fecha: { type: 'string', nullable: true },
+                    fechaMovimiento: { type: 'string', nullable: true },
                     observaciones: { type: 'string', nullable: true },
                     entregaRendimiento: { type: 'string', enum: ['Si', 'No'], nullable: true },
                     folio: { type: 'string', nullable: true },
@@ -2352,6 +2372,10 @@ export default async function afiliadoRoutes(app: FastifyInstance) {
     }
 
     try {
+      if (!parsed.data.fechaMovimiento) {
+        return reply.code(400).send(fail('FECHA_MOVIMIENTO_REQUIRED: fechaMovimiento es requerida para baja permanente'));
+      }
+
       // Validar que el interno exista en Firebird
       const validateInternoInFirebirdQuery = req.diScope.resolve<ValidateInternoInFirebirdQuery>('validateInternoInFirebirdQuery');
       const internoExists = await validateInternoInFirebirdQuery.execute(parsed.data.interno!);
@@ -2359,9 +2383,7 @@ export default async function afiliadoRoutes(app: FastifyInstance) {
         return reply.code(404).send(fail('INTERNO_NOT_FOUND_IN_FIREBIRD: El número de interno no existe en las tablas PERSONAL y ORG_PERSONAL'));
       }
 
-      // Obtener userId del token
-      const userId = req.user?.sub ? parseInt(req.user.sub, 10) : null;
-      const userUid = req.user?.sub ?? null; // UUID del usuario
+      const { userId, userUid } = getTokenUserForMovimiento(req.user);
 
       // Obtener claveOrganica0 a claveOrganica3 del body o del usuario autenticado
       // Si se envían en el body, se usan esos valores; si no, se obtienen del usuario
@@ -2389,12 +2411,14 @@ export default async function afiliadoRoutes(app: FastifyInstance) {
         ...parsed.data,
         estatus: parsed.data.estatus ?? true,
         interno: parsed.data.interno, // Usar el interno del body (obligatorio)
-        creadoPor: userId ?? 1,
+        creadoPor: userId,
         creadoPorUid: userUid,
         entregaRendimiento: parsed.data.entregaRendimiento ?? null,
         tipoMovimientoId: 2, // BAJA PERMANENTE
+        fechaMovimiento: parsed.data.fechaMovimiento ?? null,
         domicilioNumeroInterior: parsed.data.domicilioNumeroInterior ?? '',
         bc: parsed.data.bc ?? '',
+        categoriaPuestoOrgId: parsed.data.categoriaPuestoOrgId ?? null,
         activo: true,
         aplicar: true,
         poseeInmuebles: false,
@@ -2648,9 +2672,7 @@ export default async function afiliadoRoutes(app: FastifyInstance) {
         return reply.code(404).send(fail('INTERNO_NOT_FOUND_IN_FIREBIRD: El número de interno no existe en las tablas PERSONAL y ORG_PERSONAL'));
       }
 
-      // Obtener userId del token
-      const userId = req.user?.sub ? parseInt(req.user.sub, 10) : null;
-      const userUid = req.user?.sub ?? null; // UUID del usuario
+      const { userId, userUid } = getTokenUserForMovimiento(req.user);
 
       // Obtener claveOrganica0 a claveOrganica3 del body o del usuario autenticado
       // Si se envían en el body, se usan esos valores; si no, se obtienen del usuario
@@ -2678,7 +2700,7 @@ export default async function afiliadoRoutes(app: FastifyInstance) {
         ...parsed.data,
         estatus: parsed.data.estatus ?? true,
         interno: parsed.data.interno, // Usar el interno del body (obligatorio)
-        creadoPor: userId ?? 1,
+        creadoPor: userId,
         creadoPorUid: userUid,
         entregaRendimiento: parsed.data.entregaRendimiento ?? null,
         tipoMovimientoId: 3, // BAJA SUSPENSIÓN DE AFILIACIÓN
@@ -2787,8 +2809,7 @@ export default async function afiliadoRoutes(app: FastifyInstance) {
         return reply.code(404).send(fail('INTERNO_NOT_FOUND_IN_FIREBIRD: El número de interno no existe en las tablas PERSONAL y ORG_PERSONAL'));
       }
 
-      const userId = req.user?.sub ? parseInt(req.user.sub, 10) : null;
-      const userUid = req.user?.sub ?? null; // UUID del usuario
+      const { userId, userUid } = getTokenUserForMovimiento(req.user);
       
       // Obtener claveOrganica0 a claveOrganica3 del body o del usuario autenticado
       // Si se envían en el body, se usan esos valores; si no, se obtienen del usuario
@@ -2816,7 +2837,7 @@ export default async function afiliadoRoutes(app: FastifyInstance) {
         ...parsed.data,
         estatus: parsed.data.estatus ?? true,
         interno: parsed.data.interno,
-        creadoPor: userId ?? 1,
+        creadoPor: userId,
         creadoPorUid: userUid,
         entregaRendimiento: parsed.data.entregaRendimiento ?? null,
         tipoMovimientoId: 4,
@@ -2925,8 +2946,7 @@ export default async function afiliadoRoutes(app: FastifyInstance) {
         return reply.code(404).send(fail('INTERNO_NOT_FOUND_IN_FIREBIRD: El número de interno no existe en las tablas PERSONAL y ORG_PERSONAL'));
       }
 
-      const userId = req.user?.sub ? parseInt(req.user.sub, 10) : null;
-      const userUid = req.user?.sub ?? null; // UUID del usuario
+      const { userId, userUid } = getTokenUserForMovimiento(req.user);
       
       // Obtener claveOrganica0 a claveOrganica3 del body o del usuario autenticado
       // Si se envían en el body, se usan esos valores; si no, se obtienen del usuario
@@ -2954,7 +2974,7 @@ export default async function afiliadoRoutes(app: FastifyInstance) {
         ...parsed.data,
         estatus: parsed.data.estatus ?? true,
         interno: parsed.data.interno,
-        creadoPor: userId ?? 1,
+        creadoPor: userId,
         creadoPorUid: userUid,
         entregaRendimiento: parsed.data.entregaRendimiento ?? null,
         tipoMovimientoId: 6,
@@ -4376,6 +4396,115 @@ export default async function afiliadoRoutes(app: FastifyInstance) {
       return reply.send(ok(resultado));
     } catch (error: any) {
       return handleAfiliadoError(error, reply, { operation: 'cambiarAStatusCancelado', user: req.user?.sub, afiliadoId: (req.params as any)?.id });
+    }
+  });
+
+  // Aplicar BDISSPEA individual sin modificar bitácora global
+  app.post('/afiliado/:id/aplicar-bdisssspea-individual', {
+    preParsing: async (req: any, _reply: any) => {
+      if (typeof req.body === 'string') {
+        try {
+          req.body = JSON.parse(req.body);
+        } catch {
+          req.body = {};
+        }
+      }
+      if (!req.body || typeof req.body !== 'object' || Array.isArray(req.body)) {
+        req.body = {};
+      }
+    },
+    preHandler: [requireAuth],
+    schema: {
+      description: 'Aplicar BDIsspea a un solo afiliado. Migra sus movimientos activos a Firebird y cambia solo ese afiliado a estado 7. No modifica BitacoraAfectacionOrg global.',
+      tags: ['afiliado', 'firebird'],
+      security: [{ bearerAuth: [] }],
+      params: {
+        type: 'object',
+        required: ['id'],
+        properties: { id: { type: 'number' } }
+      },
+      body: {
+        type: 'object',
+        properties: {
+          motivo: { type: 'string', maxLength: 500 },
+          observaciones: { type: 'string', maxLength: 1000 }
+        }
+      },
+      response: {
+        200: {
+          type: 'object',
+          additionalProperties: true,
+          properties: {
+            ok: { type: 'boolean' },
+            data: {
+              type: 'object',
+              additionalProperties: true,
+              properties: {
+                afiliadoId: { type: 'number' },
+                folio: { type: 'number', nullable: true },
+                nombreCompleto: { type: 'string' },
+                exito: { type: 'boolean' },
+                estadoAnterior: { type: 'string', nullable: true },
+                estadoNuevo: { type: 'string', nullable: true },
+                mensaje: { type: 'string' },
+                movimientos: { type: 'array', items: { type: 'object', additionalProperties: true } },
+                movimientosExitosos: { type: 'number' },
+                movimientosFallidos: { type: 'number' },
+                afiliadoCompleto: { type: 'boolean' }
+              }
+            }
+          }
+        },
+        400: { type: 'object' },
+        404: { type: 'object' },
+        500: { type: 'object' }
+      }
+    }
+  }, async (req, reply) => {
+    try {
+      const { id } = req.params as { id: number };
+      const parsed = AplicarBDIsspeaIndividualSchema.safeParse(req.body);
+
+      if (!parsed.success) {
+        return reply.code(400).send(validationError(parsed.error.issues));
+      }
+
+      if (!id || id <= 0) {
+        return reply.code(400).send(fail('El ID del afiliado debe ser un número positivo'));
+      }
+
+      const userOrg0 = req.user?.idOrganica0 ? String(req.user.idOrganica0).trim().toUpperCase().padStart(2, '0') : '';
+      const userOrg1 = req.user?.idOrganica1 ? String(req.user.idOrganica1).trim().toUpperCase().padStart(2, '0') : '';
+
+      if (!userOrg0 || !userOrg1) {
+        return reply.code(400).send(fail('USER_ORGANICA_NOT_FOUND: Usuario no tiene orgánica configurada'));
+      }
+
+      const command = req.diScope.resolve<AplicarBDIsspeaIndividualCommand>('aplicarBDIsspeaIndividualCommand');
+      const resultado = await command.execute({
+        afiliadoId: id,
+        org0: userOrg0,
+        org1: userOrg1,
+        usuarioId: req.user?.sub || 'unknown',
+        motivo: parsed.data.motivo,
+        observaciones: parsed.data.observaciones,
+        ipAddress: req.ip,
+        userAgent: req.headers['user-agent']
+      });
+
+      return reply.send(ok(resultado));
+    } catch (error: any) {
+      if (error.message === 'AFILIADO_NOT_FOUND_OR_NOT_IN_ORGANICA') {
+        return reply.code(404).send(fail('Afiliado no encontrado o no pertenece a la orgánica del usuario'));
+      }
+      if (error.message?.startsWith('AFILIADO_STATUS_NOT_ELIGIBLE:')) {
+        const status = error.message.split(':')[1];
+        return reply.code(400).send(fail(`El afiliado no es elegible para aplicar a BDIsspea. Estado actual: ${status}. Estados permitidos: 2 y 3`));
+      }
+      if (error.message === 'AFILIADO_WITHOUT_ACTIVE_MOVEMENTS') {
+        return reply.code(400).send(fail('El afiliado no tiene movimientos activos para migrar'));
+      }
+      return handleAfiliadoError(error, reply, { operation: 'aplicarBDIsspeaIndividual', user: req.user?.sub, afiliadoId: (req.params as any)?.id });
     }
   });
 

@@ -1,11 +1,233 @@
 import { FastifyInstance } from 'fastify';
 import { requireAuth } from '../../auth/auth.middleware.js';
 import { handleAplicacionesQNAError } from './infrastructure/errorHandler.js';
-import { LineaCapturaParamsSchema } from './aplicacionesQNA.schemas.js';
+import { LineaCapturaParamsSchema, LineaCapturaPeriodoBodySchema, LineaCapturaPeriodoQuerySchema } from './aplicacionesQNA.schemas.js';
+import { GenerateLineaCapturaPeriodoCommand } from './application/commands/GenerateLineaCapturaPeriodoCommand.js';
 import { GenerateLineaCapturaQuery } from './application/queries/GenerateLineaCapturaQuery.js';
+import { GetLineaCapturaPeriodoQuery } from './application/queries/GetLineaCapturaPeriodoQuery.js';
 import { normalizeClaveOrganica } from '../../../utils/organica.js';
 
+function isAdmin(user: any): boolean {
+  return Array.isArray(user?.roles) && user.roles.some((role: any) => String(role).toLowerCase() === 'admin');
+}
+
+function resolveOrgKeys(user: any, inputOrg0?: string, inputOrg1?: string): { org0?: string; org1?: string; forbidden: boolean } {
+  const admin = isAdmin(user);
+  if (!admin && (inputOrg0 || inputOrg1)) {
+    return { forbidden: true };
+  }
+
+  const org0 = normalizeClaveOrganica(admin ? inputOrg0 : undefined) || normalizeClaveOrganica(user?.idOrganica0) || undefined;
+  const org1 = normalizeClaveOrganica(admin ? inputOrg1 : undefined) || normalizeClaveOrganica(user?.idOrganica1) || undefined;
+  return { org0, org1, forbidden: false };
+}
+
+function lineaCapturaPeriodoResponseSchema() {
+  return {
+    type: 'object',
+    properties: {
+      lineaCapturaPeriodoId: { type: 'number' },
+      org0: { type: 'string' },
+      org1: { type: 'string' },
+      periodo: { type: 'string' },
+      quincena: { type: 'number' },
+      anio: { type: 'number' },
+      importe: { type: 'number' },
+      lineaCaptura: { type: 'string' },
+      referencia4: { type: 'string' },
+      fechaInicioPeriodo: { type: 'string' },
+      fechaFinalPeriodo: { type: 'string' },
+      fechaInicioVigencia: { type: 'string' },
+      fechaFinVigencia: { type: 'string' },
+      fechaReferenciaValidacion: { type: 'string' },
+      tipoReferenciaValidacion: { type: 'string' },
+      fechaLimite: { type: 'string' },
+      fechaCondensada: { type: 'string' },
+      montoCondensado: { type: 'number' },
+      digitoVerificador: { type: 'string' },
+      usuarioId: { type: 'string', nullable: true },
+      estatus: { type: 'string' },
+      reutilizada: { type: 'boolean' },
+      createdAt: { type: 'string', nullable: true },
+      updatedAt: { type: 'string', nullable: true }
+    }
+  };
+}
+
 export async function lineaCapturaRoutes(fastify: FastifyInstance) {
+  fastify.post('/linea-captura-periodo', {
+    preHandler: [requireAuth],
+    schema: {
+      description: 'Genera, guarda y reutiliza una línea de captura vigente por orgánica, período e importe. La fecha límite se toma del primer evento calendario tipo PAGO posterior al fin del período.',
+      summary: 'Generar línea de captura por período',
+      tags: ['reportes', 'aplicaciones-qna'],
+      security: [{ bearerAuth: [] }],
+      body: {
+        type: 'object',
+        required: ['periodo', 'importe'],
+        properties: {
+          periodo: { type: 'string', pattern: '^\\d{4}$', description: 'Periodo QQAA, ejemplo 1026' },
+          importe: { type: 'number', minimum: 0.01 },
+          idOrg0: { type: 'string', pattern: '^[A-Za-z0-9]{1,2}$' },
+          idOrg1: { type: 'string', pattern: '^[A-Za-z0-9]{1,2}$' }
+        }
+      },
+      response: {
+        200: {
+          type: 'object',
+          properties: {
+            success: { type: 'boolean' },
+            data: lineaCapturaPeriodoResponseSchema(),
+            timestamp: { type: 'string' }
+          }
+        },
+        201: {
+          type: 'object',
+          properties: {
+            success: { type: 'boolean' },
+            data: lineaCapturaPeriodoResponseSchema(),
+            timestamp: { type: 'string' }
+          }
+        },
+        400: { type: 'object' },
+        401: { type: 'object' },
+        403: { type: 'object' },
+        500: { type: 'object' }
+      }
+    }
+  }, async (request, reply) => {
+    try {
+      const user = (request as any).user;
+      const parsed = LineaCapturaPeriodoBodySchema.safeParse(request.body);
+      if (!parsed.success) {
+        return reply.code(400).send({
+          success: false,
+          error: {
+            code: 'VALIDATION_ERROR',
+            message: 'Datos de entrada inválidos',
+            details: parsed.error.issues.map((e: any) => `${e.path.join('.')}: ${e.message}`),
+            timestamp: new Date().toISOString()
+          }
+        });
+      }
+
+      const org = resolveOrgKeys(user, parsed.data.idOrg0, parsed.data.idOrg1);
+      if (org.forbidden) {
+        return reply.code(403).send({
+          success: false,
+          error: { code: 'FORBIDDEN_ORGANICA_QUERY', message: 'Solo usuarios admin pueden enviar orgánicas en la solicitud.', timestamp: new Date().toISOString() }
+        });
+      }
+      if (!org.org0 || !org.org1) {
+        return reply.code(400).send({
+          success: false,
+          error: { code: 'MISSING_ORGANICA_KEYS', message: 'No fue posible resolver org0/org1 desde el token o la solicitud.', timestamp: new Date().toISOString() }
+        });
+      }
+
+      const command = request.diScope.resolve<GenerateLineaCapturaPeriodoCommand>('generateLineaCapturaPeriodoCommand');
+      const result = await command.execute({
+        org0: org.org0,
+        org1: org.org1,
+        periodo: parsed.data.periodo,
+        importe: parsed.data.importe,
+        usuarioId: user?.sub?.toString() ?? user?.id?.toString()
+      });
+
+      return reply.code(result.reutilizada ? 200 : 201).send({ success: true, data: result, timestamp: new Date().toISOString() });
+    } catch (error: any) {
+      if (error?.message === 'PAGO_EVENT_NOT_FOUND') {
+        return reply.code(400).send({
+          success: false,
+          error: { code: 'PAGO_EVENT_NOT_FOUND', message: 'No existe un evento calendario tipo PAGO posterior al final del período.', timestamp: new Date().toISOString() }
+        });
+      }
+      if (error?.message === 'PERIODO_INVALIDO') {
+        return reply.code(400).send({
+          success: false,
+          error: { code: 'PERIODO_INVALIDO', message: 'Periodo inválido. Use formato QQAA con quincena entre 01 y 24.', timestamp: new Date().toISOString() }
+        });
+      }
+      return handleAplicacionesQNAError(error, reply);
+    }
+  });
+
+  fastify.get('/linea-captura-periodo', {
+    preHandler: [requireAuth],
+    schema: {
+      description: 'Consulta una línea de captura vigente guardada por período. Usuarios no admin usan orgánicas del token; admin debe enviar org0 y org1.',
+      summary: 'Consultar línea de captura por período',
+      tags: ['reportes', 'aplicaciones-qna'],
+      security: [{ bearerAuth: [] }],
+      querystring: {
+        type: 'object',
+        required: ['periodo'],
+        properties: {
+          periodo: { type: 'string', pattern: '^\\d{4}$' },
+          org0: { type: 'string', pattern: '^[A-Za-z0-9]{1,2}$' },
+          org1: { type: 'string', pattern: '^[A-Za-z0-9]{1,2}$' }
+        }
+      },
+      response: {
+        200: {
+          type: 'object',
+          properties: {
+            success: { type: 'boolean' },
+            data: { ...lineaCapturaPeriodoResponseSchema(), nullable: true },
+            timestamp: { type: 'string' }
+          }
+        },
+        400: { type: 'object' },
+        401: { type: 'object' },
+        403: { type: 'object' },
+        500: { type: 'object' }
+      }
+    }
+  }, async (request, reply) => {
+    try {
+      const user = (request as any).user;
+      const parsed = LineaCapturaPeriodoQuerySchema.safeParse(request.query);
+      if (!parsed.success) {
+        return reply.code(400).send({
+          success: false,
+          error: {
+            code: 'VALIDATION_ERROR',
+            message: 'Datos de entrada inválidos',
+            details: parsed.error.issues.map((e: any) => `${e.path.join('.')}: ${e.message}`),
+            timestamp: new Date().toISOString()
+          }
+        });
+      }
+
+      const org = resolveOrgKeys(user, parsed.data.org0, parsed.data.org1);
+      if (org.forbidden) {
+        return reply.code(403).send({
+          success: false,
+          error: { code: 'FORBIDDEN_ORGANICA_QUERY', message: 'Solo usuarios admin pueden enviar orgánicas en la solicitud.', timestamp: new Date().toISOString() }
+        });
+      }
+      if (isAdmin(user) && (!parsed.data.org0 || !parsed.data.org1)) {
+        return reply.code(400).send({
+          success: false,
+          error: { code: 'MISSING_ORGANICA_KEYS', message: 'Usuarios admin deben enviar org0 y org1 en query.', timestamp: new Date().toISOString() }
+        });
+      }
+      if (!org.org0 || !org.org1) {
+        return reply.code(400).send({
+          success: false,
+          error: { code: 'MISSING_ORGANICA_KEYS', message: 'No fue posible resolver org0/org1 desde el token o la solicitud.', timestamp: new Date().toISOString() }
+        });
+      }
+
+      const query = request.diScope.resolve<GetLineaCapturaPeriodoQuery>('getLineaCapturaPeriodoQuery');
+      const result = await query.execute({ org0: org.org0, org1: org.org1, periodo: parsed.data.periodo });
+
+      return reply.send({ success: true, data: result ? { ...result, reutilizada: true } : null, timestamp: new Date().toISOString() });
+    } catch (error) {
+      return handleAplicacionesQNAError(error, reply);
+    }
+  });
+
   // POST /aplicaciones-qna/linea-captura - Genera referencia SPEI de 15 posiciones
   fastify.post('/linea-captura', {
     preHandler: [requireAuth],

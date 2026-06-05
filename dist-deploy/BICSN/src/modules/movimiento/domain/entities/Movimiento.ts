@@ -4,6 +4,7 @@ export interface Movimiento {
   tipoMovimientoId: number;
   afiliadoId: number;
   fecha: string | null;
+  fechaMovimiento: string | null;
   observaciones: string | null;
   folio: string | null;
   estatus: string | null;

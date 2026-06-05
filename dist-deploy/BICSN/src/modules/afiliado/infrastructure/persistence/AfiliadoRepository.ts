@@ -620,7 +620,7 @@ export class AfiliadoRepository implements IAfiliadoRepository {
         ao.dQuinquenios, ao.aplicar, ao.bc, ao.porcentaje,
         ao.createdAt AS afiliadoOrg_createdAt, ao.updatedAt AS afiliadoOrg_updatedAt,
         m.id AS movimiento_id, m.quincenaId AS movimiento_quincenaId, m.tipoMovimientoId,
-        m.afiliadoId AS movimiento_afiliadoId, m.fecha AS movimiento_fecha, m.observaciones,
+        m.afiliadoId AS movimiento_afiliadoId, m.fecha AS movimiento_fecha, m.fechaMovimiento AS movimiento_fechaMovimiento, m.observaciones,
         m.entregaRendimiento, m.folio AS movimiento_folio, m.estatus AS movimiento_estatus, m.creadoPor, m.creadoPorUid,
         m.createdAt AS movimiento_createdAt,
         tm.id AS tipoMovimiento_id, tm.abreviatura AS tipoMovimiento_abreviatura, tm.nombre AS tipoMovimiento_nombre
@@ -664,6 +664,7 @@ export class AfiliadoRepository implements IAfiliadoRepository {
       movimiento: {
         id: row.movimiento_id, quincenaId: row.movimiento_quincenaId, tipoMovimientoId: row.tipoMovimientoId,
         afiliadoId: row.movimiento_afiliadoId, fecha: row.movimiento_fecha?.toISOString().split('T')[0] || null,
+        fechaMovimiento: row.movimiento_fechaMovimiento?.toISOString().split('T')[0] || null,
         observaciones: row.observaciones, folio: row.movimiento_folio, estatus: row.movimiento_estatus,
         entregaRendimiento: row.entregaRendimiento ?? null,
         creadoPor: row.creadoPor, creadoPorUid: row.creadoPorUid, createdAt: row.movimiento_createdAt?.toISOString() || new Date().toISOString()

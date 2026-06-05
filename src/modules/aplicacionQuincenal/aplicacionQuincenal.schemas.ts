@@ -14,9 +14,25 @@ export const ResumenOrgQnaAllParamsSchema = z.object({
   PERIODO: z.string().min(1).max(10).describe('Período en formato QQAA (ej: "2125")')
 });
 
+// Schema para parámetros de AQ_ENTIDADES_RPT_PDF_INSERTA
+export const EntidadesRptPdfInsertaParamsSchema = z.object({
+  organica0: z.string().min(1).max(2).optional().describe('Clave orgánica 0 (opcional si viene en token)'),
+  organica1: z.string().min(1).max(2).optional().describe('Clave orgánica 1 (opcional si viene en token)'),
+  periodo: z.string().min(1).max(10).describe('Período enviado al SP (ej: "1026")')
+});
+
+// Schema para validar aplicacion QNA terminada y obtener historicos de aportaciones
+export const ValidarAplicacionQnaAportacionesParamsSchema = z.object({
+  organica0: z.string().min(1).max(2).optional().describe('Clave orgánica 0 (solo admin puede enviarla)'),
+  organica1: z.string().min(1).max(2).optional().describe('Clave orgánica 1 (solo admin puede enviarla)'),
+  periodo: z.string().regex(/^\d{4}$/, 'Período debe tener formato QQAA, ejemplo 1026')
+});
+
 // Tipos TypeScript inferidos
 export type AportacionQuincenalResumenParams = z.infer<typeof AportacionQuincenalResumenParamsSchema>;
 export type ResumenOrgQnaAllParams = z.infer<typeof ResumenOrgQnaAllParamsSchema>;
+export type EntidadesRptPdfInsertaParams = z.infer<typeof EntidadesRptPdfInsertaParamsSchema>;
+export type ValidarAplicacionQnaAportacionesParams = z.infer<typeof ValidarAplicacionQnaAportacionesParamsSchema>;
 
 // ============================================================================
 // Schemas para Guardar Histórico de Aportaciones
@@ -571,4 +587,3 @@ export type PrestamosMedianoPlazoDetalle = z.infer<typeof PrestamosMedianoPlazoD
 export type PrestamosHipotecariosHeader = z.infer<typeof PrestamosHipotecariosHeaderSchema>;
 export type PrestamosHipotecariosDetalle = z.infer<typeof PrestamosHipotecariosDetalleSchema>;
 export type GuardarHistoricoRetenciones = z.infer<typeof GuardarHistoricoRetencionesSchema>;
-

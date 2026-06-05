@@ -75,6 +75,7 @@ export interface MovimientoQuincenal {
     tipoMovimientoDescripcion: string | null;
     afiliadoId: number;
     fecha: string | null;
+    fechaMovimiento: string | null;
     observaciones: string | null;
     entregaRendimiento: 'Si' | 'No' | null;
     folio: string | null;

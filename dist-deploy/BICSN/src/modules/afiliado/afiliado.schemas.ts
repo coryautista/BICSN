@@ -108,11 +108,13 @@ export const CreateAfiliadoAfiliadoOrgMovimientoSchema = z.object({
   aplicar: z.boolean().nullable().optional(),
   bc: z.string().max(30).nullable().optional(),
   porcentaje: z.number().nullable().optional(),
+  categoriaPuestoOrgId: z.number().int().nullable().optional(),
 
   // Movimiento fields
   quincenaId: z.string().max(30).nullable().optional(),
   tipoMovimientoId: z.number().int().optional().default(1),
   fechaMov: z.union([z.string().date(), z.null()]).optional(),
+  fechaMovimiento: z.union([z.string().date(), z.null()]).optional(),
   observaciones: z.string().max(1024).nullable().optional(),
   entregaRendimiento: EntregaRendimientoSchema,
   folioMov: z.string().max(100).nullable().optional(),
@@ -289,6 +291,12 @@ export const UpdateAfiliadoSchema = z.object({
 
 // Schema para aplicar BDISSPEA en lote
 export const AplicarBDIsspeaLoteSchema = z.object({
+  motivo: z.string().max(500, 'El motivo no debe exceder 500 caracteres').optional(),
+  observaciones: z.string().max(1000, 'Las observaciones no deben exceder 1000 caracteres').optional()
+});
+
+// Schema para aplicar BDISSPEA a un afiliado individual
+export const AplicarBDIsspeaIndividualSchema = z.object({
   motivo: z.string().max(500, 'El motivo no debe exceder 500 caracteres').optional(),
   observaciones: z.string().max(1000, 'Las observaciones no deben exceder 1000 caracteres').optional()
 });

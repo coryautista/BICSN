@@ -4,10 +4,11 @@ import type { Movimiento } from '../../../movimiento/movimiento.repo.js';
 import type { Afiliado } from '../../domain/entities/Afiliado.js';
 import { AfiliadoAlreadyExistsError } from '../../domain/errors.js';
 import { getQuincenaAplicacion } from './AfiliadoQuincenaService.js';
+import { syncMovimientoNominaDiasLaborados } from './MovimientoNominaDiasLaboradosService.js';
 
 export async function createAfiliadoAfiliadoOrgMovimiento(data: {
   afiliado: Omit<Afiliado, 'id' | 'createdAt' | 'updatedAt'>;
-  afiliadoOrg: Omit<AfiliadoOrg, 'id' | 'afiliadoId' | 'createdAt' | 'updatedAt'>;
+  afiliadoOrg: Omit<AfiliadoOrg, 'id' | 'afiliadoId' | 'createdAt' | 'updatedAt'> & { categoriaPuestoOrgId?: number | null };
   movimiento: Omit<Movimiento, 'id' | 'afiliadoId' | 'createdAt'>;
 }): Promise<{ afiliado: Afiliado; afiliadoOrg: AfiliadoOrg; movimiento: Movimiento }> {
   const p = await getPool();
@@ -205,6 +206,7 @@ export async function createAfiliadoAfiliadoOrgMovimiento(data: {
       .input('tipoMovimientoId', sql.Int, data.movimiento.tipoMovimientoId)
       .input('afiliadoId', sql.Int, afiliadoId)
       .input('fecha', sql.Date, data.movimiento.fecha ? new Date(data.movimiento.fecha) : null)
+      .input('fechaMovimiento', sql.Date, data.movimiento.fechaMovimiento ? new Date(data.movimiento.fechaMovimiento) : null)
       .input('observaciones', sql.NVarChar(1024), data.movimiento.observaciones)
       .input('folio', sql.VarChar(100), data.movimiento.folio)
       .input('estatus', sql.VarChar(30), data.movimiento.estatus)
@@ -213,17 +215,45 @@ export async function createAfiliadoAfiliadoOrgMovimiento(data: {
       .input('entregaRendimiento', sql.VarChar(2), data.movimiento.entregaRendimiento)
       .query(`
         INSERT INTO afi.Movimiento (
-          quincenaId, tipoMovimientoId, afiliadoId, fecha,
+          quincenaId, tipoMovimientoId, afiliadoId, fecha, fechaMovimiento,
           observaciones, folio, estatus, creadoPor, creadoPorUid, entregaRendimiento
         )
         OUTPUT INSERTED.*
         VALUES (
-          @quincenaId, @tipoMovimientoId, @afiliadoId, @fecha,
+          @quincenaId, @tipoMovimientoId, @afiliadoId, @fecha, @fechaMovimiento,
           @observaciones, @folio, @estatus, @creadoPor, @creadoPorUid, @entregaRendimiento
         )
       `);
 
     const movimientoRow = movimientoResult.recordset[0];
+
+    await syncMovimientoNominaDiasLaborados({
+      executor: transaction,
+      tipoMovimientoId: data.movimiento.tipoMovimientoId,
+      quincenaId: data.movimiento.quincenaId,
+      fechaMovimiento: data.movimiento.fechaMovimiento,
+      categoriaPuestoOrgId: data.afiliadoOrg.categoriaPuestoOrgId ?? null,
+      usuarioRegistro: data.movimiento.creadoPorUid ?? data.movimiento.creadoPor,
+      afiliado: {
+        id: afiliadoRow.id,
+        rfc: afiliadoRow.rfc,
+        nombre: afiliadoRow.nombre,
+        apellidoPaterno: afiliadoRow.apellidoPaterno,
+        apellidoMaterno: afiliadoRow.apellidoMaterno,
+        noEmpleado: afiliadoRow.noEmpleado,
+        interno: afiliadoRow.interno,
+        quincenaAplicacion,
+        anioAplicacion
+      },
+      afiliadoOrg: {
+        claveOrganica0: afiliadoOrgRow.claveOrganica0,
+        claveOrganica1: afiliadoOrgRow.claveOrganica1,
+        claveOrganica2: afiliadoOrgRow.claveOrganica2,
+        claveOrganica3: afiliadoOrgRow.claveOrganica3,
+        sueldo: afiliadoOrgRow.sueldo,
+        quinquenios: afiliadoOrgRow.quinquenios
+      }
+    });
 
     await transaction.commit();
 
@@ -252,6 +282,7 @@ export async function createAfiliadoAfiliadoOrgMovimiento(data: {
       movimiento: {
         ...movimientoRow,
         fecha: movimientoRow.fecha?.toISOString().split('T')[0] || null,
+        fechaMovimiento: movimientoRow.fechaMovimiento?.toISOString().split('T')[0] || null,
         creadoPorUid: movimientoRow.creadoPorUid || null,
         createdAt: movimientoRow.createdAt?.toISOString() || new Date().toISOString()
       }

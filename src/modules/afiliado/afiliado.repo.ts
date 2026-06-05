@@ -2020,6 +2020,7 @@ export async function createAfiliadoAfiliadoOrgMovimiento(data: {
       .input('tipoMovimientoId', sql.Int, data.movimiento.tipoMovimientoId)
       .input('afiliadoId', sql.Int, afiliadoId)
       .input('fecha', sql.Date, data.movimiento.fecha ? new Date(data.movimiento.fecha) : null)
+      .input('fechaMovimiento', sql.Date, data.movimiento.fechaMovimiento ? new Date(data.movimiento.fechaMovimiento) : null)
       .input('observaciones', sql.NVarChar(1024), data.movimiento.observaciones)
       .input('folio', sql.VarChar(100), data.movimiento.folio)
       .input('estatus', sql.VarChar(30), data.movimiento.estatus)
@@ -2028,12 +2029,12 @@ export async function createAfiliadoAfiliadoOrgMovimiento(data: {
 
     const movimientoResult = await movimientoRequest.query(`
       INSERT INTO afi.Movimiento (
-        quincenaId, tipoMovimientoId, afiliadoId, fecha,
+        quincenaId, tipoMovimientoId, afiliadoId, fecha, fechaMovimiento,
         observaciones, folio, estatus, creadoPor, creadoPorUid
       )
       OUTPUT INSERTED.*
       VALUES (
-        @quincenaId, @tipoMovimientoId, @afiliadoId, @fecha,
+        @quincenaId, @tipoMovimientoId, @afiliadoId, @fecha, @fechaMovimiento,
         @observaciones, @folio, @estatus, @creadoPor, @creadoPorUid
       )
     `);
@@ -2123,6 +2124,7 @@ export async function createAfiliadoAfiliadoOrgMovimiento(data: {
         tipoMovimientoId: movimientoRow.tipoMovimientoId,
         afiliadoId: movimientoRow.afiliadoId,
         fecha: movimientoRow.fecha?.toISOString().split('T')[0] || null,
+        fechaMovimiento: movimientoRow.fechaMovimiento?.toISOString().split('T')[0] || null,
         observaciones: movimientoRow.observaciones,
         entregaRendimiento: movimientoRow.entregaRendimiento ?? null,
         folio: movimientoRow.folio,

@@ -236,8 +236,12 @@ async function buildApp() {
   await app.register(swaggerUi, {
     routePrefix: '/docs',
     uiConfig: {
-      docExpansion: 'full',
-      deepLinking: false
+      docExpansion: 'none',
+      defaultModelsExpandDepth: -1,
+      defaultModelExpandDepth: 0,
+      displayRequestDuration: true,
+      filter: true,
+      deepLinking: true
     },
     staticCSP: false,
     transformStaticCSP: (header) => header,
@@ -410,7 +414,9 @@ async function setupApplication(app: FastifyInstance) {
   });
 
   // Endpoint temporal para verificar charset de Firebird
-  app.get('/debug/firebird-charset', async (_req: any, reply: any) => {
+  app.get('/debug/firebird-charset', {
+    schema: { hide: true }
+  }, async (_req: any, reply: any) => {
     try {
       const { checkFirebirdCharset, firebirdRuntimeInfo } = await import('./db/firebird.js');
       const charsetId = await checkFirebirdCharset();

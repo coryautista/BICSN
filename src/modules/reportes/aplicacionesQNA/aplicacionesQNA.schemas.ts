@@ -54,6 +54,21 @@ export const LineaCapturaParamsSchema = z.object({
   idOrg1: z.string().regex(/^[A-Za-z0-9]{1,2}$/).optional().describe('Clave orgánica nivel 1 (1-2 caracteres alfanuméricos, opcional - se usa del token si no se proporciona)')
 });
 
+// Schema para generar y guardar línea de captura por período
+export const LineaCapturaPeriodoBodySchema = z.object({
+  periodo: z.string().regex(/^\d{4}$/, 'Periodo debe tener formato QQAA, ejemplo 1026'),
+  importe: z.number().positive().describe('Importe total con centavos (ej: 1000.00)'),
+  idOrg0: z.string().regex(/^[A-Za-z0-9]{1,2}$/).optional().describe('Clave orgánica nivel 0 (solo admin puede enviarla)'),
+  idOrg1: z.string().regex(/^[A-Za-z0-9]{1,2}$/).optional().describe('Clave orgánica nivel 1 (solo admin puede enviarla)')
+});
+
+// Schema para consultar línea de captura guardada por período
+export const LineaCapturaPeriodoQuerySchema = z.object({
+  periodo: z.string().regex(/^\d{4}$/, 'Periodo debe tener formato QQAA, ejemplo 1026'),
+  org0: z.string().regex(/^[A-Za-z0-9]{1,2}$/).optional().describe('Clave orgánica nivel 0 (solo admin puede enviarla)'),
+  org1: z.string().regex(/^[A-Za-z0-9]{1,2}$/).optional().describe('Clave orgánica nivel 1 (solo admin puede enviarla)')
+});
+
 // Schemas para respuestas
 export const MovimientoQuincenalSchema = z.object({
   interno: z.number(),
@@ -298,3 +313,5 @@ export type AplicacionPMPParams = z.infer<typeof AplicacionPMPParamsSchema>;
 export type AplicacionHIPParams = z.infer<typeof AplicacionHIPParamsSchema>;
 export type ConcentradoParams = z.infer<typeof ConcentradoParamsSchema>;
 export type LineaCapturaParams = z.infer<typeof LineaCapturaParamsSchema>;
+export type LineaCapturaPeriodoBody = z.infer<typeof LineaCapturaPeriodoBodySchema>;
+export type LineaCapturaPeriodoQuery = z.infer<typeof LineaCapturaPeriodoQuerySchema>;

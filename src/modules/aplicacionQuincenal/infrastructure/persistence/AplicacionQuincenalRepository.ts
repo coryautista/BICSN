@@ -2,7 +2,7 @@ import { FastifyRequest } from 'fastify';
 import { executeSerializedQuery, decodeFirebirdObject, executeSelectableProcedure, FIREBIRD_TIMEOUTS } from '../../../../db/firebird.js';
 import { withDbContext, sql } from '../../../../db/context.js';
 import { getPool } from '../../../../db/mssql.js';
-import { IAplicacionQuincenalRepository, GuardarHistoricoAportacionesResult, GuardarHistoricoRetencionesResult } from '../../domain/repositories/IAplicacionQuincenalRepository.js';
+import { IAplicacionQuincenalRepository, GuardarHistoricoAportacionesResult, GuardarHistoricoRetencionesResult, ValidarAplicacionQnaAportacionesResult } from '../../domain/repositories/IAplicacionQuincenalRepository.js';
 import { AportacionQuincenalResumen } from '../../domain/entities/AportacionQuincenalResumen.js';
 import { ResumenOrgQnaAll } from '../../domain/entities/ResumenOrgQnaAll.js';
 import { AplicacionQuincenalError, AplicacionQuincenalErrorCode } from '../../domain/errors.js';
@@ -38,6 +38,278 @@ const logger = pino({
 });
 
 export class AplicacionQuincenalRepository implements IAplicacionQuincenalRepository {
+  async validarAplicacionQnaAportaciones(organica0: string, organica1: string, periodo: string): Promise<ValidarAplicacionQnaAportacionesResult> {
+    const org0 = String(organica0).trim().toUpperCase().padStart(2, '0');
+    const org1 = String(organica1).trim().toUpperCase().padStart(2, '0');
+    const periodoStr = String(periodo).trim();
+    const quincena = Number(periodoStr.slice(0, 2));
+    const anio = 2000 + Number(periodoStr.slice(2, 4));
+
+    if (!/^\d{4}$/.test(periodoStr) || quincena < 1 || quincena > 24) {
+      throw new Error('PERIODO_INVALIDO');
+    }
+
+    const p = await getPool();
+    const bitacoraResult = await p.request()
+      .input('org0', sql.Char(2), org0)
+      .input('org1', sql.Char(2), org1)
+      .input('quincena', sql.Int, quincena)
+      .input('anio', sql.Int, anio)
+      .query(`
+        SELECT TOP 1
+          AfectacionId AS afectacionId,
+          Entidad AS entidad,
+          Anio AS anio,
+          Quincena AS quincena,
+          Accion AS accion,
+          Org0 AS organica0,
+          Org1 AS organica1,
+          Org2 AS organica2,
+          Org3 AS organica3,
+          Resultado AS resultado,
+          Mensaje AS mensaje,
+          Usuario AS usuario,
+          UserId AS userId,
+          AppName AS appName,
+          Ip AS ip,
+          UserAgent AS userAgent,
+          CreatedAt AS createdAt,
+          ModifiedAt AS modifiedAt
+        FROM afec.BitacoraAfectacionOrg
+        WHERE Entidad = 'AFILIADOS'
+          AND Org0 = @org0
+          AND Org1 = @org1
+          AND Quincena = @quincena
+          AND Anio = @anio
+          AND Accion = 'TERMINADO'
+        ORDER BY ModifiedAt DESC, CreatedAt DESC
+      `);
+
+    const bitacora = bitacoraResult.recordset[0] || null;
+    const baseResult = {
+      organica0: org0,
+      organica1: org1,
+      periodo: periodoStr,
+      quincena,
+      anio
+    };
+
+    if (!bitacora) {
+      return {
+        aplicada: false,
+        ...baseResult,
+        bitacora: null,
+        parametrosAplicacion: null,
+        aportaciones: null,
+        totales: null
+      };
+    }
+
+    const createRequest = () => p.request()
+      .input('org0', sql.Char(2), org0)
+      .input('org1', sql.Char(2), org1)
+      .input('quincena', sql.Int, quincena)
+      .input('anio', sql.Int, anio);
+
+    const [
+      ahorroResult,
+      viviendaResult,
+      prestacionesResult,
+      cairResult,
+      transitorioResult,
+      guarderiasResult,
+      aguinaldoResult,
+      detalleAguinaldoResult,
+      resumenResult
+    ] = await Promise.all([
+      createRequest().query(`
+        SELECT * FROM aportaciones.IndividualesAhorroHistorico
+        WHERE clave_organica_0 = @org0 AND clave_organica_1 = @org1
+          AND quincena = @quincena AND anio = @anio
+        ORDER BY id
+      `),
+      createRequest().query(`
+        SELECT * FROM aportaciones.IndividualesViviendaHistorico
+        WHERE clave_organica_0 = @org0 AND clave_organica_1 = @org1
+          AND quincena = @quincena AND anio = @anio
+        ORDER BY id
+      `),
+      createRequest().query(`
+        SELECT * FROM aportaciones.IndividualesPrestacionesHistorico
+        WHERE clave_organica_0 = @org0 AND clave_organica_1 = @org1
+          AND quincena = @quincena AND anio = @anio
+        ORDER BY id
+      `),
+      createRequest().query(`
+        SELECT * FROM aportaciones.IndividualesCairHistorico
+        WHERE clave_organica_0 = @org0 AND clave_organica_1 = @org1
+          AND quincena = @quincena AND anio = @anio
+        ORDER BY id
+      `),
+      createRequest().query(`
+        SELECT * FROM aportaciones.PensionNominaTransitorioHistorico
+        WHERE clave_organica_0 = @org0 AND clave_organica_1 = @org1
+          AND quincena = @quincena AND anio = @anio
+        ORDER BY id
+      `),
+      createRequest().query(`
+        SELECT * FROM aportaciones.GuarderiasHistorico
+        WHERE clave_organica_0 = @org0 AND clave_organica_1 = @org1
+          AND quincena = @quincena AND anio = @anio
+        ORDER BY id
+      `),
+      createRequest().query(`
+        SELECT * FROM aportaciones.AguinaldoHistorico
+        WHERE clave_organica_0 = @org0 AND clave_organica_1 = @org1
+          AND quincena = @quincena AND anio = @anio
+        ORDER BY id
+      `),
+      createRequest().query(`
+        SELECT * FROM aportaciones.DetalleHistoricoAguinaldo
+        WHERE clave_organica_0 = @org0 AND clave_organica_1 = @org1
+          AND quincena = @quincena AND anio = @anio
+        ORDER BY id
+      `),
+      createRequest().query(`
+        SELECT * FROM aportaciones.ResumenHistorico
+        WHERE clave_organica_0 = @org0 AND clave_organica_1 = @org1
+          AND quincena = @quincena AND anio = @anio
+        ORDER BY id
+      `)
+    ]);
+
+    const aportaciones = {
+      ahorro: ahorroResult.recordset,
+      vivienda: viviendaResult.recordset,
+      prestaciones: prestacionesResult.recordset,
+      cair: cairResult.recordset,
+      transitorio: transitorioResult.recordset,
+      guarderias: guarderiasResult.recordset,
+      aguinaldo: aguinaldoResult.recordset,
+      detalleAguinaldo: detalleAguinaldoResult.recordset,
+      resumen: resumenResult.recordset
+    };
+
+    return {
+      aplicada: true,
+      ...baseResult,
+      bitacora,
+      parametrosAplicacion: {
+        aplicarC: {
+          sp: 'AP_P_APLICAR',
+          org0,
+          org1,
+          quincenaC: periodoStr,
+          quincenaA: periodoStr,
+          tipo: 'C'
+        },
+        aplicarF: {
+          sp: 'AP_P_APLICAR',
+          org0,
+          org1,
+          quincenaC: periodoStr,
+          quincenaA: periodoStr,
+          tipo: 'F'
+        }
+      },
+      aportaciones,
+      totales: {
+        ahorro: aportaciones.ahorro.length,
+        vivienda: aportaciones.vivienda.length,
+        prestaciones: aportaciones.prestaciones.length,
+        cair: aportaciones.cair.length,
+        transitorio: aportaciones.transitorio.length,
+        guarderias: aportaciones.guarderias.length,
+        aguinaldo: aportaciones.aguinaldo.length,
+        detalleAguinaldo: aportaciones.detalleAguinaldo.length,
+        resumen: aportaciones.resumen.length
+      }
+    };
+  }
+
+  async getEntidadesRptPdfInserta(organica0: string, organica1: string, periodo: string): Promise<Record<string, unknown>[]> {
+    const startTime = Date.now();
+    const logContext = {
+      operation: 'getEntidadesRptPdfInserta',
+      organica0,
+      organica1,
+      periodo
+    };
+
+    const clave0 = String(organica0).trim().toUpperCase().padStart(2, '0');
+    const clave1 = String(organica1).trim().toUpperCase().padStart(2, '0');
+    const periodoStr = String(periodo).trim();
+
+    const sql = `
+      SELECT *
+      FROM AQ_ENTIDADES_RPT_PDF_INSERTA(?, ?, ?)
+      WHERE STATUS = 'A'
+    `;
+
+    return executeSerializedQuery((db) => {
+      return new Promise<Record<string, unknown>[]>((resolve, reject) => {
+        logger.info(logContext, 'Ejecutando consulta a AQ_ENTIDADES_RPT_PDF_INSERTA');
+
+        if (!db || typeof db.query !== 'function') {
+          logger.error(logContext, 'Conexión Firebird inválida');
+          reject(new AplicacionQuincenalError(
+            'Conexión a Firebird no disponible o inválida',
+            AplicacionQuincenalErrorCode.FIREBIRD_CONNECTION_ERROR
+          ));
+          return;
+        }
+
+        try {
+          db.query(sql, [clave0, clave1, periodoStr], (err: any, result: any) => {
+            const duration = Date.now() - startTime;
+
+            if (err) {
+              logger.error({
+                ...logContext,
+                error: err.message || String(err),
+                errorCode: err.code,
+                errorName: err.name,
+                stack: err.stack,
+                duracionMs: duration
+              }, 'Error ejecutando AQ_ENTIDADES_RPT_PDF_INSERTA');
+              reject(new AplicacionQuincenalError(
+                `Error al ejecutar AQ_ENTIDADES_RPT_PDF_INSERTA: ${err.message || String(err)}`,
+                AplicacionQuincenalErrorCode.FIREBIRD_QUERY_ERROR
+              ));
+              return;
+            }
+
+            if (!result || result.length === 0) {
+              logger.info({ ...logContext, duracionMs: duration }, 'No se encontraron registros activos');
+              resolve([]);
+              return;
+            }
+
+            const registros = result.map((row: any) => decodeFirebirdObject(row));
+
+            logger.info({
+              ...logContext,
+              recordCount: registros.length,
+              duracionMs: duration
+            }, 'Consulta completada exitosamente');
+
+            resolve(registros);
+          });
+        } catch (syncError: any) {
+          logger.error({
+            ...logContext,
+            error: syncError.message || String(syncError),
+            stack: syncError.stack
+          }, 'Error síncrono ejecutando AQ_ENTIDADES_RPT_PDF_INSERTA');
+          reject(new AplicacionQuincenalError(
+            `Error síncrono al ejecutar AQ_ENTIDADES_RPT_PDF_INSERTA: ${syncError.message || String(syncError)}`,
+            AplicacionQuincenalErrorCode.FIREBIRD_QUERY_ERROR
+          ));
+        }
+      });
+    });
+  }
+
   async getAportacionQuincenalResumen(org0: string, org1: string, periodo: string): Promise<AportacionQuincenalResumen[]> {
     const startTime = Date.now();
     const logContext = {

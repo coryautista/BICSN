@@ -6,20 +6,14 @@ import { IMovimientoRepository } from '../../domain/repositories/IMovimientoRepo
 export class MovimientoRepository implements IMovimientoRepository {
   constructor(private mssqlPool: ConnectionPool) {}
 
-  async findAll(): Promise<Movimiento[]> {
-    const r = await this.mssqlPool.request().query(`
-      SELECT
-        id, quincenaId, tipoMovimientoId, afiliadoId, fecha,
-        observaciones, folio, estatus, creadoPor, creadoPorUid, entregaRendimiento, createdAt
-      FROM afi.Movimiento
-      ORDER BY id
-    `);
-    return r.recordset.map((row: any) => ({
+  private mapRow(row: any): Movimiento {
+    return {
       id: row.id,
       quincenaId: row.quincenaId,
       tipoMovimientoId: row.tipoMovimientoId,
       afiliadoId: row.afiliadoId,
       fecha: row.fecha?.toISOString().split('T')[0] || null,
+      fechaMovimiento: row.fechaMovimiento?.toISOString().split('T')[0] || null,
       observaciones: row.observaciones,
       folio: row.folio,
       estatus: row.estatus,
@@ -27,7 +21,18 @@ export class MovimientoRepository implements IMovimientoRepository {
       creadoPorUid: row.creadoPorUid,
       entregaRendimiento: row.entregaRendimiento ?? null,
       createdAt: row.createdAt?.toISOString() || new Date().toISOString()
-    }));
+    };
+  }
+
+  async findAll(): Promise<Movimiento[]> {
+    const r = await this.mssqlPool.request().query(`
+      SELECT
+        id, quincenaId, tipoMovimientoId, afiliadoId, fecha, fechaMovimiento,
+        observaciones, folio, estatus, creadoPor, creadoPorUid, entregaRendimiento, createdAt
+      FROM afi.Movimiento
+      ORDER BY id
+    `);
+    return r.recordset.map((row: any) => this.mapRow(row));
   }
 
   async findById(id: number): Promise<Movimiento | undefined> {
@@ -35,27 +40,14 @@ export class MovimientoRepository implements IMovimientoRepository {
       .input('id', sql.Int, id)
       .query(`
         SELECT
-          id, quincenaId, tipoMovimientoId, afiliadoId, fecha,
+          id, quincenaId, tipoMovimientoId, afiliadoId, fecha, fechaMovimiento,
           observaciones, folio, estatus, creadoPor, creadoPorUid, entregaRendimiento, createdAt
         FROM afi.Movimiento
         WHERE id = @id
       `);
     const row = r.recordset[0];
     if (!row) return undefined;
-    return {
-      id: row.id,
-      quincenaId: row.quincenaId,
-      tipoMovimientoId: row.tipoMovimientoId,
-      afiliadoId: row.afiliadoId,
-      fecha: row.fecha?.toISOString().split('T')[0] || null,
-      observaciones: row.observaciones,
-      folio: row.folio,
-      estatus: row.estatus,
-      creadoPor: row.creadoPor,
-      creadoPorUid: row.creadoPorUid,
-      entregaRendimiento: row.entregaRendimiento ?? null,
-      createdAt: row.createdAt?.toISOString() || new Date().toISOString()
-    };
+    return this.mapRow(row);
   }
 
   async findByAfiliadoId(afiliadoId: number): Promise<Movimiento[]> {
@@ -63,26 +55,13 @@ export class MovimientoRepository implements IMovimientoRepository {
       .input('afiliadoId', sql.Int, afiliadoId)
       .query(`
         SELECT
-          id, quincenaId, tipoMovimientoId, afiliadoId, fecha,
+          id, quincenaId, tipoMovimientoId, afiliadoId, fecha, fechaMovimiento,
           observaciones, folio, estatus, creadoPor, creadoPorUid, entregaRendimiento, createdAt
         FROM afi.Movimiento
         WHERE afiliadoId = @afiliadoId
         ORDER BY id
       `);
-    return r.recordset.map((row: any) => ({
-      id: row.id,
-      quincenaId: row.quincenaId,
-      tipoMovimientoId: row.tipoMovimientoId,
-      afiliadoId: row.afiliadoId,
-      fecha: row.fecha?.toISOString().split('T')[0] || null,
-      observaciones: row.observaciones,
-      folio: row.folio,
-      estatus: row.estatus,
-      creadoPor: row.creadoPor,
-      creadoPorUid: row.creadoPorUid,
-      entregaRendimiento: row.entregaRendimiento ?? null,
-      createdAt: row.createdAt?.toISOString() || new Date().toISOString()
-    }));
+    return r.recordset.map((row: any) => this.mapRow(row));
   }
 
   async findByTipoMovimientoId(tipoMovimientoId: number): Promise<Movimiento[]> {
@@ -90,26 +69,13 @@ export class MovimientoRepository implements IMovimientoRepository {
       .input('tipoMovimientoId', sql.Int, tipoMovimientoId)
       .query(`
         SELECT
-          id, quincenaId, tipoMovimientoId, afiliadoId, fecha,
+          id, quincenaId, tipoMovimientoId, afiliadoId, fecha, fechaMovimiento,
           observaciones, folio, estatus, creadoPor, creadoPorUid, entregaRendimiento, createdAt
         FROM afi.Movimiento
         WHERE tipoMovimientoId = @tipoMovimientoId
         ORDER BY id
       `);
-    return r.recordset.map((row: any) => ({
-      id: row.id,
-      quincenaId: row.quincenaId,
-      tipoMovimientoId: row.tipoMovimientoId,
-      afiliadoId: row.afiliadoId,
-      fecha: row.fecha?.toISOString().split('T')[0] || null,
-      observaciones: row.observaciones,
-      folio: row.folio,
-      estatus: row.estatus,
-      creadoPor: row.creadoPor,
-      creadoPorUid: row.creadoPorUid,
-      entregaRendimiento: row.entregaRendimiento ?? null,
-      createdAt: row.createdAt?.toISOString() || new Date().toISOString()
-    }));
+    return r.recordset.map((row: any) => this.mapRow(row));
   }
 
   async findByFolio(folio: string): Promise<Movimiento | undefined> {
@@ -117,27 +83,14 @@ export class MovimientoRepository implements IMovimientoRepository {
       .input('folio', sql.VarChar(100), folio)
       .query(`
         SELECT
-          id, quincenaId, tipoMovimientoId, afiliadoId, fecha,
+          id, quincenaId, tipoMovimientoId, afiliadoId, fecha, fechaMovimiento,
           observaciones, folio, estatus, creadoPor, creadoPorUid, entregaRendimiento, createdAt
         FROM afi.Movimiento
         WHERE folio = @folio
       `);
     const row = r.recordset[0];
     if (!row) return undefined;
-    return {
-      id: row.id,
-      quincenaId: row.quincenaId,
-      tipoMovimientoId: row.tipoMovimientoId,
-      afiliadoId: row.afiliadoId,
-      fecha: row.fecha?.toISOString().split('T')[0] || null,
-      observaciones: row.observaciones,
-      folio: row.folio,
-      estatus: row.estatus,
-      creadoPor: row.creadoPor,
-      creadoPorUid: row.creadoPorUid,
-      entregaRendimiento: row.entregaRendimiento ?? null,
-      createdAt: row.createdAt?.toISOString() || new Date().toISOString()
-    };
+    return this.mapRow(row);
   }
 
   async create(data: CreateMovimientoData): Promise<Movimiento> {
@@ -146,6 +99,7 @@ export class MovimientoRepository implements IMovimientoRepository {
       .input('tipoMovimientoId', sql.Int, data.tipoMovimientoId)
       .input('afiliadoId', sql.Int, data.afiliadoId)
       .input('fecha', sql.Date, data.fecha ? new Date(data.fecha) : null)
+      .input('fechaMovimiento', sql.Date, data.fechaMovimiento ? new Date(data.fechaMovimiento) : null)
       .input('observaciones', sql.NVarChar(1024), data.observaciones)
       .input('folio', sql.VarChar(100), data.folio)
       .input('estatus', sql.VarChar(30), data.estatus)
@@ -154,30 +108,17 @@ export class MovimientoRepository implements IMovimientoRepository {
       .input('entregaRendimiento', sql.VarChar(2), data.entregaRendimiento)
       .query(`
         INSERT INTO afi.Movimiento (
-          quincenaId, tipoMovimientoId, afiliadoId, fecha,
+          quincenaId, tipoMovimientoId, afiliadoId, fecha, fechaMovimiento,
           observaciones, folio, estatus, creadoPor, creadoPorUid, entregaRendimiento
         )
         OUTPUT INSERTED.*
         VALUES (
-          @quincenaId, @tipoMovimientoId, @afiliadoId, @fecha,
+          @quincenaId, @tipoMovimientoId, @afiliadoId, @fecha, @fechaMovimiento,
           @observaciones, @folio, @estatus, @creadoPor, @creadoPorUid, @entregaRendimiento
         )
       `);
     const row = r.recordset[0];
-    return {
-      id: row.id,
-      quincenaId: row.quincenaId,
-      tipoMovimientoId: row.tipoMovimientoId,
-      afiliadoId: row.afiliadoId,
-      fecha: row.fecha?.toISOString().split('T')[0] || null,
-      observaciones: row.observaciones,
-      folio: row.folio,
-      estatus: row.estatus,
-      creadoPor: row.creadoPor,
-      creadoPorUid: row.creadoPorUid,
-      entregaRendimiento: row.entregaRendimiento ?? null,
-      createdAt: row.createdAt?.toISOString() || new Date().toISOString()
-    };
+    return this.mapRow(row);
   }
 
   async update(data: UpdateMovimientoData): Promise<Movimiento> {
@@ -199,6 +140,10 @@ export class MovimientoRepository implements IMovimientoRepository {
     if (data.fecha !== undefined) {
       updates.push('fecha = @fecha');
       request.input('fecha', sql.Date, data.fecha ? new Date(data.fecha) : null);
+    }
+    if (data.fechaMovimiento !== undefined) {
+      updates.push('fechaMovimiento = @fechaMovimiento');
+      request.input('fechaMovimiento', sql.Date, data.fechaMovimiento ? new Date(data.fechaMovimiento) : null);
     }
     if (data.observaciones !== undefined) {
       updates.push('observaciones = @observaciones');
@@ -235,20 +180,7 @@ export class MovimientoRepository implements IMovimientoRepository {
     const row = r.recordset[0];
     if (!row) throw new Error('MOVIMIENTO_NOT_FOUND');
     
-    return {
-      id: row.id,
-      quincenaId: row.quincenaId,
-      tipoMovimientoId: row.tipoMovimientoId,
-      afiliadoId: row.afiliadoId,
-      fecha: row.fecha?.toISOString().split('T')[0] || null,
-      observaciones: row.observaciones,
-      folio: row.folio,
-      estatus: row.estatus,
-      creadoPor: row.creadoPor,
-      creadoPorUid: row.creadoPorUid,
-      entregaRendimiento: row.entregaRendimiento ?? null,
-      createdAt: row.createdAt?.toISOString() || new Date().toISOString()
-    };
+    return this.mapRow(row);
   }
 
   async delete(id: number): Promise<void> {

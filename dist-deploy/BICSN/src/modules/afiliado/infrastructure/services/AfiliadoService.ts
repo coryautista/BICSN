@@ -317,6 +317,7 @@ export async function getMovimientosQuincenalesService(userOrg0: string, userOrg
           m.tipoMovimientoId,
           m.afiliadoId as movimiento_afiliadoId,
           m.fecha,
+          m.fechaMovimiento,
           m.observaciones,
           m.entregaRendimiento,
           m.folio as movimiento_folio,
@@ -419,6 +420,7 @@ export async function getMovimientosQuincenalesService(userOrg0: string, userOrg
         tipoMovimientoDescripcion: row.tipoMovimientoDescripcion,
         afiliadoId: parseInt(row.movimiento_afiliadoId) || 0,
         fecha: row.fecha?.toISOString().split('T')[0] || null,
+        fechaMovimiento: row.fechaMovimiento?.toISOString().split('T')[0] || null,
         observaciones: row.observaciones,
         entregaRendimiento: row.entregaRendimiento ?? null,
         folio: row.movimiento_folio,
@@ -499,9 +501,11 @@ export async function createAfiliadoAfiliadoOrgMovimientoService(data: {
   aplicar?: boolean | null;
   bc?: string | null;
   porcentaje?: number | null;
+  categoriaPuestoOrgId?: number | null;
   quincenaId?: string | null;
   tipoMovimientoId?: number;
   fechaMov?: string | null;
+  fechaMovimiento?: string | null;
   observaciones?: string | null;
   folioMov?: string | null;
   estatusMov?: string | null;
@@ -602,12 +606,14 @@ export async function createAfiliadoAfiliadoOrgMovimientoService(data: {
       numQuinquenios: data.numQuinquenios ?? 1,
       aplicar: data.aplicar ?? null,
       bc: data.bc ?? null,
-      porcentaje: data.porcentaje ?? null
+      porcentaje: data.porcentaje ?? null,
+      categoriaPuestoOrgId: data.categoriaPuestoOrgId ?? null
     },
     movimiento: {
       quincenaId: data.quincenaId ?? quincenaId,
       tipoMovimientoId: data.tipoMovimientoId ?? 1,
       fecha: data.fechaMov ?? null,
+      fechaMovimiento: data.fechaMovimiento ?? null,
       observaciones: data.observaciones ?? null,
       folio: data.folioMov ?? null,
       estatus: data.estatusMov ?? null,

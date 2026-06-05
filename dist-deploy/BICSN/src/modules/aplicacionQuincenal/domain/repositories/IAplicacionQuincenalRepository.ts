@@ -23,6 +23,25 @@ export interface HistoricoAportacionesResult {
   aguinaldo: any[];
 }
 
+export interface ValidarAplicacionQnaAportacionesResult {
+  aplicada: boolean;
+  organica0: string;
+  organica1: string;
+  periodo: string;
+  quincena: number;
+  anio: number;
+  bitacora: Record<string, unknown> | null;
+  parametrosAplicacion: {
+    aplicarC: Record<string, unknown>;
+    aplicarF: Record<string, unknown>;
+  } | null;
+  aportaciones: (HistoricoAportacionesResult & {
+    detalleAguinaldo: any[];
+    resumen: any[];
+  }) | null;
+  totales: Record<string, number> | null;
+}
+
 export interface HistoricoRetencionesResult {
   prestamosCortoPlazo: any[];
   prestamosMedianoPlazo: any[];
@@ -40,6 +59,16 @@ export interface IAplicacionQuincenalRepository {
     org1: string,
     periodo: string
   ): Promise<ResumenOrgQnaAll[]>;
+  getEntidadesRptPdfInserta(
+    organica0: string,
+    organica1: string,
+    periodo: string
+  ): Promise<Record<string, unknown>[]>;
+  validarAplicacionQnaAportaciones(
+    organica0: string,
+    organica1: string,
+    periodo: string
+  ): Promise<ValidarAplicacionQnaAportacionesResult>;
   guardarHistoricoAportaciones(
     req: FastifyRequest,
     data: GuardarHistoricoAportaciones
@@ -61,4 +90,3 @@ export interface IAplicacionQuincenalRepository {
     anio: number
   ): Promise<HistoricoRetencionesResult>;
 }
-

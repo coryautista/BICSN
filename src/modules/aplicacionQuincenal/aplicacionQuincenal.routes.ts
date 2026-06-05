@@ -4,6 +4,8 @@ import { handleAplicacionQuincenalError } from './infrastructure/errorHandler.js
 import { 
   AportacionQuincenalResumenParamsSchema, 
   ResumenOrgQnaAllParamsSchema,
+  EntidadesRptPdfInsertaParamsSchema,
+  ValidarAplicacionQnaAportacionesParamsSchema,
   GuardarHistoricoAportacionesSchema,
   GuardarHistoricoRetencionesSchema,
   GuardarHistoricoAportaciones,
@@ -11,6 +13,8 @@ import {
 } from './aplicacionQuincenal.schemas.js';
 import { GetAportacionQuincenalResumenQuery } from './application/queries/GetAportacionQuincenalResumenQuery.js';
 import { GetResumenOrgQnaAllQuery } from './application/queries/GetResumenOrgQnaAllQuery.js';
+import { GetEntidadesRptPdfInsertaQuery } from './application/queries/GetEntidadesRptPdfInsertaQuery.js';
+import { ValidarAplicacionQnaAportacionesQuery } from './application/queries/ValidarAplicacionQnaAportacionesQuery.js';
 import { AplicacionQuincenalRepository } from './infrastructure/persistence/AplicacionQuincenalRepository.js';
 import { GetAportacionesIndividualesQuery } from '../aportacionesFondos/application/queries/GetAportacionesIndividualesQuery.js';
 import { GetAguinaldoQuery } from '../aportacionesFondos/application/queries/GetAguinaldoQuery.js';
@@ -23,6 +27,215 @@ import { IAportacionFondoRepository } from '../aportacionesFondos/domain/reposit
 import { normalizeClaveOrganica } from '../../utils/organica.js';
 
 export default async function aplicacionQuincenalRoutes(app: FastifyInstance) {
+  // GET /aplicacion-quincenal/validar-aplicacion-qna-aportaciones
+  app.get('/aplicacion-quincenal/validar-aplicacion-qna-aportaciones', {
+    preHandler: [requireAuth],
+    schema: {
+      description: 'Valida si la quincena de una entidad esta TERMINADA y regresa todos los registros historicos del schema aportaciones. Solo admin puede enviar organica0/organica1; otros usuarios usan organicas del token.',
+      summary: 'Validar QNA terminada y obtener aportaciones',
+      tags: ['aplicacion-quincenal', 'sql-server'],
+      security: [{ bearerAuth: [] }],
+      querystring: {
+        type: 'object',
+        required: ['periodo'],
+        properties: {
+          organica0: { type: 'string', minLength: 1, maxLength: 2, pattern: '^[A-Za-z0-9]{1,2}$' },
+          organica1: { type: 'string', minLength: 1, maxLength: 2, pattern: '^[A-Za-z0-9]{1,2}$' },
+          periodo: { type: 'string', pattern: '^\\d{4}$', description: 'Periodo QQAA, ejemplo 1026' }
+        }
+      },
+      response: {
+        200: {
+          type: 'object',
+          additionalProperties: true,
+          properties: {
+            ok: { type: 'boolean' },
+            data: { type: 'object', additionalProperties: true }
+          }
+        },
+        400: { type: 'object' },
+        401: { type: 'object' },
+        403: { type: 'object' },
+        500: { type: 'object' }
+      }
+    }
+  }, async (request, reply) => {
+    try {
+      const parsed = ValidarAplicacionQnaAportacionesParamsSchema.safeParse(request.query);
+      if (!parsed.success) {
+        return reply.code(400).send({
+          ok: false,
+          error: {
+            code: 'VALIDATION_ERROR',
+            message: 'Parámetros de consulta inválidos',
+            details: parsed.error.issues,
+            timestamp: new Date().toISOString()
+          }
+        });
+      }
+
+      const user = (request as any).user;
+      const roles = Array.isArray(user?.roles) ? user.roles : [];
+      const isAdmin = roles.some((role: unknown) => String(role).toLowerCase() === 'admin');
+      const sentOrganicas = Boolean(parsed.data.organica0 || parsed.data.organica1);
+
+      if (sentOrganicas && !isAdmin) {
+        return reply.code(403).send({
+          ok: false,
+          error: {
+            code: 'FORBIDDEN_ORGANICA_QUERY',
+            message: 'Solo usuarios admin pueden enviar organica0/organica1. Use las organicas del token.',
+            timestamp: new Date().toISOString()
+          }
+        });
+      }
+
+      let organica0 = isAdmin && parsed.data.organica0 ? parsed.data.organica0 : undefined;
+      let organica1 = isAdmin && parsed.data.organica1 ? parsed.data.organica1 : undefined;
+
+      if (!organica0 && user?.idOrganica0) {
+        organica0 = normalizeClaveOrganica(user.idOrganica0) || undefined;
+      }
+      if (!organica1 && user?.idOrganica1) {
+        organica1 = normalizeClaveOrganica(user.idOrganica1) || undefined;
+      }
+      if (organica0) organica0 = normalizeClaveOrganica(organica0) || undefined;
+      if (organica1) organica1 = normalizeClaveOrganica(organica1) || undefined;
+
+      if (!organica0 || !organica1) {
+        return reply.code(400).send({
+          ok: false,
+          error: {
+            code: 'MISSING_ORGANICA_KEYS',
+            message: 'organica0 y organica1 son requeridas en el token, o en query string para usuarios admin.',
+            timestamp: new Date().toISOString()
+          }
+        });
+      }
+
+      const query = request.diScope.resolve<ValidarAplicacionQnaAportacionesQuery>('validarAplicacionQnaAportacionesQuery');
+      const result = await query.execute(organica0, organica1, parsed.data.periodo, user?.sub);
+
+      return reply.code(200).send({ ok: true, data: result });
+    } catch (error: any) {
+      if (error.message === 'PERIODO_INVALIDO') {
+        return reply.code(400).send({
+          ok: false,
+          error: {
+            code: 'PERIODO_INVALIDO',
+            message: 'periodo debe tener formato QQAA y quincena válida de 01 a 24.',
+            timestamp: new Date().toISOString()
+          }
+        });
+      }
+      return handleAplicacionQuincenalError(error, reply);
+    }
+  });
+
+  // GET /aplicacion-quincenal/entidades-rpt-pdf-inserta
+  app.get('/aplicacion-quincenal/entidades-rpt-pdf-inserta', {
+    preHandler: [requireAuth],
+    schema: {
+      description: "[FIREBIRD] Consulta registros activos desde AQ_ENTIDADES_RPT_PDF_INSERTA filtrando STATUS = 'A'. Si no se proporcionan organica0/organica1, se usan las claves orgánicas del token.",
+      summary: 'Entidades RPT PDF Inserta activos',
+      tags: ['aplicacion-quincenal', 'firebird'],
+      security: [{ bearerAuth: [] }],
+      querystring: {
+        type: 'object',
+        required: ['periodo'],
+        properties: {
+          organica0: {
+            type: 'string',
+            description: 'Clave orgánica 0 (opcional, se obtiene del token si no se proporciona)',
+            minLength: 1,
+            maxLength: 2,
+            pattern: '^[A-Za-z0-9]{1,2}$'
+          },
+          organica1: {
+            type: 'string',
+            description: 'Clave orgánica 1 (opcional, se obtiene del token si no se proporciona)',
+            minLength: 1,
+            maxLength: 2,
+            pattern: '^[A-Za-z0-9]{1,2}$'
+          },
+          periodo: {
+            type: 'string',
+            description: 'Período enviado al SP. Ejemplo: 1026',
+            minLength: 1,
+            maxLength: 10
+          }
+        }
+      },
+      response: {
+        200: {
+          description: 'Consulta ejecutada exitosamente',
+          type: 'object',
+          additionalProperties: true,
+          properties: {
+            ok: { type: 'boolean' },
+            data: {
+              type: 'array',
+              items: { type: 'object', additionalProperties: true }
+            }
+          }
+        },
+        400: { type: 'object' },
+        401: { type: 'object' },
+        500: { type: 'object' }
+      }
+    }
+  }, async (request, reply) => {
+    try {
+      const parsed = EntidadesRptPdfInsertaParamsSchema.safeParse(request.query);
+      if (!parsed.success) {
+        return reply.code(400).send({
+          ok: false,
+          error: {
+            code: 'VALIDATION_ERROR',
+            message: 'Parámetros de consulta inválidos',
+            details: parsed.error.issues,
+            timestamp: new Date().toISOString()
+          }
+        });
+      }
+
+      const user = (request as any).user;
+      const userId = user?.sub;
+      let organica0 = parsed.data.organica0;
+      let organica1 = parsed.data.organica1;
+
+      if (!organica0 && user?.idOrganica0) {
+        organica0 = normalizeClaveOrganica(user.idOrganica0) || undefined;
+      }
+      if (!organica1 && user?.idOrganica1) {
+        organica1 = normalizeClaveOrganica(user.idOrganica1) || undefined;
+      }
+      if (organica0) organica0 = normalizeClaveOrganica(organica0) || undefined;
+      if (organica1) organica1 = normalizeClaveOrganica(organica1) || undefined;
+
+      if (!organica0 || !organica1) {
+        return reply.code(400).send({
+          ok: false,
+          error: {
+            code: 'MISSING_ORGANICA_KEYS',
+            message: 'organica0 y organica1 son requeridas. Deben proporcionarse en query string o estar disponibles en el token del usuario.',
+            timestamp: new Date().toISOString()
+          }
+        });
+      }
+
+      const query = request.diScope.resolve<GetEntidadesRptPdfInsertaQuery>('getEntidadesRptPdfInsertaQuery');
+      const registros = await query.execute(organica0, organica1, parsed.data.periodo, userId);
+
+      return reply.code(200).send({
+        ok: true,
+        data: registros
+      });
+    } catch (error) {
+      return handleAplicacionQuincenalError(error, reply);
+    }
+  });
+
   // GET /aplicacion-quincenal/AportacionQuincenalResumen
   app.get('/aplicacion-quincenal/AportacionQuincenalResumen', {
     preHandler: [requireAuth],

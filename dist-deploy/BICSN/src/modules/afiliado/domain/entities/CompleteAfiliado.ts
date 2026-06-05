@@ -68,11 +68,13 @@ export interface CreateCompleteAfiliadoData {
     bc: string | null;
     porcentaje: number | null;
     numQuinquenios?: number | null;
+    categoriaPuestoOrgId?: number | null;
   };
   movimiento: {
     quincenaId?: string | null;
     tipoMovimientoId: number;
     fecha: string | null;
+    fechaMovimiento: string | null;
     observaciones: string | null;
     folio: string | null;
     estatus: string | null;
