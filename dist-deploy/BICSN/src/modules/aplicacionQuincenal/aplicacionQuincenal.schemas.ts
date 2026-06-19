@@ -270,7 +270,10 @@ export const GuarderiasDetalleSchema = z.object({
   recibo_total: z.number(),
   recibo_mes_ano: z.string().min(0).max(50),
   recibo_fecha_venc: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Formato de fecha debe ser YYYY-MM-DD'),
-  recibo_folio: z.string().min(0).max(50),
+  recibo_folio: z.preprocess(
+    value => value === null || value === undefined ? '' : String(value),
+    z.string().min(0).max(50)
+  ),
   menor_id: z.number().int(),
   menor_nombre: z.string().min(0).max(200),
   menor_rfc: stringSchema,

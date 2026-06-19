@@ -1682,7 +1682,7 @@ export class AportacionFondoRepository implements IAportacionFondoRepository {
                 recibo_total: row.RECIBO_TOTAL !== null && row.RECIBO_TOTAL !== undefined ? Number(row.RECIBO_TOTAL) : null,
                 recibo_mes_ano: row.RECIBO_MES_ANO || null,
                 recibo_fecha_venc: row.RECIBO_FECHA_VENC ? new Date(row.RECIBO_FECHA_VENC) : null,
-                recibo_folio: row.RECIBO_FOLIO || null,
+                recibo_folio: row.RECIBO_FOLIO !== null && row.RECIBO_FOLIO !== undefined ? String(row.RECIBO_FOLIO) : null,
                 menor_id: row.MENOR_ID !== null && row.MENOR_ID !== undefined ? Number(row.MENOR_ID) : null,
                 menor_nombre: row.MENOR_NOMBRE || null,
                 menor_rfc: row.MENOR_RFC || null,

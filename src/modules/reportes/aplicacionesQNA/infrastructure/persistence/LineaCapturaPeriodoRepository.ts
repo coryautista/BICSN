@@ -120,6 +120,20 @@ export class LineaCapturaPeriodoRepository {
     return result.recordset[0]?.fecha ?? null;
   }
 
+  async findPrimerPagoDesde(fecha: string): Promise<string | null> {
+    const result = await this.mssqlPool.request()
+      .input('fecha', sql.Date, fecha)
+      .query(`
+        SELECT TOP 1 CONVERT(VARCHAR(10), fecha, 23) AS fecha
+        FROM dbo.EventoCalendario
+        WHERE tipo = 'PAGO'
+          AND fecha >= @fecha
+        ORDER BY fecha ASC
+      `);
+
+    return result.recordset[0]?.fecha ?? null;
+  }
+
   async create(data: CreateLineaCapturaPeriodoData): Promise<LineaCapturaPeriodoRecord> {
     const result = await this.mssqlPool.request()
       .input('org0', sql.Char(2), data.org0)

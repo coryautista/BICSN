@@ -21,13 +21,15 @@ export class GenerateLineaCapturaPeriodoCommand {
 
   async execute(params: GenerateLineaCapturaPeriodoParams): Promise<GenerateLineaCapturaPeriodoResult> {
     const periodoInfo = parsePeriodo(params.periodo);
-    const existing = await this.lineaCapturaPeriodoRepo.findVigente(params.org0, params.org1, params.periodo, params.importe);
+    const existing = await this.lineaCapturaPeriodoRepo.findVigente(params.org0, params.org1, params.periodo);
 
     if (existing) {
       return { ...existing, reutilizada: true };
     }
 
-    const fechaPago = await this.lineaCapturaPeriodoRepo.findPrimerPagoPosterior(periodoInfo.fechaFinalPeriodo);
+    const today = getMexicoToday();
+    const fechaPago = await this.lineaCapturaPeriodoRepo.findPrimerPagoDesde(today);
+
     if (!fechaPago) {
       throw new Error('PAGO_EVENT_NOT_FOUND');
     }
@@ -41,7 +43,6 @@ export class GenerateLineaCapturaPeriodoCommand {
     const fechaCondensada = this.lineaCapturaService.calcularFechaCondensada(fechaPago);
     const montoCondensado = this.lineaCapturaService.calcularMontoCondensado(params.importe);
     const digitoVerificador = lineaCaptura.substring(13, 15);
-    const today = new Date().toISOString().split('T')[0];
 
     try {
       const created = await this.lineaCapturaPeriodoRepo.create({
@@ -68,7 +69,7 @@ export class GenerateLineaCapturaPeriodoCommand {
 
       return { ...created, reutilizada: false };
     } catch (error: any) {
-      const duplicate = await this.lineaCapturaPeriodoRepo.findVigente(params.org0, params.org1, params.periodo, params.importe);
+      const duplicate = await this.lineaCapturaPeriodoRepo.findVigente(params.org0, params.org1, params.periodo);
       if (duplicate) return { ...duplicate, reutilizada: true };
       throw error;
     }
@@ -96,4 +97,20 @@ function parsePeriodo(periodo: string): { quincena: number; anio: number; fechaI
 
 function formatDate(year: number, month: number, day: number): string {
   return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+}
+
+function getMexicoToday(): string {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Mexico_City',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit'
+  }).formatToParts(new Date());
+
+  const year = parts.find(part => part.type === 'year')?.value;
+  const month = parts.find(part => part.type === 'month')?.value;
+  const day = parts.find(part => part.type === 'day')?.value;
+
+  if (!year || !month || !day) return new Date().toISOString().split('T')[0];
+  return `${year}-${month}-${day}`;
 }

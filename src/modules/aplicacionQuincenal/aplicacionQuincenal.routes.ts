@@ -1246,7 +1246,7 @@ export default async function aplicacionQuincenalRoutes(app: FastifyInstance) {
           recibo_total: d.recibo_total ?? 0,
           recibo_mes_ano: d.recibo_mes_ano || '',
           recibo_fecha_venc: d.recibo_fecha_venc ? new Date(d.recibo_fecha_venc).toISOString().split('T')[0] : '1900-01-01',
-          recibo_folio: d.recibo_folio || '',
+          recibo_folio: d.recibo_folio !== null && d.recibo_folio !== undefined ? String(d.recibo_folio) : '',
           menor_id: d.menor_id ?? 0,
           menor_nombre: d.menor_nombre || '',
           menor_rfc: d.menor_rfc ?? null,

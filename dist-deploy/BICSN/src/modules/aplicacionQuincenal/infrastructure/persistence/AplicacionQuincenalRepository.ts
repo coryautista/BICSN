@@ -241,73 +241,71 @@ export class AplicacionQuincenalRepository implements IAplicacionQuincenalReposi
     const periodoStr = String(periodo).trim();
 
     const sql = `
-      SELECT *
-      FROM AQ_ENTIDADES_RPT_PDF_INSERTA(?, ?, ?)
-      WHERE STATUS = 'A'
+      SELECT
+        r.CLAVE_ORGANICA_0,
+        r.CLAVE_ORGANICA_1,
+        r.CLAVE_ORGANICA_2,
+        r.CLAVE_ORGANICA_3,
+        r.PERIODO,
+        r.FECHA_GENERACION,
+        r.STATUS
+      FROM AQ_ENTIDADES_RPT_PDF r
+      WHERE r.CLAVE_ORGANICA_0 = ?
+        AND r.CLAVE_ORGANICA_1 = ?
+        AND r.PERIODO = ?
+        AND r.STATUS = 'A'
     `;
 
-    return executeSerializedQuery((db) => {
-      return new Promise<Record<string, unknown>[]>((resolve, reject) => {
-        logger.info(logContext, 'Ejecutando consulta a AQ_ENTIDADES_RPT_PDF_INSERTA');
+    try {
+      logger.info(logContext, 'Consultando AQ_ENTIDADES_RPT_PDF');
 
-        if (!db || typeof db.query !== 'function') {
-          logger.error(logContext, 'Conexión Firebird inválida');
-          reject(new AplicacionQuincenalError(
-            'Conexión a Firebird no disponible o inválida',
-            AplicacionQuincenalErrorCode.FIREBIRD_CONNECTION_ERROR
-          ));
-          return;
-        }
+      const result = await executeSerializedQuery((db) => {
+        return new Promise<Record<string, unknown>[]>((resolve, reject) => {
+          if (!db || typeof db.query !== 'function') {
+            reject(new AplicacionQuincenalError(
+              'Conexión a Firebird no disponible o inválida',
+              AplicacionQuincenalErrorCode.FIREBIRD_CONNECTION_ERROR
+            ));
+            return;
+          }
 
-        try {
-          db.query(sql, [clave0, clave1, periodoStr], (err: any, result: any) => {
-            const duration = Date.now() - startTime;
-
+          db.query(sql, [clave0, clave1, periodoStr], (err: any, rows: any) => {
             if (err) {
-              logger.error({
-                ...logContext,
-                error: err.message || String(err),
-                errorCode: err.code,
-                errorName: err.name,
-                stack: err.stack,
-                duracionMs: duration
-              }, 'Error ejecutando AQ_ENTIDADES_RPT_PDF_INSERTA');
-              reject(new AplicacionQuincenalError(
-                `Error al ejecutar AQ_ENTIDADES_RPT_PDF_INSERTA: ${err.message || String(err)}`,
-                AplicacionQuincenalErrorCode.FIREBIRD_QUERY_ERROR
-              ));
+              reject(err);
               return;
             }
-
-            if (!result || result.length === 0) {
-              logger.info({ ...logContext, duracionMs: duration }, 'No se encontraron registros activos');
-              resolve([]);
-              return;
-            }
-
-            const registros = result.map((row: any) => decodeFirebirdObject(row));
-
-            logger.info({
-              ...logContext,
-              recordCount: registros.length,
-              duracionMs: duration
-            }, 'Consulta completada exitosamente');
-
-            resolve(registros);
+            resolve(Array.isArray(rows) ? rows : []);
           });
-        } catch (syncError: any) {
-          logger.error({
-            ...logContext,
-            error: syncError.message || String(syncError),
-            stack: syncError.stack
-          }, 'Error síncrono ejecutando AQ_ENTIDADES_RPT_PDF_INSERTA');
-          reject(new AplicacionQuincenalError(
-            `Error síncrono al ejecutar AQ_ENTIDADES_RPT_PDF_INSERTA: ${syncError.message || String(syncError)}`,
-            AplicacionQuincenalErrorCode.FIREBIRD_QUERY_ERROR
-          ));
-        }
+        });
       });
-    });
+      const duration = Date.now() - startTime;
+
+      const registros = (Array.isArray(result) ? result : [])
+        .map((row: any) => decodeFirebirdObject(row));
+
+      logger.info({
+        ...logContext,
+        recordCount: registros.length,
+        duracionMs: duration
+      }, 'Consulta AQ_ENTIDADES_RPT_PDF completada exitosamente');
+
+      return registros;
+    } catch (error: any) {
+      const duration = Date.now() - startTime;
+      logger.error({
+        ...logContext,
+        error: error.message || String(error),
+        errorCode: error.code,
+        errorName: error.name,
+        stack: error.stack,
+        duracionMs: duration
+      }, 'Error consultando AQ_ENTIDADES_RPT_PDF');
+
+      throw new AplicacionQuincenalError(
+        `Error al consultar AQ_ENTIDADES_RPT_PDF: ${error.message || String(error)}`,
+        AplicacionQuincenalErrorCode.FIREBIRD_QUERY_ERROR
+      );
+    }
   }
 
   async getAportacionQuincenalResumen(org0: string, org1: string, periodo: string): Promise<AportacionQuincenalResumen[]> {
