@@ -12,7 +12,8 @@ export class GetAportacionesIndividualesQuery {
     claveOrganica0?: string,
     claveOrganica1?: string,
     userId?: string,
-    usarDiasLaboradosNomina = false
+    usarDiasLaboradosNomina = false,
+    periodo?: string
   ): Promise<AportacionIndividual> {
     console.log(`[APORTACIONES_FONDOS] Consultando aportaciones individuales - Tipo: ${tipo}, Usuario: ${userId || 'desconocido'}`);
 
@@ -30,7 +31,8 @@ export class GetAportacionesIndividualesQuery {
         tipo,
         claves.clave0,
         claves.clave1,
-        usarDiasLaboradosNomina
+        usarDiasLaboradosNomina,
+        periodo
       );
 
       console.log(`[APORTACIONES_FONDOS] Se encontraron ${result.datos.length} registros para tipo ${tipo}`);

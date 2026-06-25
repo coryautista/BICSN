@@ -1,5 +1,6 @@
 import { ConnectionPool } from 'mssql';
 import sql from 'mssql';
+import { formatSqlDateOnly, formatSqlDateTimeMx } from '../../../../../utils/sqlServerDate.js';
 
 export interface LineaCapturaPeriodoRecord {
   lineaCapturaPeriodoId: number;
@@ -106,6 +107,24 @@ export class LineaCapturaPeriodoRepository {
     return result.recordset[0] ? this.mapRow(result.recordset[0]) : null;
   }
 
+  async findVigenteActiva(org0: string, org1: string, fechaMexicoHoy: string): Promise<LineaCapturaPeriodoRecord | null> {
+    const result = await this.mssqlPool.request()
+      .input('org0', sql.Char(2), org0)
+      .input('org1', sql.Char(2), org1)
+      .input('fechaMexicoHoy', sql.Date, fechaMexicoHoy)
+      .query(`
+        SELECT TOP 1 *
+        FROM pagos.LineaCapturaPeriodo
+        WHERE Org0 = @org0
+          AND Org1 = @org1
+          AND Estatus = 'VIGENTE'
+          AND FechaFinVigencia >= @fechaMexicoHoy
+        ORDER BY FechaFinVigencia DESC, CreatedAt DESC
+      `);
+
+    return result.recordset[0] ? this.mapRow(result.recordset[0]) : null;
+  }
+
   async findPrimerPagoPosterior(fechaFinalPeriodo: string): Promise<string | null> {
     const result = await this.mssqlPool.request()
       .input('fechaFinalPeriodo', sql.Date, fechaFinalPeriodo)
@@ -114,6 +133,20 @@ export class LineaCapturaPeriodoRepository {
         FROM dbo.EventoCalendario
         WHERE tipo = 'PAGO'
           AND fecha > @fechaFinalPeriodo
+        ORDER BY fecha ASC
+      `);
+
+    return result.recordset[0]?.fecha ?? null;
+  }
+
+  async findPrimerPagoDesde(fecha: string): Promise<string | null> {
+    const result = await this.mssqlPool.request()
+      .input('fecha', sql.Date, fecha)
+      .query(`
+        SELECT TOP 1 CONVERT(VARCHAR(10), fecha, 23) AS fecha
+        FROM dbo.EventoCalendario
+        WHERE tipo = 'PAGO'
+          AND fecha >= @fecha
         ORDER BY fecha ASC
       `);
 
@@ -161,14 +194,10 @@ export class LineaCapturaPeriodoRepository {
   }
 
   private formatDate(value: unknown): string {
-    if (!value) return '';
-    if (value instanceof Date) return value.toISOString().split('T')[0];
-    return String(value).split('T')[0];
+    return formatSqlDateOnly(value) ?? '';
   }
 
   private formatDateTime(value: unknown): string | null {
-    if (!value) return null;
-    if (value instanceof Date) return value.toISOString();
-    return String(value);
+    return formatSqlDateTimeMx(value);
   }
 }

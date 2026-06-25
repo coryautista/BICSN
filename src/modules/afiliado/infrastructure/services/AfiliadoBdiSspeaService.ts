@@ -323,6 +323,142 @@ export async function getUltimaBitacoraAfectacionOrgPorOrganica(
   }
 }
 
+export async function getBitacoraAfectacionOrgPorOrganicaYPeriodo(
+  org0: string,
+  org1: string,
+  periodo: string
+): Promise<any | null> {
+  const periodoStr = String(periodo).trim();
+
+  if (!/^\d{4}$/.test(periodoStr)) {
+    throw new Error('PERIODO_INVALIDO');
+  }
+
+  const quincena = Number(periodoStr.slice(0, 2));
+  const anio = 2000 + Number(periodoStr.slice(2, 4));
+
+  if (quincena < 1 || quincena > 24) {
+    throw new Error('PERIODO_INVALIDO');
+  }
+
+  const logContext = {
+    operation: 'getBitacoraAfectacionOrgPorOrganicaYPeriodo',
+    org0,
+    org1,
+    periodo: periodoStr,
+    quincena,
+    anio
+  };
+
+  const startTime = Date.now();
+  logger.info(logContext, 'Buscando registro de BitacoraAfectacionOrg por periodo');
+  console.log(`[BITACORA] Buscando registro de BitacoraAfectacionOrg para orgánica ${org0}/${org1}, periodo ${periodoStr}`);
+
+  const p = await getPool();
+
+  try {
+    const queryStart = Date.now();
+    const r = await p.request()
+      .input('org0', sql.VarChar(30), org0)
+      .input('org1', sql.VarChar(30), org1)
+      .input('quincena', sql.Int, quincena)
+      .input('anio', sql.Int, anio)
+      .query(`
+        SELECT TOP 1
+          AfectacionId as Id,
+          OrgNivel,
+          Org0,
+          Org1,
+          Org2,
+          Org3,
+          Entidad,
+          EntidadId,
+          Anio,
+          Quincena,
+          Accion,
+          Resultado,
+          Mensaje,
+          Usuario,
+          UserId,
+          AppName,
+          Ip,
+          UserAgent,
+          RequestId,
+          CreatedAt,
+          ModifiedAt
+        FROM afec.BitacoraAfectacionOrg
+        WHERE Org0 = @org0
+          AND Org1 = @org1
+          AND Entidad = 'AFILIADOS'
+          AND Quincena = @quincena
+          AND Anio = @anio
+        ORDER BY ModifiedAt DESC, CreatedAt DESC
+      `);
+
+    const queryTime = Date.now() - queryStart;
+
+    if (r.recordset.length === 0) {
+      logger.warn({
+        ...logContext,
+        queryTimeMs: queryTime,
+        elapsedMs: Date.now() - startTime
+      }, 'No se encontró registro en BitacoraAfectacionOrg para el periodo');
+      console.log(`[BITACORA] ⚠️  No se encontró registro en BitacoraAfectacionOrg para orgánica ${org0}/${org1}, periodo ${periodoStr} (${queryTime}ms)`);
+      return null;
+    }
+
+    const registro = r.recordset[0];
+    logger.info({
+      ...logContext,
+      registroId: registro.Id,
+      accion: registro.Accion,
+      resultado: registro.Resultado,
+      queryTimeMs: queryTime,
+      elapsedMs: Date.now() - startTime
+    }, 'Registro encontrado en BitacoraAfectacionOrg para el periodo');
+    console.log(`[BITACORA] ✅ Registro encontrado - ID: ${registro.Id}, Accion: ${registro.Accion}, Periodo: ${periodoStr} (${queryTime}ms)`);
+
+    return {
+      id: registro.Id,
+      orgNivel: registro.OrgNivel,
+      org0: registro.Org0,
+      org1: registro.Org1,
+      org2: registro.Org2,
+      org3: registro.Org3,
+      entidad: registro.Entidad,
+      entidadId: registro.EntidadId,
+      anio: registro.Anio,
+      quincena: registro.Quincena,
+      accion: registro.Accion,
+      resultado: registro.Resultado,
+      mensaje: registro.Mensaje,
+      usuario: registro.Usuario,
+      userId: registro.UserId,
+      appName: registro.AppName,
+      ip: registro.Ip,
+      userAgent: registro.UserAgent,
+      requestId: registro.RequestId,
+      createdAt: registro.CreatedAt?.toISOString() || null,
+      modifiedAt: registro.ModifiedAt?.toISOString() || null
+    };
+  } catch (error: any) {
+    const queryTime = Date.now() - startTime;
+    logger.error({
+      ...logContext,
+      error: {
+        message: error.message || String(error),
+        stack: error.stack,
+        name: error.name,
+        code: error.code
+      },
+      queryTimeMs: queryTime,
+      elapsedMs: Date.now() - startTime
+    }, 'Error consultando BitacoraAfectacionOrg por periodo');
+    console.error(`[BITACORA] ❌ Error consultando BitacoraAfectacionOrg por periodo: ${error.message || String(error)} (${queryTime}ms)`);
+    throw error;
+  }
+}
+
 export async function aplicarBDIsspea(
   afiliadoId: number,
   org0: string,

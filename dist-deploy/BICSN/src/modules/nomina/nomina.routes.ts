@@ -93,8 +93,8 @@ function resolveOrganicas(user: any, input: Partial<{ organica0: string; organic
 
   const organica0 = normalizeOrganica(source.organica0);
   const organica1 = normalizeOrganica(source.organica1);
-  const organica2 = normalizeOrganica(source.organica2);
-  const organica3 = normalizeOrganica(source.organica3);
+  const organica2 = normalizeOrganica(source.organica2) ?? '01';
+  const organica3 = normalizeOrganica(source.organica3) ?? '01';
 
   if (!organica0 || !organica1 || !organica2 || !organica3) {
     return {

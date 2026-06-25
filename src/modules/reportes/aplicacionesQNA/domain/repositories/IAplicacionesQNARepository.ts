@@ -12,6 +12,19 @@ export interface PeriodoTrabajo {
   accion: string;
   fechaInicio: string; // YYYY-MM-DD
   fechaFin: string;    // YYYY-MM-DD
+  lineaCapturaVigente?: {
+    lineaCapturaPeriodoId: number;
+    periodo: string;
+    quincena: number;
+    anio: number;
+    importe: number;
+    lineaCaptura: string;
+    referencia4: string;
+    fechaLimite: string;
+    fechaFinVigencia: string;
+    estatus: string;
+    digitoVerificador: string;
+  } | null;
 }
 
 export interface IAplicacionesQNARepository {
@@ -23,4 +36,3 @@ export interface IAplicacionesQNARepository {
   getConcentrado(org0: string, org1: string, org2: string, org3: string, periodo: string): Promise<Concentrado[]>;
   obtenerPeriodoTrabajo(org0: string, org1: string): Promise<PeriodoTrabajo>;
 }
-

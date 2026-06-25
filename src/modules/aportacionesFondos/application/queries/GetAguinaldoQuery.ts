@@ -12,7 +12,8 @@ export class GetAguinaldoQuery {
     claveOrganica0?: string,
     claveOrganica1?: string,
     userId?: string,
-    usarDiasLaboradosNomina = false
+    usarDiasLaboradosNomina = false,
+    periodoParam?: string
   ): Promise<AguinaldoResponse> {
     const startTime = Date.now();
     const logContext = {
@@ -46,16 +47,10 @@ export class GetAguinaldoQuery {
       const org0Normalized = claves.clave0.padStart(2, '0').substring(0, 2);
       const org1Normalized = claves.clave1.padStart(2, '0').substring(0, 2);
 
-      // Obtener período de aplicación desde BitacoraAfectacionOrg
-      console.log('[APORTACIONES_FONDOS] [AGUINALDO] Obteniendo período de aplicación', {
-        ...logContext,
-        org0: org0Normalized,
-        org1: org1Normalized
-      });
-      const { periodo, accion } = await this.aportacionFondoRepo.obtenerPeriodoAplicacion(
-        org0Normalized,
-        org1Normalized
-      );
+      const periodoData = periodoParam
+        ? { periodo: periodoParam, accion: 'PERIODO_PARAM' }
+        : await this.aportacionFondoRepo.obtenerPeriodoAplicacion(org0Normalized, org1Normalized);
+      const { periodo, accion } = periodoData;
       console.log('[APORTACIONES_FONDOS] [AGUINALDO] Período obtenido', {
         ...logContext,
         periodo,

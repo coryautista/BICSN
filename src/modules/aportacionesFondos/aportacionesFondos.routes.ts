@@ -37,7 +37,9 @@ export default async function aportacionesFondosRoutes(app: FastifyInstance) {
         type: 'object',
         properties: {
           clave_organica_0: { type: 'string', maxLength: 2 },
-          clave_organica_1: { type: 'string', maxLength: 2 }
+          clave_organica_1: { type: 'string', maxLength: 2 },
+          usarDiasLaboradosNomina: { type: 'string' },
+          periodo: { type: 'string', minLength: 4, maxLength: 4 }
         }
       },
       response: {
@@ -151,7 +153,8 @@ export default async function aportacionesFondosRoutes(app: FastifyInstance) {
         parsed.data.clave_organica_0,
         parsed.data.clave_organica_1,
         user.sub?.toString(),
-        String((req.query as any)?.usarDiasLaboradosNomina || '') === '1'
+        String((req.query as any)?.usarDiasLaboradosNomina || '') === '1',
+        (req.query as any)?.periodo
       );
 
       return reply.send(ok(result));
@@ -399,7 +402,8 @@ export default async function aportacionesFondosRoutes(app: FastifyInstance) {
         isEntidad,
         (req.query as any)?.clave_organica_0,
         (req.query as any)?.clave_organica_1,
-        user.sub?.toString()
+        user.sub?.toString(),
+        (req.query as any)?.periodo
       );
 
       const duration = Date.now() - startTime;
@@ -557,7 +561,8 @@ export default async function aportacionesFondosRoutes(app: FastifyInstance) {
         isEntidad,
         (req.query as any)?.clave_organica_0,
         (req.query as any)?.clave_organica_1,
-        user.sub?.toString()
+        user.sub?.toString(),
+        (req.query as any)?.periodo
       );
 
       const duration = Date.now() - startTime;
@@ -741,7 +746,8 @@ export default async function aportacionesFondosRoutes(app: FastifyInstance) {
         computadoraAntigua,
         (req.query as any)?.clave_organica_0,
         (req.query as any)?.clave_organica_1,
-        user.sub?.toString()
+        user.sub?.toString(),
+        (req.query as any)?.periodo
       );
 
       const duration = Date.now() - startTime;
@@ -897,7 +903,8 @@ export default async function aportacionesFondosRoutes(app: FastifyInstance) {
         (req.query as any)?.clave_organica_0,
         (req.query as any)?.clave_organica_1,
         user.sub?.toString(),
-        String((req.query as any)?.usarDiasLaboradosNomina || '') === '1'
+        String((req.query as any)?.usarDiasLaboradosNomina || '') === '1',
+        (req.query as any)?.periodo
       );
 
       const duration = Date.now() - startTime;
@@ -1087,7 +1094,8 @@ export default async function aportacionesFondosRoutes(app: FastifyInstance) {
         (req.query as any)?.clave_organica_0,
         (req.query as any)?.clave_organica_1,
         user.sub?.toString(),
-        String((req.query as any)?.usarDiasLaboradosNomina || '') === '1'
+        String((req.query as any)?.usarDiasLaboradosNomina || '') === '1',
+        (req.query as any)?.periodo
       );
 
       const duration = Date.now() - startTime;
@@ -1255,7 +1263,8 @@ export default async function aportacionesFondosRoutes(app: FastifyInstance) {
         (req.query as any)?.clave_organica_0,
         (req.query as any)?.clave_organica_1,
         user.sub?.toString(),
-        String((req.query as any)?.usarDiasLaboradosNomina || '') === '1'
+        String((req.query as any)?.usarDiasLaboradosNomina || '') === '1',
+        (req.query as any)?.periodo
       );
 
       const duration = Date.now() - startTime;

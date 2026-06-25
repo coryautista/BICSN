@@ -1,5 +1,6 @@
 import { LineaCapturaService } from '../../domain/services/LineaCapturaService.js';
 import { LineaCapturaPeriodoRepository, LineaCapturaPeriodoRecord } from '../../infrastructure/persistence/LineaCapturaPeriodoRepository.js';
+import { getMexicoTodayDateOnly } from '../../../../../utils/sqlServerDate.js';
 
 export interface GenerateLineaCapturaPeriodoParams {
   org0: string;
@@ -27,7 +28,7 @@ export class GenerateLineaCapturaPeriodoCommand {
       return { ...existing, reutilizada: true };
     }
 
-    const today = getMexicoToday();
+    const today = getMexicoTodayDateOnly();
     const fechaPago = await this.lineaCapturaPeriodoRepo.findPrimerPagoDesde(today);
 
     if (!fechaPago) {
@@ -37,6 +38,8 @@ export class GenerateLineaCapturaPeriodoCommand {
     const referencia4 = `${params.org0}${params.org1}`.toUpperCase();
     const lineaCaptura = this.lineaCapturaService.generarReferencia11({
       referencia4,
+      periodo: params.periodo,
+      quincena: periodoInfo.quincena,
       fechaLimite: fechaPago,
       importe: params.importe
     });
@@ -97,20 +100,4 @@ function parsePeriodo(periodo: string): { quincena: number; anio: number; fechaI
 
 function formatDate(year: number, month: number, day: number): string {
   return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-}
-
-function getMexicoToday(): string {
-  const parts = new Intl.DateTimeFormat('en-CA', {
-    timeZone: 'America/Mexico_City',
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit'
-  }).formatToParts(new Date());
-
-  const year = parts.find(part => part.type === 'year')?.value;
-  const month = parts.find(part => part.type === 'month')?.value;
-  const day = parts.find(part => part.type === 'day')?.value;
-
-  if (!year || !month || !day) return new Date().toISOString().split('T')[0];
-  return `${year}-${month}-${day}`;
 }

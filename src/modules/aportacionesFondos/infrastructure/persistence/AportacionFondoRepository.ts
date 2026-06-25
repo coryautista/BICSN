@@ -43,7 +43,8 @@ export class AportacionFondoRepository implements IAportacionFondoRepository {
     tipo: TipoFondo,
     claveOrganica0: string,
     claveOrganica1: string,
-    usarDiasLaboradosNomina = false
+    usarDiasLaboradosNomina = false,
+    periodo?: string
   ): Promise<AportacionIndividual> {
     try {
       // Validar tipo de fondo
@@ -75,12 +76,12 @@ export class AportacionFondoRepository implements IAportacionFondoRepository {
       }
 
       // Calcular aportaciones según el tipo
-      const periodoInfo = usarDiasLaboradosNomina ? await this.obtenerPeriodoAplicacion(claveOrganica0, claveOrganica1) : null;
+      const periodoInfo = usarDiasLaboradosNomina && !periodo ? await this.obtenerPeriodoAplicacion(claveOrganica0, claveOrganica1) : null;
       const datos = await this.calcularAportaciones(
         registros,
         tipo,
         usarDiasLaboradosNomina,
-        periodoInfo?.periodo,
+        periodo || periodoInfo?.periodo,
         claveOrganica0,
         claveOrganica1
       );

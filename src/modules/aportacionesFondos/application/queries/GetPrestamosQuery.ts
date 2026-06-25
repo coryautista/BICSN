@@ -11,7 +11,8 @@ export class GetPrestamosQuery {
     isEntidad: boolean,
     claveOrganica0?: string,
     claveOrganica1?: string,
-    userId?: string
+    userId?: string,
+    periodoParam?: string
   ): Promise<PrestamosResponse> {
     const startTime = Date.now();
     const logContext = {
@@ -41,12 +42,10 @@ export class GetPrestamosQuery {
       );
       console.log('[APORTACIONES_FONDOS] [PRESTAMOS_CORTO_PLAZO] Acceso validado', { ...logContext, clavesValidadas: claves });
 
-      // Obtener período de aplicación desde BitacoraAfectacionOrg
-      console.log('[APORTACIONES_FONDOS] [PRESTAMOS_CORTO_PLAZO] Obteniendo período de aplicación', { ...logContext, org0: claves.clave0, org1: claves.clave1 });
-      const { periodo, accion } = await this.aportacionFondoRepo.obtenerPeriodoAplicacion(
-        claves.clave0,
-        claves.clave1
-      );
+      const periodoData = periodoParam
+        ? { periodo: periodoParam, accion: 'PERIODO_PARAM' }
+        : await this.aportacionFondoRepo.obtenerPeriodoAplicacion(claves.clave0, claves.clave1);
+      const { periodo, accion } = periodoData;
       console.log('[APORTACIONES_FONDOS] [PRESTAMOS_CORTO_PLAZO] Período obtenido', { ...logContext, periodo, accion });
 
       // Obtener préstamos ejecutando procedimiento AP_S_PCP
@@ -163,4 +162,3 @@ export class GetPrestamosQuery {
     }
   }
 }
-

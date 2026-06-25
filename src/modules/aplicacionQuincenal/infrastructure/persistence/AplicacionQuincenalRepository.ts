@@ -1,5 +1,5 @@
 import { FastifyRequest } from 'fastify';
-import { executeSerializedQuery, decodeFirebirdObject, executeSelectableProcedure, FIREBIRD_TIMEOUTS } from '../../../../db/firebird.js';
+import { executeSerializedQuery, decodeFirebirdObject, executeSelectableProcedure, executeSafeQuery, FIREBIRD_TIMEOUTS } from '../../../../db/firebird.js';
 import { withDbContext, sql } from '../../../../db/context.js';
 import { getPool } from '../../../../db/mssql.js';
 import { IAplicacionQuincenalRepository, GuardarHistoricoAportacionesResult, GuardarHistoricoRetencionesResult, ValidarAplicacionQnaAportacionesResult } from '../../domain/repositories/IAplicacionQuincenalRepository.js';
@@ -2132,14 +2132,32 @@ export class AplicacionQuincenalRepository implements IAplicacionQuincenalReposi
         }
       }, 'Consulta de histórico de aportaciones completada');
 
+      const diasMap = await this.obtenerDiasLaboradosHistoricoMap(
+        p,
+        org0,
+        org1,
+        quincena,
+        anio,
+        [
+          ahorroResult.recordset,
+          viviendaResult.recordset,
+          prestacionesResult.recordset,
+          cairResult.recordset,
+          transitorioResult.recordset,
+          guarderiasResult.recordset,
+          aguinaldoResult.recordset
+        ].flat()
+      );
+      const porcentajesMap = await this.obtenerPorcentajesFondoHistoricoMap(p);
+
       return {
-        ahorro: ahorroResult.recordset,
-        vivienda: viviendaResult.recordset,
-        prestaciones: prestacionesResult.recordset,
-        cair: cairResult.recordset,
-        transitorio: transitorioResult.recordset,
-        guarderias: guarderiasResult.recordset,
-        aguinaldo: aguinaldoResult.recordset
+        ahorro: this.enriquecerHistoricoConDiasLaborados(ahorroResult.recordset, diasMap, 'ahorro', porcentajesMap),
+        vivienda: this.enriquecerHistoricoConDiasLaborados(viviendaResult.recordset, diasMap, 'vivienda', porcentajesMap),
+        prestaciones: this.enriquecerHistoricoConDiasLaborados(prestacionesResult.recordset, diasMap, 'prestaciones', porcentajesMap),
+        cair: this.enriquecerHistoricoConDiasLaborados(cairResult.recordset, diasMap, 'cair', porcentajesMap),
+        transitorio: this.enriquecerHistoricoConDiasLaborados(transitorioResult.recordset, diasMap),
+        guarderias: this.enriquecerHistoricoConDiasLaborados(guarderiasResult.recordset, diasMap),
+        aguinaldo: this.enriquecerHistoricoConDiasLaborados(aguinaldoResult.recordset, diasMap)
       };
     } catch (error: any) {
       const duration = Date.now() - startTime;
@@ -2252,6 +2270,221 @@ export class AplicacionQuincenalRepository implements IAplicacionQuincenalReposi
         AplicacionQuincenalErrorCode.SQL_SERVER_ERROR
       );
     }
+  }
+
+  private normalizarRfcHistorico(value: unknown): string | null {
+    const rfc = String(value ?? '').trim().toUpperCase();
+    return rfc ? rfc : null;
+  }
+
+  private obtenerRfcHistorico(row: any): string | null {
+    return this.normalizarRfcHistorico(row?.rfc ?? row?.RFC ?? row?.titular_rfc ?? row?.TitularRFC);
+  }
+
+  private normalizarInternoHistorico(value: unknown): string | null {
+    const interno = String(value ?? '').trim();
+    return interno ? interno : null;
+  }
+
+  private obtenerInternoHistorico(row: any): string | null {
+    return this.normalizarInternoHistorico(row?.interno ?? row?.INTERNO ?? row?.titular_no_empleado ?? row?.TitularNoEmpleado);
+  }
+
+  private async obtenerRfcPorInternoHistoricoMap(
+    org0: string,
+    org1: string,
+    rows: any[]
+  ): Promise<Map<string, string>> {
+    const internos = Array.from(new Set(rows
+      .map((row) => this.obtenerInternoHistorico(row))
+      .filter((interno): interno is string => Boolean(interno))));
+
+    if (internos.length === 0) {
+      return new Map();
+    }
+
+    const params: any[] = [org0, org1, ...internos];
+    const internoPlaceholders = internos.map(() => '?').join(', ');
+    const result = await executeSafeQuery(`
+      SELECT
+        CAST(p.INTERNO AS VARCHAR(30)) AS INTERNO,
+        p.RFC
+      FROM PERSONAL p
+      INNER JOIN ORG_PERSONAL o ON o.INTERNO = p.INTERNO
+      WHERE o.CLAVE_ORGANICA_0 = ?
+        AND o.CLAVE_ORGANICA_1 = ?
+        AND CAST(p.INTERNO AS VARCHAR(30)) IN (${internoPlaceholders})
+    `, params);
+
+    const map = new Map<string, string>();
+    result.forEach((row: any) => {
+      const interno = this.normalizarInternoHistorico(row.INTERNO ?? row.interno);
+      const rfc = this.normalizarRfcHistorico(row.RFC ?? row.rfc);
+      if (interno && rfc && !map.has(interno)) {
+        map.set(interno, rfc);
+      }
+    });
+
+    return map;
+  }
+
+  private async obtenerDiasLaboradosHistoricoMap(
+    pool: any,
+    org0: string,
+    org1: string,
+    quincena: number,
+    anio: number,
+    rows: any[]
+  ): Promise<Map<string, number>> {
+    const rfcPorInterno = await this.obtenerRfcPorInternoHistoricoMap(org0, org1, rows);
+    const rfcs = Array.from(new Set(rows
+      .map((row) => this.obtenerRfcHistorico(row) ?? rfcPorInterno.get(this.obtenerInternoHistorico(row) ?? ''))
+      .filter((rfc): rfc is string => Boolean(rfc))));
+
+    if (rfcs.length === 0) {
+      return new Map();
+    }
+
+    const request = pool.request()
+      .input('org0', sql.Char(2), org0)
+      .input('org1', sql.Char(2), org1)
+      .input('quincena', sql.Int, quincena)
+      .input('anio', sql.Int, anio);
+
+    const rfcParams = rfcs.map((rfc, index) => {
+      const paramName = `rfc${index}`;
+      request.input(paramName, sql.VarChar(20), rfc);
+      return `@${paramName}`;
+    });
+
+    const result = await request.query(`
+        SELECT
+          UPPER(LTRIM(RTRIM(d.RFC))) AS rfc,
+          MAX(d.DiasLaborados) AS dias_laborados
+        FROM [SII-ISSSSPEA].[dbo].[NominaAplicacionQnalDetalle] d
+        WHERE d.Organica0 = @org0
+          AND d.Organica1 = @org1
+          AND d.Anio = @anio
+          AND d.Quincena = @quincena
+          AND UPPER(LTRIM(RTRIM(d.RFC))) IN (${rfcParams.join(', ')})
+        GROUP BY UPPER(LTRIM(RTRIM(d.RFC)))
+      `);
+
+    const diasMap = new Map<string, number>();
+    result.recordset.forEach((row: any) => {
+      const rfc = this.normalizarRfcHistorico(row.rfc);
+      const dias = row.dias_laborados == null ? null : Number(row.dias_laborados);
+      if (rfc && dias !== null && Number.isFinite(dias)) {
+        diasMap.set(rfc, dias);
+      }
+    });
+
+    const diasPorInterno = new Map<string, number>();
+    rfcPorInterno.forEach((rfc, interno) => {
+      const dias = diasMap.get(rfc);
+      if (dias !== undefined) {
+        diasPorInterno.set(interno, dias);
+      }
+    });
+
+    return new Map([...diasMap, ...diasPorInterno]);
+  }
+
+  private async obtenerPorcentajesFondoHistoricoMap(pool: any): Promise<Map<string, { porcentajePatron: number; porcentajeAfiliado: number }>> {
+    const result = await pool.request().query(`
+      SELECT TipoFondo, PorcentajePatron, PorcentajeAfiliado
+      FROM aportaciones.CatalogoPorcentajeFondo
+      WHERE Vigente = 1
+        AND TipoFondo IN ('ahorro', 'vivienda', 'prestaciones', 'cair')
+    `);
+
+    const map = new Map<string, { porcentajePatron: number; porcentajeAfiliado: number }>();
+    result.recordset.forEach((row: any) => {
+      const tipo = String(row.TipoFondo ?? '').trim().toLowerCase();
+      const porcentajePatron = Number(row.PorcentajePatron ?? 0);
+      const porcentajeAfiliado = Number(row.PorcentajeAfiliado ?? 0);
+      if (tipo && Number.isFinite(porcentajePatron) && Number.isFinite(porcentajeAfiliado)) {
+        map.set(tipo, { porcentajePatron, porcentajeAfiliado });
+      }
+    });
+
+    return map;
+  }
+
+  private recalcularHistoricoPorDias(row: any, tipo?: string, dias?: number, porcentajesMap?: Map<string, { porcentajePatron: number; porcentajeAfiliado: number }>): any {
+    if (!tipo || dias === undefined || !porcentajesMap) {
+      return row;
+    }
+
+    const porcentajes = porcentajesMap.get(tipo);
+    if (!porcentajes) {
+      return row;
+    }
+
+    const sueldo = Number(row.sueldo ?? row.Sueldo ?? 0);
+    const otrasPrestaciones = Number(row.otras_prestaciones ?? row.OtrasPrestaciones ?? 0);
+    const quinquenios = Number(row.quinquenios ?? row.Quinquenios ?? 0);
+    const sueldoBase = ((sueldo + otrasPrestaciones + quinquenios) / 30) * dias;
+
+    if (![sueldo, otrasPrestaciones, quinquenios, sueldoBase].every(Number.isFinite)) {
+      return row;
+    }
+
+    if (tipo === 'ahorro') {
+      const afae = ((sueldo / 30) * dias) * porcentajes.porcentajePatron;
+      const afaa = ((sueldo / 30) * dias) * porcentajes.porcentajeAfiliado;
+      return {
+        ...row,
+        sueldo_base: sueldoBase,
+        afae,
+        afaa,
+        total: afae + afaa
+      };
+    }
+
+    if (tipo === 'vivienda' || tipo === 'cair') {
+      const afe = ((sueldo / 30) * dias) * porcentajes.porcentajePatron;
+      return {
+        ...row,
+        sueldo_base: sueldoBase,
+        afe,
+        total: afe
+      };
+    }
+
+    if (tipo === 'prestaciones') {
+      const afpe = sueldoBase * porcentajes.porcentajePatron;
+      const afpa = sueldoBase * porcentajes.porcentajeAfiliado;
+      return {
+        ...row,
+        sueldo_base: sueldoBase,
+        afpe,
+        afpa,
+        total: afpe + afpa
+      };
+    }
+
+    return row;
+  }
+
+  private enriquecerHistoricoConDiasLaborados(
+    rows: any[],
+    diasMap: Map<string, number>,
+    tipo?: string,
+    porcentajesMap?: Map<string, { porcentajePatron: number; porcentajeAfiliado: number }>
+  ): any[] {
+    return rows.map((row) => {
+      const rfc = this.obtenerRfcHistorico(row);
+      const interno = this.obtenerInternoHistorico(row);
+      const dias = (rfc ? diasMap.get(rfc) : undefined) ?? (interno ? diasMap.get(interno) : undefined);
+      const recalculado = this.recalcularHistoricoPorDias(row, tipo, dias ?? 15, porcentajesMap);
+
+      return {
+        ...recalculado,
+        dias_laborados: dias ?? 15,
+        dias_laborados_origen: dias === undefined ? 'categoriapuesto' : 'txt'
+      };
+    });
   }
 }
 

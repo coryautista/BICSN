@@ -1,5 +1,6 @@
 import { LineaCapturaService } from '../../domain/services/LineaCapturaService.js';
 import { LineaCapturaPeriodoRepository, LineaCapturaPeriodoRecord } from '../../infrastructure/persistence/LineaCapturaPeriodoRepository.js';
+import { getMexicoTodayDateOnly } from '../../../../../utils/sqlServerDate.js';
 
 export interface GenerateLineaCapturaPeriodoParams {
   org0: string;
@@ -21,13 +22,15 @@ export class GenerateLineaCapturaPeriodoCommand {
 
   async execute(params: GenerateLineaCapturaPeriodoParams): Promise<GenerateLineaCapturaPeriodoResult> {
     const periodoInfo = parsePeriodo(params.periodo);
-    const existing = await this.lineaCapturaPeriodoRepo.findVigente(params.org0, params.org1, params.periodo, params.importe);
+    const existing = await this.lineaCapturaPeriodoRepo.findVigente(params.org0, params.org1, params.periodo);
 
     if (existing) {
       return { ...existing, reutilizada: true };
     }
 
-    const fechaPago = await this.lineaCapturaPeriodoRepo.findPrimerPagoPosterior(periodoInfo.fechaFinalPeriodo);
+    const today = getMexicoTodayDateOnly();
+    const fechaPago = await this.lineaCapturaPeriodoRepo.findPrimerPagoDesde(today);
+
     if (!fechaPago) {
       throw new Error('PAGO_EVENT_NOT_FOUND');
     }
@@ -41,7 +44,6 @@ export class GenerateLineaCapturaPeriodoCommand {
     const fechaCondensada = this.lineaCapturaService.calcularFechaCondensada(fechaPago);
     const montoCondensado = this.lineaCapturaService.calcularMontoCondensado(params.importe);
     const digitoVerificador = lineaCaptura.substring(13, 15);
-    const today = new Date().toISOString().split('T')[0];
 
     try {
       const created = await this.lineaCapturaPeriodoRepo.create({
@@ -68,7 +70,7 @@ export class GenerateLineaCapturaPeriodoCommand {
 
       return { ...created, reutilizada: false };
     } catch (error: any) {
-      const duplicate = await this.lineaCapturaPeriodoRepo.findVigente(params.org0, params.org1, params.periodo, params.importe);
+      const duplicate = await this.lineaCapturaPeriodoRepo.findVigente(params.org0, params.org1, params.periodo);
       if (duplicate) return { ...duplicate, reutilizada: true };
       throw error;
     }

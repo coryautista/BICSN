@@ -16,7 +16,28 @@ import { GetAplicacionPMPQuery } from './application/queries/GetAplicacionPMPQue
 import { GetAplicacionHIPQuery } from './application/queries/GetAplicacionHIPQuery.js';
 import { GetConcentradoQuery } from './application/queries/GetConcentradoQuery.js';
 import { IAplicacionesQNARepository } from './domain/repositories/IAplicacionesQNARepository.js';
+import { LineaCapturaPeriodoRepository } from './infrastructure/persistence/LineaCapturaPeriodoRepository.js';
 import { normalizeClaveOrganica } from '../../../utils/organica.js';
+import { getMexicoTodayDateOnly } from '../../../utils/sqlServerDate.js';
+
+function calcularFechasQuincena(quincena: number, anio: number): { fechaInicio: string; fechaFin: string } {
+  const mes = Math.ceil(quincena / 2);
+  const esQuincenaImpar = quincena % 2 === 1;
+  const fechaInicio = new Date(anio, mes - 1, esQuincenaImpar ? 1 : 16);
+  const fechaFin = esQuincenaImpar ? new Date(anio, mes - 1, 15) : new Date(anio, mes, 0);
+
+  const formatoFecha = (fecha: Date): string => {
+    const year = fecha.getFullYear();
+    const month = String(fecha.getMonth() + 1).padStart(2, '0');
+    const day = String(fecha.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
+
+  return {
+    fechaInicio: formatoFecha(fechaInicio),
+    fechaFin: formatoFecha(fechaFin)
+  };
+}
 
 export async function aplicacionesQNARoutes(fastify: FastifyInstance) {
   // GET /reportes/aplicaciones-qna/movimientos - HISTORIAL_MOVIMIENTOS_QUIN_IND
@@ -917,7 +938,28 @@ export async function aplicacionesQNARoutes(fastify: FastifyInstance) {
                 org0: { type: 'string', description: 'Clave orgánica nivel 0 utilizada' },
                 org1: { type: 'string', description: 'Clave orgánica nivel 1 utilizada' },
                 fechaInicio: { type: 'string', format: 'date', description: 'Fecha de inicio de la quincena (YYYY-MM-DD)' },
-                fechaFin: { type: 'string', format: 'date', description: 'Fecha de fin de la quincena (YYYY-MM-DD)' }
+                fechaFin: { type: 'string', format: 'date', description: 'Fecha de fin de la quincena (YYYY-MM-DD)' },
+                lineaCapturaVigente: {
+                  oneOf: [
+                    { type: 'null' },
+                    {
+                      type: 'object',
+                      properties: {
+                        lineaCapturaPeriodoId: { type: 'number' },
+                        periodo: { type: 'string' },
+                        quincena: { type: 'number' },
+                        anio: { type: 'number' },
+                        importe: { type: 'number' },
+                        lineaCaptura: { type: 'string' },
+                        referencia4: { type: 'string' },
+                        fechaLimite: { type: 'string', format: 'date' },
+                        fechaFinVigencia: { type: 'string', format: 'date' },
+                        estatus: { type: 'string' },
+                        digitoVerificador: { type: 'string' }
+                      }
+                    }
+                  ]
+                }
               }
             },
             timestamp: { type: 'string' }
@@ -968,6 +1010,42 @@ export async function aplicacionesQNARoutes(fastify: FastifyInstance) {
         });
       }
 
+      const lineaCapturaPeriodoRepo = request.diScope.resolve<LineaCapturaPeriodoRepository>('lineaCapturaPeriodoRepo');
+      const fechaMexicoHoy = getMexicoTodayDateOnly();
+      const lineaVigente = await lineaCapturaPeriodoRepo.findVigenteActiva(org0, org1, fechaMexicoHoy);
+
+      if (lineaVigente) {
+        const { fechaInicio, fechaFin } = calcularFechasQuincena(lineaVigente.quincena, lineaVigente.anio);
+
+        return reply.send({
+          success: true,
+          data: {
+            periodo: lineaVigente.periodo,
+            quincena: lineaVigente.quincena,
+            anio: lineaVigente.anio,
+            accion: 'LINEA_CAPTURA_VIGENTE',
+            org0,
+            org1,
+            fechaInicio,
+            fechaFin,
+            lineaCapturaVigente: {
+              lineaCapturaPeriodoId: lineaVigente.lineaCapturaPeriodoId,
+              periodo: lineaVigente.periodo,
+              quincena: lineaVigente.quincena,
+              anio: lineaVigente.anio,
+              importe: lineaVigente.importe,
+              lineaCaptura: lineaVigente.lineaCaptura,
+              referencia4: lineaVigente.referencia4,
+              fechaLimite: lineaVigente.fechaLimite,
+              fechaFinVigencia: lineaVigente.fechaFinVigencia,
+              estatus: lineaVigente.estatus,
+              digitoVerificador: lineaVigente.digitoVerificador
+            }
+          },
+          timestamp: new Date().toISOString()
+        });
+      }
+
       // Obtener repository y ejecutar consulta
       const repository = request.diScope.resolve<IAplicacionesQNARepository>('aplicacionesQNARepo');
       const periodoData = await repository.obtenerPeriodoTrabajo(org0, org1);
@@ -978,7 +1056,8 @@ export async function aplicacionesQNARoutes(fastify: FastifyInstance) {
         data: {
           ...periodoData,
           org0,
-          org1
+          org1,
+          lineaCapturaVigente: null
         },
         timestamp: new Date().toISOString()
       });
