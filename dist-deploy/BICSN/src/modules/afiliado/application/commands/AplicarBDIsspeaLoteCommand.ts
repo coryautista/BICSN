@@ -2,8 +2,7 @@ import { IAfiliadoRepository, AplicarBDIsspeaLoteResult } from '../../domain/rep
 import pino from 'pino';
 import {
   AplicarBDIsspeaError,
-  OrganicaNoConfiguradaError,
-  NoAfiliadosElegiblesError
+  OrganicaNoConfiguradaError
 } from '../../domain/errors.js';
 
 const logger = pino({
@@ -41,27 +40,8 @@ export class AplicarBDIsspeaLoteCommand {
     }
 
     try {
-      // Validar que existan afiliados elegibles antes de procesar
-      const afiliadosElegibles = await this.afiliadoRepo.findByStatusAndOrganica(
-        data.org0,
-        data.org1,
-        [2, 3] // Estados 2 (Aprobado) y 3 (En Revisión)
-      );
-
-      if (afiliadosElegibles.length === 0) {
-        logger.warn({
-          ...logContext,
-          estadosBuscados: [2, 3]
-        }, 'No se encontraron afiliados elegibles');
-        throw new NoAfiliadosElegiblesError(data.org0, data.org1);
-      }
-
-      logger.info({
-        ...logContext,
-        afiliadosEncontrados: afiliadosElegibles.length
-      }, 'Afiliados elegibles encontrados, iniciando procesamiento');
-
-      // Ejecutar el procesamiento en lote
+      // Ejecutar el procesamiento en lote. El repositorio resuelve la QNA desde
+      // BitacoraAfectacionOrg y filtra afiliados/movimientos de esa quincena.
       const resultado = await this.afiliadoRepo.aplicarBDIsspeaLote(
         data.org0,
         data.org1,
@@ -84,8 +64,7 @@ export class AplicarBDIsspeaLoteCommand {
     } catch (error: any) {
       // Re-lanzar errores del dominio sin modificar
       if (
-        error instanceof OrganicaNoConfiguradaError ||
-        error instanceof NoAfiliadosElegiblesError
+        error instanceof OrganicaNoConfiguradaError
       ) {
         throw error;
       }

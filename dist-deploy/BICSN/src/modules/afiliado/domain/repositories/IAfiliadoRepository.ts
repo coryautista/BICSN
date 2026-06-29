@@ -21,6 +21,11 @@ export interface AplicarBDIsspeaLoteResult {
     procesadosConError: number;
     organica: string;
   };
+  periodo?: string;
+  quincena?: number;
+  anio?: number;
+  quincenaId?: string;
+  afectacionId?: number;
   detallesMigracion?: Array<{
     afiliadoId: number;
     movimientoId: number;

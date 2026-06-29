@@ -4563,6 +4563,11 @@ export default async function afiliadoRoutes(app: FastifyInstance) {
                 afiliadosFallidos: { type: 'number', description: 'Cantidad de afiliados que fallaron al procesar' },
                 afiliadosCompletos: { type: 'number', description: 'Total de afiliados marcados como completos' },
                 bitacoraActualizada: { type: 'number', description: 'Si se actualizó BitacoraAfectacionOrg (0 o 1)' },
+                periodo: { type: 'string', nullable: true, description: 'Periodo QQAA resuelto desde BitacoraAfectacionOrg' },
+                quincena: { type: 'number', nullable: true, description: 'Quincena resuelta desde BitacoraAfectacionOrg' },
+                anio: { type: 'number', nullable: true, description: 'Año resuelto desde BitacoraAfectacionOrg' },
+                quincenaId: { type: 'string', nullable: true, description: 'QuincenaId usada para filtrar movimientos (YYYY-QQ)' },
+                afectacionId: { type: 'number', nullable: true, description: 'AfectacionId usado para actualizar la bitácora exacta' },
                 resumen: {
                   type: 'object',
                   properties: {
@@ -4676,6 +4681,11 @@ export default async function afiliadoRoutes(app: FastifyInstance) {
         afiliadosFallidos: resultado.afiliadosFallidos,
         afiliadosCompletos: resultado.afiliadosCompletos,
         bitacoraActualizada: resultado.bitacoraActualizada,
+        periodo: resultado.periodo,
+        quincena: resultado.quincena,
+        anio: resultado.anio,
+        quincenaId: resultado.quincenaId,
+        afectacionId: resultado.afectacionId,
         resumen: resultado.resumen,
         detallesMigracion: resultado.detallesMigracion || [],
         errores: erroresResumidos,
