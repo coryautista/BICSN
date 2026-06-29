@@ -38,6 +38,8 @@ export class GenerateLineaCapturaPeriodoCommand {
     const referencia4 = `${params.org0}${params.org1}`.toUpperCase();
     const lineaCaptura = this.lineaCapturaService.generarReferencia11({
       referencia4,
+      periodo: params.periodo,
+      quincena: periodoInfo.quincena,
       fechaLimite: fechaPago,
       importe: params.importe
     });

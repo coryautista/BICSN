@@ -12,7 +12,8 @@ export class GetAportacionGuarderiasQuery {
     claveOrganica0?: string,
     claveOrganica1?: string,
     userId?: string,
-    usarDiasLaboradosNomina = false
+    usarDiasLaboradosNomina = false,
+    periodoParam?: string
   ): Promise<AportacionGuarderiasResponse> {
     const startTime = Date.now();
     const logContext = {
@@ -42,19 +43,10 @@ export class GetAportacionGuarderiasQuery {
       );
       console.log('[APORTACIONES_FONDOS] [APORTACION_GUARDERIAS] Acceso validado', { ...logContext, clavesValidadas: claves });
 
-      // Obtener quincena y año desde BitacoraAfectacionOrg
-      console.log('[APORTACIONES_FONDOS] [APORTACION_GUARDERIAS] Obteniendo quincena y año', { ...logContext, org0: claves.clave0, org1: claves.clave1 });
-      const { quincena, anio, accion } = await this.aportacionFondoRepo.obtenerQuincenaYAnio(
-        claves.clave0,
-        claves.clave1
-      );
-      console.log('[APORTACIONES_FONDOS] [APORTACION_GUARDERIAS] Quincena y año obtenidos', { ...logContext, quincena, anio, accion });
-
-      // Calcular período: quincena con padding de 2 dígitos + dos últimos dígitos del año
-      const quincenaStr = String(quincena).padStart(2, '0');
-      const anioStr = String(anio).slice(-2);
-      const periodo = quincenaStr + anioStr;
-      console.log('[APORTACIONES_FONDOS] [APORTACION_GUARDERIAS] Período calculado', { ...logContext, periodo, quincena, anio, accion });
+      const periodoData = periodoParam
+        ? { periodo: periodoParam, accion: 'PERIODO_PARAM' }
+        : await this.aportacionFondoRepo.obtenerPeriodoAplicacion(claves.clave0, claves.clave1);
+      const { periodo, accion } = periodoData;
 
       // Obtener aportaciones ejecutando función EBI2_RECIBOS_IMPRIMIR
       console.log('[APORTACIONES_FONDOS] [APORTACION_GUARDERIAS] Ejecutando función EBI2_RECIBOS_IMPRIMIR', { ...logContext, periodo });

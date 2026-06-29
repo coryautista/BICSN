@@ -162,24 +162,26 @@ export class LineaCapturaService {
    * 
    * Estructura:
    *   Pos  1–4 : referencia base (alfa-numérica, ej. '0101', '04A0')
-   *   Pos  5–6 : mes (2 dígitos, con padding de ceros)
-   *   Pos  7–8 : año (2 dígitos, últimos 2 del año)
+   *   Pos  5–8 : periodo QQAA si se proporciona; de lo contrario mes/año de fecha límite
    *   Pos  9–12: fecha condensada (año base 2014)
    *   Pos 13   : monto condensado
    *   Pos 14–15: dígito verificador Base 97
    * 
    * @param params Parámetros para generar la referencia
    * @param params.referencia4 Primeras 4 posiciones (alfa-numéricas)
+   * @param params.periodo Periodo QQAA, cuando la referencia se genera por periodo
    * @param params.fechaLimite Fecha límite de pago
    * @param params.importe Importe total con centavos
    * @returns Referencia completa de 15 caracteres
    */
   generarReferencia11(params: {
     referencia4: string;
+    periodo?: string;
+    quincena?: number;
     fechaLimite: Date | string;
     importe: number | string;
   }): string {
-    const { referencia4, fechaLimite, importe } = params;
+    const { referencia4, periodo, fechaLimite, importe } = params;
 
     // Validamos que la referencia base tenga exactamente 4 caracteres
     if (!referencia4 || referencia4.toString().length !== 4) {
@@ -214,11 +216,18 @@ export class LineaCapturaService {
       );
     }
 
-    // Extraemos mes y año de 2 dígitos
+    if (periodo && !/^\d{4}$/.test(periodo)) {
+      throw new AplicacionesQNAError(
+        'periodo debe tener formato QQAA',
+        AplicacionesQNAErrorCode.INVALID_PARAMETERS,
+        400
+      );
+    }
+
+    // Extraemos mes y año de 2 dígitos como fallback legacy.
     const month = fecha.getMonth() + 1; // getMonth() es 0–11, por eso +1
     const year = fecha.getFullYear();
-    const mes2 = month.toString().padStart(2, '0'); // Mes con padding de ceros (01-12)
-    const anio2 = year.toString().slice(-2); // Últimos 2 dígitos del año
+    const periodo4 = periodo ?? `${month.toString().padStart(2, '0')}${year.toString().slice(-2)}`;
 
     // Calculamos la fecha condensada de 4 dígitos
     const fechaCond = this.calcularFechaCondensada(fechaLimite, this.ANIO_BASE);
@@ -226,8 +235,8 @@ export class LineaCapturaService {
     // Calculamos el monto condensado (un solo dígito)
     const montoCond = this.calcularMontoCondensado(importe).toString();
 
-    // Construimos las primeras 13 posiciones: referencia4 + mes + año + fechaCondensada + montoCondensado
-    const cuerpo13 = (ref4 + mes2 + anio2 + fechaCond + montoCond).toUpperCase();
+    // Construimos las primeras 13 posiciones: referencia4 + periodo + fechaCondensada + montoCondensado
+    const cuerpo13 = (ref4 + periodo4 + fechaCond + montoCond).toUpperCase();
 
     // Calculamos el DV Base 97 sobre las 13 posiciones
     const dv97 = this.calcularDVBase97(cuerpo13);

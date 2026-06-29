@@ -2424,15 +2424,18 @@ export class AplicacionQuincenalRepository implements IAplicacionQuincenalReposi
     const sueldo = Number(row.sueldo ?? row.Sueldo ?? 0);
     const otrasPrestaciones = Number(row.otras_prestaciones ?? row.OtrasPrestaciones ?? 0);
     const quinquenios = Number(row.quinquenios ?? row.Quinquenios ?? 0);
-    const sueldoBase = ((sueldo + otrasPrestaciones + quinquenios) / 30) * dias;
+    const sueldoProporcional = (sueldo / 30) * dias;
+    const otrasPrestacionesProporcional = (otrasPrestaciones / 30) * dias;
+    const quinqueniosProporcional = (quinquenios / 30) * dias;
+    const sueldoBase = sueldoProporcional + otrasPrestacionesProporcional + quinqueniosProporcional;
 
-    if (![sueldo, otrasPrestaciones, quinquenios, sueldoBase].every(Number.isFinite)) {
+    if (![sueldo, otrasPrestaciones, quinquenios, sueldoProporcional, sueldoBase].every(Number.isFinite)) {
       return row;
     }
 
     if (tipo === 'ahorro') {
-      const afae = ((sueldo / 30) * dias) * porcentajes.porcentajePatron;
-      const afaa = ((sueldo / 30) * dias) * porcentajes.porcentajeAfiliado;
+      const afae = sueldoProporcional * porcentajes.porcentajePatron;
+      const afaa = sueldoProporcional * porcentajes.porcentajeAfiliado;
       return {
         ...row,
         sueldo_base: sueldoBase,
@@ -2443,7 +2446,7 @@ export class AplicacionQuincenalRepository implements IAplicacionQuincenalReposi
     }
 
     if (tipo === 'vivienda' || tipo === 'cair') {
-      const afe = ((sueldo / 30) * dias) * porcentajes.porcentajePatron;
+      const afe = sueldoProporcional * porcentajes.porcentajePatron;
       return {
         ...row,
         sueldo_base: sueldoBase,

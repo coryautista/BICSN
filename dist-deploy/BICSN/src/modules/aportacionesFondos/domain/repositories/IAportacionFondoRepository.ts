@@ -12,7 +12,8 @@ export interface IAportacionFondoRepository {
     tipo: TipoFondo,
     claveOrganica0: string,
     claveOrganica1: string,
-    usarDiasLaboradosNomina?: boolean
+    usarDiasLaboradosNomina?: boolean,
+    periodo?: string
   ): Promise<AportacionIndividual>;
   
   // Obtener aportaciones combinadas de todos los tipos

@@ -12,7 +12,8 @@ export class GetPensionNominaTransitorioQuery {
     claveOrganica0?: string,
     claveOrganica1?: string,
     userId?: string,
-    usarDiasLaboradosNomina = false
+    usarDiasLaboradosNomina = false,
+    periodoParam?: string
   ): Promise<PensionNominaTransitorioResponse> {
     const startTime = Date.now();
     const logContext = {
@@ -42,20 +43,10 @@ export class GetPensionNominaTransitorioQuery {
       );
       console.log('[APORTACIONES_FONDOS] [PENSION_NOMINA_TRANSITORIO] Acceso validado', { ...logContext, clavesValidadas: claves });
 
-      // Obtener quincena y año desde BitacoraAfectacionOrg usando org0 y org1 del token
-      // Para pensionados, usamos las claves orgánicas del usuario para obtener el período
-      console.log('[APORTACIONES_FONDOS] [PENSION_NOMINA_TRANSITORIO] Obteniendo quincena y año', { ...logContext, org0: userClave0, org1: userClave1 });
-      const { quincena, anio, accion } = await this.aportacionFondoRepo.obtenerQuincenaYAnio(
-        userClave0,
-        userClave1
-      );
-      console.log('[APORTACIONES_FONDOS] [PENSION_NOMINA_TRANSITORIO] Quincena y año obtenidos', { ...logContext, quincena, anio, accion });
-
-      // Calcular período: quincena con padding de 2 dígitos + dos últimos dígitos del año (SIN restar 1)
-      const quincenaStr = String(quincena).padStart(2, '0');
-      const anioStr = String(anio).slice(-2);
-      const periodo = quincenaStr + anioStr;
-      console.log('[APORTACIONES_FONDOS] [PENSION_NOMINA_TRANSITORIO] Período calculado', { ...logContext, periodo, quincena, anio, accion });
+      const periodoData = periodoParam
+        ? { periodo: periodoParam, accion: 'PERIODO_PARAM' }
+        : await this.aportacionFondoRepo.obtenerPeriodoAplicacion(userClave0, userClave1);
+      const { periodo, accion } = periodoData;
 
       // Para pensionados: org0='04' y org1='60' son hardcodeados, org2 y org3 vienen del token
       const org0Pension = '04';

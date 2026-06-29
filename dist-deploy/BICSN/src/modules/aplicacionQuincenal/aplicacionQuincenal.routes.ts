@@ -1714,13 +1714,13 @@ export default async function aplicacionQuincenalRoutes(app: FastifyInstance) {
                 quincena: { type: 'number' },
                 anio: { type: 'number' },
                 periodo: { type: 'string' },
-                ahorro: { type: 'array', items: { type: 'object' } },
-                vivienda: { type: 'array', items: { type: 'object' } },
-                prestaciones: { type: 'array', items: { type: 'object' } },
-                cair: { type: 'array', items: { type: 'object' } },
-                transitorio: { type: 'array', items: { type: 'object' } },
-                guarderias: { type: 'array', items: { type: 'object' } },
-                aguinaldo: { type: 'array', items: { type: 'object' } }
+                ahorro: { type: 'array', items: { type: 'object', additionalProperties: true } },
+                vivienda: { type: 'array', items: { type: 'object', additionalProperties: true } },
+                prestaciones: { type: 'array', items: { type: 'object', additionalProperties: true } },
+                cair: { type: 'array', items: { type: 'object', additionalProperties: true } },
+                transitorio: { type: 'array', items: { type: 'object', additionalProperties: true } },
+                guarderias: { type: 'array', items: { type: 'object', additionalProperties: true } },
+                aguinaldo: { type: 'array', items: { type: 'object', additionalProperties: true } }
               }
             }
           }
@@ -1859,9 +1859,9 @@ export default async function aplicacionQuincenalRoutes(app: FastifyInstance) {
                 quincena: { type: 'number' },
                 anio: { type: 'number' },
                 periodo: { type: 'string' },
-                prestamosCortoPlazo: { type: 'array', items: { type: 'object' } },
-                prestamosMedianoPlazo: { type: 'array', items: { type: 'object' } },
-                prestamosHipotecarios: { type: 'array', items: { type: 'object' } }
+                prestamosCortoPlazo: { type: 'array', items: { type: 'object', additionalProperties: true } },
+                prestamosMedianoPlazo: { type: 'array', items: { type: 'object', additionalProperties: true } },
+                prestamosHipotecarios: { type: 'array', items: { type: 'object', additionalProperties: true } }
               }
             }
           }

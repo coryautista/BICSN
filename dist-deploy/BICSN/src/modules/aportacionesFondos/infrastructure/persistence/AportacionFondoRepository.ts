@@ -43,7 +43,8 @@ export class AportacionFondoRepository implements IAportacionFondoRepository {
     tipo: TipoFondo,
     claveOrganica0: string,
     claveOrganica1: string,
-    usarDiasLaboradosNomina = false
+    usarDiasLaboradosNomina = false,
+    periodo?: string
   ): Promise<AportacionIndividual> {
     try {
       // Validar tipo de fondo
@@ -75,12 +76,12 @@ export class AportacionFondoRepository implements IAportacionFondoRepository {
       }
 
       // Calcular aportaciones según el tipo
-      const periodoInfo = usarDiasLaboradosNomina ? await this.obtenerPeriodoAplicacion(claveOrganica0, claveOrganica1) : null;
+      const periodoInfo = usarDiasLaboradosNomina && !periodo ? await this.obtenerPeriodoAplicacion(claveOrganica0, claveOrganica1) : null;
       const datos = await this.calcularAportaciones(
         registros,
         tipo,
         usarDiasLaboradosNomina,
-        periodoInfo?.periodo,
+        periodo || periodoInfo?.periodo,
         claveOrganica0,
         claveOrganica1
       );
@@ -1223,9 +1224,11 @@ export class AportacionFondoRepository implements IAportacionFondoRepository {
       const otrasPrestaciones = registro.otras_prestaciones || 0;
       const quinquenios = registro.quinquenios || 0;
       const diasInfo = this.resolveDiasLaborados(registro.rfc, diasMap, usarDiasLaboradosNomina);
-      
-      // Calcular sueldo base (misma para todos los tipos)
-      const sueldoBase = ((sueldo + otrasPrestaciones + quinquenios) / 30) * diasInfo.dias;
+
+      const sueldoProporcional = (sueldo / 30) * diasInfo.dias;
+      const otrasPrestacionesProporcional = (otrasPrestaciones / 30) * diasInfo.dias;
+      const quinqueniosProporcional = (quinquenios / 30) * diasInfo.dias;
+      const sueldoBase = sueldoProporcional + otrasPrestacionesProporcional + quinqueniosProporcional;
 
       // Debug: verificar que el nombre esté presente
       const nombre = registro.nombre || null;
@@ -1268,13 +1271,13 @@ export class AportacionFondoRepository implements IAportacionFondoRepository {
 
       switch (tipo) {
         case 'ahorro':
-          aportacion.afae = ((sueldo / 30) * diasInfo.dias) * porcentajes.porcentajePatron; // Patron contribution
-          aportacion.afaa = ((sueldo / 30) * diasInfo.dias) * (porcentajes.porcentajeAfiliado ?? 0);  // Employee contribution
+          aportacion.afae = sueldoProporcional * porcentajes.porcentajePatron; // Patron contribution
+          aportacion.afaa = sueldoProporcional * (porcentajes.porcentajeAfiliado ?? 0);  // Employee contribution
           aportacion.total = (aportacion.afae || 0) + (aportacion.afaa || 0);
           break;
         
         case 'vivienda':
-          aportacion.afe = ((sueldo / 30) * diasInfo.dias) * porcentajes.porcentajePatron; // Patron contribution
+          aportacion.afe = sueldoProporcional * porcentajes.porcentajePatron; // Patron contribution
           aportacion.total = aportacion.afe || 0;
           break;
         
@@ -1285,7 +1288,7 @@ export class AportacionFondoRepository implements IAportacionFondoRepository {
           break;
         
         case 'cair':
-          aportacion.afe = ((sueldo / 30) * diasInfo.dias) * porcentajes.porcentajePatron; // Patron contribution
+          aportacion.afe = sueldoProporcional * porcentajes.porcentajePatron; // Patron contribution
           aportacion.total = aportacion.afe || 0;
           break;
       }

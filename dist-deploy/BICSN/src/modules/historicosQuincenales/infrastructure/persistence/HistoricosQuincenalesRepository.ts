@@ -1,5 +1,6 @@
 import { ConnectionPool } from 'mssql';
 import sql from 'mssql';
+import { executeSafeQuery } from '../../../../db/firebird.js';
 import { HistoricoQuincenalFilters, HistoricoQuincenalResult, HistoricoTipoConfig } from '../../domain/entities/HistoricoQuincenal.js';
 import { IHistoricosQuincenalesRepository } from '../../domain/repositories/IHistoricosQuincenalesRepository.js';
 
@@ -143,8 +144,10 @@ export class HistoricosQuincenalesRepository implements IHistoricosQuincenalesRe
     const recordsets = result.recordsets as sql.IRecordSet<any>[];
     const total = Number(recordsets[0][0]?.Total ?? 0);
 
+    const data = await this.enriquecerAportacionesHistoricas(recordsets[1] as Record<string, unknown>[], filters);
+
     return {
-      data: recordsets[1] as Record<string, unknown>[],
+      data,
       meta: {
         grupo: config.grupo,
         tipo: config.tipo,
@@ -178,5 +181,175 @@ export class HistoricosQuincenalesRepository implements IHistoricosQuincenalesRe
     });
 
     return `AND (${clauses.join(' OR ')})`;
+  }
+
+  private esAportacionRecalculable(filters: HistoricoQuincenalFilters): boolean {
+    return filters.grupo === 'aportaciones' && ['ahorro', 'vivienda', 'prestaciones', 'cair'].includes(filters.tipo);
+  }
+
+  private normalizarRfc(value: unknown): string | null {
+    const rfc = String(value ?? '').trim().toUpperCase();
+    return rfc ? rfc : null;
+  }
+
+  private normalizarInterno(value: unknown): string | null {
+    const interno = String(value ?? '').trim();
+    return interno ? interno : null;
+  }
+
+  private obtenerRfc(row: Record<string, unknown>): string | null {
+    return this.normalizarRfc(row.rfc ?? row.RFC ?? row.titular_rfc ?? row.TitularRFC);
+  }
+
+  private obtenerInterno(row: Record<string, unknown>): string | null {
+    return this.normalizarInterno(row.interno ?? row.INTERNO ?? row.titular_no_empleado ?? row.TitularNoEmpleado);
+  }
+
+  private async obtenerRfcPorInternoMap(org0: string, org1: string, rows: Record<string, unknown>[]): Promise<Map<string, string>> {
+    const internos = Array.from(new Set(rows
+      .map((row) => this.obtenerInterno(row))
+      .filter((interno): interno is string => Boolean(interno))));
+
+    if (internos.length === 0) return new Map();
+
+    const placeholders = internos.map(() => '?').join(', ');
+    const result = await executeSafeQuery(`
+      SELECT
+        CAST(p.INTERNO AS VARCHAR(30)) AS INTERNO,
+        p.RFC
+      FROM PERSONAL p
+      INNER JOIN ORG_PERSONAL o ON o.INTERNO = p.INTERNO
+      WHERE o.CLAVE_ORGANICA_0 = ?
+        AND o.CLAVE_ORGANICA_1 = ?
+        AND CAST(p.INTERNO AS VARCHAR(30)) IN (${placeholders})
+    `, [org0, org1, ...internos]);
+
+    const map = new Map<string, string>();
+    result.forEach((row: any) => {
+      const interno = this.normalizarInterno(row.INTERNO ?? row.interno);
+      const rfc = this.normalizarRfc(row.RFC ?? row.rfc);
+      if (interno && rfc && !map.has(interno)) map.set(interno, rfc);
+    });
+    return map;
+  }
+
+  private async obtenerDiasLaboradosMap(filters: HistoricoQuincenalFilters, rows: Record<string, unknown>[]): Promise<Map<string, number>> {
+    const rfcPorInterno = await this.obtenerRfcPorInternoMap(filters.org0, filters.org1, rows);
+    const rfcs = Array.from(new Set(rows
+      .map((row) => this.obtenerRfc(row) ?? rfcPorInterno.get(this.obtenerInterno(row) ?? ''))
+      .filter((rfc): rfc is string => Boolean(rfc))));
+
+    if (rfcs.length === 0) return new Map();
+
+    const request = this.mssqlPool.request()
+      .input('org0', sql.Char(2), filters.org0)
+      .input('org1', sql.Char(2), filters.org1)
+      .input('quincena', sql.Int, filters.quincena)
+      .input('anio', sql.Int, filters.anio);
+
+    const placeholders = rfcs.map((rfc, index) => {
+      const name = `rfc${index}`;
+      request.input(name, sql.VarChar(20), rfc);
+      return `@${name}`;
+    }).join(', ');
+
+    const result = await request.query(`
+      SELECT UPPER(LTRIM(RTRIM(RFC))) AS rfc, MAX(DiasLaborados) AS dias_laborados
+      FROM dbo.NominaAplicacionQnalDetalle
+      WHERE Organica0 = @org0
+        AND Organica1 = @org1
+        AND Anio = @anio
+        AND Quincena = @quincena
+        AND UPPER(LTRIM(RTRIM(RFC))) IN (${placeholders})
+      GROUP BY UPPER(LTRIM(RTRIM(RFC)))
+    `);
+
+    const diasMap = new Map<string, number>();
+    result.recordset.forEach((row: any) => {
+      const rfc = this.normalizarRfc(row.rfc);
+      const dias = row.dias_laborados == null ? null : Number(row.dias_laborados);
+      if (rfc && dias !== null && Number.isFinite(dias)) diasMap.set(rfc, dias);
+    });
+
+    rfcPorInterno.forEach((rfc, interno) => {
+      const dias = diasMap.get(rfc);
+      if (dias !== undefined) diasMap.set(interno, dias);
+    });
+
+    return diasMap;
+  }
+
+  private async obtenerPorcentajesMap(): Promise<Map<string, { porcentajePatron: number; porcentajeAfiliado: number }>> {
+    const result = await this.mssqlPool.request().query(`
+      SELECT TipoFondo, PorcentajePatron, PorcentajeAfiliado
+      FROM aportaciones.CatalogoPorcentajeFondo
+      WHERE Vigente = 1
+        AND TipoFondo IN ('ahorro', 'vivienda', 'prestaciones', 'cair')
+    `);
+
+    const map = new Map<string, { porcentajePatron: number; porcentajeAfiliado: number }>();
+    result.recordset.forEach((row: any) => {
+      const tipo = String(row.TipoFondo ?? '').trim().toLowerCase();
+      const porcentajePatron = Number(row.PorcentajePatron ?? 0);
+      const porcentajeAfiliado = Number(row.PorcentajeAfiliado ?? 0);
+      if (tipo && Number.isFinite(porcentajePatron) && Number.isFinite(porcentajeAfiliado)) {
+        map.set(tipo, { porcentajePatron, porcentajeAfiliado });
+      }
+    });
+    return map;
+  }
+
+  private recalcularRow(row: Record<string, unknown>, tipo: string, dias: number, porcentajes: { porcentajePatron: number; porcentajeAfiliado: number }): Record<string, unknown> {
+    const sueldo = Number(row.sueldo ?? row.Sueldo ?? 0);
+    const otrasPrestaciones = Number(row.otras_prestaciones ?? row.OtrasPrestaciones ?? 0);
+    const quinquenios = Number(row.quinquenios ?? row.Quinquenios ?? 0);
+    const sueldoProporcional = (sueldo / 30) * dias;
+    const otrasPrestacionesProporcional = (otrasPrestaciones / 30) * dias;
+    const quinqueniosProporcional = (quinquenios / 30) * dias;
+    const sueldoBase = sueldoProporcional + otrasPrestacionesProporcional + quinqueniosProporcional;
+
+    if (![sueldo, otrasPrestaciones, quinquenios, sueldoProporcional, sueldoBase].every(Number.isFinite)) return row;
+
+    if (tipo === 'ahorro') {
+      const afae = sueldoProporcional * porcentajes.porcentajePatron;
+      const afaa = sueldoProporcional * porcentajes.porcentajeAfiliado;
+      return { ...row, sueldo_base: sueldoBase, afae, afaa, total: afae + afaa };
+    }
+
+    if (tipo === 'vivienda' || tipo === 'cair') {
+      const afe = sueldoProporcional * porcentajes.porcentajePatron;
+      return { ...row, sueldo_base: sueldoBase, afe, total: afe };
+    }
+
+    if (tipo === 'prestaciones') {
+      const afpe = sueldoBase * porcentajes.porcentajePatron;
+      const afpa = sueldoBase * porcentajes.porcentajeAfiliado;
+      return { ...row, sueldo_base: sueldoBase, afpe, afpa, total: afpe + afpa };
+    }
+
+    return row;
+  }
+
+  private async enriquecerAportacionesHistoricas(rows: Record<string, unknown>[], filters: HistoricoQuincenalFilters): Promise<Record<string, unknown>[]> {
+    if (!this.esAportacionRecalculable(filters) || rows.length === 0) return rows;
+
+    const [diasMap, porcentajesMap] = await Promise.all([
+      this.obtenerDiasLaboradosMap(filters, rows),
+      this.obtenerPorcentajesMap()
+    ]);
+    const porcentajes = porcentajesMap.get(filters.tipo);
+    if (!porcentajes) return rows;
+
+    return rows.map((row) => {
+      const rfc = this.obtenerRfc(row);
+      const interno = this.obtenerInterno(row);
+      const dias = (rfc ? diasMap.get(rfc) : undefined) ?? (interno ? diasMap.get(interno) : undefined);
+      const recalculado = this.recalcularRow(row, filters.tipo, dias ?? 15, porcentajes);
+      return {
+        ...recalculado,
+        dias_laborados: dias ?? 15,
+        dias_laborados_origen: dias === undefined ? 'categoriapuesto' : 'txt'
+      };
+    });
   }
 }

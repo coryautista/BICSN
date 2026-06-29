@@ -12,7 +12,7 @@ import {
   getAfiliadosPendientes,
   getAllStatusControl
 } from './infrastructure/services/AfiliadoStatusService.js';
-import { getUltimaBitacoraAfectacionOrgPorOrganica } from './infrastructure/services/AfiliadoBdiSspeaService.js';
+import { getBitacoraAfectacionOrgPorOrganicaYPeriodo, getUltimaBitacoraAfectacionOrgPorOrganica } from './infrastructure/services/AfiliadoBdiSspeaService.js';
 import { ok, fail, validationError } from '../../utils/http.js';
 import { GetAllAfiliadosQuery } from './application/queries/GetAllAfiliadosQuery.js';
 import { GetAfiliadoByIdQuery } from './application/queries/GetAfiliadoByIdQuery.js';
@@ -4822,7 +4822,8 @@ export default async function afiliadoRoutes(app: FastifyInstance) {
         type: 'object',
         properties: {
           org0: { type: 'string', description: 'Orgánica nivel 0 (opcional, se usa del token si no se proporciona)' },
-          org1: { type: 'string', description: 'Orgánica nivel 1 (opcional, se usa del token si no se proporciona)' }
+          org1: { type: 'string', description: 'Orgánica nivel 1 (opcional, se usa del token si no se proporciona)' },
+          periodo: { type: 'string', pattern: '^\\d{4}$', description: 'Periodo QQAA opcional para consultar la bitácora de una quincena específica' }
         }
       },
       response: {
@@ -4871,9 +4872,10 @@ export default async function afiliadoRoutes(app: FastifyInstance) {
   }, async (req, reply) => {
     try {
       // Obtener orgánica del usuario autenticado o de query params
-      const query = req.query as { org0?: string; org1?: string };
+      const query = req.query as { org0?: string; org1?: string; periodo?: string };
       let userOrg0 = query.org0 || req.user?.idOrganica0 || '';
       let userOrg1 = query.org1 || req.user?.idOrganica1 || '';
+      const periodo = query.periodo?.trim();
 
       // Normalizar orgánicas (padding a 2 dígitos)
       if (userOrg0) {
@@ -4891,12 +4893,14 @@ export default async function afiliadoRoutes(app: FastifyInstance) {
         operation: 'getBitacoraAccionAfiliado',
         org0: userOrg0,
         org1: userOrg1,
-        usuarioId: req.user?.sub
+        usuarioId: req.user?.sub,
+        periodo
       }, 'Consultando BitacoraAfectacionOrg para obtener acción actual');
-      console.log(`[BITACORA_ACCION] Consultando BitacoraAfectacionOrg para orgánica ${userOrg0}/${userOrg1}`);
+      console.log(`[BITACORA_ACCION] Consultando BitacoraAfectacionOrg para orgánica ${userOrg0}/${userOrg1}${periodo ? `, periodo ${periodo}` : ''}`);
 
-      // Obtener el último registro
-      const bitacora = await getUltimaBitacoraAfectacionOrgPorOrganica(userOrg0, userOrg1);
+      const bitacora = periodo
+        ? await getBitacoraAfectacionOrgPorOrganicaYPeriodo(userOrg0, userOrg1, periodo)
+        : await getUltimaBitacoraAfectacionOrgPorOrganica(userOrg0, userOrg1);
 
       if (!bitacora) {
         logger.warn({
@@ -4905,7 +4909,9 @@ export default async function afiliadoRoutes(app: FastifyInstance) {
           org1: userOrg1,
           usuarioId: req.user?.sub
         }, 'No se encontró registro en BitacoraAfectacionOrg');
-        return reply.code(404).send(fail('BITACORA_NOT_FOUND: No se encontró registro en BitacoraAfectacionOrg para la orgánica especificada'));
+        return reply.code(404).send(fail(periodo
+          ? 'BITACORA_NOT_FOUND: No se encontró registro en BitacoraAfectacionOrg para la orgánica y periodo especificados'
+          : 'BITACORA_NOT_FOUND: No se encontró registro en BitacoraAfectacionOrg para la orgánica especificada'));
       }
 
       logger.info({
@@ -4921,6 +4927,9 @@ export default async function afiliadoRoutes(app: FastifyInstance) {
 
       return reply.send(ok({ bitacora }));
     } catch (error: any) {
+      if (error.message === 'PERIODO_INVALIDO') {
+        return reply.code(400).send(fail('PERIODO_INVALIDO: periodo debe tener formato QQAA y quincena válida de 01 a 24'));
+      }
       return handleAfiliadoError(error, reply, { operation: 'getBitacoraAccionAfiliado', user: req.user?.sub });
     }
   });

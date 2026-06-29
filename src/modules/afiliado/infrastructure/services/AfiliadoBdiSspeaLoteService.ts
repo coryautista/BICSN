@@ -3,11 +3,59 @@ import { getMovimientosByAfiliadoId } from '../../../movimiento/movimiento.repo.
 import { migrarMovimientoAFirebird } from '../firebird/FirebirdMovimientoService.js';
 import { getAfiliadoById } from './AfiliadoPersistenceService.js';
 
-export async function getAfiliadosElegiblesParaBdiSspea(org0: string, org1: string): Promise<any[]> {
+interface BitacoraAplicarQna {
+  afectacionId: number;
+  quincena: number;
+  anio: number;
+  periodo: string;
+  quincenaId: string;
+}
+
+async function getBitacoraAplicarQna(org0: string, org1: string): Promise<BitacoraAplicarQna> {
   const p = await getPool();
   const result = await p.request()
     .input('org0', sql.VarChar(30), org0)
     .input('org1', sql.VarChar(30), org1)
+    .query(`
+      SELECT TOP 1 AfectacionId, Quincena, Anio
+      FROM afec.BitacoraAfectacionOrg
+      WHERE Org0 = @org0
+        AND Org1 = @org1
+        AND Entidad = 'AFILIADOS'
+        AND Accion = 'Aplicar'
+      ORDER BY CreatedAt DESC
+    `);
+
+  const row = result.recordset[0];
+  if (!row) {
+    throw new Error('BITACORA_APLICAR_NOT_FOUND');
+  }
+
+  const quincena = Number(row.Quincena);
+  const anio = Number(row.Anio);
+  if (!quincena || !anio) {
+    throw new Error('BITACORA_APLICAR_QNA_INVALIDA');
+  }
+
+  const quincena2 = String(quincena).padStart(2, '0');
+  return {
+    afectacionId: Number(row.AfectacionId),
+    quincena,
+    anio,
+    periodo: `${quincena2}${String(anio).slice(-2)}`,
+    quincenaId: `${anio}-${quincena2}`
+  };
+}
+
+export async function getAfiliadosElegiblesParaBdiSspea(org0: string, org1: string, qna?: BitacoraAplicarQna): Promise<any[]> {
+  const qnaAplicar = qna ?? await getBitacoraAplicarQna(org0, org1);
+  const p = await getPool();
+  const result = await p.request()
+    .input('org0', sql.VarChar(30), org0)
+    .input('org1', sql.VarChar(30), org1)
+    .input('quincena', sql.TinyInt, qnaAplicar.quincena)
+    .input('anio', sql.SmallInt, qnaAplicar.anio)
+    .input('quincenaId', sql.VarChar(30), qnaAplicar.quincenaId)
     .query(`
       SELECT DISTINCT a.id, a.folio, a.nombre, a.apellidoPaterno, a.apellidoMaterno,
              a.numValidacion, s.nombreStatus as statusActual
@@ -18,7 +66,16 @@ export async function getAfiliadosElegiblesParaBdiSspea(org0: string, org1: stri
         AND ao.claveOrganica1 = @org1
         AND a.numValidacion IN (2, 3)
         AND a.estatus = 1
+        AND a.quincenaAplicacion = @quincena
+        AND a.anioAplicacion = @anio
         AND s.activo = 1
+        AND EXISTS (
+          SELECT 1
+          FROM afi.Movimiento m
+          WHERE m.afiliadoId = a.id
+            AND m.estatus = 'A'
+            AND m.quincenaId = @quincenaId
+        )
       ORDER BY a.id
     `);
 
@@ -98,6 +155,7 @@ export async function actualizarAfiliadoAplicadoBdiSspea(params: {
 }
 
 export async function actualizarBitacoraAplicacionLote(params: {
+  afectacionId?: number;
   org0: string;
   org1: string;
   usuarioId: string;
@@ -126,10 +184,7 @@ export async function actualizarBitacoraAplicacionLote(params: {
         bao.Resultado = 'OK',
         bao.Mensaje = '${mensajeBitacora.replace(/'/g, "''")}'
     FROM afec.BitacoraAfectacionOrg bao
-    WHERE bao.Org0 = '${params.org0}'
-      AND bao.Org1 = '${params.org1}'
-      AND bao.Accion = 'Aplicar'
-      AND bao.Entidad = 'AFILIADOS'
+    WHERE ${params.afectacionId ? `bao.AfectacionId = ${params.afectacionId}` : `bao.Org0 = '${params.org0}' AND bao.Org1 = '${params.org1}' AND bao.Accion = 'Aplicar' AND bao.Entidad = 'AFILIADOS'`}
   `;
 
   try {
@@ -139,6 +194,7 @@ export async function actualizarBitacoraAplicacionLote(params: {
     const bitacoraResult = await transaction.request()
       .input('org0', sql.VarChar(30), params.org0)
       .input('org1', sql.VarChar(30), params.org1)
+      .input('afectacionId', sql.Int, params.afectacionId ?? null)
       .input('usuarioId', sql.NVarChar(50), params.usuarioId)
       .input('mensaje', sql.NVarChar(4000), mensajeBitacora)
       .query(`
@@ -149,7 +205,8 @@ export async function actualizarBitacoraAplicacionLote(params: {
             bao.Resultado = 'OK',
             bao.Mensaje = @mensaje
         FROM afec.BitacoraAfectacionOrg bao
-        WHERE bao.Org0 = @org0
+        WHERE (@afectacionId IS NULL OR bao.AfectacionId = @afectacionId)
+          AND bao.Org0 = @org0
           AND bao.Org1 = @org1
           AND bao.Accion = 'Aplicar'
           AND bao.Entidad = 'AFILIADOS'
@@ -186,7 +243,8 @@ export async function aplicarBDIsspeaLote(
   ipAddress?: string,
   userAgent?: string
 ): Promise<any> {
-  const afiliadosParaProcesar = await getAfiliadosElegiblesParaBdiSspea(org0, org1);
+  const qna = await getBitacoraAplicarQna(org0, org1);
+  const afiliadosParaProcesar = await getAfiliadosElegiblesParaBdiSspea(org0, org1, qna);
   const resultadosProcesamiento: any[] = [];
   const movimientosMigrados: any[] = [];
   const detallesMigracion: any[] = [];
@@ -209,7 +267,12 @@ export async function aplicarBDIsspeaLote(
         procesadosConError: 0,
         movimientosMigradosExitosos: 0,
         movimientosMigradosFallidos: 0,
-        organica: `${org0}/${org1}`
+        organica: `${org0}/${org1}`,
+        periodo: qna.periodo,
+        quincena: qna.quincena,
+        anio: qna.anio,
+        quincenaId: qna.quincenaId,
+        afectacionId: qna.afectacionId
       }
     };
   }
@@ -223,7 +286,7 @@ export async function aplicarBDIsspeaLote(
       internoAnterior = afiliadoCompletoAntes?.interno || null;
 
       const movimientos = await getMovimientosByAfiliadoId(afiliado.id);
-      const movimientosActivos = movimientos.filter(m => m.estatus === 'A');
+      const movimientosActivos = movimientos.filter(m => m.estatus === 'A' && m.quincenaId === qna.quincenaId);
 
       if (movimientosActivos.length === 0) {
         resultadosProcesamiento.push({
@@ -365,6 +428,7 @@ export async function aplicarBDIsspeaLote(
   if (todosExitosos) {
     try {
       const bitacoraResult = await actualizarBitacoraAplicacionLote({
+        afectacionId: qna.afectacionId,
         org0,
         org1,
         usuarioId,
@@ -402,6 +466,11 @@ export async function aplicarBDIsspeaLote(
         ? `Todos los ${afiliadosExitosos} afiliados procesados exitosamente`
         : `${afiliadosExitosos} de ${afiliadosParaProcesar.length} afiliados procesados exitosamente`,
       organica: `${org0}/${org1}`
-    }
+    },
+    periodo: qna.periodo,
+    quincena: qna.quincena,
+    anio: qna.anio,
+    quincenaId: qna.quincenaId,
+    afectacionId: qna.afectacionId
   };
 }
