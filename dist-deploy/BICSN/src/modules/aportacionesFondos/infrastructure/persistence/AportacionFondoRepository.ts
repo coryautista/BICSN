@@ -12,6 +12,12 @@ import { getPool, sql } from '../../../../db/mssql.js';
 import { executeSerializedQuery, decodeFirebirdObject, executeSelectableProcedure, FIREBIRD_TIMEOUTS } from '../../../../db/firebird.js';
 import { normalizeTextDeep } from '../../../../utils/encoding.js';
 
+type NominaAportacionInfo = {
+  dias: number;
+  origen: 'nomina' | 'default';
+  baseCotizacionQuinquenios: number | null;
+};
+
 export class AportacionFondoRepository implements IAportacionFondoRepository {
   private readonly DIAS_LABORADOS_DEFAULT = 15;
 
@@ -1217,7 +1223,7 @@ export class AportacionFondoRepository implements IAportacionFondoRepository {
           org0,
           org1
         )
-      : new Map<string, { dias: number; origen: 'nomina' | 'default' }>();
+      : new Map<string, NominaAportacionInfo>();
 
     return registros.map(registro => {
       const sueldo = registro.sueldo || 0;
@@ -1227,8 +1233,10 @@ export class AportacionFondoRepository implements IAportacionFondoRepository {
 
       const sueldoProporcional = (sueldo / 30) * diasInfo.dias;
       const otrasPrestacionesProporcional = (otrasPrestaciones / 30) * diasInfo.dias;
-      const quinqueniosProporcional = (quinquenios / 30) * diasInfo.dias;
-      const sueldoBase = sueldoProporcional + otrasPrestacionesProporcional + quinqueniosProporcional;
+      const quinqueniosAplicado = tipo === 'prestaciones'
+        ? (diasInfo.baseCotizacionQuinquenios ?? (quinquenios / 2))
+        : ((quinquenios / 30) * diasInfo.dias);
+      const sueldoBase = sueldoProporcional + otrasPrestacionesProporcional + quinqueniosAplicado;
 
       // Debug: verificar que el nombre esté presente
       const nombre = registro.nombre || null;
@@ -1257,7 +1265,9 @@ export class AportacionFondoRepository implements IAportacionFondoRepository {
         total: 0, // Initialize total
         tipo,
         dias_laborados: diasInfo.dias,
-        dias_laborados_origen: diasInfo.origen
+        dias_laborados_origen: diasInfo.origen,
+        base_cotizacion_quinquenios: diasInfo.baseCotizacionQuinquenios,
+        quinquenios_aplicado: tipo === 'prestaciones' ? quinqueniosAplicado : null
       };
       
       // Debug (solo LOG_LEVEL=debug): verificar que el nombre se asignó correctamente
@@ -1282,8 +1292,13 @@ export class AportacionFondoRepository implements IAportacionFondoRepository {
           break;
         
         case 'prestaciones':
-          aportacion.afpe = ((sueldoBase) * porcentajes.porcentajePatron); // Patron contribution
-          aportacion.afpa = ((sueldoBase) * (porcentajes.porcentajeAfiliado ?? 0)); // Employee contribution
+          {
+            const porcentajeAfiliado = porcentajes.porcentajeAfiliado ?? 0;
+            const basePatron = sueldoProporcional + otrasPrestacionesProporcional;
+            aportacion.afpe = (basePatron * porcentajes.porcentajePatron)
+              + (quinqueniosAplicado * (porcentajes.porcentajePatron + porcentajeAfiliado)); // Patron absorbs employee quinquenio portion
+            aportacion.afpa = (sueldoProporcional * porcentajeAfiliado); // Employee contribution only applies to salary
+          }
           aportacion.total = (aportacion.afpe || 0) + (aportacion.afpa || 0);
           break;
         
@@ -1321,17 +1336,17 @@ export class AportacionFondoRepository implements IAportacionFondoRepository {
 
   private resolveDiasLaborados(
     rfc: string | null | undefined,
-    diasMap: Map<string, { dias: number; origen: 'nomina' | 'default' }>,
+    diasMap: Map<string, NominaAportacionInfo>,
     usarDiasLaboradosNomina: boolean
-  ): { dias: number; origen: 'nomina' | 'default' } {
+  ): NominaAportacionInfo {
     if (!usarDiasLaboradosNomina) {
-      return { dias: this.DIAS_LABORADOS_DEFAULT, origen: 'default' };
+      return { dias: this.DIAS_LABORADOS_DEFAULT, origen: 'default', baseCotizacionQuinquenios: null };
     }
 
     const key = this.normalizeRfc(rfc);
     const found = key ? diasMap.get(key) : undefined;
     if (!found || found.dias == null || !Number.isFinite(found.dias) || found.dias <= 0) {
-      return { dias: this.DIAS_LABORADOS_DEFAULT, origen: 'default' };
+      return { dias: this.DIAS_LABORADOS_DEFAULT, origen: 'default', baseCotizacionQuinquenios: found?.baseCotizacionQuinquenios ?? null };
     }
 
     return found;
@@ -1342,8 +1357,8 @@ export class AportacionFondoRepository implements IAportacionFondoRepository {
     periodo: string,
     org0: string,
     org1: string
-  ): Promise<Map<string, { dias: number; origen: 'nomina' | 'default' }>> {
-    const map = new Map<string, { dias: number; origen: 'nomina' | 'default' }>();
+  ): Promise<Map<string, NominaAportacionInfo>> {
+    const map = new Map<string, NominaAportacionInfo>();
     const uniqueRfcs = [...new Set(rfcs.map((rfc) => this.normalizeRfc(rfc)).filter((rfc): rfc is string => !!rfc))];
     if (uniqueRfcs.length === 0 || !/^\d{4}$/.test(periodo)) {
       return map;
@@ -1370,21 +1385,26 @@ export class AportacionFondoRepository implements IAportacionFondoRepository {
       }).join(', ');
 
       const result = await request.query(`
-        SELECT UPPER(LTRIM(RTRIM(RFC))) AS RFC, DiasLaborados
+        SELECT UPPER(LTRIM(RTRIM(RFC))) AS RFC, DiasLaborados, BaseCotizacionQuinquenios
         FROM dbo.NominaAplicacionQnalDetalle
         WHERE Anio = @anio
           AND Quincena = @quincena
           AND Organica0 = @org0
           AND Organica1 = @org1
           AND UPPER(LTRIM(RTRIM(RFC))) IN (${placeholders})
-          AND DiasLaborados IS NOT NULL
+          AND (DiasLaborados IS NOT NULL OR BaseCotizacionQuinquenios IS NOT NULL)
       `);
 
       for (const row of result.recordset) {
         const key = this.normalizeRfc(row.RFC);
         const dias = this.safeNumber(row.DiasLaborados);
-        if (key && dias != null && dias > 0) {
-          map.set(key, { dias, origen: 'nomina' });
+        const baseCotizacionQuinquenios = this.safeNumber(row.BaseCotizacionQuinquenios);
+        if (key) {
+          map.set(key, {
+            dias: dias != null && dias > 0 ? dias : this.DIAS_LABORADOS_DEFAULT,
+            origen: dias != null && dias > 0 ? 'nomina' : 'default',
+            baseCotizacionQuinquenios
+          });
         }
       }
     }
@@ -1407,7 +1427,7 @@ export class AportacionFondoRepository implements IAportacionFondoRepository {
   ): Promise<Array<T & { dias_laborados: number; dias_laborados_origen: 'nomina' | 'default' }>> {
     const diasMap = usarDiasLaboradosNomina
       ? await this.obtenerDiasLaboradosNominaMap(registros.map(getRfc), periodo, org0, org1)
-      : new Map<string, { dias: number; origen: 'nomina' | 'default' }>();
+      : new Map<string, NominaAportacionInfo>();
 
     return registros.map((registro) => {
       const dias = this.resolveDiasLaborados(getRfc(registro), diasMap, usarDiasLaboradosNomina);

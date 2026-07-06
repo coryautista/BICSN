@@ -985,6 +985,7 @@ export default async function aplicacionQuincenalRoutes(app: FastifyInstance) {
       const periodoInfo = await aportacionFondoRepo.obtenerQuincenaYAnio(org0, org1);
       const quincena = periodoInfo.quincena;
       const anio = periodoInfo.anio;
+      const periodo = `${String(quincena).padStart(2, '0')}${String(anio).slice(-2)}`;
 
       // Obtener datos de todos los tipos de aportaciones en paralelo
       const getAportacionesIndividualesQuery = request.diScope.resolve<GetAportacionesIndividualesQuery>('getAportacionesIndividualesQuery');
@@ -1005,13 +1006,13 @@ export default async function aplicacionQuincenalRoutes(app: FastifyInstance) {
         transitorioData,
         guarderiasData
       ] = await Promise.all([
-        getAportacionesIndividualesQuery.execute('ahorro', userClave0, userClave1, isEntidad, org0, org1, userId?.toString()).catch(() => null),
-        getAportacionesIndividualesQuery.execute('vivienda', userClave0, userClave1, isEntidad, org0, org1, userId?.toString()).catch(() => null),
-        getAportacionesIndividualesQuery.execute('prestaciones', userClave0, userClave1, isEntidad, org0, org1, userId?.toString()).catch(() => null),
-        getAportacionesIndividualesQuery.execute('cair', userClave0, userClave1, isEntidad, org0, org1, userId?.toString()).catch(() => null),
-        getAguinaldoQuery.execute(userClave0, userClave1, isEntidad, org0, org1, userId?.toString()).catch(() => null),
-        getPensionNominaTransitorioQuery.execute(userClave0, userClave1, isEntidad, org0, org1, userId?.toString()).catch(() => null),
-        getAportacionGuarderiasQuery.execute(userClave0, userClave1, isEntidad, org0, org1, userId?.toString()).catch(() => null)
+        getAportacionesIndividualesQuery.execute('ahorro', userClave0, userClave1, isEntidad, org0, org1, userId?.toString(), true, periodo).catch(() => null),
+        getAportacionesIndividualesQuery.execute('vivienda', userClave0, userClave1, isEntidad, org0, org1, userId?.toString(), true, periodo).catch(() => null),
+        getAportacionesIndividualesQuery.execute('prestaciones', userClave0, userClave1, isEntidad, org0, org1, userId?.toString(), true, periodo).catch(() => null),
+        getAportacionesIndividualesQuery.execute('cair', userClave0, userClave1, isEntidad, org0, org1, userId?.toString(), true, periodo).catch(() => null),
+        getAguinaldoQuery.execute(userClave0, userClave1, isEntidad, org0, org1, userId?.toString(), true, periodo).catch(() => null),
+        getPensionNominaTransitorioQuery.execute(userClave0, userClave1, isEntidad, org0, org1, userId?.toString(), true, periodo).catch(() => null),
+        getAportacionGuarderiasQuery.execute(userClave0, userClave1, isEntidad, org0, org1, userId?.toString(), true, periodo).catch(() => null)
       ]);
 
       // Transformar datos al formato esperado

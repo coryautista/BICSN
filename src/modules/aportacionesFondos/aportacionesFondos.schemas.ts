@@ -26,7 +26,9 @@ export const AportacionFondoResponseSchema = z.object({
   afpe: z.number().optional(),
   afpa: z.number().optional(),
   total: z.number(),
-  tipo: z.string()
+  tipo: z.string(),
+  base_cotizacion_quinquenios: z.number().nullable().optional(),
+  quinquenios_aplicado: z.number().nullable().optional()
 });
 
 export const AportacionIndividualResponseSchema = z.object({

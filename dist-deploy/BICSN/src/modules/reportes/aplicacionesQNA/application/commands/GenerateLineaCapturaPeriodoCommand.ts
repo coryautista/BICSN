@@ -22,9 +22,23 @@ export class GenerateLineaCapturaPeriodoCommand {
 
   async execute(params: GenerateLineaCapturaPeriodoParams): Promise<GenerateLineaCapturaPeriodoResult> {
     const periodoInfo = parsePeriodo(params.periodo);
+    const historico = await this.lineaCapturaPeriodoRepo.calcularImporteHistorico(params.org0, params.org1, params.periodo);
+    if (historico.totalRegistros === 0 || historico.importe <= 0) {
+      throw new Error('HISTORICO_APLICADO_NOT_FOUND');
+    }
+
+    const importe = historico.importe;
     const existing = await this.lineaCapturaPeriodoRepo.findVigente(params.org0, params.org1, params.periodo);
 
     if (existing) {
+      const existingImporte = Math.round(Number(existing.importe) * 100) / 100;
+      if (existingImporte !== importe) {
+        const error = new Error('LINEA_CAPTURA_IMPORTE_MISMATCH') as Error & {
+          details?: { importeLinea: number; importeHistorico: number };
+        };
+        error.details = { importeLinea: existingImporte, importeHistorico: importe };
+        throw error;
+      }
       return { ...existing, reutilizada: true };
     }
 
@@ -41,10 +55,10 @@ export class GenerateLineaCapturaPeriodoCommand {
       periodo: params.periodo,
       quincena: periodoInfo.quincena,
       fechaLimite: fechaPago,
-      importe: params.importe
+      importe
     });
     const fechaCondensada = this.lineaCapturaService.calcularFechaCondensada(fechaPago);
-    const montoCondensado = this.lineaCapturaService.calcularMontoCondensado(params.importe);
+    const montoCondensado = this.lineaCapturaService.calcularMontoCondensado(importe);
     const digitoVerificador = lineaCaptura.substring(13, 15);
 
     try {
@@ -54,7 +68,7 @@ export class GenerateLineaCapturaPeriodoCommand {
         periodo: params.periodo,
         quincena: periodoInfo.quincena,
         anio: periodoInfo.anio,
-        importe: params.importe,
+        importe,
         lineaCaptura,
         referencia4,
         fechaInicioPeriodo: periodoInfo.fechaInicioPeriodo,
@@ -73,7 +87,17 @@ export class GenerateLineaCapturaPeriodoCommand {
       return { ...created, reutilizada: false };
     } catch (error: any) {
       const duplicate = await this.lineaCapturaPeriodoRepo.findVigente(params.org0, params.org1, params.periodo);
-      if (duplicate) return { ...duplicate, reutilizada: true };
+      if (duplicate) {
+        const duplicateImporte = Math.round(Number(duplicate.importe) * 100) / 100;
+        if (duplicateImporte !== importe) {
+          const mismatch = new Error('LINEA_CAPTURA_IMPORTE_MISMATCH') as Error & {
+            details?: { importeLinea: number; importeHistorico: number };
+          };
+          mismatch.details = { importeLinea: duplicateImporte, importeHistorico: importe };
+          throw mismatch;
+        }
+        return { ...duplicate, reutilizada: true };
+      }
       throw error;
     }
   }

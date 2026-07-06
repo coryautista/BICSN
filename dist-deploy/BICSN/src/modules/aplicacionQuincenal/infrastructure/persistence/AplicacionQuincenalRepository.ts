@@ -2148,13 +2148,11 @@ export class AplicacionQuincenalRepository implements IAplicacionQuincenalReposi
           aguinaldoResult.recordset
         ].flat()
       );
-      const porcentajesMap = await this.obtenerPorcentajesFondoHistoricoMap(p);
-
       return {
-        ahorro: this.enriquecerHistoricoConDiasLaborados(ahorroResult.recordset, diasMap, 'ahorro', porcentajesMap),
-        vivienda: this.enriquecerHistoricoConDiasLaborados(viviendaResult.recordset, diasMap, 'vivienda', porcentajesMap),
-        prestaciones: this.enriquecerHistoricoConDiasLaborados(prestacionesResult.recordset, diasMap, 'prestaciones', porcentajesMap),
-        cair: this.enriquecerHistoricoConDiasLaborados(cairResult.recordset, diasMap, 'cair', porcentajesMap),
+        ahorro: this.enriquecerHistoricoConDiasLaborados(ahorroResult.recordset, diasMap),
+        vivienda: this.enriquecerHistoricoConDiasLaborados(viviendaResult.recordset, diasMap),
+        prestaciones: this.enriquecerHistoricoConDiasLaborados(prestacionesResult.recordset, diasMap),
+        cair: this.enriquecerHistoricoConDiasLaborados(cairResult.recordset, diasMap),
         transitorio: this.enriquecerHistoricoConDiasLaborados(transitorioResult.recordset, diasMap),
         guarderias: this.enriquecerHistoricoConDiasLaborados(guarderiasResult.recordset, diasMap),
         aguinaldo: this.enriquecerHistoricoConDiasLaborados(aguinaldoResult.recordset, diasMap)
@@ -2335,7 +2333,7 @@ export class AplicacionQuincenalRepository implements IAplicacionQuincenalReposi
     quincena: number,
     anio: number,
     rows: any[]
-  ): Promise<Map<string, number>> {
+  ): Promise<Map<string, { dias: number; baseCotizacionQuinquenios: number | null }>> {
     const rfcPorInterno = await this.obtenerRfcPorInternoHistoricoMap(org0, org1, rows);
     const rfcs = Array.from(new Set(rows
       .map((row) => this.obtenerRfcHistorico(row) ?? rfcPorInterno.get(this.obtenerInternoHistorico(row) ?? ''))
@@ -2360,7 +2358,8 @@ export class AplicacionQuincenalRepository implements IAplicacionQuincenalReposi
     const result = await request.query(`
         SELECT
           UPPER(LTRIM(RTRIM(d.RFC))) AS rfc,
-          MAX(d.DiasLaborados) AS dias_laborados
+          MAX(d.DiasLaborados) AS dias_laborados,
+          MAX(d.BaseCotizacionQuinquenios) AS base_cotizacion_quinquenios
         FROM [SII-ISSSSPEA].[dbo].[NominaAplicacionQnalDetalle] d
         WHERE d.Organica0 = @org0
           AND d.Organica1 = @org1
@@ -2370,122 +2369,49 @@ export class AplicacionQuincenalRepository implements IAplicacionQuincenalReposi
         GROUP BY UPPER(LTRIM(RTRIM(d.RFC)))
       `);
 
-    const diasMap = new Map<string, number>();
+    const diasMap = new Map<string, { dias: number; baseCotizacionQuinquenios: number | null }>();
     result.recordset.forEach((row: any) => {
       const rfc = this.normalizarRfcHistorico(row.rfc);
       const dias = row.dias_laborados == null ? null : Number(row.dias_laborados);
+      const baseCotizacionQuinquenios = row.base_cotizacion_quinquenios == null ? null : Number(row.base_cotizacion_quinquenios);
       if (rfc && dias !== null && Number.isFinite(dias)) {
-        diasMap.set(rfc, dias);
+        diasMap.set(rfc, {
+          dias,
+          baseCotizacionQuinquenios: Number.isFinite(baseCotizacionQuinquenios) ? baseCotizacionQuinquenios : null
+        });
+      } else if (rfc && baseCotizacionQuinquenios !== null && Number.isFinite(baseCotizacionQuinquenios)) {
+        diasMap.set(rfc, {
+          dias: 15,
+          baseCotizacionQuinquenios
+        });
       }
     });
 
-    const diasPorInterno = new Map<string, number>();
+    const diasPorInterno = new Map<string, { dias: number; baseCotizacionQuinquenios: number | null }>();
     rfcPorInterno.forEach((rfc, interno) => {
-      const dias = diasMap.get(rfc);
-      if (dias !== undefined) {
-        diasPorInterno.set(interno, dias);
+      const info = diasMap.get(rfc);
+      if (info !== undefined) {
+        diasPorInterno.set(interno, info);
       }
     });
 
     return new Map([...diasMap, ...diasPorInterno]);
   }
 
-  private async obtenerPorcentajesFondoHistoricoMap(pool: any): Promise<Map<string, { porcentajePatron: number; porcentajeAfiliado: number }>> {
-    const result = await pool.request().query(`
-      SELECT TipoFondo, PorcentajePatron, PorcentajeAfiliado
-      FROM aportaciones.CatalogoPorcentajeFondo
-      WHERE Vigente = 1
-        AND TipoFondo IN ('ahorro', 'vivienda', 'prestaciones', 'cair')
-    `);
-
-    const map = new Map<string, { porcentajePatron: number; porcentajeAfiliado: number }>();
-    result.recordset.forEach((row: any) => {
-      const tipo = String(row.TipoFondo ?? '').trim().toLowerCase();
-      const porcentajePatron = Number(row.PorcentajePatron ?? 0);
-      const porcentajeAfiliado = Number(row.PorcentajeAfiliado ?? 0);
-      if (tipo && Number.isFinite(porcentajePatron) && Number.isFinite(porcentajeAfiliado)) {
-        map.set(tipo, { porcentajePatron, porcentajeAfiliado });
-      }
-    });
-
-    return map;
-  }
-
-  private recalcularHistoricoPorDias(row: any, tipo?: string, dias?: number, porcentajesMap?: Map<string, { porcentajePatron: number; porcentajeAfiliado: number }>): any {
-    if (!tipo || dias === undefined || !porcentajesMap) {
-      return row;
-    }
-
-    const porcentajes = porcentajesMap.get(tipo);
-    if (!porcentajes) {
-      return row;
-    }
-
-    const sueldo = Number(row.sueldo ?? row.Sueldo ?? 0);
-    const otrasPrestaciones = Number(row.otras_prestaciones ?? row.OtrasPrestaciones ?? 0);
-    const quinquenios = Number(row.quinquenios ?? row.Quinquenios ?? 0);
-    const sueldoProporcional = (sueldo / 30) * dias;
-    const otrasPrestacionesProporcional = (otrasPrestaciones / 30) * dias;
-    const quinqueniosProporcional = (quinquenios / 30) * dias;
-    const sueldoBase = sueldoProporcional + otrasPrestacionesProporcional + quinqueniosProporcional;
-
-    if (![sueldo, otrasPrestaciones, quinquenios, sueldoProporcional, sueldoBase].every(Number.isFinite)) {
-      return row;
-    }
-
-    if (tipo === 'ahorro') {
-      const afae = sueldoProporcional * porcentajes.porcentajePatron;
-      const afaa = sueldoProporcional * porcentajes.porcentajeAfiliado;
-      return {
-        ...row,
-        sueldo_base: sueldoBase,
-        afae,
-        afaa,
-        total: afae + afaa
-      };
-    }
-
-    if (tipo === 'vivienda' || tipo === 'cair') {
-      const afe = sueldoProporcional * porcentajes.porcentajePatron;
-      return {
-        ...row,
-        sueldo_base: sueldoBase,
-        afe,
-        total: afe
-      };
-    }
-
-    if (tipo === 'prestaciones') {
-      const afpe = sueldoBase * porcentajes.porcentajePatron;
-      const afpa = sueldoBase * porcentajes.porcentajeAfiliado;
-      return {
-        ...row,
-        sueldo_base: sueldoBase,
-        afpe,
-        afpa,
-        total: afpe + afpa
-      };
-    }
-
-    return row;
-  }
-
   private enriquecerHistoricoConDiasLaborados(
     rows: any[],
-    diasMap: Map<string, number>,
-    tipo?: string,
-    porcentajesMap?: Map<string, { porcentajePatron: number; porcentajeAfiliado: number }>
+    diasMap: Map<string, { dias: number; baseCotizacionQuinquenios: number | null }>
   ): any[] {
     return rows.map((row) => {
       const rfc = this.obtenerRfcHistorico(row);
       const interno = this.obtenerInternoHistorico(row);
-      const dias = (rfc ? diasMap.get(rfc) : undefined) ?? (interno ? diasMap.get(interno) : undefined);
-      const recalculado = this.recalcularHistoricoPorDias(row, tipo, dias ?? 15, porcentajesMap);
+      const info = (rfc ? diasMap.get(rfc) : undefined) ?? (interno ? diasMap.get(interno) : undefined);
+      const nominaInfo = info ?? { dias: 15, baseCotizacionQuinquenios: null };
 
       return {
-        ...recalculado,
-        dias_laborados: dias ?? 15,
-        dias_laborados_origen: dias === undefined ? 'categoriapuesto' : 'txt'
+        ...row,
+        dias_laborados: nominaInfo.dias,
+        dias_laborados_origen: info === undefined ? 'categoriapuesto' : 'txt'
       };
     });
   }

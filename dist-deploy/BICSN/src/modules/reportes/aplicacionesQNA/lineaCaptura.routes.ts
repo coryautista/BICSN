@@ -92,6 +92,7 @@ export async function lineaCapturaRoutes(fastify: FastifyInstance) {
         400: { type: 'object' },
         401: { type: 'object' },
         403: { type: 'object' },
+        409: { type: 'object' },
         500: { type: 'object' }
       }
     }
@@ -146,6 +147,24 @@ export async function lineaCapturaRoutes(fastify: FastifyInstance) {
         return reply.code(400).send({
           success: false,
           error: { code: 'PERIODO_INVALIDO', message: 'Periodo inválido. Use formato QQAA con quincena entre 01 y 24.', timestamp: new Date().toISOString() }
+        });
+      }
+      if (error?.message === 'HISTORICO_APLICADO_NOT_FOUND') {
+        return reply.code(400).send({
+          success: false,
+          error: { code: 'HISTORICO_APLICADO_NOT_FOUND', message: 'No existe histórico aplicado para generar Línea de Pago.', timestamp: new Date().toISOString() }
+        });
+      }
+      if (error?.message === 'LINEA_CAPTURA_IMPORTE_MISMATCH') {
+        const importeLinea = Number(error.details?.importeLinea ?? 0).toLocaleString('es-MX', { style: 'currency', currency: 'MXN' });
+        const importeHistorico = Number(error.details?.importeHistorico ?? 0).toLocaleString('es-MX', { style: 'currency', currency: 'MXN' });
+        return reply.code(409).send({
+          success: false,
+          error: {
+            code: 'LINEA_CAPTURA_IMPORTE_MISMATCH',
+            message: `Ya existe una Línea de Pago vigente para este periodo con importe ${importeLinea}. El histórico aplicado suma ${importeHistorico}. Requiere revisión administrativa.`,
+            timestamp: new Date().toISOString()
+          }
         });
       }
       return handleAplicacionesQNAError(error, reply);

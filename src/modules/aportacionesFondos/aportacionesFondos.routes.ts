@@ -72,7 +72,9 @@ export default async function aportacionesFondosRoutes(app: FastifyInstance) {
                       total: { type: 'number' },
                       tipo: { type: 'string' },
                       dias_laborados: { type: 'number' },
-                      dias_laborados_origen: { type: 'string', enum: ['nomina', 'default'] }
+                      dias_laborados_origen: { type: 'string', enum: ['nomina', 'default'] },
+                      base_cotizacion_quinquenios: { type: 'number', nullable: true },
+                      quinquenios_aplicado: { type: 'number', nullable: true }
                     }
                   }
                 },
