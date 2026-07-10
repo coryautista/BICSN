@@ -62,6 +62,10 @@ export function handleAfiliadoError(error: any, reply: FastifyReply, context?: a
     timestamp: new Date().toISOString()
   }, 'Error en módulo Afiliado');
 
+  if (typeof error.message === 'string' && error.message.startsWith('MOTIVO_BAJA_')) {
+    return reply.code(400).send(fail(error.message));
+  }
+
   // Errores de validación (400)
   if (error instanceof InvalidAfiliadoDataError ||
       error instanceof InvalidCurpError ||

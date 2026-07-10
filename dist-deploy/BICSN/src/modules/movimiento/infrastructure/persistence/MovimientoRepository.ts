@@ -20,6 +20,7 @@ export class MovimientoRepository implements IMovimientoRepository {
       creadoPor: row.creadoPor,
       creadoPorUid: row.creadoPorUid,
       entregaRendimiento: row.entregaRendimiento ?? null,
+      motivoBajaId: row.motivoBajaId ?? null,
       createdAt: row.createdAt?.toISOString() || new Date().toISOString()
     };
   }
@@ -28,7 +29,7 @@ export class MovimientoRepository implements IMovimientoRepository {
     const r = await this.mssqlPool.request().query(`
       SELECT
         id, quincenaId, tipoMovimientoId, afiliadoId, fecha, fechaMovimiento,
-        observaciones, folio, estatus, creadoPor, creadoPorUid, entregaRendimiento, createdAt
+        observaciones, folio, estatus, creadoPor, creadoPorUid, entregaRendimiento, motivoBajaId, createdAt
       FROM afi.Movimiento
       ORDER BY id
     `);
@@ -41,7 +42,7 @@ export class MovimientoRepository implements IMovimientoRepository {
       .query(`
         SELECT
           id, quincenaId, tipoMovimientoId, afiliadoId, fecha, fechaMovimiento,
-          observaciones, folio, estatus, creadoPor, creadoPorUid, entregaRendimiento, createdAt
+          observaciones, folio, estatus, creadoPor, creadoPorUid, entregaRendimiento, motivoBajaId, createdAt
         FROM afi.Movimiento
         WHERE id = @id
       `);
@@ -56,7 +57,7 @@ export class MovimientoRepository implements IMovimientoRepository {
       .query(`
         SELECT
           id, quincenaId, tipoMovimientoId, afiliadoId, fecha, fechaMovimiento,
-          observaciones, folio, estatus, creadoPor, creadoPorUid, entregaRendimiento, createdAt
+          observaciones, folio, estatus, creadoPor, creadoPorUid, entregaRendimiento, motivoBajaId, createdAt
         FROM afi.Movimiento
         WHERE afiliadoId = @afiliadoId
         ORDER BY id
@@ -70,7 +71,7 @@ export class MovimientoRepository implements IMovimientoRepository {
       .query(`
         SELECT
           id, quincenaId, tipoMovimientoId, afiliadoId, fecha, fechaMovimiento,
-          observaciones, folio, estatus, creadoPor, creadoPorUid, entregaRendimiento, createdAt
+          observaciones, folio, estatus, creadoPor, creadoPorUid, entregaRendimiento, motivoBajaId, createdAt
         FROM afi.Movimiento
         WHERE tipoMovimientoId = @tipoMovimientoId
         ORDER BY id
@@ -84,7 +85,7 @@ export class MovimientoRepository implements IMovimientoRepository {
       .query(`
         SELECT
           id, quincenaId, tipoMovimientoId, afiliadoId, fecha, fechaMovimiento,
-          observaciones, folio, estatus, creadoPor, creadoPorUid, entregaRendimiento, createdAt
+          observaciones, folio, estatus, creadoPor, creadoPorUid, entregaRendimiento, motivoBajaId, createdAt
         FROM afi.Movimiento
         WHERE folio = @folio
       `);
@@ -106,15 +107,16 @@ export class MovimientoRepository implements IMovimientoRepository {
       .input('creadoPor', sql.Int, data.creadoPor)
       .input('creadoPorUid', sql.UniqueIdentifier, data.creadoPorUid)
       .input('entregaRendimiento', sql.VarChar(2), data.entregaRendimiento)
+      .input('motivoBajaId', sql.Int, data.motivoBajaId)
       .query(`
         INSERT INTO afi.Movimiento (
           quincenaId, tipoMovimientoId, afiliadoId, fecha, fechaMovimiento,
-          observaciones, folio, estatus, creadoPor, creadoPorUid, entregaRendimiento
+          observaciones, folio, estatus, creadoPor, creadoPorUid, entregaRendimiento, motivoBajaId
         )
         OUTPUT INSERTED.*
         VALUES (
           @quincenaId, @tipoMovimientoId, @afiliadoId, @fecha, @fechaMovimiento,
-          @observaciones, @folio, @estatus, @creadoPor, @creadoPorUid, @entregaRendimiento
+          @observaciones, @folio, @estatus, @creadoPor, @creadoPorUid, @entregaRendimiento, @motivoBajaId
         )
       `);
     const row = r.recordset[0];
@@ -168,6 +170,10 @@ export class MovimientoRepository implements IMovimientoRepository {
     if (data.entregaRendimiento !== undefined) {
       updates.push('entregaRendimiento = @entregaRendimiento');
       request.input('entregaRendimiento', sql.VarChar(2), data.entregaRendimiento);
+    }
+    if (data.motivoBajaId !== undefined) {
+      updates.push('motivoBajaId = @motivoBajaId');
+      request.input('motivoBajaId', sql.Int, data.motivoBajaId);
     }
 
     const r = await request.query(`

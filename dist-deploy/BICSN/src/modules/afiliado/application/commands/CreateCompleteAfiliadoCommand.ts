@@ -405,6 +405,7 @@ export class CreateCompleteAfiliadoCommand {
           fechaMovimiento: movimientoRow.fechaMovimiento?.toISOString().split('T')[0] || null,
           observaciones: movimientoRow.observaciones,
           entregaRendimiento: movimientoRow.entregaRendimiento ?? null,
+          motivoBajaId: movimientoRow.motivoBajaId ?? null,
           folio: movimientoRow.folio,
           estatus: movimientoRow.estatus,
           creadoPor: movimientoRow.creadoPor,

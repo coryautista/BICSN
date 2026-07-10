@@ -11,6 +11,7 @@ export interface Movimiento {
   creadoPor: number | null;
   creadoPorUid: string | null;
   entregaRendimiento: 'Si' | 'No' | null;
+  motivoBajaId: number | null;
   createdAt: string;
 }
 

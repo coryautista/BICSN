@@ -213,15 +213,16 @@ export async function createAfiliadoAfiliadoOrgMovimiento(data: {
       .input('creadoPor', sql.Int, data.movimiento.creadoPor)
       .input('creadoPorUid', sql.UniqueIdentifier, data.movimiento.creadoPorUid)
       .input('entregaRendimiento', sql.VarChar(2), data.movimiento.entregaRendimiento)
+      .input('motivoBajaId', sql.Int, data.movimiento.motivoBajaId)
       .query(`
         INSERT INTO afi.Movimiento (
           quincenaId, tipoMovimientoId, afiliadoId, fecha, fechaMovimiento,
-          observaciones, folio, estatus, creadoPor, creadoPorUid, entregaRendimiento
+          observaciones, folio, estatus, creadoPor, creadoPorUid, entregaRendimiento, motivoBajaId
         )
         OUTPUT INSERTED.*
         VALUES (
           @quincenaId, @tipoMovimientoId, @afiliadoId, @fecha, @fechaMovimiento,
-          @observaciones, @folio, @estatus, @creadoPor, @creadoPorUid, @entregaRendimiento
+          @observaciones, @folio, @estatus, @creadoPor, @creadoPorUid, @entregaRendimiento, @motivoBajaId
         )
       `);
 

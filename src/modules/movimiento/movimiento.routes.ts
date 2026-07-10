@@ -365,7 +365,8 @@ export default async function movimientoRoutes(app: FastifyInstance) {
         folio: parsed.data.folio ?? null,
         estatus: parsed.data.estatus ?? null,
         creadoPor: parsed.data.creadoPor ?? null,
-        creadoPorUid: parsed.data.creadoPorUid ?? null
+        creadoPorUid: parsed.data.creadoPorUid ?? null,
+        motivoBajaId: parsed.data.motivoBajaId ?? null
       }, userId);
       return reply.code(201).send(ok(record));
     } catch (error: any) {

@@ -510,6 +510,7 @@ export async function createAfiliadoAfiliadoOrgMovimientoService(data: {
   folioMov?: string | null;
   estatusMov?: string | null;
   entregaRendimiento?: 'Si' | 'No' | null;
+  motivoBajaId?: number | null;
   creadoPor?: number | null;
   creadoPorUid?: string | null;
 }): Promise<{ afiliado: Afiliado; afiliadoOrg: AfiliadoOrg; movimiento: Movimiento }> {
@@ -618,6 +619,7 @@ export async function createAfiliadoAfiliadoOrgMovimientoService(data: {
       folio: data.folioMov ?? null,
       estatus: data.estatusMov ?? null,
       entregaRendimiento: data.entregaRendimiento ?? null,
+      motivoBajaId: data.motivoBajaId ?? null,
       creadoPor: data.creadoPor ?? null,
       creadoPorUid: data.creadoPorUid ?? null
     }

@@ -54,6 +54,34 @@ function getTokenUserForMovimiento(user: any): { userId: number | null; userUid:
   return { userId, userUid };
 }
 
+async function validarMotivoBaja(motivoBajaId: number | null | undefined, tipo: 'bajaPermanente' | 'suspension') {
+  if (!motivoBajaId) {
+    throw new Error('MOTIVO_BAJA_REQUIRED: motivoBajaId es requerido');
+  }
+
+  const pool = await getPool();
+  const result = await pool.request()
+    .input('motivoBajaId', sql.Int, motivoBajaId)
+    .query(`
+      SELECT MotivoBajaId, AplicaBajaPermanente, AplicaSuspension, Activo
+      FROM afi.CatalogoMotivoBaja
+      WHERE MotivoBajaId = @motivoBajaId
+    `);
+
+  const motivo = result.recordset[0];
+  if (!motivo || !(motivo.Activo === true || motivo.Activo === 1)) {
+    throw new Error('MOTIVO_BAJA_INVALID: motivoBajaId no existe o no esta activo');
+  }
+
+  if (tipo === 'bajaPermanente' && !(motivo.AplicaBajaPermanente === true || motivo.AplicaBajaPermanente === 1)) {
+    throw new Error('MOTIVO_BAJA_NO_APLICA: el motivo no aplica para baja permanente');
+  }
+
+  if (tipo === 'suspension' && !(motivo.AplicaSuspension === true || motivo.AplicaSuspension === 1)) {
+    throw new Error('MOTIVO_BAJA_NO_APLICA: el motivo no aplica para suspension');
+  }
+}
+
 // Routes for Afiliado CRUD operations
 export default async function afiliadoRoutes(app: FastifyInstance) {
 
@@ -2213,7 +2241,8 @@ export default async function afiliadoRoutes(app: FastifyInstance) {
           // Movimiento fields
           fechaMovimiento: { type: 'string', format: 'date', nullable: true, description: 'Fecha efectiva de la baja para calcular días laborados' },
           observaciones: { type: 'string', maxLength: 1024, nullable: true },
-          entregaRendimiento: { type: 'string', enum: ['Si', 'No'], nullable: true, description: 'Indica si se entrega rendimiento' }
+          entregaRendimiento: { type: 'string', enum: ['Si', 'No'], nullable: true, description: 'Indica si se entrega rendimiento' },
+          motivoBajaId: { type: 'number', minimum: 1, nullable: true, description: 'Motivo de baja seleccionado del catalogo afi.CatalogoMotivoBaja' }
         }
       },
       response: {
@@ -2313,6 +2342,7 @@ export default async function afiliadoRoutes(app: FastifyInstance) {
                     fechaMovimiento: { type: 'string', nullable: true },
                     observaciones: { type: 'string', nullable: true },
                     entregaRendimiento: { type: 'string', enum: ['Si', 'No'], nullable: true },
+                    motivoBajaId: { type: 'number', nullable: true },
                     folio: { type: 'string', nullable: true },
                     estatus: { type: 'string' },
                     creadoPor: { type: 'number', nullable: true },
@@ -2375,6 +2405,7 @@ export default async function afiliadoRoutes(app: FastifyInstance) {
       if (!parsed.data.fechaMovimiento) {
         return reply.code(400).send(fail('FECHA_MOVIMIENTO_REQUIRED: fechaMovimiento es requerida para baja permanente'));
       }
+      await validarMotivoBaja(parsed.data.motivoBajaId, 'bajaPermanente');
 
       // Validar que el interno exista en Firebird
       const validateInternoInFirebirdQuery = req.diScope.resolve<ValidateInternoInFirebirdQuery>('validateInternoInFirebirdQuery');
@@ -2507,7 +2538,8 @@ export default async function afiliadoRoutes(app: FastifyInstance) {
           orgs4: { type: 'string', maxLength: 200, nullable: true },
           // Movimiento fields
           observaciones: { type: 'string', maxLength: 1024, nullable: true },
-          entregaRendimiento: { type: 'string', enum: ['Si', 'No'], nullable: true, description: 'Indica si se entrega rendimiento' }
+          entregaRendimiento: { type: 'string', enum: ['Si', 'No'], nullable: true, description: 'Indica si se entrega rendimiento' },
+          motivoBajaId: { type: 'number', minimum: 1, nullable: true, description: 'Motivo de baja seleccionado del catalogo afi.CatalogoMotivoBaja' }
         }
       },
       response: {
@@ -2606,6 +2638,7 @@ export default async function afiliadoRoutes(app: FastifyInstance) {
                     fecha: { type: 'string', nullable: true },
                     observaciones: { type: 'string', nullable: true },
                     entregaRendimiento: { type: 'string', enum: ['Si', 'No'], nullable: true },
+                    motivoBajaId: { type: 'number', nullable: true },
                     folio: { type: 'string', nullable: true },
                     estatus: { type: 'string' },
                     creadoPor: { type: 'number', nullable: true },
@@ -2665,6 +2698,8 @@ export default async function afiliadoRoutes(app: FastifyInstance) {
     }
 
     try {
+      await validarMotivoBaja(parsed.data.motivoBajaId, 'suspension');
+
       // Validar que el interno exista en Firebird
       const validateInternoInFirebirdQuery = req.diScope.resolve<ValidateInternoInFirebirdQuery>('validateInternoInFirebirdQuery');
       const internoExists = await validateInternoInFirebirdQuery.execute(parsed.data.interno!);
@@ -2928,7 +2963,8 @@ export default async function afiliadoRoutes(app: FastifyInstance) {
           orgs3: { type: 'string', maxLength: 200, nullable: true },
           orgs4: { type: 'string', maxLength: 200, nullable: true },
           observaciones: { type: 'string', maxLength: 1024, nullable: true },
-          entregaRendimiento: { type: 'string', enum: ['Si', 'No'], nullable: true, description: 'Indica si se entrega rendimiento' }
+          entregaRendimiento: { type: 'string', enum: ['Si', 'No'], nullable: true, description: 'Indica si se entrega rendimiento' },
+          motivoBajaId: { type: 'number', minimum: 1, nullable: true, description: 'Motivo de baja seleccionado del catalogo afi.CatalogoMotivoBaja' }
         }
       }
     }
@@ -2939,6 +2975,8 @@ export default async function afiliadoRoutes(app: FastifyInstance) {
     }
 
     try {
+      await validarMotivoBaja(parsed.data.motivoBajaId, 'bajaPermanente');
+
       // Validar que el interno exista en Firebird
       const validateInternoInFirebirdQuery = req.diScope.resolve<ValidateInternoInFirebirdQuery>('validateInternoInFirebirdQuery');
       const internoExists = await validateInternoInFirebirdQuery.execute(parsed.data.interno!);

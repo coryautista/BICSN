@@ -48,6 +48,7 @@ import afectacionOrgRoutes from '../modules/afectacionOrg/afectacionOrg.routes.j
 import organicaCascadeRoutes from '../modules/organicaCascade/organicaCascade.routes.js';
 import aportacionesFondosRoutes from '../modules/aportacionesFondos/aportacionesFondos.routes.js';
 import catalogoPorcentajeFondoRoutes from '../modules/catalogoPorcentajeFondo/catalogoPorcentajeFondo.routes.js';
+import catalogoMotivoBajaRoutes from '../modules/catalogoMotivoBaja/catalogoMotivoBaja.routes.js';
 import nominaRoutes from '../modules/nomina/nomina.routes.js';
 import historicosQuincenalesRoutes from '../modules/historicosQuincenales/historicosQuincenales.routes.js';
 import seguimientoAplicacionRoutes from '../modules/seguimientoAplicacion/seguimientoAplicacion.routes.js';
@@ -334,6 +335,11 @@ const ROUTE_CONFIGS: RouteConfig[] = [
   },
   {
     plugin: catalogoPorcentajeFondoRoutes,
+    prefix: '/v1',
+    options: { group: ROUTE_GROUPS.AFILIADOS }
+  },
+  {
+    plugin: catalogoMotivoBajaRoutes,
     prefix: '/v1',
     options: { group: ROUTE_GROUPS.AFILIADOS }
   },

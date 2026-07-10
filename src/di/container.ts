@@ -206,6 +206,12 @@ import { GetUltimoPorcentajeFondoVigenteQuery } from '../modules/catalogoPorcent
 import { CreateCatalogoPorcentajeFondoCommand } from '../modules/catalogoPorcentajeFondo/application/commands/CreateCatalogoPorcentajeFondoCommand.js';
 import { UpdateCatalogoPorcentajeFondoCommand } from '../modules/catalogoPorcentajeFondo/application/commands/UpdateCatalogoPorcentajeFondoCommand.js';
 import { DeleteCatalogoPorcentajeFondoCommand } from '../modules/catalogoPorcentajeFondo/application/commands/DeleteCatalogoPorcentajeFondoCommand.js';
+import { CatalogoMotivoBajaRepository } from '../modules/catalogoMotivoBaja/infrastructure/persistence/CatalogoMotivoBajaRepository.js';
+import { GetAllCatalogoMotivoBajaQuery } from '../modules/catalogoMotivoBaja/application/queries/GetAllCatalogoMotivoBajaQuery.js';
+import { GetCatalogoMotivoBajaByIdQuery } from '../modules/catalogoMotivoBaja/application/queries/GetCatalogoMotivoBajaByIdQuery.js';
+import { CreateCatalogoMotivoBajaCommand } from '../modules/catalogoMotivoBaja/application/commands/CreateCatalogoMotivoBajaCommand.js';
+import { UpdateCatalogoMotivoBajaCommand } from '../modules/catalogoMotivoBaja/application/commands/UpdateCatalogoMotivoBajaCommand.js';
+import { DeleteCatalogoMotivoBajaCommand } from '../modules/catalogoMotivoBaja/application/commands/DeleteCatalogoMotivoBajaCommand.js';
 import { UpdateColoniaCommand } from '../modules/colonias/application/commands/UpdateColoniaCommand.js';
 import { DeleteColoniaCommand } from '../modules/colonias/application/commands/DeleteColoniaCommand.js';
 
@@ -1282,7 +1288,17 @@ container.register({
   getUltimoPorcentajeFondoVigenteQuery: asClass(GetUltimoPorcentajeFondoVigenteQuery).scoped(),
   createCatalogoPorcentajeFondoCommand: asClass(CreateCatalogoPorcentajeFondoCommand).scoped(),
   updateCatalogoPorcentajeFondoCommand: asClass(UpdateCatalogoPorcentajeFondoCommand).scoped(),
-  deleteCatalogoPorcentajeFondoCommand: asClass(DeleteCatalogoPorcentajeFondoCommand).scoped()
+  deleteCatalogoPorcentajeFondoCommand: asClass(DeleteCatalogoPorcentajeFondoCommand).scoped(),
+
+  // ============================================================================
+  // CATALOGO MOTIVO BAJA MODULE
+  // ============================================================================
+  catalogoMotivoBajaRepo: asClass(CatalogoMotivoBajaRepository).scoped(),
+  getAllCatalogoMotivoBajaQuery: asClass(GetAllCatalogoMotivoBajaQuery).scoped(),
+  getCatalogoMotivoBajaByIdQuery: asClass(GetCatalogoMotivoBajaByIdQuery).scoped(),
+  createCatalogoMotivoBajaCommand: asClass(CreateCatalogoMotivoBajaCommand).scoped(),
+  updateCatalogoMotivoBajaCommand: asClass(UpdateCatalogoMotivoBajaCommand).scoped(),
+  deleteCatalogoMotivoBajaCommand: asClass(DeleteCatalogoMotivoBajaCommand).scoped()
 });
 
 /**

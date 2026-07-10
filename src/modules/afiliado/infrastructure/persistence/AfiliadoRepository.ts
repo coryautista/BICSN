@@ -667,6 +667,7 @@ export class AfiliadoRepository implements IAfiliadoRepository {
         fechaMovimiento: row.movimiento_fechaMovimiento?.toISOString().split('T')[0] || null,
         observaciones: row.observaciones, folio: row.movimiento_folio, estatus: row.movimiento_estatus,
         entregaRendimiento: row.entregaRendimiento ?? null,
+        motivoBajaId: row.motivoBajaId ?? null,
         creadoPor: row.creadoPor, creadoPorUid: row.creadoPorUid, createdAt: row.movimiento_createdAt?.toISOString() || new Date().toISOString()
       },
       tipoMovimiento: row.tipoMovimiento_id == null ? null : { id: row.tipoMovimiento_id, abreviatura: row.tipoMovimiento_abreviatura, nombre: row.tipoMovimiento_nombre }
