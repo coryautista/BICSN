@@ -1,5 +1,5 @@
 import pino from 'pino';
-import { executeExecutableProcedure, FIREBIRD_TIMEOUTS } from '../../../../db/firebird.js';
+import { executeExecutableProcedure, executeSafeQuery, executeSelectableProcedure, FIREBIRD_TIMEOUTS } from '../../../../db/firebird.js';
 
 const logger = pino({
   name: 'afiliado-bdisspea-firebird-service',
@@ -64,6 +64,84 @@ export async function ejecutarAP_P_APLICAR(
     }, 'Error ejecutando AP_P_APLICAR');
     console.error(`[AP_P_APLICAR] ❌ Error ejecutando stored procedure: ${error.message || String(error)}`);
     throw new Error(`Error al ejecutar AP_P_APLICAR: ${error.message || String(error)}`);
+  }
+}
+
+export interface EBI2RecibosResult {
+  idPeriodo: number;
+  periodo: string;
+  error?: boolean | null;
+  mensaje?: string | null;
+}
+
+export async function ejecutarEBI2_RECIBOS(
+  periodo: string,
+  accion: 'APLICAR'
+): Promise<EBI2RecibosResult> {
+  const logContext = {
+    operation: 'ejecutarEBI2_RECIBOS',
+    periodo,
+    accion
+  };
+
+  const startTime = Date.now();
+  logger.info(logContext, 'Iniciando ejecución de EBI2_RECIBOS');
+  console.log(`[EBI2_RECIBOS] Iniciando ejecución con parámetros: periodo=${periodo}, accion=${accion}`);
+
+  if (!/^\d{4}$/.test(periodo)) {
+    throw new Error(`Parámetro inválido para periodo: ${periodo}`);
+  }
+
+  if (accion !== 'APLICAR') {
+    throw new Error(`Parámetro inválido para accion: ${accion}`);
+  }
+
+  try {
+    const periodoRows = await executeSafeQuery(
+      'SELECT ID_PERIODO FROM EBI2_CAT_PERIODO WHERE PERIODO = ?',
+      [periodo],
+      FIREBIRD_TIMEOUTS.HEAVY_SP
+    );
+    const idPeriodo = periodoRows[0]?.ID_PERIODO;
+
+    if (idPeriodo == null) {
+      throw new Error(`No existe ID_PERIODO para PERIODO=${periodo} en EBI2_CAT_PERIODO`);
+    }
+
+    const resultRows = await executeSelectableProcedure('EBI2_RECIBOS', [idPeriodo, accion], {
+      timeoutMs: FIREBIRD_TIMEOUTS.HEAVY_SP
+    });
+    const result = resultRows[0] ?? {};
+
+    const duration = Date.now() - startTime;
+    logger.info({
+      ...logContext,
+      idPeriodo,
+      resultado: result,
+      duracionMs: duration
+    }, 'EBI2_RECIBOS ejecutado exitosamente');
+    console.log(`[EBI2_RECIBOS] ✅ Ejecutado exitosamente en ${duration}ms (ID_PERIODO=${idPeriodo})`);
+
+    return {
+      idPeriodo: Number(idPeriodo),
+      periodo,
+      error: result.ERROR ?? null,
+      mensaje: result.MENSAJE ?? null
+    };
+  } catch (error: any) {
+    const duration = Date.now() - startTime;
+    logger.error({
+      ...logContext,
+      error: {
+        message: error.message || String(error),
+        code: error.code,
+        name: error.name,
+        stack: error.stack
+      },
+      duracionMs: duration
+    }, 'Error ejecutando EBI2_RECIBOS');
+    console.error(`[EBI2_RECIBOS] ❌ Error ejecutando stored procedure: ${error.message || String(error)}`);
+    throw new Error(`Error al ejecutar EBI2_RECIBOS: ${error.message || String(error)}`);
   }
 }
 

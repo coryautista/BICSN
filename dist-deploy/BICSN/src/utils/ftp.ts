@@ -164,6 +164,24 @@ export class FTPService {
     return this.joinRemotePath(this.basePath, 'expedientes', curp, newFileName);
   }
 
+  async uploadText(content: string, remoteFilePath: string): Promise<void> {
+    const client = new Client();
+
+    try {
+      await client.connect(this.config);
+
+      const remoteDir = path.posix.dirname(remoteFilePath);
+      await client.mkdir(remoteDir, true);
+
+      await client.put(Buffer.from(content, 'utf8'), remoteFilePath);
+    } catch (error) {
+      console.error('FTP upload text error:', error);
+      throw new Error(`Failed to upload text to FTP: ${error}`);
+    } finally {
+      await client.end();
+    }
+  }
+
   /**
    * Get file stats from FTP server
    * @param remoteFilePath - Remote path of the file

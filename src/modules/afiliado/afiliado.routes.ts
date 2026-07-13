@@ -4793,6 +4793,16 @@ export default async function afiliadoRoutes(app: FastifyInstance) {
                         error: { type: 'string', nullable: true }
                       }
                     },
+                    ebi2Recibos: {
+                      type: 'object',
+                      properties: {
+                        exito: { type: 'boolean' },
+                        duracionMs: { type: 'number' },
+                        error: { type: 'string', nullable: true },
+                        idPeriodoFirebird: { type: 'number', nullable: true },
+                        mensaje: { type: 'string', nullable: true }
+                      }
+                    },
                     envioLayout: {
                       type: 'object',
                       properties: {
@@ -4808,10 +4818,21 @@ export default async function afiliadoRoutes(app: FastifyInstance) {
                         duracionMs: { type: 'number' },
                         error: { type: 'string', nullable: true }
                       }
+                    },
+                    guardarLogFtp: {
+                      type: 'object',
+                      properties: {
+                        exito: { type: 'boolean' },
+                        duracionMs: { type: 'number' },
+                        error: { type: 'string', nullable: true },
+                        ruta: { type: 'string', nullable: true }
+                      }
                     }
                   }
                 },
                 bitacoraActualizada: { type: 'boolean' },
+                logFtpPath: { type: 'string', nullable: true },
+                idPeriodoFirebird: { type: 'number', nullable: true },
                 mensaje: { type: 'string' },
                 tiempoTotalMs: { type: 'number' }
               }
