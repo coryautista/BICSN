@@ -207,7 +207,6 @@ export default async function authRoutes(app: FastifyInstance) {
       }
     }
   }, async (req, reply) => {
-    console.log('Auth login request body:', req.body);
     const parsed = LoginSchema.safeParse(req.body);
     if (!parsed.success) {
       console.log('Auth login validation error:', parsed.error.issues);

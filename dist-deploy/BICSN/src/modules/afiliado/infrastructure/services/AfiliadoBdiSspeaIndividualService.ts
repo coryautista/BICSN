@@ -93,7 +93,7 @@ export async function aplicarBDIsspeaIndividual(params: AplicarBDIsspeaIndividua
     throw new Error('AFILIADO_NOT_FOUND_OR_NOT_IN_ORGANICA');
   }
 
-  if (![2, 3].includes(Number(afiliado.numValidacion))) {
+  if (Number(afiliado.numValidacion) !== 2) {
     throw new Error(`AFILIADO_STATUS_NOT_ELIGIBLE:${afiliado.numValidacion}`);
   }
 

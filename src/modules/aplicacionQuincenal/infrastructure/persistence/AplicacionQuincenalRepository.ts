@@ -925,15 +925,15 @@ export class AplicacionQuincenalRepository implements IAplicacionQuincenalReposi
     detalle: AhorroDetalle[]
   ): Promise<void> {
     // Crear TVP Header
-    const headerTable = new sql.Table('aportaciones.TVP_AhorroLoteHeader');
+    const headerTable = new sql.Table('aportaciones.TVP_AhorroLoteHeader_V2');
     headerTable.columns.add('clave_organica_0', sql.Char(2));
     headerTable.columns.add('clave_organica_1', sql.Char(2));
     headerTable.columns.add('quincena', sql.Int);
     headerTable.columns.add('anio', sql.Int);
     headerTable.columns.add('usuario_id', sql.NVarChar(100));
     headerTable.columns.add('total_empleados', sql.Int);
-    headerTable.columns.add('total_contribucion', sql.Decimal(18, 2));
-    headerTable.columns.add('total_sueldo_base', sql.Decimal(18, 2));
+    headerTable.columns.add('total_contribucion', sql.Decimal(19, 6));
+    headerTable.columns.add('total_sueldo_base', sql.Decimal(19, 6));
     headerTable.rows.add(
       header.clave_organica_0,
       header.clave_organica_1,
@@ -946,20 +946,20 @@ export class AplicacionQuincenalRepository implements IAplicacionQuincenalReposi
     );
 
     // Crear TVP Detalle
-    const detalleTable = new sql.Table('aportaciones.TVP_AhorroLoteDetalle');
+    const detalleTable = new sql.Table('aportaciones.TVP_AhorroLoteDetalle_V2');
     detalleTable.columns.add('clave_organica_0', sql.Char(2));
     detalleTable.columns.add('clave_organica_1', sql.Char(2));
     detalleTable.columns.add('quincena', sql.Int);
     detalleTable.columns.add('anio', sql.Int);
     detalleTable.columns.add('interno', sql.Int);
     detalleTable.columns.add('nombre', sql.NVarChar(200));
-    detalleTable.columns.add('sueldo', sql.Decimal(18, 2));
-    detalleTable.columns.add('quinquenios', sql.Decimal(18, 2));
-    detalleTable.columns.add('otras_prestaciones', sql.Decimal(18, 2));
-    detalleTable.columns.add('sueldo_base', sql.Decimal(18, 2));
-    detalleTable.columns.add('afae', sql.Decimal(18, 2));
-    detalleTable.columns.add('afaa', sql.Decimal(18, 2));
-    detalleTable.columns.add('total', sql.Decimal(18, 2));
+    detalleTable.columns.add('sueldo', sql.Decimal(19, 6));
+    detalleTable.columns.add('quinquenios', sql.Decimal(19, 6));
+    detalleTable.columns.add('otras_prestaciones', sql.Decimal(19, 6));
+    detalleTable.columns.add('sueldo_base', sql.Decimal(19, 6));
+    detalleTable.columns.add('afae', sql.Decimal(19, 6));
+    detalleTable.columns.add('afaa', sql.Decimal(19, 6));
+    detalleTable.columns.add('total', sql.Decimal(19, 6));
 
     detalle.forEach(row => {
       detalleTable.rows.add(
@@ -992,15 +992,15 @@ export class AplicacionQuincenalRepository implements IAplicacionQuincenalReposi
     header: ViviendaHeader,
     detalle: ViviendaDetalle[]
   ): Promise<void> {
-    const headerTable = new sql.Table('aportaciones.TVP_ViviendaLoteHeader');
+    const headerTable = new sql.Table('aportaciones.TVP_ViviendaLoteHeader_V2');
     headerTable.columns.add('clave_organica_0', sql.Char(2));
     headerTable.columns.add('clave_organica_1', sql.Char(2));
     headerTable.columns.add('quincena', sql.Int);
     headerTable.columns.add('anio', sql.Int);
     headerTable.columns.add('usuario_id', sql.NVarChar(100));
     headerTable.columns.add('total_empleados', sql.Int);
-    headerTable.columns.add('total_contribucion', sql.Decimal(18, 2));
-    headerTable.columns.add('total_sueldo_base', sql.Decimal(18, 2));
+    headerTable.columns.add('total_contribucion', sql.Decimal(19, 6));
+    headerTable.columns.add('total_sueldo_base', sql.Decimal(19, 6));
     headerTable.rows.add(
       header.clave_organica_0,
       header.clave_organica_1,
@@ -1012,19 +1012,19 @@ export class AplicacionQuincenalRepository implements IAplicacionQuincenalReposi
       header.total_sueldo_base ?? 0
     );
 
-    const detalleTable = new sql.Table('aportaciones.TVP_ViviendaLoteDetalle');
+    const detalleTable = new sql.Table('aportaciones.TVP_ViviendaLoteDetalle_V2');
     detalleTable.columns.add('clave_organica_0', sql.Char(2));
     detalleTable.columns.add('clave_organica_1', sql.Char(2));
     detalleTable.columns.add('quincena', sql.Int);
     detalleTable.columns.add('anio', sql.Int);
     detalleTable.columns.add('interno', sql.Int);
     detalleTable.columns.add('nombre', sql.NVarChar(200));
-    detalleTable.columns.add('sueldo', sql.Decimal(18, 2));
-    detalleTable.columns.add('quinquenios', sql.Decimal(18, 2));
-    detalleTable.columns.add('otras_prestaciones', sql.Decimal(18, 2));
-    detalleTable.columns.add('sueldo_base', sql.Decimal(18, 2));
-    detalleTable.columns.add('afe', sql.Decimal(18, 2));
-    detalleTable.columns.add('total', sql.Decimal(18, 2));
+    detalleTable.columns.add('sueldo', sql.Decimal(19, 6));
+    detalleTable.columns.add('quinquenios', sql.Decimal(19, 6));
+    detalleTable.columns.add('otras_prestaciones', sql.Decimal(19, 6));
+    detalleTable.columns.add('sueldo_base', sql.Decimal(19, 6));
+    detalleTable.columns.add('afe', sql.Decimal(19, 6));
+    detalleTable.columns.add('total', sql.Decimal(19, 6));
 
     detalle.forEach(row => {
       detalleTable.rows.add(
@@ -1055,15 +1055,15 @@ export class AplicacionQuincenalRepository implements IAplicacionQuincenalReposi
     header: PrestacionesHeader,
     detalle: PrestacionesDetalle[]
   ): Promise<void> {
-    const headerTable = new sql.Table('aportaciones.TVP_PrestacionesLoteHeader');
+    const headerTable = new sql.Table('aportaciones.TVP_PrestacionesLoteHeader_V2');
     headerTable.columns.add('clave_organica_0', sql.Char(2));
     headerTable.columns.add('clave_organica_1', sql.Char(2));
     headerTable.columns.add('quincena', sql.Int);
     headerTable.columns.add('anio', sql.Int);
     headerTable.columns.add('usuario_id', sql.NVarChar(100));
     headerTable.columns.add('total_empleados', sql.Int);
-    headerTable.columns.add('total_contribucion', sql.Decimal(18, 2));
-    headerTable.columns.add('total_sueldo_base', sql.Decimal(18, 2));
+    headerTable.columns.add('total_contribucion', sql.Decimal(19, 6));
+    headerTable.columns.add('total_sueldo_base', sql.Decimal(19, 6));
     headerTable.rows.add(
       header.clave_organica_0,
       header.clave_organica_1,
@@ -1075,20 +1075,20 @@ export class AplicacionQuincenalRepository implements IAplicacionQuincenalReposi
       header.total_sueldo_base ?? 0
     );
 
-    const detalleTable = new sql.Table('aportaciones.TVP_PrestacionesLoteDetalle');
+    const detalleTable = new sql.Table('aportaciones.TVP_PrestacionesLoteDetalle_V2');
     detalleTable.columns.add('clave_organica_0', sql.Char(2));
     detalleTable.columns.add('clave_organica_1', sql.Char(2));
     detalleTable.columns.add('quincena', sql.Int);
     detalleTable.columns.add('anio', sql.Int);
     detalleTable.columns.add('interno', sql.Int);
     detalleTable.columns.add('nombre', sql.NVarChar(200));
-    detalleTable.columns.add('sueldo', sql.Decimal(18, 2));
-    detalleTable.columns.add('quinquenios', sql.Decimal(18, 2));
-    detalleTable.columns.add('otras_prestaciones', sql.Decimal(18, 2));
-    detalleTable.columns.add('sueldo_base', sql.Decimal(18, 2));
-    detalleTable.columns.add('afpe', sql.Decimal(18, 2));
-    detalleTable.columns.add('afpa', sql.Decimal(18, 2));
-    detalleTable.columns.add('total', sql.Decimal(18, 2));
+    detalleTable.columns.add('sueldo', sql.Decimal(19, 6));
+    detalleTable.columns.add('quinquenios', sql.Decimal(19, 6));
+    detalleTable.columns.add('otras_prestaciones', sql.Decimal(19, 6));
+    detalleTable.columns.add('sueldo_base', sql.Decimal(19, 6));
+    detalleTable.columns.add('afpe', sql.Decimal(19, 6));
+    detalleTable.columns.add('afpa', sql.Decimal(19, 6));
+    detalleTable.columns.add('total', sql.Decimal(19, 6));
 
     detalle.forEach(row => {
       detalleTable.rows.add(
@@ -1120,15 +1120,15 @@ export class AplicacionQuincenalRepository implements IAplicacionQuincenalReposi
     header: CairHeader,
     detalle: CairDetalle[]
   ): Promise<void> {
-    const headerTable = new sql.Table('aportaciones.TVP_CairLoteHeader');
+    const headerTable = new sql.Table('aportaciones.TVP_CairLoteHeader_V2');
     headerTable.columns.add('clave_organica_0', sql.Char(2));
     headerTable.columns.add('clave_organica_1', sql.Char(2));
     headerTable.columns.add('quincena', sql.Int);
     headerTable.columns.add('anio', sql.Int);
     headerTable.columns.add('usuario_id', sql.NVarChar(100));
     headerTable.columns.add('total_empleados', sql.Int);
-    headerTable.columns.add('total_contribucion', sql.Decimal(18, 2));
-    headerTable.columns.add('total_sueldo_base', sql.Decimal(18, 2));
+    headerTable.columns.add('total_contribucion', sql.Decimal(19, 6));
+    headerTable.columns.add('total_sueldo_base', sql.Decimal(19, 6));
     headerTable.rows.add(
       header.clave_organica_0,
       header.clave_organica_1,
@@ -1140,19 +1140,19 @@ export class AplicacionQuincenalRepository implements IAplicacionQuincenalReposi
       header.total_sueldo_base ?? 0
     );
 
-    const detalleTable = new sql.Table('aportaciones.TVP_CairLoteDetalle');
+    const detalleTable = new sql.Table('aportaciones.TVP_CairLoteDetalle_V2');
     detalleTable.columns.add('clave_organica_0', sql.Char(2));
     detalleTable.columns.add('clave_organica_1', sql.Char(2));
     detalleTable.columns.add('quincena', sql.Int);
     detalleTable.columns.add('anio', sql.Int);
     detalleTable.columns.add('interno', sql.Int);
     detalleTable.columns.add('nombre', sql.NVarChar(200));
-    detalleTable.columns.add('sueldo', sql.Decimal(18, 2));
-    detalleTable.columns.add('quinquenios', sql.Decimal(18, 2));
-    detalleTable.columns.add('otras_prestaciones', sql.Decimal(18, 2));
-    detalleTable.columns.add('sueldo_base', sql.Decimal(18, 2));
-    detalleTable.columns.add('afe', sql.Decimal(18, 2));
-    detalleTable.columns.add('total', sql.Decimal(18, 2));
+    detalleTable.columns.add('sueldo', sql.Decimal(19, 6));
+    detalleTable.columns.add('quinquenios', sql.Decimal(19, 6));
+    detalleTable.columns.add('otras_prestaciones', sql.Decimal(19, 6));
+    detalleTable.columns.add('sueldo_base', sql.Decimal(19, 6));
+    detalleTable.columns.add('afe', sql.Decimal(19, 6));
+    detalleTable.columns.add('total', sql.Decimal(19, 6));
 
     detalle.forEach(row => {
       detalleTable.rows.add(

@@ -159,6 +159,40 @@ export async function actualizarBitacoraAfectacionOrgTerminado(
   };
 }
 
+export async function verificarAplicacionMovimientosFinalizada(
+  org0: string,
+  org1: string,
+  quincena: number,
+  anio: number
+): Promise<{ finalizada: boolean; afectacionId: number | null }> {
+  const p = await getPool();
+  const result = await p.request()
+    .input('org0', sql.VarChar(30), org0)
+    .input('org1', sql.VarChar(30), org1)
+    .input('quincena', sql.Int, quincena)
+    .input('anio', sql.Int, anio)
+    .query(`
+      SELECT TOP 1 AfectacionId, AplicacionMovimientosFinalizada
+      FROM afec.BitacoraAfectacionOrg
+      WHERE Org0 = @org0
+        AND Org1 = @org1
+        AND Entidad = 'AFILIADOS'
+        AND Quincena = @quincena
+        AND Anio = @anio
+      ORDER BY ModifiedAt DESC, CreatedAt DESC
+    `);
+
+  const row = result.recordset[0];
+  if (!row) {
+    return { finalizada: false, afectacionId: null };
+  }
+
+  return {
+    finalizada: row.AplicacionMovimientosFinalizada === true || row.AplicacionMovimientosFinalizada === 1,
+    afectacionId: Number(row.AfectacionId)
+  };
+}
+
 export async function actualizarBitacoraAfectacionOrgTerminadoPorAfectacionId(
   afectacionId: number
 ): Promise<{ actualizado: boolean; registrosAfectados: number }> {
@@ -249,7 +283,14 @@ export async function getUltimaBitacoraAfectacionOrgPorOrganica(
           UserAgent,
           RequestId,
           CreatedAt,
-          ModifiedAt
+          ModifiedAt,
+          AplicacionMovimientosFinalizada,
+          AplicacionMovimientosFinalizadaEn,
+          AplicacionMovimientosFinalizadaPor,
+          AplicacionMovimientosTotal,
+          AplicacionMovimientosAplicados,
+          AplicacionMovimientosCancelados,
+          AplicacionMovimientosObservaciones
         FROM afec.BitacoraAfectacionOrg
         WHERE Org0 = @org0
           AND Org1 = @org1
@@ -303,7 +344,14 @@ export async function getUltimaBitacoraAfectacionOrgPorOrganica(
       userAgent: registro.UserAgent,
       requestId: registro.RequestId,
       createdAt: registro.CreatedAt?.toISOString() || null,
-      modifiedAt: registro.ModifiedAt?.toISOString() || null
+      modifiedAt: registro.ModifiedAt?.toISOString() || null,
+      aplicacionMovimientosFinalizada: registro.AplicacionMovimientosFinalizada === true || registro.AplicacionMovimientosFinalizada === 1,
+      aplicacionMovimientosFinalizadaEn: registro.AplicacionMovimientosFinalizadaEn?.toISOString() || null,
+      aplicacionMovimientosFinalizadaPor: registro.AplicacionMovimientosFinalizadaPor || null,
+      aplicacionMovimientosTotal: registro.AplicacionMovimientosTotal ?? null,
+      aplicacionMovimientosAplicados: registro.AplicacionMovimientosAplicados ?? null,
+      aplicacionMovimientosCancelados: registro.AplicacionMovimientosCancelados ?? null,
+      aplicacionMovimientosObservaciones: registro.AplicacionMovimientosObservaciones || null
     };
   } catch (error: any) {
     const queryTime = Date.now() - startTime;
@@ -385,7 +433,14 @@ export async function getBitacoraAfectacionOrgPorOrganicaYPeriodo(
           UserAgent,
           RequestId,
           CreatedAt,
-          ModifiedAt
+          ModifiedAt,
+          AplicacionMovimientosFinalizada,
+          AplicacionMovimientosFinalizadaEn,
+          AplicacionMovimientosFinalizadaPor,
+          AplicacionMovimientosTotal,
+          AplicacionMovimientosAplicados,
+          AplicacionMovimientosCancelados,
+          AplicacionMovimientosObservaciones
         FROM afec.BitacoraAfectacionOrg
         WHERE Org0 = @org0
           AND Org1 = @org1
@@ -439,7 +494,14 @@ export async function getBitacoraAfectacionOrgPorOrganicaYPeriodo(
       userAgent: registro.UserAgent,
       requestId: registro.RequestId,
       createdAt: registro.CreatedAt?.toISOString() || null,
-      modifiedAt: registro.ModifiedAt?.toISOString() || null
+      modifiedAt: registro.ModifiedAt?.toISOString() || null,
+      aplicacionMovimientosFinalizada: registro.AplicacionMovimientosFinalizada === true || registro.AplicacionMovimientosFinalizada === 1,
+      aplicacionMovimientosFinalizadaEn: registro.AplicacionMovimientosFinalizadaEn?.toISOString() || null,
+      aplicacionMovimientosFinalizadaPor: registro.AplicacionMovimientosFinalizadaPor || null,
+      aplicacionMovimientosTotal: registro.AplicacionMovimientosTotal ?? null,
+      aplicacionMovimientosAplicados: registro.AplicacionMovimientosAplicados ?? null,
+      aplicacionMovimientosCancelados: registro.AplicacionMovimientosCancelados ?? null,
+      aplicacionMovimientosObservaciones: registro.AplicacionMovimientosObservaciones || null
     };
   } catch (error: any) {
     const queryTime = Date.now() - startTime;

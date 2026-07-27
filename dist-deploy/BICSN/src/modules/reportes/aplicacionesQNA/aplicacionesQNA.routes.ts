@@ -19,25 +19,8 @@ import { IAplicacionesQNARepository } from './domain/repositories/IAplicacionesQ
 import { LineaCapturaPeriodoRepository } from './infrastructure/persistence/LineaCapturaPeriodoRepository.js';
 import { normalizeClaveOrganica } from '../../../utils/organica.js';
 import { getMexicoTodayDateOnly } from '../../../utils/sqlServerDate.js';
-
-function calcularFechasQuincena(quincena: number, anio: number): { fechaInicio: string; fechaFin: string } {
-  const mes = Math.ceil(quincena / 2);
-  const esQuincenaImpar = quincena % 2 === 1;
-  const fechaInicio = new Date(anio, mes - 1, esQuincenaImpar ? 1 : 16);
-  const fechaFin = esQuincenaImpar ? new Date(anio, mes - 1, 15) : new Date(anio, mes, 0);
-
-  const formatoFecha = (fecha: Date): string => {
-    const year = fecha.getFullYear();
-    const month = String(fecha.getMonth() + 1).padStart(2, '0');
-    const day = String(fecha.getDate()).padStart(2, '0');
-    return `${year}-${month}-${day}`;
-  };
-
-  return {
-    fechaInicio: formatoFecha(fechaInicio),
-    fechaFin: formatoFecha(fechaFin)
-  };
-}
+import { executeSafeQuery, executeSelectableProcedure } from '../../../db/firebird.js';
+import { getPool, sql } from '../../../db/mssql.js';
 
 export async function aplicacionesQNARoutes(fastify: FastifyInstance) {
   // GET /reportes/aplicaciones-qna/movimientos - HISTORIAL_MOVIMIENTOS_QUIN_IND
@@ -898,6 +881,112 @@ export async function aplicacionesQNARoutes(fastify: FastifyInstance) {
     }
   });
 
+  // POST /aplicaciones-qna/sincronizar-periodo-trabajo - Sincroniza la QNA Firebird con la bitácora SQL Server.
+  fastify.post('/sincronizar-periodo-trabajo', {
+    preHandler: [requireAuth],
+    schema: {
+      description: 'Obtiene la QNA actual desde Firebird y crea su bitácora si aún no existe. Solo cierra registros APLICAR de periodos anteriores.',
+      summary: 'Sincronizar período de trabajo',
+      tags: ['reportes', 'aplicaciones-qna', 'firebird'],
+      security: [{ bearerAuth: [] }],
+      response: {
+        200: { type: 'object' },
+        400: { type: 'object' },
+        500: { type: 'object' }
+      }
+    }
+  }, async (request, reply) => {
+    try {
+      const user = (request as any).user;
+      const org0 = normalizeClaveOrganica(user?.idOrganica0);
+      const org1 = normalizeClaveOrganica(user?.idOrganica1);
+
+      if (!org0 || !org1) {
+        return reply.code(400).send({
+          success: false,
+          error: { code: 'MISSING_ORGANICA_KEYS', message: 'No fue posible resolver org0/org1 desde el usuario autenticado.' }
+        });
+      }
+
+      const rows = await executeSelectableProcedure('AP_G_APLICADO_TIPO', [org0, org1, '01', '01'], {
+        alias: 'p',
+        columns: ['p.QUINCENA']
+      });
+      const qnaFirebird = String(rows[0]?.QUINCENA ?? '').padStart(4, '0');
+      if (!/^([0-1]\d|2[0-4])\d{2}$/.test(qnaFirebird) || Number(qnaFirebird.slice(0, 2)) < 1) {
+        throw new Error('AP_G_APLICADO_TIPO no devolvió una QNA válida');
+      }
+
+      const quincena = Number(qnaFirebird.slice(0, 2));
+      const anio = 2000 + Number(qnaFirebird.slice(2));
+      const pool = await getPool();
+      const transaction = new sql.Transaction(pool);
+      await transaction.begin(sql.ISOLATION_LEVEL.SERIALIZABLE);
+
+      try {
+        const current = await new sql.Request(transaction)
+          .input('org0', sql.Char(2), org0)
+          .input('org1', sql.Char(2), org1)
+          .input('quincena', sql.TinyInt, quincena)
+          .input('anio', sql.SmallInt, anio)
+          .query(`
+            SELECT TOP 1 AfectacionId
+            FROM afec.BitacoraAfectacionOrg WITH (UPDLOCK, HOLDLOCK)
+            WHERE Entidad = 'AFILIADOS'
+              AND Org0 = @org0
+              AND Org1 = @org1
+              AND Quincena = @quincena
+              AND Anio = @anio
+            ORDER BY CreatedAt DESC
+          `);
+
+        let created = false;
+        if (current.recordset.length === 0) {
+          await new sql.Request(transaction)
+            .input('org0', sql.Char(2), org0)
+            .input('org1', sql.Char(2), org1)
+            .input('quincena', sql.TinyInt, quincena)
+            .input('anio', sql.SmallInt, anio)
+            .query(`
+              UPDATE afec.BitacoraAfectacionOrg
+              SET Accion = 'TERMINADO'
+              WHERE Entidad = 'AFILIADOS'
+                AND Org0 = @org0
+                AND Org1 = @org1
+                AND UPPER(Accion) = 'APLICAR'
+                AND (Anio < @anio OR (Anio = @anio AND Quincena < @quincena))
+            `);
+
+          await new sql.Request(transaction)
+            .input('Entidad', sql.NVarChar(128), 'AFILIADOS')
+            .input('Anio', sql.SmallInt, anio)
+            .input('Quincena', sql.TinyInt, quincena)
+            .input('OrgNivel', sql.TinyInt, 3)
+            .input('Org0', sql.Char(2), org0)
+            .input('Org1', sql.Char(2), org1)
+            .input('Org2', sql.Char(2), '01')
+            .input('Org3', sql.Char(2), '01')
+            .input('Accion', sql.VarChar(20), 'APLICAR')
+            .input('Resultado', sql.VarChar(10), 'OK')
+            .input('Mensaje', sql.NVarChar(4000), `QNA ${qnaFirebird} sincronizada desde Firebird`)
+            .input('Usuario', sql.NVarChar(100), String(user?.sub ?? 'Sistema'))
+            .input('AppName', sql.NVarChar(100), 'BICSN-API')
+            .input('Ip', sql.NVarChar(64), request.ip)
+            .execute('afec.usp_RegistrarAfectacionOrg');
+          created = true;
+        }
+
+        await transaction.commit();
+        return reply.send({ success: true, data: { periodo: qnaFirebird, quincena, anio, created }, timestamp: new Date().toISOString() });
+      } catch (error) {
+        await transaction.rollback();
+        throw error;
+      }
+    } catch (error) {
+      return handleAplicacionesQNAError(error, reply);
+    }
+  });
+
   // GET /aplicaciones-qna/periodo-trabajo - Obtiene período de trabajo desde BitacoraAfectacionOrg
   fastify.get('/periodo-trabajo', {
     preHandler: [requireAuth],
@@ -937,6 +1026,7 @@ export async function aplicacionesQNARoutes(fastify: FastifyInstance) {
                 accion: { type: 'string', description: 'Acción del registro en BitacoraAfectacionOrg (APLICAR o TERMINADO)' },
                 org0: { type: 'string', description: 'Clave orgánica nivel 0 utilizada' },
                 org1: { type: 'string', description: 'Clave orgánica nivel 1 utilizada' },
+                dependencia: { type: 'string', nullable: true, description: 'Nombre de la dependencia asociada a las claves orgánicas del usuario' },
                 fechaInicio: { type: 'string', format: 'date', description: 'Fecha de inicio de la quincena (YYYY-MM-DD)' },
                 fechaFin: { type: 'string', format: 'date', description: 'Fecha de fin de la quincena (YYYY-MM-DD)' },
                 lineaCapturaVigente: {
@@ -1013,38 +1103,27 @@ export async function aplicacionesQNARoutes(fastify: FastifyInstance) {
       const lineaCapturaPeriodoRepo = request.diScope.resolve<LineaCapturaPeriodoRepository>('lineaCapturaPeriodoRepo');
       const fechaMexicoHoy = getMexicoTodayDateOnly();
       const lineaVigente = await lineaCapturaPeriodoRepo.findVigenteActiva(org0, org1, fechaMexicoHoy);
-
-      if (lineaVigente) {
-        const { fechaInicio, fechaFin } = calcularFechasQuincena(lineaVigente.quincena, lineaVigente.anio);
-
-        return reply.send({
-          success: true,
-          data: {
+      const lineaCapturaVigente = lineaVigente
+        ? {
+            lineaCapturaPeriodoId: lineaVigente.lineaCapturaPeriodoId,
             periodo: lineaVigente.periodo,
             quincena: lineaVigente.quincena,
             anio: lineaVigente.anio,
-            accion: 'LINEA_CAPTURA_VIGENTE',
-            org0,
-            org1,
-            fechaInicio,
-            fechaFin,
-            lineaCapturaVigente: {
-              lineaCapturaPeriodoId: lineaVigente.lineaCapturaPeriodoId,
-              periodo: lineaVigente.periodo,
-              quincena: lineaVigente.quincena,
-              anio: lineaVigente.anio,
-              importe: lineaVigente.importe,
-              lineaCaptura: lineaVigente.lineaCaptura,
-              referencia4: lineaVigente.referencia4,
-              fechaLimite: lineaVigente.fechaLimite,
-              fechaFinVigencia: lineaVigente.fechaFinVigencia,
-              estatus: lineaVigente.estatus,
-              digitoVerificador: lineaVigente.digitoVerificador
-            }
-          },
-          timestamp: new Date().toISOString()
-        });
-      }
+            importe: lineaVigente.importe,
+            lineaCaptura: lineaVigente.lineaCaptura,
+            referencia4: lineaVigente.referencia4,
+            fechaLimite: lineaVigente.fechaLimite,
+            fechaFinVigencia: lineaVigente.fechaFinVigencia,
+            estatus: lineaVigente.estatus,
+            digitoVerificador: lineaVigente.digitoVerificador
+          }
+        : null;
+
+      const dependenciaRows = await executeSafeQuery(
+        'SELECT DESCRIPCION FROM ORGANICA_1 WHERE CLAVE_ORGANICA_0 = ? AND CLAVE_ORGANICA_1 = ?',
+        [org0, org1]
+      );
+      const dependencia = String(dependenciaRows[0]?.DESCRIPCION ?? '').trim() || null;
 
       // Obtener repository y ejecutar consulta
       const repository = request.diScope.resolve<IAplicacionesQNARepository>('aplicacionesQNARepo');
@@ -1057,7 +1136,8 @@ export async function aplicacionesQNARoutes(fastify: FastifyInstance) {
           ...periodoData,
           org0,
           org1,
-          lineaCapturaVigente: null
+          dependencia,
+          lineaCapturaVigente
         },
         timestamp: new Date().toISOString()
       });

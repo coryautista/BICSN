@@ -9,6 +9,15 @@ interface BitacoraAplicarQna {
   anio: number;
   periodo: string;
   quincenaId: string;
+  aplicacionMovimientosFinalizada: boolean;
+}
+
+interface ResumenFinalizacionMovimientos {
+  total: number;
+  aprobados: number;
+  cancelados: number;
+  aplicados: number;
+  noPermitidos: number;
 }
 
 async function getBitacoraAplicarQna(org0: string, org1: string): Promise<BitacoraAplicarQna> {
@@ -17,12 +26,12 @@ async function getBitacoraAplicarQna(org0: string, org1: string): Promise<Bitaco
     .input('org0', sql.VarChar(30), org0)
     .input('org1', sql.VarChar(30), org1)
     .query(`
-      SELECT TOP 1 AfectacionId, Quincena, Anio
+      SELECT TOP 1 AfectacionId, Quincena, Anio, AplicacionMovimientosFinalizada
       FROM afec.BitacoraAfectacionOrg
       WHERE Org0 = @org0
         AND Org1 = @org1
         AND Entidad = 'AFILIADOS'
-        AND Accion = 'Aplicar'
+        AND Accion IN ('Aplicar', 'APLICAR')
       ORDER BY CreatedAt DESC
     `);
 
@@ -43,7 +52,49 @@ async function getBitacoraAplicarQna(org0: string, org1: string): Promise<Bitaco
     quincena,
     anio,
     periodo: `${quincena2}${String(anio).slice(-2)}`,
-    quincenaId: `${anio}-${quincena2}`
+    quincenaId: `${anio}-${quincena2}`,
+    aplicacionMovimientosFinalizada: row.AplicacionMovimientosFinalizada === true || row.AplicacionMovimientosFinalizada === 1
+  };
+}
+
+async function obtenerResumenFinalizacionMovimientos(org0: string, org1: string, qna: BitacoraAplicarQna): Promise<ResumenFinalizacionMovimientos> {
+  const p = await getPool();
+  const result = await p.request()
+    .input('org0', sql.VarChar(30), org0)
+    .input('org1', sql.VarChar(30), org1)
+    .input('quincena', sql.TinyInt, qna.quincena)
+    .input('anio', sql.SmallInt, qna.anio)
+    .input('quincenaId', sql.VarChar(30), qna.quincenaId)
+    .query(`
+      SELECT
+        COUNT(DISTINCT a.id) AS Total,
+        SUM(CASE WHEN a.numValidacion = 2 THEN 1 ELSE 0 END) AS Aprobados,
+        SUM(CASE WHEN a.numValidacion = 6 THEN 1 ELSE 0 END) AS Cancelados,
+        SUM(CASE WHEN a.numValidacion = 7 THEN 1 ELSE 0 END) AS Aplicados,
+        SUM(CASE WHEN a.numValidacion NOT IN (2, 6, 7) THEN 1 ELSE 0 END) AS NoPermitidos
+      FROM afi.Afiliado a
+      INNER JOIN afi.AfiliadoOrg ao ON a.id = ao.afiliadoId
+      WHERE ao.claveOrganica0 = @org0
+        AND ao.claveOrganica1 = @org1
+        AND a.estatus = 1
+        AND a.quincenaAplicacion = @quincena
+        AND a.anioAplicacion = @anio
+        AND EXISTS (
+          SELECT 1
+          FROM afi.Movimiento m
+          WHERE m.afiliadoId = a.id
+            AND m.estatus = 'A'
+            AND m.quincenaId = @quincenaId
+        )
+    `);
+
+  const row = result.recordset[0] || {};
+  return {
+    total: Number(row.Total || 0),
+    aprobados: Number(row.Aprobados || 0),
+    cancelados: Number(row.Cancelados || 0),
+    aplicados: Number(row.Aplicados || 0),
+    noPermitidos: Number(row.NoPermitidos || 0)
   };
 }
 
@@ -64,7 +115,7 @@ export async function getAfiliadosElegiblesParaBdiSspea(org0: string, org1: stri
       INNER JOIN afi.AfiliadoStatusControl s ON a.numValidacion = s.numValidacion
       WHERE ao.claveOrganica0 = @org0
         AND ao.claveOrganica1 = @org1
-        AND a.numValidacion IN (2, 3)
+        AND a.numValidacion = 2
         AND a.estatus = 1
         AND a.quincenaAplicacion = @quincena
         AND a.anioAplicacion = @anio
@@ -160,6 +211,7 @@ export async function actualizarBitacoraAplicacionLote(params: {
   org1: string;
   usuarioId: string;
   afiliadosExitosos: number;
+  resumenFinalizacion: ResumenFinalizacionMovimientos;
   internosNuevos: number[];
 }): Promise<{
   registrosActualizados: number;
@@ -171,7 +223,7 @@ export async function actualizarBitacoraAplicacionLote(params: {
   const p = await getPool();
   const transaction = p.transaction();
 
-  let mensajeBitacora = `Todos los afiliados procesados exitosamente - ${params.afiliadosExitosos} afiliados aplicados a Movimientos BDIsspea`;
+  let mensajeBitacora = `Aplicacion de movimientos finalizada - ${params.afiliadosExitosos} afiliados aplicados a Movimientos BDIsspea`;
   if (params.internosNuevos.length > 0) {
     mensajeBitacora += `. INTERNOs nuevos registrados: [${params.internosNuevos.join(', ')}]`;
   }
@@ -179,6 +231,13 @@ export async function actualizarBitacoraAplicacionLote(params: {
   const sqlBitacora = `
     UPDATE TOP (1) bao
     SET bao.Accion = 'APLICAR',
+        bao.AplicacionMovimientosFinalizada = 1,
+        bao.AplicacionMovimientosFinalizadaEn = SYSUTCDATETIME(),
+        bao.AplicacionMovimientosFinalizadaPor = '${params.usuarioId}',
+        bao.AplicacionMovimientosTotal = ${params.resumenFinalizacion.total},
+        bao.AplicacionMovimientosAplicados = ${params.resumenFinalizacion.aplicados + params.afiliadosExitosos},
+        bao.AplicacionMovimientosCancelados = ${params.resumenFinalizacion.cancelados},
+        bao.AplicacionMovimientosObservaciones = '${mensajeBitacora.replace(/'/g, "''")}',
         bao.ModifiedAt = SYSUTCDATETIME(),
         bao.Usuario = '${params.usuarioId}',
         bao.Resultado = 'OK',
@@ -197,9 +256,19 @@ export async function actualizarBitacoraAplicacionLote(params: {
       .input('afectacionId', sql.Int, params.afectacionId ?? null)
       .input('usuarioId', sql.NVarChar(50), params.usuarioId)
       .input('mensaje', sql.NVarChar(4000), mensajeBitacora)
+      .input('total', sql.Int, params.resumenFinalizacion.total)
+      .input('aplicados', sql.Int, params.resumenFinalizacion.aplicados + params.afiliadosExitosos)
+      .input('cancelados', sql.Int, params.resumenFinalizacion.cancelados)
       .query(`
         UPDATE TOP (1) bao
         SET bao.Accion = 'APLICAR',
+            bao.AplicacionMovimientosFinalizada = 1,
+            bao.AplicacionMovimientosFinalizadaEn = SYSUTCDATETIME(),
+            bao.AplicacionMovimientosFinalizadaPor = @usuarioId,
+            bao.AplicacionMovimientosTotal = @total,
+            bao.AplicacionMovimientosAplicados = @aplicados,
+            bao.AplicacionMovimientosCancelados = @cancelados,
+            bao.AplicacionMovimientosObservaciones = @mensaje,
             bao.ModifiedAt = SYSUTCDATETIME(),
             bao.Usuario = @usuarioId,
             bao.Resultado = 'OK',
@@ -234,6 +303,48 @@ export async function actualizarBitacoraAplicacionLote(params: {
   }
 }
 
+async function finalizarBitacoraAplicacionMovimientosSinProcesar(params: {
+  qna: BitacoraAplicarQna;
+  org0: string;
+  org1: string;
+  usuarioId: string;
+  resumenFinalizacion: ResumenFinalizacionMovimientos;
+}): Promise<number> {
+  const mensaje = `Aplicacion de movimientos finalizada sin afiliados pendientes por aplicar. Total: ${params.resumenFinalizacion.total}, aplicados: ${params.resumenFinalizacion.aplicados}, cancelados: ${params.resumenFinalizacion.cancelados}.`;
+  const p = await getPool();
+  const result = await p.request()
+    .input('afectacionId', sql.Int, params.qna.afectacionId)
+    .input('org0', sql.VarChar(30), params.org0)
+    .input('org1', sql.VarChar(30), params.org1)
+    .input('usuarioId', sql.NVarChar(50), params.usuarioId)
+    .input('mensaje', sql.NVarChar(4000), mensaje)
+    .input('total', sql.Int, params.resumenFinalizacion.total)
+    .input('aplicados', sql.Int, params.resumenFinalizacion.aplicados)
+    .input('cancelados', sql.Int, params.resumenFinalizacion.cancelados)
+    .query(`
+      UPDATE TOP (1) bao
+      SET bao.Accion = 'APLICAR',
+          bao.AplicacionMovimientosFinalizada = 1,
+          bao.AplicacionMovimientosFinalizadaEn = SYSUTCDATETIME(),
+          bao.AplicacionMovimientosFinalizadaPor = @usuarioId,
+          bao.AplicacionMovimientosTotal = @total,
+          bao.AplicacionMovimientosAplicados = @aplicados,
+          bao.AplicacionMovimientosCancelados = @cancelados,
+          bao.AplicacionMovimientosObservaciones = @mensaje,
+          bao.ModifiedAt = SYSUTCDATETIME(),
+          bao.Usuario = @usuarioId,
+          bao.Resultado = 'OK',
+          bao.Mensaje = @mensaje
+      FROM afec.BitacoraAfectacionOrg bao
+      WHERE bao.AfectacionId = @afectacionId
+        AND bao.Org0 = @org0
+        AND bao.Org1 = @org1
+        AND bao.Entidad = 'AFILIADOS'
+    `);
+
+  return result.rowsAffected[0] || 0;
+}
+
 export async function aplicarBDIsspeaLote(
   org0: string,
   org1: string,
@@ -244,13 +355,9 @@ export async function aplicarBDIsspeaLote(
   userAgent?: string
 ): Promise<any> {
   const qna = await getBitacoraAplicarQna(org0, org1);
-  const afiliadosParaProcesar = await getAfiliadosElegiblesParaBdiSspea(org0, org1, qna);
-  const resultadosProcesamiento: any[] = [];
-  const movimientosMigrados: any[] = [];
-  const detallesMigracion: any[] = [];
-  const internosNuevos: number[] = [];
+  const resumenFinalizacion = await obtenerResumenFinalizacionMovimientos(org0, org1, qna);
 
-  if (afiliadosParaProcesar.length === 0) {
+  if (qna.aplicacionMovimientosFinalizada) {
     return {
       afiliadosProcesados: [],
       afiliadosCambiadosEstado: 0,
@@ -272,8 +379,66 @@ export async function aplicarBDIsspeaLote(
         quincena: qna.quincena,
         anio: qna.anio,
         quincenaId: qna.quincenaId,
-        afectacionId: qna.afectacionId
-      }
+        afectacionId: qna.afectacionId,
+        aplicacionMovimientosFinalizada: true,
+        mensaje: 'La aplicacion de movimientos ya estaba finalizada para esta quincena.'
+      },
+      periodo: qna.periodo,
+      quincena: qna.quincena,
+      anio: qna.anio,
+      quincenaId: qna.quincenaId,
+      afectacionId: qna.afectacionId
+    };
+  }
+
+  if (resumenFinalizacion.noPermitidos > 0) {
+    throw new Error(`MOVIMIENTOS_ESTADO_NO_PERMITIDO:${resumenFinalizacion.noPermitidos}`);
+  }
+
+  const afiliadosParaProcesar = await getAfiliadosElegiblesParaBdiSspea(org0, org1, qna);
+  const resultadosProcesamiento: any[] = [];
+  const movimientosMigrados: any[] = [];
+  const detallesMigracion: any[] = [];
+  const internosNuevos: number[] = [];
+
+  if (afiliadosParaProcesar.length === 0) {
+    const bitacoraActualizada = await finalizarBitacoraAplicacionMovimientosSinProcesar({
+      qna,
+      org0,
+      org1,
+      usuarioId,
+      resumenFinalizacion
+    });
+
+    return {
+      afiliadosProcesados: [],
+      afiliadosCambiadosEstado: 0,
+      afiliadosFallidos: 0,
+      afiliadosCompletos: 0,
+      bitacoraActualizada,
+      movimientosMigrados: [],
+      afiliadosConMigracionExitosa: 0,
+      afiliadosConMigracionFallida: 0,
+      detallesMigracion: [],
+      resumen: {
+        totalEncontrados: 0,
+        procesadosExitosamente: 0,
+        procesadosConError: 0,
+        movimientosMigradosExitosos: 0,
+        movimientosMigradosFallidos: 0,
+        organica: `${org0}/${org1}`,
+        periodo: qna.periodo,
+        quincena: qna.quincena,
+        anio: qna.anio,
+        quincenaId: qna.quincenaId,
+        afectacionId: qna.afectacionId,
+        aplicacionMovimientosFinalizada: bitacoraActualizada > 0
+      },
+      periodo: qna.periodo,
+      quincena: qna.quincena,
+      anio: qna.anio,
+      quincenaId: qna.quincenaId,
+      afectacionId: qna.afectacionId
     };
   }
 
@@ -433,6 +598,7 @@ export async function aplicarBDIsspeaLote(
         org1,
         usuarioId,
         afiliadosExitosos,
+        resumenFinalizacion,
         internosNuevos
       });
       bitacoraActualizada = bitacoraResult.registrosActualizados;

@@ -1,5 +1,5 @@
 import pino from 'pino';
-import { actualizarBitacoraAfectacionOrgTerminado } from '../../infrastructure/services/AfiliadoBdiSspeaService.js';
+import { actualizarBitacoraAfectacionOrgTerminado, verificarAplicacionMovimientosFinalizada } from '../../infrastructure/services/AfiliadoBdiSspeaService.js';
 import { ejecutarAP_P_APLICAR, ejecutarEBI2_RECIBOS } from '../../infrastructure/services/AfiliadoBdiSspeaFirebirdService.js';
 import { getQuincenaAplicacion } from '../../infrastructure/services/AfiliadoQuincenaService.js';
 import { crearAplicacionQnaLogPayload, guardarAplicacionQnaLogFtp } from '../../infrastructure/services/AplicacionQnaLogFtpService.js';
@@ -133,6 +133,17 @@ export class AplicarBDIssspeaQNACommand {
         anio = quincenaResult.anio;
         // Formato QQAA (ej: "2125" = quincena 21 del año 2025)
         quincena = `${String(quincenaNumero).padStart(2, '0')}${String(anio).slice(-2)}`;
+
+        const estadoMovimientos = await verificarAplicacionMovimientosFinalizada(
+          data.org0,
+          data.org1,
+          quincenaNumero,
+          anio
+        );
+
+        if (!estadoMovimientos.finalizada) {
+          throw new Error('APLICACION_MOVIMIENTOS_NO_FINALIZADA');
+        }
 
         const paso1Time = Date.now() - paso1Start;
         ejecuciones.obtenerQuincena = { exito: true, duracionMs: paso1Time, error: undefined };

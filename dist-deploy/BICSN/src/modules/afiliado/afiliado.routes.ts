@@ -4537,7 +4537,7 @@ export default async function afiliadoRoutes(app: FastifyInstance) {
       }
       if (error.message?.startsWith('AFILIADO_STATUS_NOT_ELIGIBLE:')) {
         const status = error.message.split(':')[1];
-        return reply.code(400).send(fail(`El afiliado no es elegible para aplicar a BDIsspea. Estado actual: ${status}. Estados permitidos: 2 y 3`));
+        return reply.code(400).send(fail(`El afiliado no es elegible para aplicar a BDIsspea. Estado actual: ${status}. Estado permitido: 2`));
       }
       if (error.message === 'AFILIADO_WITHOUT_ACTIVE_MOVEMENTS') {
         return reply.code(400).send(fail('El afiliado no tiene movimientos activos para migrar'));
@@ -4729,13 +4729,17 @@ export default async function afiliadoRoutes(app: FastifyInstance) {
         errores: erroresResumidos,
         detalles: {
           organica: `${userOrg0}/${userOrg1}`,
-          estadosOrigen: [2, 3],
+          estadosOrigen: [2],
           estadoDestino: 7,
           motivo: parsed.data.motivo,
           observaciones: parsed.data.observaciones
         }
       }));
     } catch (error: any) {
+      if (error.message?.startsWith('MOVIMIENTOS_ESTADO_NO_PERMITIDO:')) {
+        const totalNoPermitidos = error.message.split(':')[1] || '0';
+        return reply.code(400).send(fail(`No se puede finalizar la aplicacion de movimientos. Existen ${totalNoPermitidos} movimiento(s) fuera de los estados permitidos: Aprobado, Cancelado o Aplicado.`));
+      }
       return handleAfiliadoError(error, reply, { operation: 'aplicarBDIsspeaLote', user: req.user?.sub });
     }
   });
@@ -4782,9 +4786,7 @@ export default async function afiliadoRoutes(app: FastifyInstance) {
                       properties: {
                         exito: { type: 'boolean' },
                         duracionMs: { type: 'number' },
-                        error: { type: 'string', nullable: true },
-                        idPeriodoFirebird: { type: 'number', nullable: true },
-                        mensaje: { type: 'string', nullable: true }
+                        error: { type: 'string', nullable: true }
                       }
                     },
                     aplicarF: {
@@ -4800,7 +4802,9 @@ export default async function afiliadoRoutes(app: FastifyInstance) {
                       properties: {
                         exito: { type: 'boolean' },
                         duracionMs: { type: 'number' },
-                        error: { type: 'string', nullable: true }
+                        error: { type: 'string', nullable: true },
+                        idPeriodoFirebird: { type: 'number', nullable: true },
+                        mensaje: { type: 'string', nullable: true }
                       }
                     },
                     envioLayout: {
@@ -4876,6 +4880,9 @@ export default async function afiliadoRoutes(app: FastifyInstance) {
       // Si no fue exitoso, el código de estado será 200 pero el cliente puede verificar resultado.exito
       return reply.send(ok(resultado));
     } catch (error: any) {
+      if (error.message?.includes('APLICACION_MOVIMIENTOS_NO_FINALIZADA')) {
+        return reply.code(400).send(fail('APLICACION_MOVIMIENTOS_NO_FINALIZADA: Primero debe finalizar Aplicar movimientos para habilitar Aplicacion QNA.'));
+      }
       return handleAfiliadoError(error, reply, { operation: 'aplicarBDIssspeaQNA', user: req.user?.sub });
     }
   });
@@ -4926,7 +4933,14 @@ export default async function afiliadoRoutes(app: FastifyInstance) {
                     userAgent: { type: 'string', nullable: true },
                     requestId: { type: 'string', nullable: true },
                     createdAt: { type: 'string', nullable: true },
-                    modifiedAt: { type: 'string', nullable: true }
+                    modifiedAt: { type: 'string', nullable: true },
+                    aplicacionMovimientosFinalizada: { type: 'boolean' },
+                    aplicacionMovimientosFinalizadaEn: { type: 'string', nullable: true },
+                    aplicacionMovimientosFinalizadaPor: { type: 'string', nullable: true },
+                    aplicacionMovimientosTotal: { type: 'number', nullable: true },
+                    aplicacionMovimientosAplicados: { type: 'number', nullable: true },
+                    aplicacionMovimientosCancelados: { type: 'number', nullable: true },
+                    aplicacionMovimientosObservaciones: { type: 'string', nullable: true }
                   }
                 }
               }

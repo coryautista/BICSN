@@ -182,7 +182,7 @@ export class LineaCapturaPeriodoRepository {
             AND anio = @anio
         ),
         retenciones AS (
-          SELECT 'PCP', COUNT(*), COALESCE(SUM(total), 0), 'RETENCION'
+          SELECT 'PCP' AS tipo, COUNT(*) AS registros, COALESCE(SUM(total), 0) AS total, 'RETENCION' AS grupo
           FROM retenciones.PrestamosCortoPlazoHistorico
           WHERE clave_organica_0 = @org0 AND clave_organica_1 = @org1 AND quincena = @quincena AND anio = @anio
           UNION ALL

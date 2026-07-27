@@ -167,6 +167,18 @@ export async function lineaCapturaRoutes(fastify: FastifyInstance) {
           }
         });
       }
+      const errorMessage = String(error?.message || '');
+      if (errorMessage.includes('Invalid object name') || errorMessage.includes('Invalid column name')) {
+        return reply.code(500).send({
+          success: false,
+          error: {
+            code: 'LINEA_CAPTURA_SCHEMA_ERROR',
+            message: 'No se pudo generar la Línea de Pago porque falta una tabla o columna requerida en la base de datos.',
+            details: errorMessage,
+            timestamp: new Date().toISOString()
+          }
+        });
+      }
       return handleAplicacionesQNAError(error, reply);
     }
   });

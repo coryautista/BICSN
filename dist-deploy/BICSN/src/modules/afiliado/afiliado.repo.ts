@@ -1645,6 +1645,13 @@ export async function aplicarBDIsspeaLote(
         org1,
         usuarioId,
         afiliadosExitosos,
+        resumenFinalizacion: {
+          total: afiliadosExitosos,
+          aprobados: afiliadosExitosos,
+          cancelados: 0,
+          aplicados: 0,
+          noPermitidos: 0
+        },
         internosNuevos
       });
 
