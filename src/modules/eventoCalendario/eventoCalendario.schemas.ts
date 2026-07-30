@@ -5,6 +5,7 @@ const TipoEventoEnum = z.enum([
   'ARCHIVO_APLICACION',
   'ASUETO',
   'ALTA_BAJA_CAMBIO',
+  'BA_MOVIMIENTO',
   'PAGO',
   'HIPOTECARIO',
   'INTERESES_MORATORIOS',
@@ -22,7 +23,8 @@ export const UpdateEventoCalendarioSchema = z.object({
   fecha: z.string().date().optional(),
   tipo: TipoEventoEnum.optional(),
   anio: z.number().int().optional(),
-  createdAt: z.string().datetime().optional()
+  createdAt: z.string().datetime().optional(),
+  confirmarImpactoBA: z.boolean().optional()
 });
 
 export const EventoCalendarioIdSchema = z.object({

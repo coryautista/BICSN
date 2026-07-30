@@ -12,7 +12,10 @@ export class EventoCalendarioRepository implements IEventoCalendarioRepository {
       fecha: row.fecha,
       tipo: row.tipo,
       anio: row.anio,
-      createdAt: row.createdAt instanceof Date ? row.createdAt.toISOString() : row.createdAt
+      createdAt: row.createdAt instanceof Date ? row.createdAt.toISOString() : row.createdAt,
+      origen: row.origen || 'MANUAL',
+      periodoQna: row.periodoQna || null,
+      eventoHipotecarioId: row.eventoHipotecarioId ?? null
     };
   }
 
@@ -25,7 +28,10 @@ export class EventoCalendarioRepository implements IEventoCalendarioRepository {
           CONVERT(VARCHAR(10), fecha, 23) as fecha,
           tipo,
           anio,
-          createdAt
+          createdAt,
+          origen,
+          periodoQna,
+          eventoHipotecarioId
         FROM dbo.EventoCalendario
         WHERE id = @id
       `);
@@ -41,7 +47,10 @@ export class EventoCalendarioRepository implements IEventoCalendarioRepository {
         CONVERT(VARCHAR(10), fecha, 23) as fecha,
         tipo,
         anio,
-        createdAt
+        createdAt,
+        origen,
+        periodoQna,
+        eventoHipotecarioId
       FROM dbo.EventoCalendario
       ORDER BY fecha DESC, createdAt DESC
     `);
@@ -58,7 +67,10 @@ export class EventoCalendarioRepository implements IEventoCalendarioRepository {
           CONVERT(VARCHAR(10), fecha, 23) as fecha,
           tipo,
           anio,
-          createdAt
+          createdAt,
+          origen,
+          periodoQna,
+          eventoHipotecarioId
         FROM dbo.EventoCalendario
         WHERE anio = @anio
         ORDER BY fecha ASC
@@ -78,7 +90,10 @@ export class EventoCalendarioRepository implements IEventoCalendarioRepository {
         CONVERT(VARCHAR(10), fecha, 23) as fecha,
         tipo,
         anio,
-        createdAt
+        createdAt,
+        origen,
+        periodoQna,
+        eventoHipotecarioId
       FROM dbo.EventoCalendario
       WHERE fecha BETWEEN @fechaInicio AND @fechaFin
     `;
@@ -92,6 +107,38 @@ export class EventoCalendarioRepository implements IEventoCalendarioRepository {
 
     const result = await request.query(query);
     return result.recordset.map(this.mapRowToEventoCalendario);
+  }
+
+  async hasAplicacionQnaFinalizada(fecha: string): Promise<boolean> {
+    const date = new Date(`${fecha}T12:00:00`);
+    const quincena = date.getMonth() * 2 + (date.getDate() <= 15 ? 1 : 2);
+    const result = await this.mssqlPool.request()
+      .input('quincena', sql.Int, quincena)
+      .input('anio', sql.Int, date.getFullYear())
+      .query(`
+        SELECT TOP 1 AfectacionId
+        FROM afec.BitacoraAfectacionOrg
+        WHERE Entidad = 'AFILIADOS'
+          AND Quincena = @quincena
+          AND Anio = @anio
+          AND Accion = 'TERMINADO'
+          AND Resultado = 'OK'
+        ORDER BY ModifiedAt DESC, CreatedAt DESC
+      `);
+    return result.recordset.length > 0;
+  }
+
+  async countBaAutomaticosByHipotecarioId(eventoHipotecarioId: number): Promise<number> {
+    const result = await this.mssqlPool.request()
+      .input('eventoHipotecarioId', sql.Int, eventoHipotecarioId)
+      .query(`
+        SELECT COUNT(*) AS total
+        FROM dbo.EventoCalendario
+        WHERE tipo = 'BA_MOVIMIENTO'
+          AND origen = 'AUTOMATICO'
+          AND eventoHipotecarioId = @eventoHipotecarioId
+      `);
+    return Number(result.recordset[0]?.total || 0);
   }
 
   async create(data: CreateEventoCalendarioData): Promise<EventoCalendario> {
@@ -115,16 +162,22 @@ export class EventoCalendarioRepository implements IEventoCalendarioRepository {
       .input('tipo', sql.NVarChar(50), data.tipo)
       .input('anio', sql.Int, data.anio)
       .input('createdAt', sql.DateTime2, createdAt)
+      .input('origen', sql.NVarChar(20), data.origen || 'MANUAL')
+      .input('periodoQna', sql.NVarChar(4), data.periodoQna || null)
+      .input('eventoHipotecarioId', sql.Int, data.eventoHipotecarioId || null)
       .query(`
-        INSERT INTO dbo.EventoCalendario (fecha, tipo, anio, createdAt)
-        VALUES (@fecha, @tipo, @anio, @createdAt);
+        INSERT INTO dbo.EventoCalendario (fecha, tipo, anio, createdAt, origen, periodoQna, eventoHipotecarioId)
+        VALUES (@fecha, @tipo, @anio, @createdAt, @origen, @periodoQna, @eventoHipotecarioId);
 
         SELECT
           id,
           CONVERT(VARCHAR(10), fecha, 23) as fecha,
           tipo,
           anio,
-          createdAt
+          createdAt,
+          origen,
+          periodoQna,
+          eventoHipotecarioId
         FROM dbo.EventoCalendario
         WHERE id = SCOPE_IDENTITY()
       `);
@@ -167,7 +220,10 @@ export class EventoCalendarioRepository implements IEventoCalendarioRepository {
         CONVERT(VARCHAR(10), fecha, 23) as fecha,
         tipo,
         anio,
-        createdAt
+        createdAt,
+        origen,
+        periodoQna,
+        eventoHipotecarioId
       FROM dbo.EventoCalendario
       WHERE id = @id
     `;

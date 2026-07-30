@@ -32,6 +32,13 @@ export class CreateEventoCalendarioCommand {
     logger.info(logContext, 'Creando nuevo evento de calendario');
 
     try {
+      if (data.tipo === 'BA_MOVIMIENTO' && data.origen !== 'AUTOMATICO') {
+        const aplicacionFinalizada = await this.eventoCalendarioRepo.hasAplicacionQnaFinalizada(data.fecha);
+        if (!aplicacionFinalizada) {
+          throw new Error('APLICACION_QNA_NO_FINALIZADA');
+        }
+      }
+
       const result = await this.eventoCalendarioRepo.create(data);
 
       logger.info({
@@ -100,7 +107,7 @@ export class CreateEventoCalendarioCommand {
       throw new InvalidEventoCalendarioDataError('tipo', 'Es requerido y debe ser una cadena');
     }
 
-    const validTipos = ['ARCHIVO_APLICACION', 'ASUETO', 'ALTA_BAJA_CAMBIO', 'PAGO', 'HIPOTECARIO', 'INTERESES_MORATORIOS', 'REPORTES'];
+    const validTipos = ['ARCHIVO_APLICACION', 'ASUETO', 'ALTA_BAJA_CAMBIO', 'BA_MOVIMIENTO', 'PAGO', 'HIPOTECARIO', 'INTERESES_MORATORIOS', 'REPORTES'];
     if (!validTipos.includes(data.tipo)) {
       throw new InvalidEventoCalendarioTipoError(data.tipo);
     }

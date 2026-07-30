@@ -5,6 +5,8 @@ export interface IEventoCalendarioRepository {
   findAll(): Promise<EventoCalendario[]>;
   findByAnio(anio: number): Promise<EventoCalendario[]>;
   findByDateRange(fechaInicio: string, fechaFin: string, tipo?: string): Promise<EventoCalendario[]>;
+  hasAplicacionQnaFinalizada(fecha: string): Promise<boolean>;
+  countBaAutomaticosByHipotecarioId(eventoHipotecarioId: number): Promise<number>;
   create(data: CreateEventoCalendarioData): Promise<EventoCalendario>;
   update(data: UpdateEventoCalendarioData): Promise<EventoCalendario>;
   delete(id: number): Promise<number>;

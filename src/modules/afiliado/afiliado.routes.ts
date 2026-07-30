@@ -54,6 +54,22 @@ function getTokenUserForMovimiento(user: any): { userId: number | null; userUid:
   return { userId, userUid };
 }
 
+async function puedeCapturarMovimiento(fecha: string | null | undefined): Promise<boolean> {
+  if (!fecha) return false;
+
+  const pool = await getPool();
+  const result = await pool.request()
+    .input('fecha', sql.Date, fecha)
+    .query(`
+      SELECT TOP 1 id
+      FROM dbo.EventoCalendario
+      WHERE fecha = @fecha
+        AND tipo IN ('ALTA_BAJA_CAMBIO', 'BA_MOVIMIENTO')
+    `);
+
+  return result.recordset.length > 0;
+}
+
 async function validarMotivoBaja(motivoBajaId: number | null | undefined, tipo: 'bajaPermanente' | 'suspension') {
   if (!motivoBajaId) {
     throw new Error('MOTIVO_BAJA_REQUIRED: motivoBajaId es requerido');
@@ -1771,6 +1787,9 @@ export default async function afiliadoRoutes(app: FastifyInstance) {
       if (!parsed.data.fechaMovimiento) {
         return reply.code(400).send(fail('FECHA_MOVIMIENTO_REQUIRED: fechaMovimiento es requerida para alta'));
       }
+      if (!(await puedeCapturarMovimiento(parsed.data.fechaMovimiento))) {
+        return reply.code(400).send(fail('La fecha de movimiento no tiene una ventana ALTA_BAJA_CAMBIO o BA_MOVIMIENTO activa.', 'MOVIMIENTO_FUERA_DE_VENTANA'));
+      }
       if (!parsed.data.categoriaPuestoOrgId) {
         return reply.code(400).send(fail('CATEGORIA_PUESTO_ORG_REQUIRED: categoriaPuestoOrgId es requerida para alta'));
       }
@@ -2110,6 +2129,9 @@ export default async function afiliadoRoutes(app: FastifyInstance) {
     }
 
     try {
+      if (!(await puedeCapturarMovimiento(parsed.data.fechaMovimiento || parsed.data.fechaMov))) {
+        return reply.code(400).send(fail('La fecha de movimiento no tiene una ventana ALTA_BAJA_CAMBIO o BA_MOVIMIENTO activa.', 'MOVIMIENTO_FUERA_DE_VENTANA'));
+      }
       // Validar que el interno exista en Firebird
       const validateInternoInFirebirdQuery = req.diScope.resolve<ValidateInternoInFirebirdQuery>('validateInternoInFirebirdQuery');
       const internoExists = await validateInternoInFirebirdQuery.execute(parsed.data.interno!);
@@ -2405,6 +2427,9 @@ export default async function afiliadoRoutes(app: FastifyInstance) {
       if (!parsed.data.fechaMovimiento) {
         return reply.code(400).send(fail('FECHA_MOVIMIENTO_REQUIRED: fechaMovimiento es requerida para baja permanente'));
       }
+      if (!(await puedeCapturarMovimiento(parsed.data.fechaMovimiento))) {
+        return reply.code(400).send(fail('La fecha de movimiento no tiene una ventana ALTA_BAJA_CAMBIO o BA_MOVIMIENTO activa.', 'MOVIMIENTO_FUERA_DE_VENTANA'));
+      }
       await validarMotivoBaja(parsed.data.motivoBajaId, 'bajaPermanente');
 
       // Validar que el interno exista en Firebird
@@ -2698,6 +2723,9 @@ export default async function afiliadoRoutes(app: FastifyInstance) {
     }
 
     try {
+      if (!(await puedeCapturarMovimiento(parsed.data.fechaMovimiento || parsed.data.fechaMov))) {
+        return reply.code(400).send(fail('La fecha de movimiento no tiene una ventana ALTA_BAJA_CAMBIO o BA_MOVIMIENTO activa.', 'MOVIMIENTO_FUERA_DE_VENTANA'));
+      }
       await validarMotivoBaja(parsed.data.motivoBajaId, 'suspension');
 
       // Validar que el interno exista en Firebird
@@ -2837,6 +2865,9 @@ export default async function afiliadoRoutes(app: FastifyInstance) {
     }
 
     try {
+      if (!(await puedeCapturarMovimiento(parsed.data.fechaMovimiento || parsed.data.fechaMov))) {
+        return reply.code(400).send(fail('La fecha de movimiento no tiene una ventana ALTA_BAJA_CAMBIO o BA_MOVIMIENTO activa.', 'MOVIMIENTO_FUERA_DE_VENTANA'));
+      }
       // Validar que el interno exista en Firebird
       const validateInternoInFirebirdQuery = req.diScope.resolve<ValidateInternoInFirebirdQuery>('validateInternoInFirebirdQuery');
       const internoExists = await validateInternoInFirebirdQuery.execute(parsed.data.interno!);
@@ -2975,6 +3006,9 @@ export default async function afiliadoRoutes(app: FastifyInstance) {
     }
 
     try {
+      if (!(await puedeCapturarMovimiento(parsed.data.fechaMovimiento || parsed.data.fechaMov))) {
+        return reply.code(400).send(fail('La fecha de movimiento no tiene una ventana ALTA_BAJA_CAMBIO o BA_MOVIMIENTO activa.', 'MOVIMIENTO_FUERA_DE_VENTANA'));
+      }
       await validarMotivoBaja(parsed.data.motivoBajaId, 'bajaPermanente');
 
       // Validar que el interno exista en Firebird
