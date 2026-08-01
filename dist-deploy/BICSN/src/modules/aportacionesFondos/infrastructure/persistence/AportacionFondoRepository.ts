@@ -1,4 +1,7 @@
-import { IAportacionFondoRepository } from '../../domain/repositories/IAportacionFondoRepository.js';
+import {
+  IAportacionFondoRepository,
+  NumerosEmpleadoLookup
+} from '../../domain/repositories/IAportacionFondoRepository.js';
 import { AportacionIndividual, AportacionCompleta, TipoFondo, AportacionFondo } from '../../domain/entities/AportacionFondo.js';
 import { Prestamo } from '../../domain/entities/Prestamo.js';
 import { PrestamoMedianoPlazo } from '../../domain/entities/PrestamoMedianoPlazo.js';
@@ -17,6 +20,16 @@ type NominaAportacionInfo = {
   origen: 'nomina' | 'default';
   baseCotizacionQuinquenios: number | null;
 };
+
+const MONEY_SCALE = 1_000_000;
+
+function roundMoney(value: number): number {
+  return Math.round((value + Number.EPSILON) * MONEY_SCALE) / MONEY_SCALE;
+}
+
+function sumMoney(values: number[]): number {
+  return values.reduce((sum, value) => sum + Math.round(value * MONEY_SCALE), 0) / MONEY_SCALE;
+}
 
 export class AportacionFondoRepository implements IAportacionFondoRepository {
   private readonly DIAS_LABORADOS_DEFAULT = 15;
@@ -104,8 +117,8 @@ export class AportacionFondoRepository implements IAportacionFondoRepository {
       // Calcular resumen
       const resumen = {
         total_empleados: datos.length,
-        total_contribucion: datos.reduce((sum, item) => sum + item.total, 0),
-        total_sueldo_base: datos.reduce((sum, item) => sum + item.sueldo_base, 0)
+        total_contribucion: sumMoney(datos.map((item) => item.total)),
+        total_sueldo_base: sumMoney(datos.map((item) => item.sueldo_base))
       };
 
       return {
@@ -164,8 +177,8 @@ export class AportacionFondoRepository implements IAportacionFondoRepository {
           // Calcular resumen para este tipo
           const resumen = {
             total_empleados: datos.length,
-            total_contribucion: datos.reduce((sum, item) => sum + item.total, 0),
-            total_sueldo_base: datos.reduce((sum, item) => sum + item.sueldo_base, 0)
+            total_contribucion: sumMoney(datos.map((item) => item.total)),
+            total_sueldo_base: sumMoney(datos.map((item) => item.sueldo_base))
           };
 
           // Agregar al resultado
@@ -1231,12 +1244,16 @@ export class AportacionFondoRepository implements IAportacionFondoRepository {
       const quinquenios = registro.quinquenios || 0;
       const diasInfo = this.resolveDiasLaborados(registro.rfc, diasMap, usarDiasLaboradosNomina);
 
-      const sueldoProporcional = (sueldo / 30) * diasInfo.dias;
-      const otrasPrestacionesProporcional = (otrasPrestaciones / 30) * diasInfo.dias;
+      const sueldoProporcional = roundMoney((sueldo / 30) * diasInfo.dias);
+      const otrasPrestacionesProporcional = roundMoney((otrasPrestaciones / 30) * diasInfo.dias);
       const quinqueniosAplicado = tipo === 'prestaciones'
-        ? (diasInfo.baseCotizacionQuinquenios ?? (quinquenios / 2))
-        : ((quinquenios / 30) * diasInfo.dias);
-      const sueldoBase = sueldoProporcional + otrasPrestacionesProporcional + quinqueniosAplicado;
+        ? roundMoney(diasInfo.baseCotizacionQuinquenios ?? (quinquenios / 2))
+        : roundMoney((quinquenios / 30) * diasInfo.dias);
+      const sueldoBase = sumMoney([
+        sueldoProporcional,
+        otrasPrestacionesProporcional,
+        quinqueniosAplicado,
+      ]);
 
       // Debug: verificar que el nombre esté presente
       const nombre = registro.nombre || null;
@@ -1281,35 +1298,123 @@ export class AportacionFondoRepository implements IAportacionFondoRepository {
 
       switch (tipo) {
         case 'ahorro':
-          aportacion.afae = sueldoProporcional * porcentajes.porcentajePatron; // Patron contribution
-          aportacion.afaa = sueldoProporcional * (porcentajes.porcentajeAfiliado ?? 0);  // Employee contribution
-          aportacion.total = (aportacion.afae || 0) + (aportacion.afaa || 0);
+          aportacion.afae = roundMoney(sueldoProporcional * porcentajes.porcentajePatron);
+          aportacion.afaa = roundMoney(
+            sueldoProporcional * (porcentajes.porcentajeAfiliado ?? 0),
+          );
+          aportacion.total = sumMoney([aportacion.afae, aportacion.afaa]);
           break;
         
         case 'vivienda':
-          aportacion.afe = sueldoProporcional * porcentajes.porcentajePatron; // Patron contribution
-          aportacion.total = aportacion.afe || 0;
+          aportacion.afe = roundMoney(sueldoProporcional * porcentajes.porcentajePatron);
+          aportacion.total = aportacion.afe;
           break;
         
         case 'prestaciones':
           {
             const porcentajeAfiliado = porcentajes.porcentajeAfiliado ?? 0;
-            const basePatron = sueldoProporcional + otrasPrestacionesProporcional;
-            aportacion.afpe = (basePatron * porcentajes.porcentajePatron)
-              + (quinqueniosAplicado * (porcentajes.porcentajePatron + porcentajeAfiliado)); // Patron absorbs employee quinquenio portion
-            aportacion.afpa = (sueldoProporcional * porcentajeAfiliado); // Employee contribution only applies to salary
+            const basePatron = sumMoney([sueldoProporcional, otrasPrestacionesProporcional]);
+            aportacion.afpe = roundMoney(
+              (basePatron * porcentajes.porcentajePatron)
+                + (quinqueniosAplicado * (porcentajes.porcentajePatron + porcentajeAfiliado)),
+            );
+            aportacion.afpa = roundMoney(sueldoProporcional * porcentajeAfiliado);
           }
-          aportacion.total = (aportacion.afpe || 0) + (aportacion.afpa || 0);
+          aportacion.total = sumMoney([aportacion.afpe || 0, aportacion.afpa || 0]);
           break;
         
         case 'cair':
-          aportacion.afe = sueldoProporcional * porcentajes.porcentajePatron; // Patron contribution
-          aportacion.total = aportacion.afe || 0;
+          aportacion.afe = roundMoney(sueldoProporcional * porcentajes.porcentajePatron);
+          aportacion.total = aportacion.afe;
           break;
       }
 
       return aportacion;
     });
+  }
+
+  async obtenerNumerosEmpleado(internos: number[], rfcs: string[]): Promise<NumerosEmpleadoLookup> {
+    const internosUnicos = [...new Set(internos.filter(Number.isInteger).filter((interno) => interno > 0))];
+    const rfcsUnicos = [
+      ...new Set(
+        rfcs
+          .map((rfc) => rfc.trim().toUpperCase())
+          .filter(Boolean)
+      )
+    ];
+
+    if (internosUnicos.length === 0 && rfcsUnicos.length === 0) {
+      return { porInterno: {}, porRfc: {} };
+    }
+
+    const condiciones: string[] = [];
+    const parametros: Array<number | string> = [];
+
+    if (internosUnicos.length > 0) {
+      condiciones.push(`p.INTERNO IN (${internosUnicos.map(() => '?').join(', ')})`);
+      parametros.push(...internosUnicos);
+    }
+
+    if (rfcsUnicos.length > 0) {
+      condiciones.push(`UPPER(TRIM(p.RFC)) IN (${rfcsUnicos.map(() => '?').join(', ')})`);
+      parametros.push(...rfcsUnicos);
+    }
+
+    const query = `
+      SELECT p.INTERNO, p.RFC, p.NOEMPLEADO
+      FROM PERSONAL p
+      WHERE ${condiciones.join(' OR ')}
+    `;
+
+    return executeSerializedQuery((db) => new Promise<NumerosEmpleadoLookup>((resolve, reject) => {
+      if (!db || typeof db.query !== 'function') {
+        reject(new AportacionFondoDomainError(
+          'Conexión a Firebird no disponible o inválida',
+          AportacionFondoError.ERROR_FIREBIRD_CONEXION
+        ));
+        return;
+      }
+
+      db.query(query, parametros, (error: any, result: any) => {
+        if (error) {
+          reject(new AportacionFondoDomainError(
+            'Error al consultar números de empleado en Firebird',
+            AportacionFondoError.ERROR_FIREBIRD_CONEXION
+          ));
+          return;
+        }
+
+        const porInterno: Record<string, string> = {};
+        const numerosPorRfc = new Map<string, Set<string>>();
+        const rows = Array.isArray(result) ? result : [];
+
+        rows.map((row: any) => decodeFirebirdObject(row)).forEach((row: any) => {
+          const noempleado = String(row.NOEMPLEADO ?? '').trim();
+          if (!noempleado) return;
+
+          const interno = Number(row.INTERNO);
+          if (Number.isInteger(interno) && interno > 0) {
+            porInterno[String(interno)] = noempleado;
+          }
+
+          const rfc = String(row.RFC ?? '').trim().toUpperCase();
+          if (!rfc) return;
+
+          const numeros = numerosPorRfc.get(rfc) ?? new Set<string>();
+          numeros.add(noempleado);
+          numerosPorRfc.set(rfc, numeros);
+        });
+
+        const porRfc: Record<string, string> = {};
+        numerosPorRfc.forEach((numeros, rfc) => {
+          if (numeros.size === 1) {
+            porRfc[rfc] = [...numeros][0];
+          }
+        });
+
+        resolve({ porInterno, porRfc });
+      });
+    }));
   }
 
   private async obtenerPorcentajeFondoVigente(tipo: TipoFondo): Promise<{ porcentajePatron: number; porcentajeAfiliado: number | null }> {

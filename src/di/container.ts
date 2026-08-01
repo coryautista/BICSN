@@ -199,6 +199,7 @@ import { GetPrestamosHipotecariosQuery } from '../modules/aportacionesFondos/app
 import { GetAportacionGuarderiasQuery } from '../modules/aportacionesFondos/application/queries/GetAportacionGuarderiasQuery.js';
 import { GetPensionNominaTransitorioQuery } from '../modules/aportacionesFondos/application/queries/GetPensionNominaTransitorioQuery.js';
 import { GetAguinaldoQuery } from '../modules/aportacionesFondos/application/queries/GetAguinaldoQuery.js';
+import { GetNumerosEmpleadoQuery } from '../modules/aportacionesFondos/application/queries/GetNumerosEmpleadoQuery.js';
 import { CatalogoPorcentajeFondoRepository } from '../modules/catalogoPorcentajeFondo/infrastructure/persistence/CatalogoPorcentajeFondoRepository.js';
 import { GetAllCatalogoPorcentajeFondoQuery } from '../modules/catalogoPorcentajeFondo/application/queries/GetAllCatalogoPorcentajeFondoQuery.js';
 import { GetCatalogoPorcentajeFondoByIdQuery } from '../modules/catalogoPorcentajeFondo/application/queries/GetCatalogoPorcentajeFondoByIdQuery.js';
@@ -1278,6 +1279,7 @@ container.register({
   getAportacionGuarderiasQuery: asClass(GetAportacionGuarderiasQuery).scoped(),
   getPensionNominaTransitorioQuery: asClass(GetPensionNominaTransitorioQuery).scoped(),
   getAguinaldoQuery: asClass(GetAguinaldoQuery).scoped(),
+  getNumerosEmpleadoQuery: asClass(GetNumerosEmpleadoQuery).scoped(),
 
   // ============================================================================
   // CATALOGO PORCENTAJE FONDO MODULE

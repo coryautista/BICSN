@@ -6,6 +6,11 @@ import { AportacionGuarderia } from '../entities/AportacionGuarderia.js';
 import { PensionNominaTransitorio } from '../entities/PensionNominaTransitorio.js';
 import { Aguinaldo } from '../entities/Aguinaldo.js';
 
+export type NumerosEmpleadoLookup = {
+  porInterno: Record<string, string>;
+  porRfc: Record<string, string>;
+};
+
 export interface IAportacionFondoRepository {
   // Obtener aportaciones de un tipo específico
   obtenerAportacionesIndividuales(
@@ -43,6 +48,9 @@ export interface IAportacionFondoRepository {
     periodo: string,
     computadoraAntigua?: boolean
   ): Promise<PrestamoHipotecario[]>;
+
+  // Obtiene números de empleado canónicos desde PERSONAL para cruces de retenciones.
+  obtenerNumerosEmpleado(internos: number[], rfcs: string[]): Promise<NumerosEmpleadoLookup>;
   
   // Obtener período de aplicación desde BitacoraAfectacionOrg
   obtenerPeriodoAplicacion(org0: string, org1: string): Promise<{ periodo: string; accion: string }>;

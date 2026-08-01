@@ -41,10 +41,11 @@ export async function createAfiliadoAfiliadoOrgMovimiento(data: {
         SELECT id, interno, quincenaAplicacion, anioAplicacion
         FROM afi.Afiliado
         WHERE interno = @interno
-          AND quincenaAplicacion = @quincenaAplicacion
-          AND anioAplicacion = @anioAplicacion
-          AND estatus = 1
-      `);
+           AND quincenaAplicacion = @quincenaAplicacion
+           AND anioAplicacion = @anioAplicacion
+           AND estatus = 1
+           AND numValidacion = 1
+       `);
 
     if (dupResult.recordset.length > 0) {
       const error = new AfiliadoAlreadyExistsError({

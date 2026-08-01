@@ -12,6 +12,13 @@ export const AportacionesCompletasSchema = z.object({
   clave_organica_1: z.string().min(1).max(2).optional()
 });
 
+export const NumerosEmpleadoLookupSchema = z.object({
+  internos: z.array(z.number().int().positive()).max(1000).default([]),
+  rfcs: z.array(z.string().trim().min(1).max(13)).max(1000).default([])
+}).refine((value) => value.internos.length > 0 || value.rfcs.length > 0, {
+  message: 'Se requiere al menos un interno o RFC'
+});
+
 // Esquemas para respuestas de la API
 export const AportacionFondoResponseSchema = z.object({
   interno: z.number(),
@@ -60,6 +67,7 @@ export const AportacionCompletaResponseSchema = z.object({
 
 export type AportacionesIndividualesInput = z.infer<typeof AportacionesIndividualesSchema>;
 export type AportacionesCompletasInput = z.infer<typeof AportacionesCompletasSchema>;
+export type NumerosEmpleadoLookupInput = z.infer<typeof NumerosEmpleadoLookupSchema>;
 export type AportacionFondoResponse = z.infer<typeof AportacionFondoResponseSchema>;
 export type AportacionIndividualResponse = z.infer<typeof AportacionIndividualResponseSchema>;
 export type AportacionCompletaResponse = z.infer<typeof AportacionCompletaResponseSchema>;

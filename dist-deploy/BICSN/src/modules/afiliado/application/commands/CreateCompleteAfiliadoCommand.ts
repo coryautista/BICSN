@@ -78,10 +78,11 @@ export class CreateCompleteAfiliadoCommand {
           SELECT id, interno, quincenaAplicacion, anioAplicacion
           FROM afi.Afiliado
           WHERE interno = @interno
-            AND quincenaAplicacion = @quincenaAplicacion
-            AND anioAplicacion = @anioAplicacion
-            AND estatus = 1
-        `);
+             AND quincenaAplicacion = @quincenaAplicacion
+             AND anioAplicacion = @anioAplicacion
+             AND estatus = 1
+             AND numValidacion = 1
+         `);
 
       if (dupResult.recordset.length > 0) {
         logger.warn({ ...logContext, interno, quincenaAplicacion, anioAplicacion, duplicateId: dupResult.recordset[0].id }, 'Ya existe registro para este interno en la misma quincena/año');

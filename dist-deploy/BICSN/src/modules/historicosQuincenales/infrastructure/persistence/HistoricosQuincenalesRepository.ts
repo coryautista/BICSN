@@ -4,6 +4,16 @@ import { executeSafeQuery } from '../../../../db/firebird.js';
 import { HistoricoQuincenalFilters, HistoricoQuincenalResult, HistoricoTipoConfig } from '../../domain/entities/HistoricoQuincenal.js';
 import { IHistoricosQuincenalesRepository } from '../../domain/repositories/IHistoricosQuincenalesRepository.js';
 
+const MONEY_SCALE = 1_000_000;
+
+function roundMoney(value: number): number {
+  return Math.round((value + Number.EPSILON) * MONEY_SCALE) / MONEY_SCALE;
+}
+
+function sumMoney(values: number[]): number {
+  return values.reduce((sum, value) => sum + Math.round(value * MONEY_SCALE), 0) / MONEY_SCALE;
+}
+
 const CONFIGS: Record<string, HistoricoTipoConfig> = {
   'aportaciones:ahorro': {
     grupo: 'aportaciones',
@@ -303,28 +313,32 @@ export class HistoricosQuincenalesRepository implements IHistoricosQuincenalesRe
     const sueldo = Number(row.sueldo ?? row.Sueldo ?? 0);
     const otrasPrestaciones = Number(row.otras_prestaciones ?? row.OtrasPrestaciones ?? 0);
     const quinquenios = Number(row.quinquenios ?? row.Quinquenios ?? 0);
-    const sueldoProporcional = (sueldo / 30) * dias;
-    const otrasPrestacionesProporcional = (otrasPrestaciones / 30) * dias;
-    const quinqueniosProporcional = (quinquenios / 30) * dias;
-    const sueldoBase = sueldoProporcional + otrasPrestacionesProporcional + quinqueniosProporcional;
+    const sueldoProporcional = roundMoney((sueldo / 30) * dias);
+    const otrasPrestacionesProporcional = roundMoney((otrasPrestaciones / 30) * dias);
+    const quinqueniosProporcional = roundMoney((quinquenios / 30) * dias);
+    const sueldoBase = sumMoney([
+      sueldoProporcional,
+      otrasPrestacionesProporcional,
+      quinqueniosProporcional,
+    ]);
 
     if (![sueldo, otrasPrestaciones, quinquenios, sueldoProporcional, sueldoBase].every(Number.isFinite)) return row;
 
     if (tipo === 'ahorro') {
-      const afae = sueldoProporcional * porcentajes.porcentajePatron;
-      const afaa = sueldoProporcional * porcentajes.porcentajeAfiliado;
-      return { ...row, sueldo_base: sueldoBase, afae, afaa, total: afae + afaa };
+      const afae = roundMoney(sueldoProporcional * porcentajes.porcentajePatron);
+      const afaa = roundMoney(sueldoProporcional * porcentajes.porcentajeAfiliado);
+      return { ...row, sueldo_base: sueldoBase, afae, afaa, total: sumMoney([afae, afaa]) };
     }
 
     if (tipo === 'vivienda' || tipo === 'cair') {
-      const afe = sueldoProporcional * porcentajes.porcentajePatron;
+      const afe = roundMoney(sueldoProporcional * porcentajes.porcentajePatron);
       return { ...row, sueldo_base: sueldoBase, afe, total: afe };
     }
 
     if (tipo === 'prestaciones') {
-      const afpe = sueldoBase * porcentajes.porcentajePatron;
-      const afpa = sueldoBase * porcentajes.porcentajeAfiliado;
-      return { ...row, sueldo_base: sueldoBase, afpe, afpa, total: afpe + afpa };
+      const afpe = roundMoney(sueldoBase * porcentajes.porcentajePatron);
+      const afpa = roundMoney(sueldoBase * porcentajes.porcentajeAfiliado);
+      return { ...row, sueldo_base: sueldoBase, afpe, afpa, total: sumMoney([afpe, afpa]) };
     }
 
     return row;

@@ -70,6 +70,49 @@ async function puedeCapturarMovimiento(fecha: string | null | undefined): Promis
   return result.recordset.length > 0;
 }
 
+async function resolverEntregaRendimiento(
+  interno: number,
+  entregaRendimiento: 'Si' | 'No' | null | undefined,
+): Promise<'Si' | 'No' | null> {
+  if (entregaRendimiento) return entregaRendimiento;
+
+  const pool = await getPool();
+  const result = await pool.request()
+    .input('interno', sql.Int, interno)
+    .query(`
+      SELECT TOP 1 m.entregaRendimiento
+      FROM afi.Movimiento m
+      INNER JOIN afi.Afiliado a ON a.id = m.afiliadoId
+      WHERE a.interno = @interno
+        AND m.entregaRendimiento IN ('Si', 'No')
+      ORDER BY m.createdAt DESC, m.id DESC
+    `);
+
+  return result.recordset[0]?.entregaRendimiento ?? null;
+}
+
+async function obtenerNombreBajaPermanenteExistente(interno: number): Promise<string | null> {
+  const pool = await getPool();
+  const result = await pool.request()
+    .input('interno', sql.Int, interno)
+    .query(`
+      SELECT TOP 1 a.nombre, a.apellidoPaterno, a.apellidoMaterno
+      FROM afi.Afiliado a
+      INNER JOIN afi.Movimiento m ON m.afiliadoId = a.id
+      WHERE a.interno = @interno
+        AND m.tipoMovimientoId = 2
+        AND a.numValidacion IN (1, 2, 3, 7)
+      ORDER BY a.createdAt DESC, m.id DESC
+    `);
+
+  const afiliado = result.recordset[0];
+  if (!afiliado) return null;
+
+  return [afiliado.nombre, afiliado.apellidoPaterno, afiliado.apellidoMaterno]
+    .filter((nombre): nombre is string => typeof nombre === 'string' && nombre.trim().length > 0)
+    .join(' ');
+}
+
 async function validarMotivoBaja(motivoBajaId: number | null | undefined, tipo: 'bajaPermanente' | 'suspension') {
   if (!motivoBajaId) {
     throw new Error('MOTIVO_BAJA_REQUIRED: motivoBajaId es requerido');
@@ -2140,7 +2183,7 @@ export default async function afiliadoRoutes(app: FastifyInstance) {
       }
 
       const { userId, userUid } = getTokenUserForMovimiento(req.user);
-      
+
       // Obtener claveOrganica0 a claveOrganica3 del body o del usuario autenticado
       // Si se envían en el body, se usan esos valores; si no, se obtienen del usuario
       const claveOrganica0 = req.user?.idOrganica0 ?? null;
@@ -2263,7 +2306,7 @@ export default async function afiliadoRoutes(app: FastifyInstance) {
           // Movimiento fields
           fechaMovimiento: { type: 'string', format: 'date', nullable: true, description: 'Fecha efectiva de la baja para calcular días laborados' },
           observaciones: { type: 'string', maxLength: 1024, nullable: true },
-          entregaRendimiento: { type: 'string', enum: ['Si', 'No'], nullable: true, description: 'Indica si se entrega rendimiento' },
+          entregaRendimiento: { type: 'string', enum: ['Si', 'No', null], nullable: true, description: 'Indica si se entrega rendimiento' },
           motivoBajaId: { type: 'number', minimum: 1, nullable: true, description: 'Motivo de baja seleccionado del catalogo afi.CatalogoMotivoBaja' }
         }
       },
@@ -2439,7 +2482,21 @@ export default async function afiliadoRoutes(app: FastifyInstance) {
         return reply.code(404).send(fail('INTERNO_NOT_FOUND_IN_FIREBIRD: El número de interno no existe en las tablas PERSONAL y ORG_PERSONAL'));
       }
 
+      const nombreBajaExistente = await obtenerNombreBajaPermanenteExistente(parsed.data.interno);
+      if (nombreBajaExistente) {
+        return reply.code(400).send(
+          fail(
+            `Ya existe una baja permanente pendiente de aprobación, aplicación o ya aplicada para ${nombreBajaExistente}.`,
+            'BAJA_PERMANENTE_EXISTENTE',
+          ),
+        );
+      }
+
       const { userId, userUid } = getTokenUserForMovimiento(req.user);
+      const entregaRendimiento = await resolverEntregaRendimiento(
+        parsed.data.interno,
+        parsed.data.entregaRendimiento,
+      );
 
       // Obtener claveOrganica0 a claveOrganica3 del body o del usuario autenticado
       // Si se envían en el body, se usan esos valores; si no, se obtienen del usuario
@@ -2469,7 +2526,7 @@ export default async function afiliadoRoutes(app: FastifyInstance) {
         interno: parsed.data.interno, // Usar el interno del body (obligatorio)
         creadoPor: userId,
         creadoPorUid: userUid,
-        entregaRendimiento: parsed.data.entregaRendimiento ?? null,
+        entregaRendimiento,
         tipoMovimientoId: 2, // BAJA PERMANENTE
         fechaMovimiento: parsed.data.fechaMovimiento ?? null,
         domicilioNumeroInterior: parsed.data.domicilioNumeroInterior ?? '',

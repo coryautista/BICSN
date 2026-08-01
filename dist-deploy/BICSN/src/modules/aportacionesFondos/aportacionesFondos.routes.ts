@@ -1,6 +1,10 @@
 import { FastifyInstance } from 'fastify';
 import { requireAuth } from '../auth/auth.middleware.js';
-import { AportacionesIndividualesSchema, AportacionesCompletasSchema } from './aportacionesFondos.schemas.js';
+import {
+  AportacionesIndividualesSchema,
+  AportacionesCompletasSchema,
+  NumerosEmpleadoLookupSchema
+} from './aportacionesFondos.schemas.js';
 import { ok, fail, unauthorized } from '../../utils/http.js';
 import { normalizeClaveOrganica } from '../../utils/organica.js';
 import { GetAportacionesIndividualesQuery } from './application/queries/GetAportacionesIndividualesQuery.js';
@@ -11,10 +15,44 @@ import { GetPrestamosHipotecariosQuery } from './application/queries/GetPrestamo
 import { GetAportacionGuarderiasQuery } from './application/queries/GetAportacionGuarderiasQuery.js';
 import { GetPensionNominaTransitorioQuery } from './application/queries/GetPensionNominaTransitorioQuery.js';
 import { GetAguinaldoQuery } from './application/queries/GetAguinaldoQuery.js';
+import { GetNumerosEmpleadoQuery } from './application/queries/GetNumerosEmpleadoQuery.js';
 import { handleAportacionesFondosError } from './infrastructure/errorHandler.js';
 
 // Routes for fund contributions operations
 export default async function aportacionesFondosRoutes(app: FastifyInstance) {
+
+  app.post('/aportacionesFondos/no-empleados', {
+    preHandler: [requireAuth],
+    schema: {
+      description: 'Obtiene números de empleado desde PERSONAL para cruces de retenciones',
+      tags: ['aportacionesFondos', 'firebird'],
+      security: [{ bearerAuth: [] }],
+      body: {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          internos: { type: 'array', maxItems: 1000, items: { type: 'integer', minimum: 1 } },
+          rfcs: { type: 'array', maxItems: 1000, items: { type: 'string', minLength: 1, maxLength: 13 } }
+        }
+      }
+    }
+  }, async (req, reply) => {
+    try {
+      if (!req.user) {
+        return reply.code(401).send(unauthorized('Usuario no autenticado'));
+      }
+
+      const parsed = NumerosEmpleadoLookupSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return reply.code(400).send(fail('Parámetros de consulta inválidos', 'PARAMETRO_INVALIDO'));
+      }
+
+      const query = req.diScope.resolve<GetNumerosEmpleadoQuery>('getNumerosEmpleadoQuery');
+      return reply.send(ok(await query.execute(parsed.data.internos, parsed.data.rfcs)));
+    } catch (error: any) {
+      return handleAportacionesFondosError(error, reply);
+    }
+  });
 
   // GET /aportacionesFondos/individuales/:tipo - Get individual fund contributions
   app.get('/aportacionesFondos/individuales/:tipo', {
