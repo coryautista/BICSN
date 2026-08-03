@@ -109,21 +109,33 @@ export class EventoCalendarioRepository implements IEventoCalendarioRepository {
     return result.recordset.map(this.mapRowToEventoCalendario);
   }
 
-  async hasAplicacionQnaFinalizada(fecha: string): Promise<boolean> {
-    const date = new Date(`${fecha}T12:00:00`);
-    const quincena = date.getMonth() * 2 + (date.getDate() <= 15 ? 1 : 2);
+  async hasAplicacionQnaFinalizada(fecha: string, org0: string, org1: string): Promise<boolean> {
     const result = await this.mssqlPool.request()
-      .input('quincena', sql.Int, quincena)
-      .input('anio', sql.Int, date.getFullYear())
+      .input('fecha', sql.Date, fecha)
+      .input('org0', sql.VarChar(2), org0)
+      .input('org1', sql.VarChar(2), org1)
       .query(`
-        SELECT TOP 1 AfectacionId
-        FROM afec.BitacoraAfectacionOrg
-        WHERE Entidad = 'AFILIADOS'
-          AND Quincena = @quincena
-          AND Anio = @anio
-          AND Accion = 'TERMINADO'
-          AND Resultado = 'OK'
-        ORDER BY ModifiedAt DESC, CreatedAt DESC
+        DECLARE @HipotecarioAnterior DATE = (
+          SELECT MAX(fecha) FROM dbo.EventoCalendario
+          WHERE tipo = 'HIPOTECARIO' AND fecha < @fecha
+        );
+        DECLARE @HipotecarioSiguiente DATE = (
+          SELECT MIN(fecha) FROM dbo.EventoCalendario
+          WHERE tipo = 'HIPOTECARIO' AND fecha > @fecha
+        );
+
+        SELECT TOP (1) b.AfectacionId
+        FROM afec.BitacoraAfectacionOrg b
+        WHERE @HipotecarioAnterior IS NOT NULL
+          AND @HipotecarioSiguiente IS NOT NULL
+          AND b.Entidad = 'AFILIADOS'
+          AND b.Org0 = @org0
+          AND b.Org1 = @org1
+          AND b.Accion IN ('APLICAR', 'TERMINADO')
+          AND b.Resultado = 'OK'
+          AND CAST(b.CreatedAt AS DATE) > @HipotecarioAnterior
+          AND CAST(b.CreatedAt AS DATE) < @HipotecarioSiguiente
+        ORDER BY b.CreatedAt DESC
       `);
     return result.recordset.length > 0;
   }

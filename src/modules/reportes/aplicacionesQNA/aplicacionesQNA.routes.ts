@@ -885,13 +885,14 @@ export async function aplicacionesQNARoutes(fastify: FastifyInstance) {
   fastify.post('/sincronizar-periodo-trabajo', {
     preHandler: [requireAuth],
     schema: {
-      description: 'Obtiene la QNA actual desde Firebird y crea su bitácora si aún no existe. Solo cierra registros APLICAR de periodos anteriores.',
+      description: 'Obtiene la QNA actual desde Firebird y crea su bitácora únicamente cuando la QNA anterior está TERMINADO y tiene Línea de Pago.',
       summary: 'Sincronizar período de trabajo',
       tags: ['reportes', 'aplicaciones-qna', 'firebird'],
       security: [{ bearerAuth: [] }],
       response: {
         200: { type: 'object' },
         400: { type: 'object' },
+        409: { type: 'object' },
         500: { type: 'object' }
       }
     }
@@ -942,20 +943,41 @@ export async function aplicacionesQNARoutes(fastify: FastifyInstance) {
 
         let created = false;
         if (current.recordset.length === 0) {
-          await new sql.Request(transaction)
+          const anteriorPendiente = await new sql.Request(transaction)
             .input('org0', sql.Char(2), org0)
             .input('org1', sql.Char(2), org1)
             .input('quincena', sql.TinyInt, quincena)
             .input('anio', sql.SmallInt, anio)
             .query(`
-              UPDATE afec.BitacoraAfectacionOrg
-              SET Accion = 'TERMINADO'
-              WHERE Entidad = 'AFILIADOS'
-                AND Org0 = @org0
-                AND Org1 = @org1
-                AND UPPER(Accion) = 'APLICAR'
+              SELECT TOP 1 AfectacionId, Quincena, Anio, Accion, Resultado
+              FROM afec.BitacoraAfectacionOrg
+              WHERE Entidad = 'AFILIADOS' AND Org0 = @org0 AND Org1 = @org1
                 AND (Anio < @anio OR (Anio = @anio AND Quincena < @quincena))
+                AND (
+                  Accion <> 'TERMINADO'
+                  OR NOT EXISTS (
+                    SELECT 1 FROM pagos.LineaCapturaPeriodo l
+                    WHERE l.Org0 = @org0 AND l.Org1 = @org1
+                      AND l.Periodo = RIGHT('0' + CONVERT(VARCHAR(2), Quincena), 2) + RIGHT(CONVERT(VARCHAR(4), Anio), 2)
+                  )
+                )
+              ORDER BY Anio DESC, Quincena DESC, CreatedAt DESC
             `);
+          if (anteriorPendiente.recordset.length > 0) {
+            await transaction.rollback();
+            const pendiente = anteriorPendiente.recordset[0];
+            return reply.send({
+              success: true,
+              data: {
+                periodo: `${String(pendiente.Quincena).padStart(2, '0')}${String(pendiente.Anio).slice(-2)}`,
+                quincena: Number(pendiente.Quincena),
+                anio: Number(pendiente.Anio),
+                created: false,
+                blockedByPendingQna: true
+              },
+              timestamp: new Date().toISOString()
+            });
+          }
 
           await new sql.Request(transaction)
             .input('Entidad', sql.NVarChar(128), 'AFILIADOS')

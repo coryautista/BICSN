@@ -57,7 +57,6 @@ export const LineaCapturaParamsSchema = z.object({
 // Schema para generar y guardar línea de captura por período
 export const LineaCapturaPeriodoBodySchema = z.object({
   periodo: z.string().regex(/^\d{4}$/, 'Periodo debe tener formato QQAA, ejemplo 1026'),
-  importe: z.number().positive().describe('Importe total con centavos (ej: 1000.00)'),
   idOrg0: z.string().regex(/^[A-Za-z0-9]{1,2}$/).optional().describe('Clave orgánica nivel 0 (solo admin puede enviarla)'),
   idOrg1: z.string().regex(/^[A-Za-z0-9]{1,2}$/).optional().describe('Clave orgánica nivel 1 (solo admin puede enviarla)')
 });

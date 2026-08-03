@@ -1,5 +1,11 @@
 import pino from 'pino';
-import { executeExecutableProcedure, executeSelectableProcedure, FIREBIRD_TIMEOUTS } from '../../../../db/firebird.js';
+import {
+  executeExecutableProcedure,
+  executeProcedureInTransaction,
+  executeQueryInTransaction,
+  executeSelectableProcedure,
+  FIREBIRD_TIMEOUTS
+} from '../../../../db/firebird.js';
 
 const logger = pino({
   name: 'afiliado-bdisspea-firebird-service',
@@ -11,7 +17,8 @@ export async function ejecutarAP_P_APLICAR(
   org1: string,
   quincenaC: string,
   quincenaA: string,
-  tipo: string
+  tipo: string,
+  tx?: unknown
 ): Promise<void> {
   const logContext = {
     operation: 'ejecutarAP_P_APLICAR',
@@ -40,9 +47,12 @@ export async function ejecutarAP_P_APLICAR(
   ensureMatch(tipo, /^[A-Z]$/, 'tipo');
 
   try {
-    await executeExecutableProcedure('AP_P_APLICAR', [org0, org1, quincenaC, quincenaA, tipo], {
-      timeoutMs: FIREBIRD_TIMEOUTS.HEAVY_SP
-    });
+    const params = [org0, org1, quincenaC, quincenaA, tipo];
+    if (tx) {
+      await executeProcedureInTransaction(tx, 'AP_P_APLICAR', params);
+    } else {
+      await executeExecutableProcedure('AP_P_APLICAR', params, { timeoutMs: FIREBIRD_TIMEOUTS.HEAVY_SP });
+    }
 
     const duration = Date.now() - startTime;
     logger.info({
@@ -79,7 +89,8 @@ export async function ejecutarEBI2_RECIBOS_AP(
   org2: string,
   org3: string,
   periodo: string,
-  accion: 'APLICAR'
+  accion: 'APLICAR',
+  tx?: unknown
 ): Promise<EBI2RecibosApResult> {
   const logContext = {
     operation: 'ejecutarEBI2_RECIBOS_AP',
@@ -107,9 +118,10 @@ export async function ejecutarEBI2_RECIBOS_AP(
   }
 
   try {
-    const resultRows = await executeSelectableProcedure('EBI2_RECIBOS_AP', [org0, org1, org2, org3, periodo, accion], {
-      timeoutMs: FIREBIRD_TIMEOUTS.HEAVY_SP
-    });
+    const params = [org0, org1, org2, org3, periodo, accion];
+    const resultRows = tx
+      ? await executeQueryInTransaction(tx, 'SELECT * FROM EBI2_RECIBOS_AP(?, ?, ?, ?, ?, ?)', params)
+      : await executeSelectableProcedure('EBI2_RECIBOS_AP', params, { timeoutMs: FIREBIRD_TIMEOUTS.HEAVY_SP });
     const result = resultRows[0] ?? {};
     if (result.ERROR === true) {
       throw new Error(result.MENSAJE || 'EBI2_RECIBOS_AP reportó un error sin mensaje.');

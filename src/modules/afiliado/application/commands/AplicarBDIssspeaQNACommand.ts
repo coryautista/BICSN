@@ -1,5 +1,5 @@
 import pino from 'pino';
-import { actualizarBitacoraAfectacionOrgTerminadoPorAfectacionId, marcarBitacoraPendienteLineaPago, verificarAplicacionMovimientosFinalizada } from '../../infrastructure/services/AfiliadoBdiSspeaService.js';
+import { actualizarBitacoraAfectacionOrgTerminadoPorAfectacionId, marcarBitacoraPendienteLineaPago, registrarSiguienteQnaSiDisponible, verificarAplicacionMovimientosFinalizada } from '../../infrastructure/services/AfiliadoBdiSspeaService.js';
 import { ejecutarAP_P_APLICAR, ejecutarEBI2_RECIBOS_AP } from '../../infrastructure/services/AfiliadoBdiSspeaFirebirdService.js';
 import { getQuincenaAplicacion } from '../../infrastructure/services/AfiliadoQuincenaService.js';
 import { crearAplicacionQnaLogPayload, guardarAplicacionQnaLogFtp } from '../../infrastructure/services/AplicacionQnaLogFtpService.js';
@@ -493,6 +493,14 @@ export class AplicarBDIssspeaQNACommand {
         console.error(`❌ [${paso5Time}ms] Error actualizando BitacoraAfectacionOrg: ${errorMsg}`);
         // NO lanzar error aquí - los stored procedures ya fueron exitosos
         // Solo loguear el error pero continuar
+      }
+
+      if (bitacoraActualizada) {
+        try {
+          await registrarSiguienteQnaSiDisponible(data.org0, data.org1, quincena, data.usuarioId);
+        } catch (error: any) {
+          logger.error({ ...logContext, quincena, error: error.message || String(error) }, 'No se pudo registrar la siguiente QNA');
+        }
       }
 
       // Resumen final

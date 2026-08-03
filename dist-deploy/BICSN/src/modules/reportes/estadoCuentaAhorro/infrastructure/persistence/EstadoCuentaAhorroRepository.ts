@@ -204,15 +204,13 @@ export class EstadoCuentaAhorroRepository implements IEstadoCuentaAhorroReposito
       });
     }
 
-    // El parámetro TIPO no tiene catálogo funcional validado; ejecutarlo con un valor supuesto corrompería el reporte.
-    incidencias.push({
-      severidad: 'ADVERTENCIA',
-      codigo: 'SAR_DEVOLUCION_SIN_CATALOGO_TIPO',
-      mensaje: 'SAR_DEVOLUCION_REPORTE no se ejecutó porque falta validar los valores de TIPO para activos, licencias y capitalizaciones.',
-      procedimientoOrigen: 'SAR_DEVOLUCION_REPORTE',
-      parametros: this.obtenerRangoFechas(parametros.quincena, parametros.anio)
-    });
-    fuentes.devolucionesIntereses = [];
+    const rangoFechas = this.obtenerRangoFechas(parametros.quincena, parametros.anio);
+    await ejecutar('devolucionesEntregadas', 'SAR_DEVOLUCION_REPORTE (TIPO E)', () =>
+      this.obtenerDevolucionesIntereses(rangoFechas.fechaInicio, rangoFechas.fechaFin, 'E', parametros));
+    await ejecutar('devolucionesCanceladas', 'SAR_DEVOLUCION_REPORTE (TIPO C)', () =>
+      this.obtenerDevolucionesIntereses(rangoFechas.fechaInicio, rangoFechas.fechaFin, 'C', parametros));
+    await ejecutar('devolucionesEnTramite', 'SAR_DEVOLUCION_REPORTE (TIPO T)', () =>
+      this.obtenerDevolucionesIntereses(rangoFechas.fechaInicio, rangoFechas.fechaFin, 'T', parametros));
 
     const fuentesPendientes = [
       'HISTORIAL_MOVIMIENTOS_QUIN',
@@ -251,8 +249,16 @@ export class EstadoCuentaAhorroRepository implements IEstadoCuentaAhorroReposito
     return this.consultarFirebird('SELECT * FROM SAR_TOTAL_A_ORG(?)', [periodo]);
   }
 
-  private obtenerDevolucionesIntereses(fechaInicio: string, fechaFin: string, tipo: string) {
-    return this.consultarFirebird('SELECT * FROM SAR_DEVOLUCION_REPORTE(?, ?, ?)', [fechaInicio, fechaFin, tipo]);
+  private async obtenerDevolucionesIntereses(fechaInicio: string, fechaFin: string, tipo: 'E' | 'C' | 'T', parametros: ParametrosEstadoCuentaAhorro) {
+    const registros = await this.consultarFirebird('SELECT * FROM SAR_DEVOLUCION_REPORTE(?, ?, ?)', [
+      new Date(`${fechaInicio}T00:00:00`),
+      new Date(`${fechaFin}T00:00:00`),
+      tipo
+    ]);
+    return registros
+      .filter((registro) => ['ORG00', 'ORG11', 'ORG22', 'ORG33'].every((campo, indice) =>
+        String(registro[campo] ?? '').trim() === [parametros.org0, parametros.org1, parametros.org2, parametros.org3][indice]))
+      .map((registro) => ({ ...registro, TIPO_REPORTE: tipo }));
   }
 
   private obtenerReingresos(periodo: string) {
@@ -286,7 +292,7 @@ export class EstadoCuentaAhorroRepository implements IEstadoCuentaAhorroReposito
     return resultado.recordset;
   }
 
-  private consultarFirebird(consulta: string, parametros: string[]): Promise<RegistroFuente[]> {
+  private consultarFirebird(consulta: string, parametros: unknown[]): Promise<RegistroFuente[]> {
     return executeSerializedQuery((db) => new Promise<RegistroFuente[]>((resolve, reject) => {
       db.query(consulta, parametros, (error: Error | null, resultado: RegistroFuente[] | undefined) => {
         if (error) {
@@ -356,6 +362,9 @@ export class EstadoCuentaAhorroRepository implements IEstadoCuentaAhorroReposito
       ['historialPromedio', 'HISTORIAL_MOV_PROMEDIO_SDO'],
       ['adeudoOrganica', 'ADEUDO_ORGANICA_LAYOUT'],
       ['sarTotal', 'SAR_TOTAL_A_ORG'],
+      ['devolucionesEntregadas', 'SAR_DEVOLUCION_REPORTE (TIPO E)'],
+      ['devolucionesCanceladas', 'SAR_DEVOLUCION_REPORTE (TIPO C)'],
+      ['devolucionesEnTramite', 'SAR_DEVOLUCION_REPORTE (TIPO T)'],
       ['reingresos', 'AP_G_FONDOS_REINGRESO'],
       ['pensionTransitorio', 'PENSION_NOMINA_QNAL_TRANSITORIO'],
       ['altasBajas', 'AP_G_FONDOS_ALTBAJ']

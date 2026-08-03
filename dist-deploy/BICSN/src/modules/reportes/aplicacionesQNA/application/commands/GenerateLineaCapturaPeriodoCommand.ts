@@ -6,8 +6,9 @@ export interface GenerateLineaCapturaPeriodoParams {
   org0: string;
   org1: string;
   periodo: string;
-  importe: number;
   usuarioId?: string;
+  omitirValidacionEstado?: boolean;
+  finalizarPendiente?: boolean;
 }
 
 export interface GenerateLineaCapturaPeriodoResult extends LineaCapturaPeriodoRecord {
@@ -22,6 +23,12 @@ export class GenerateLineaCapturaPeriodoCommand {
 
   async execute(params: GenerateLineaCapturaPeriodoParams): Promise<GenerateLineaCapturaPeriodoResult> {
     const periodoInfo = parsePeriodo(params.periodo);
+    const estado = params.omitirValidacionEstado
+      ? null
+      : await this.lineaCapturaPeriodoRepo.findEstadoPeriodo(params.org0, params.org1, params.periodo);
+    if (!params.omitirValidacionEstado && !estado?.habilitaLineaPago) {
+      throw new Error('APLICACION_QNA_NO_HABILITA_LINEA_PAGO');
+    }
     const historico = await this.lineaCapturaPeriodoRepo.calcularImporteHistorico(params.org0, params.org1, params.periodo);
     if (historico.totalRegistros === 0 || historico.importe <= 0) {
       throw new Error('HISTORICO_APLICADO_NOT_FOUND');
@@ -38,6 +45,9 @@ export class GenerateLineaCapturaPeriodoCommand {
         };
         error.details = { importeLinea: existingImporte, importeHistorico: importe };
         throw error;
+      }
+      if (params.finalizarPendiente && estado?.pendienteLineaPago) {
+        await this.lineaCapturaPeriodoRepo.finalizarAfectacion(estado.afectacionId, params.usuarioId);
       }
       return { ...existing, reutilizada: true };
     }
@@ -84,6 +94,9 @@ export class GenerateLineaCapturaPeriodoCommand {
         usuarioId: params.usuarioId
       });
 
+      if (params.finalizarPendiente && estado?.pendienteLineaPago) {
+        await this.lineaCapturaPeriodoRepo.finalizarAfectacion(estado.afectacionId, params.usuarioId);
+      }
       return { ...created, reutilizada: false };
     } catch (error: any) {
       const duplicate = await this.lineaCapturaPeriodoRepo.findVigente(params.org0, params.org1, params.periodo);
@@ -95,6 +108,9 @@ export class GenerateLineaCapturaPeriodoCommand {
           };
           mismatch.details = { importeLinea: duplicateImporte, importeHistorico: importe };
           throw mismatch;
+        }
+        if (params.finalizarPendiente && estado?.pendienteLineaPago) {
+          await this.lineaCapturaPeriodoRepo.finalizarAfectacion(estado.afectacionId, params.usuarioId);
         }
         return { ...duplicate, reutilizada: true };
       }

@@ -1415,12 +1415,37 @@ export class AplicacionesQNARepository implements IAplicacionesQNARepository {
         .input('Org0', sql.Char(2), org0Normalized)
         .input('Org1', sql.Char(2), org1Normalized)
         .query(`
+          WITH PeriodoPendienteLinea AS (
+            SELECT TOP 1 b.Quincena, b.Anio, b.Accion, 0 AS Prioridad
+            FROM afec.BitacoraAfectacionOrg b
+            WHERE b.Org0 = @Org0
+              AND b.Org1 = @Org1
+              AND b.Entidad = 'AFILIADOS'
+              AND b.AplicacionMovimientosFinalizada = 1
+              AND NOT EXISTS (
+                SELECT 1
+                FROM pagos.LineaCapturaPeriodo l
+                WHERE l.Org0 = b.Org0
+                  AND l.Org1 = b.Org1
+                  AND l.Periodo = RIGHT('0' + CONVERT(VARCHAR(2), b.Quincena), 2) + RIGHT(CONVERT(VARCHAR(4), b.Anio), 2)
+              )
+            ORDER BY b.Anio DESC, b.Quincena DESC, b.CreatedAt DESC
+          ), PeriodoActual AS (
+            SELECT TOP 1 b.Quincena, b.Anio, b.Accion, 1 AS Prioridad
+            FROM afec.BitacoraAfectacionOrg b
+            WHERE b.Org0 = @Org0
+              AND b.Org1 = @Org1
+              AND b.Entidad = 'AFILIADOS'
+              AND b.Accion IN ('APLICAR', 'TERMINADO')
+            ORDER BY b.Anio DESC, b.Quincena DESC, b.CreatedAt DESC
+          )
           SELECT TOP 1 Quincena, Anio, Accion
-          FROM afec.BitacoraAfectacionOrg
-          WHERE Org0 = @Org0
-            AND Org1 = @Org1
-            AND (Accion = 'APLICAR' OR Accion = 'TERMINADO')
-          ORDER BY Anio DESC, Quincena DESC, CreatedAt DESC
+          FROM (
+            SELECT * FROM PeriodoPendienteLinea
+            UNION ALL
+            SELECT * FROM PeriodoActual
+          ) periodos
+          ORDER BY Prioridad, Anio DESC, Quincena DESC
         `);
 
       if (result.recordset.length === 0) {

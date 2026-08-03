@@ -18,7 +18,7 @@ const logger = pino({
 export class CreateEventoCalendarioCommand {
   constructor(private eventoCalendarioRepo: IEventoCalendarioRepository) {}
 
-  async execute(data: CreateEventoCalendarioData): Promise<EventoCalendario> {
+  async execute(data: CreateEventoCalendarioData, organica?: { org0: string; org1: string }): Promise<EventoCalendario> {
     // Validaciones de entrada
     this.validateInput(data);
 
@@ -33,7 +33,10 @@ export class CreateEventoCalendarioCommand {
 
     try {
       if (data.tipo === 'BA_MOVIMIENTO' && data.origen !== 'AUTOMATICO') {
-        const aplicacionFinalizada = await this.eventoCalendarioRepo.hasAplicacionQnaFinalizada(data.fecha);
+        if (!organica?.org0 || !organica?.org1) {
+          throw new Error('USER_ORGANICA_NOT_FOUND');
+        }
+        const aplicacionFinalizada = await this.eventoCalendarioRepo.hasAplicacionQnaFinalizada(data.fecha, organica.org0, organica.org1);
         if (!aplicacionFinalizada) {
           throw new Error('APLICACION_QNA_NO_FINALIZADA');
         }
@@ -56,6 +59,10 @@ export class CreateEventoCalendarioCommand {
           error instanceof InvalidEventoCalendarioTipoError ||
           error instanceof InvalidEventoCalendarioFechaError ||
           error instanceof InvalidEventoCalendarioAnioError) {
+        throw error;
+      }
+
+      if (error.message === 'APLICACION_QNA_NO_FINALIZADA' || error.message === 'USER_ORGANICA_NOT_FOUND') {
         throw error;
       }
 

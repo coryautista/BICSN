@@ -6,6 +6,7 @@ import { GenerateLineaCapturaPeriodoCommand } from './application/commands/Gener
 import { GenerateLineaCapturaQuery } from './application/queries/GenerateLineaCapturaQuery.js';
 import { GetLineaCapturaPeriodoQuery } from './application/queries/GetLineaCapturaPeriodoQuery.js';
 import { normalizeClaveOrganica } from '../../../utils/organica.js';
+import { registrarSiguienteQnaSiDisponible } from '../../afiliado/infrastructure/services/AfiliadoBdiSspeaService.js';
 
 function isAdmin(user: any): boolean {
   return Array.isArray(user?.roles) && user.roles.some((role: any) => String(role).toLowerCase() === 'admin');
@@ -133,6 +134,17 @@ export async function lineaCapturaRoutes(fastify: FastifyInstance) {
         usuarioId: user?.sub?.toString() ?? user?.id?.toString(),
         finalizarPendiente: true
       });
+      try {
+        await registrarSiguienteQnaSiDisponible(
+          org.org0,
+          org.org1,
+          parsed.data.periodo,
+          user?.sub?.toString() ?? user?.id?.toString() ?? 'Sistema',
+          request.ip
+        );
+      } catch (error) {
+        request.log.error({ err: error, periodo: parsed.data.periodo }, 'No se pudo registrar la siguiente QNA después de recuperar la Línea de Pago');
+      }
 
       return reply.code(result.reutilizada ? 200 : 201).send({ success: true, data: result, timestamp: new Date().toISOString() });
     } catch (error: any) {

@@ -343,6 +343,10 @@ export async function executeProcedureInTransaction(
 ): Promise<any[]> {
   const placeholders = params.map(() => "?").join(", ");
   const sql = `EXECUTE PROCEDURE ${procedureName} ${placeholders ? "(" + placeholders + ")" : ""}`;
+  if (cn?.attachment && cn?.transaction) {
+    await cn.attachment.execute(cn.transaction, sql, params);
+    return [];
+  }
   return await executeQueryInTransaction(cn, sql, params);
 }
 

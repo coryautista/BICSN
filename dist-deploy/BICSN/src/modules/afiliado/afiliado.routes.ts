@@ -4886,7 +4886,7 @@ export default async function afiliadoRoutes(app: FastifyInstance) {
   app.post('/afiliado/aplicar-bdisssspea-qna', {
     preHandler: [requireAuth],
     schema: {
-      description: 'Ejecutar stored procedures de Firebird para aplicar BDIssspea QNA. Ejecuta: 1) AP_G_APLICADO_TIPO para obtener quincena, 2) AP_P_APLICAR con tipo C, 3) AP_P_APLICAR con tipo F, 4) Actualizar BitacoraAfectacionOrg a TERMINADO',
+      description: 'Aplica la QNA en una transacción única de Firebird: AP_P_APLICAR(C), AP_P_APLICAR(F) y EBI2_RECIBOS_AP cuando corresponda. Ante cualquier fallo revierte Firebird, conserva la bitácora en APLICAR y guarda trazabilidad SFTP. Solo después del COMMIT actualiza SQL Server a TERMINADO.',
       tags: ['afiliado', 'firebird'],
       security: [{ bearerAuth: [] }],
       querystring: {
@@ -4945,6 +4945,14 @@ export default async function afiliadoRoutes(app: FastifyInstance) {
                         mensaje: { type: 'string', nullable: true }
                       }
                     },
+                    lineaPago: {
+                      type: 'object',
+                      properties: {
+                        exito: { type: 'boolean' },
+                        duracionMs: { type: 'number' },
+                        error: { type: 'string', nullable: true }
+                      }
+                    },
                     envioLayout: {
                       type: 'object',
                       properties: {
@@ -4973,6 +4981,9 @@ export default async function afiliadoRoutes(app: FastifyInstance) {
                   }
                 },
                 bitacoraActualizada: { type: 'boolean' },
+                firebirdTransaction: { type: 'string', enum: ['NO_INICIADA', 'COMMIT', 'ROLLBACK'] },
+                pasoFallido: { type: 'string', nullable: true },
+                lineaPago: { type: 'object', nullable: true, additionalProperties: true },
                 logFtpPath: { type: 'string', nullable: true },
                 idPeriodoFirebird: { type: 'number', nullable: true },
                 mensaje: { type: 'string' },

@@ -1,5 +1,6 @@
 import pino from 'pino';
 import { getPool, sql } from '../../../../db/mssql.js';
+import { executeSelectableProcedure } from '../../../../db/firebird.js';
 
 const logger = pino({
   name: 'afiliado-bdisspea-service',
@@ -215,6 +216,71 @@ export async function marcarBitacoraPendienteLineaPago(
     `);
   if ((result.rowsAffected[0] || 0) !== 1) {
     throw new Error('BITACORA_PENDIENTE_LINEA_NO_ACTUALIZADA');
+  }
+}
+
+export async function registrarSiguienteQnaSiDisponible(
+  org0: string,
+  org1: string,
+  periodoTerminado: string,
+  usuarioId: string,
+  ip = '127.0.0.1'
+): Promise<{ creada: boolean; periodo: string | null; afectacionId: number | null }> {
+  const rows = await executeSelectableProcedure('AP_G_APLICADO_TIPO', [org0, org1, '01', '01'], {
+    alias: 'p',
+    columns: ['p.QUINCENA']
+  });
+  const periodo = String(rows[0]?.QUINCENA ?? '').padStart(4, '0');
+  const ordenarPeriodo = (value: string) => (2000 + Number(value.slice(2, 4))) * 100 + Number(value.slice(0, 2));
+  if (!/^\d{4}$/.test(periodo) || ordenarPeriodo(periodo) <= ordenarPeriodo(periodoTerminado)) {
+    return { creada: false, periodo: periodo || null, afectacionId: null };
+  }
+
+  const quincena = Number(periodo.slice(0, 2));
+  const anio = 2000 + Number(periodo.slice(2, 4));
+  const p = await getPool();
+  const transaction = new sql.Transaction(p);
+  await transaction.begin();
+  try {
+    const existing = await new sql.Request(transaction)
+      .input('org0', sql.Char(2), org0)
+      .input('org1', sql.Char(2), org1)
+      .input('quincena', sql.TinyInt, quincena)
+      .input('anio', sql.SmallInt, anio)
+      .query(`
+        SELECT TOP 1 AfectacionId
+        FROM afec.BitacoraAfectacionOrg WITH (UPDLOCK, HOLDLOCK)
+        WHERE Entidad = 'AFILIADOS'
+          AND Org0 = @org0 AND Org1 = @org1
+          AND Quincena = @quincena AND Anio = @anio
+      `);
+    if (existing.recordset.length > 0) {
+      await transaction.commit();
+      return { creada: false, periodo, afectacionId: Number(existing.recordset[0].AfectacionId) };
+    }
+
+    const result = await new sql.Request(transaction)
+      .input('Entidad', sql.NVarChar(128), 'AFILIADOS')
+      .input('Anio', sql.SmallInt, anio)
+      .input('Quincena', sql.TinyInt, quincena)
+      .input('OrgNivel', sql.TinyInt, 3)
+      .input('Org0', sql.Char(2), org0)
+      .input('Org1', sql.Char(2), org1)
+      .input('Org2', sql.Char(2), '01')
+      .input('Org3', sql.Char(2), '01')
+      .input('Accion', sql.VarChar(20), 'APLICAR')
+      .input('Resultado', sql.VarChar(10), 'OK')
+      .input('Mensaje', sql.NVarChar(4000), `QNA ${periodo} creada después de finalizar ${periodoTerminado}`)
+      .input('Usuario', sql.NVarChar(100), usuarioId)
+      .input('AppName', sql.NVarChar(100), 'BICSN-API')
+      .input('Ip', sql.NVarChar(64), ip)
+      .execute('afec.usp_RegistrarAfectacionOrg');
+    await transaction.commit();
+    const afectacionId = Number(result.recordset?.[0]?.AfectacionId ?? result.recordset?.[0]?.Id ?? 0) || null;
+    return { creada: true, periodo, afectacionId };
+  } catch (error) {
+    await transaction.rollback();
+    throw error;
   }
 }
 

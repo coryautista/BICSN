@@ -1,9 +1,11 @@
 import pino from 'pino';
-import { actualizarBitacoraAfectacionOrgTerminado, verificarAplicacionMovimientosFinalizada } from '../../infrastructure/services/AfiliadoBdiSspeaService.js';
+import { actualizarBitacoraAfectacionOrgTerminadoPorAfectacionId, marcarBitacoraPendienteLineaPago, registrarSiguienteQnaSiDisponible, verificarAplicacionMovimientosFinalizada } from '../../infrastructure/services/AfiliadoBdiSspeaService.js';
 import { ejecutarAP_P_APLICAR, ejecutarEBI2_RECIBOS_AP } from '../../infrastructure/services/AfiliadoBdiSspeaFirebirdService.js';
 import { getQuincenaAplicacion } from '../../infrastructure/services/AfiliadoQuincenaService.js';
 import { crearAplicacionQnaLogPayload, guardarAplicacionQnaLogFtp } from '../../infrastructure/services/AplicacionQnaLogFtpService.js';
 import type { IEventoCalendarioRepository } from '../../../eventoCalendario/domain/repositories/IEventoCalendarioRepository.js';
+import { executeInTransaction } from '../../../../db/firebird.js';
+import { GenerateLineaCapturaPeriodoCommand, GenerateLineaCapturaPeriodoResult } from '../../../reportes/aplicacionesQNA/application/commands/GenerateLineaCapturaPeriodoCommand.js';
 
 const logger = pino({
   name: 'aplicarBDIssspeaQNACommand',
@@ -26,6 +28,7 @@ export interface AplicarBDIssspeaQNAResult {
     aplicarC: { exito: boolean; duracionMs: number; error?: string };
     aplicarF: { exito: boolean; duracionMs: number; error?: string };
     ebi2Recibos: { exito: boolean; duracionMs: number; error?: string; idPeriodoFirebird?: number; mensaje?: string | null };
+    lineaPago: { exito: boolean; duracionMs: number; error?: string };
     envioLayout: { exito: boolean; duracionMs: number; error?: string };
     actualizarBitacora: { exito: boolean; duracionMs: number; error?: string };
     guardarLogFtp: { exito: boolean; duracionMs: number; error?: string; ruta?: string };
@@ -34,12 +37,18 @@ export interface AplicarBDIssspeaQNAResult {
   logFtpPath?: string | null;
   idPeriodoFirebird?: number | null;
   baMovimiento: { generados: number; fechaInicio?: string; fechaFin?: string; error?: string };
+  firebirdTransaction: 'NO_INICIADA' | 'COMMIT' | 'ROLLBACK';
+  pasoFallido?: string | null;
+  lineaPago?: GenerateLineaCapturaPeriodoResult | null;
   mensaje: string;
   tiempoTotalMs: number;
 }
 
 export class AplicarBDIssspeaQNACommand {
-  constructor(private eventoCalendarioRepo: IEventoCalendarioRepository) {}
+  constructor(
+    private eventoCalendarioRepo: IEventoCalendarioRepository,
+    private generateLineaCapturaPeriodoCommand: GenerateLineaCapturaPeriodoCommand
+  ) {}
 
   async execute(data: AplicarBDIssspeaQNAData): Promise<AplicarBDIssspeaQNAResult> {
     const startTime = Date.now();
@@ -63,6 +72,7 @@ export class AplicarBDIssspeaQNACommand {
       aplicarC: { exito: false, duracionMs: 0, error: undefined as string | undefined },
       aplicarF: { exito: false, duracionMs: 0, error: undefined as string | undefined },
       ebi2Recibos: { exito: false, duracionMs: 0, error: undefined as string | undefined, idPeriodoFirebird: undefined as number | undefined, mensaje: undefined as string | null | undefined },
+      lineaPago: { exito: false, duracionMs: 0, error: undefined as string | undefined },
       envioLayout: { exito: true, duracionMs: 0, error: 'OMITIDO' as string | undefined },
       actualizarBitacora: { exito: false, duracionMs: 0, error: undefined as string | undefined },
       guardarLogFtp: { exito: false, duracionMs: 0, error: undefined as string | undefined, ruta: undefined as string | undefined }
@@ -75,12 +85,18 @@ export class AplicarBDIssspeaQNACommand {
     let logFtpPath: string | null = null;
     let idPeriodoFirebird: number | null = null;
     let baMovimiento: AplicarBDIssspeaQNAResult['baMovimiento'] = { generados: 0 };
+    let afectacionId: number | null = null;
+    let firebirdTransaction: AplicarBDIssspeaQNAResult['firebirdTransaction'] = 'NO_INICIADA';
+    let pasoFallido: string | null = null;
+    let lineaPago: GenerateLineaCapturaPeriodoResult | null = null;
     const inicioUtc = new Date().toISOString();
 
     const guardarLogFtp = async (resultado: 'OK' | 'ERROR' | 'PARCIAL', mensaje: string): Promise<string | null> => {
       const logStart = Date.now();
 
       try {
+        // Si el archivo existe en SFTP, la escritura terminó correctamente; si falla, el catch corrige el resultado de la API.
+        ejecuciones.guardarLogFtp = { exito: true, duracionMs: 0, error: undefined, ruta: undefined };
         const path = await guardarAplicacionQnaLogFtp(crearAplicacionQnaLogPayload({
           resultado,
           solicitud: {
@@ -93,6 +109,8 @@ export class AplicarBDIssspeaQNACommand {
             usuarioId: data.usuarioId
           },
           ejecuciones,
+          firebirdTransaction,
+          pasoFallido,
           timestamps: {
             inicioUtc,
             finUtc: new Date().toISOString()
@@ -149,6 +167,10 @@ export class AplicarBDIssspeaQNACommand {
         if (!estadoMovimientos.finalizada) {
           throw new Error('APLICACION_MOVIMIENTOS_NO_FINALIZADA');
         }
+        if (estadoMovimientos.resultado === 'PENDIENTE') {
+          throw new Error('LINEA_PAGO_PENDIENTE_RECUPERACION');
+        }
+        afectacionId = estadoMovimientos.afectacionId;
 
         const paso1Time = Date.now() - paso1Start;
         ejecuciones.obtenerQuincena = { exito: true, duracionMs: paso1Time, error: undefined };
@@ -184,6 +206,8 @@ export class AplicarBDIssspeaQNACommand {
         throw new Error(`Error al obtener quincena: ${errorMsg}`);
       }
 
+      const esQuincenaPar = quincenaNumero % 2 === 0;
+      await executeInTransaction(async (firebirdTx) => {
       // PASO 2: Ejecutar AP_P_APLICAR con tipo 'C'
       console.log(`\n${'─'.repeat(80)}`);
       console.log(`📋 PASO 2: Ejecutando AP_P_APLICAR con tipo 'C'`);
@@ -199,7 +223,8 @@ export class AplicarBDIssspeaQNACommand {
       console.log(`⏳ [${Date.now() - startTime}ms] Ejecutando AP_P_APLICAR(${data.org0}, ${data.org1}, ${quincena}, ${quincena}, 'C')...`);
 
       try {
-        await ejecutarAP_P_APLICAR(data.org0, data.org1, quincena, quincena, 'C');
+        pasoFallido = 'AP_P_APLICAR_C';
+        await ejecutarAP_P_APLICAR(data.org0, data.org1, quincena, quincena, 'C', firebirdTx);
         const paso2Time = Date.now() - paso2Start;
         ejecuciones.aplicarC = { exito: true, duracionMs: paso2Time, error: undefined };
         
@@ -248,7 +273,8 @@ export class AplicarBDIssspeaQNACommand {
       console.log(`⏳ [${Date.now() - startTime}ms] Ejecutando AP_P_APLICAR(${data.org0}, ${data.org1}, ${quincena}, ${quincena}, 'F')...`);
 
       try {
-        await ejecutarAP_P_APLICAR(data.org0, data.org1, quincena, quincena, 'F');
+        pasoFallido = 'AP_P_APLICAR_F';
+        await ejecutarAP_P_APLICAR(data.org0, data.org1, quincena, quincena, 'F', firebirdTx);
         const paso3Time = Date.now() - paso3Start;
         ejecuciones.aplicarF = { exito: true, duracionMs: paso3Time, error: undefined };
         
@@ -282,8 +308,6 @@ export class AplicarBDIssspeaQNACommand {
         throw new Error(`Error al ejecutar AP_P_APLICAR con tipo 'F': ${errorMsg}`);
       }
 
-      const esQuincenaPar = quincenaNumero % 2 === 0;
-
       // PASO 4: Ejecutar EBI2_RECIBOS_AP con accion 'APLICAR' solo en quincenas pares
       console.log(`\n${'─'.repeat(80)}`);
       console.log(`📋 PASO 4: ${esQuincenaPar ? "Ejecutando EBI2_RECIBOS_AP con accion 'APLICAR'" : 'Omitiendo EBI2_RECIBOS_AP por quincena impar'}`);
@@ -316,7 +340,8 @@ export class AplicarBDIssspeaQNACommand {
         console.log(`⏳ [${Date.now() - startTime}ms] Ejecutando EBI2_RECIBOS_AP para periodo ${quincena} con accion 'APLICAR'...`);
 
         try {
-          const ebi2Result = await ejecutarEBI2_RECIBOS_AP(data.org0, data.org1, '01', '01', quincena, 'APLICAR');
+          pasoFallido = 'EBI2_RECIBOS_AP';
+          const ebi2Result = await ejecutarEBI2_RECIBOS_AP(data.org0, data.org1, '01', '01', quincena, 'APLICAR', firebirdTx);
           const paso4Time = Date.now() - paso4Start;
           ejecuciones.ebi2Recibos = {
             exito: true,
@@ -363,6 +388,29 @@ export class AplicarBDIssspeaQNACommand {
           throw new Error(`Error al ejecutar EBI2_RECIBOS_AP: ${errorMsg}`);
         }
       }
+      });
+      firebirdTransaction = 'COMMIT';
+      pasoFallido = null;
+
+      const lineaPagoStart = Date.now();
+      try {
+        pasoFallido = 'LINEA_PAGO';
+        lineaPago = await this.generateLineaCapturaPeriodoCommand.execute({
+          org0: data.org0,
+          org1: data.org1,
+          periodo: quincena,
+          usuarioId: data.usuarioId,
+          omitirValidacionEstado: true
+        });
+        ejecuciones.lineaPago = { exito: true, duracionMs: Date.now() - lineaPagoStart, error: undefined };
+        pasoFallido = null;
+      } catch (error: any) {
+        const errorMsg = error.message || String(error);
+        ejecuciones.lineaPago = { exito: false, duracionMs: Date.now() - lineaPagoStart, error: errorMsg };
+        if (!afectacionId) throw new Error('AFECTACION_ID_NO_RESUELTO');
+        await marcarBitacoraPendienteLineaPago(afectacionId, data.usuarioId, errorMsg);
+        throw new Error(`LINEA_PAGO_PENDIENTE_RECUPERACION: ${errorMsg}`);
+      }
 
       // PASO 5: Actualizar BitacoraAfectacionOrg a TERMINADO (SOLO si todos los pasos anteriores fueron exitosos)
       console.log(`\n${'─'.repeat(80)}`);
@@ -382,9 +430,9 @@ export class AplicarBDIssspeaQNACommand {
         const mensajeBitacora = esQuincenaPar
           ? `Proceso QNA completado - Quincena: ${quincena} (${quincenaNumero}/${anio}). Stored procedures ejecutados: AP_P_APLICAR(C), AP_P_APLICAR(F), EBI2_RECIBOS_AP(APLICAR)`
           : `Proceso QNA completado - Quincena: ${quincena} (${quincenaNumero}/${anio}). Stored procedures ejecutados: AP_P_APLICAR(C), AP_P_APLICAR(F). EBI2_RECIBOS_AP omitido por quincena impar`;
-        const bitacoraResult = await actualizarBitacoraAfectacionOrgTerminado(
-          data.org0,
-          data.org1,
+        if (!afectacionId) throw new Error('AFECTACION_ID_NO_RESUELTO');
+        const bitacoraResult = await actualizarBitacoraAfectacionOrgTerminadoPorAfectacionId(
+          afectacionId,
           data.usuarioId,
           mensajeBitacora
         );
@@ -396,6 +444,9 @@ export class AplicarBDIssspeaQNACommand {
           duracionMs: paso5Time,
           error: bitacoraActualizada ? undefined : 'No se encontró registro para actualizar'
         };
+        if (!bitacoraActualizada) {
+          throw new Error('BITACORA_TERMINADO_NO_ACTUALIZADA');
+        }
         
         if (bitacoraActualizada) {
           logger.info({
@@ -421,7 +472,11 @@ export class AplicarBDIssspeaQNACommand {
       } catch (error: any) {
         const paso5Time = Date.now() - paso5Start;
         const errorMsg = error.message || String(error);
+        pasoFallido = 'ACTUALIZAR_BITACORA';
         ejecuciones.actualizarBitacora = { exito: false, duracionMs: paso5Time, error: errorMsg };
+        if (afectacionId) {
+          await marcarBitacoraPendienteLineaPago(afectacionId, data.usuarioId, errorMsg);
+        }
         
         logger.error({
           ...logContext,
@@ -440,13 +495,22 @@ export class AplicarBDIssspeaQNACommand {
         // Solo loguear el error pero continuar
       }
 
+      if (bitacoraActualizada) {
+        try {
+          await registrarSiguienteQnaSiDisponible(data.org0, data.org1, quincena, data.usuarioId);
+        } catch (error: any) {
+          logger.error({ ...logContext, quincena, error: error.message || String(error) }, 'No se pudo registrar la siguiente QNA');
+        }
+      }
+
       // Resumen final
       const tiempoTotal = Date.now() - startTime;
       const todosExitosos = ejecuciones.obtenerQuincena.exito &&
                             ejecuciones.aplicarC.exito &&
                             ejecuciones.aplicarF.exito &&
-                            ejecuciones.ebi2Recibos.exito;
-      if (todosExitosos) {
+                            ejecuciones.ebi2Recibos.exito &&
+                            ejecuciones.lineaPago.exito;
+      if (todosExitosos && bitacoraActualizada) {
         try {
           baMovimiento = await this.generarBaMovimiento(quincena);
         } catch (error: any) {
@@ -455,14 +519,15 @@ export class AplicarBDIssspeaQNACommand {
           logger.error({ ...logContext, quincena, error: errorMessage }, 'No se pudieron generar los eventos BA_MOVIMIENTO');
         }
       }
-      const mensaje = todosExitosos
+      const procesoCompleto = todosExitosos && bitacoraActualizada;
+      const mensaje = procesoCompleto
         ? `Proceso completado exitosamente. Quincena: ${quincena} (${quincenaNumero}/${anio}).`
         : `Proceso completado con errores. Revisar ejecuciones para detalles.`;
 
       logFtpPath = await guardarLogFtp(todosExitosos && bitacoraActualizada ? 'OK' : todosExitosos ? 'PARCIAL' : 'ERROR', mensaje);
 
       console.log(`\n${'='.repeat(80)}`);
-      console.log(`🎉 PROCESO ${todosExitosos ? '✅ COMPLETADO' : '❌ FALLIDO'}`);
+      console.log(`🎉 PROCESO ${procesoCompleto ? '✅ COMPLETADO' : '❌ FALLIDO'}`);
       console.log(`${'='.repeat(80)}`);
       console.log(`⏱️  Tiempo total: ${Math.round(tiempoTotal / 1000)}s (${tiempoTotal}ms)`);
       console.log(`📊 Resumen:`);
@@ -481,13 +546,14 @@ export class AplicarBDIssspeaQNACommand {
         step: 'procesoCompletado',
         quincena,
         todosExitosos,
+        procesoCompleto,
         bitacoraActualizada,
         tiempoTotalMs: tiempoTotal,
         ejecuciones
       }, `Proceso completado en ${Math.round(tiempoTotal / 1000)}s`);
 
       return {
-        exito: todosExitosos,
+        exito: procesoCompleto,
         quincena,
         quincenaNumero,
         anio,
@@ -496,14 +562,21 @@ export class AplicarBDIssspeaQNACommand {
         logFtpPath,
         idPeriodoFirebird,
         baMovimiento,
+        firebirdTransaction,
+        pasoFallido,
+        lineaPago,
         mensaje,
         tiempoTotalMs: tiempoTotal
       };
 
     } catch (error: any) {
+      if (firebirdTransaction === 'NO_INICIADA' && ejecuciones.obtenerQuincena.exito) {
+        firebirdTransaction = 'ROLLBACK';
+      }
       const tiempoTotal = Date.now() - startTime;
       const errorMsg = error.message || String(error);
-      logFtpPath = await guardarLogFtp('ERROR', `Error durante el proceso: ${errorMsg}`);
+      const resultadoFtp = firebirdTransaction === 'COMMIT' && pasoFallido === 'LINEA_PAGO' ? 'PARCIAL' : 'ERROR';
+      logFtpPath = await guardarLogFtp(resultadoFtp, `Error durante el proceso: ${errorMsg}`);
       
       console.error(`\n${'='.repeat(80)}`);
       console.error(`🔴 ERROR DURANTE EL PROCESO`);
@@ -534,6 +607,9 @@ export class AplicarBDIssspeaQNACommand {
         logFtpPath,
         idPeriodoFirebird,
         baMovimiento,
+        firebirdTransaction,
+        pasoFallido,
+        lineaPago,
         mensaje: `Error durante el proceso: ${errorMsg}`,
         tiempoTotalMs: tiempoTotal
       };

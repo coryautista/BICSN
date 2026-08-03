@@ -92,6 +92,7 @@ export default async function afectacionOrgRoutes(app: FastifyInstance) {
             }
           }
         },
+        409: { type: 'object' },
         500: {
           type: 'object',
           properties: {
@@ -137,6 +138,32 @@ export default async function afectacionOrgRoutes(app: FastifyInstance) {
         return reply.code(400).send(validationError([{ 
           message: 'org0 y org1 son requeridos. Deben estar en el body o disponibles en el token del usuario.' 
         }]));
+      }
+
+      const pool = req.diScope.resolve<any>('mssqlPool');
+      const ultimaQna = await pool.request()
+        .input('org0', body.org0)
+        .input('org1', body.org1)
+        .query(`
+          SELECT TOP 1 b.AfectacionId, b.Quincena, b.Anio, b.Accion, b.Resultado,
+            CASE WHEN EXISTS (
+              SELECT 1 FROM pagos.LineaCapturaPeriodo l
+              WHERE l.Org0 = b.Org0 AND l.Org1 = b.Org1
+                AND l.Periodo = RIGHT('0' + CONVERT(VARCHAR(2), b.Quincena), 2) + RIGHT(CONVERT(VARCHAR(4), b.Anio), 2)
+            ) THEN 1 ELSE 0 END AS TieneLineaPago
+          FROM afec.BitacoraAfectacionOrg b
+          WHERE b.Entidad = 'AFILIADOS' AND b.Org0 = @org0 AND b.Org1 = @org1
+          ORDER BY b.Anio DESC, b.Quincena DESC, b.CreatedAt DESC
+        `);
+      const ultima = ultimaQna.recordset[0];
+      if (ultima && (String(ultima.Accion) !== 'TERMINADO' || Number(ultima.TieneLineaPago) !== 1)) {
+        return reply.code(409).send({
+          ok: false,
+          error: {
+            code: 'QNA_ANTERIOR_NO_FINALIZADA',
+            message: `La QNA ${String(ultima.Quincena).padStart(2, '0')}${String(ultima.Anio).slice(-2)} debe terminar y generar su Línea de Pago antes de crear una nueva.`
+          }
+        });
       }
       
       // 3. Normalizar org2 y org3: si son null/undefined/vacío, usar "01" por defecto
