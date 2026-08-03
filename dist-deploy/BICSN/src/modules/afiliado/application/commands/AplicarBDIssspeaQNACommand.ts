@@ -1,6 +1,6 @@
 import pino from 'pino';
 import { actualizarBitacoraAfectacionOrgTerminado, verificarAplicacionMovimientosFinalizada } from '../../infrastructure/services/AfiliadoBdiSspeaService.js';
-import { ejecutarAP_P_APLICAR, ejecutarEBI2_RECIBOS } from '../../infrastructure/services/AfiliadoBdiSspeaFirebirdService.js';
+import { ejecutarAP_P_APLICAR, ejecutarEBI2_RECIBOS_AP } from '../../infrastructure/services/AfiliadoBdiSspeaFirebirdService.js';
 import { getQuincenaAplicacion } from '../../infrastructure/services/AfiliadoQuincenaService.js';
 import { crearAplicacionQnaLogPayload, guardarAplicacionQnaLogFtp } from '../../infrastructure/services/AplicacionQnaLogFtpService.js';
 import type { IEventoCalendarioRepository } from '../../../eventoCalendario/domain/repositories/IEventoCalendarioRepository.js';
@@ -284,9 +284,9 @@ export class AplicarBDIssspeaQNACommand {
 
       const esQuincenaPar = quincenaNumero % 2 === 0;
 
-      // PASO 4: Ejecutar EBI2_RECIBOS con accion 'APLICAR' solo en quincenas pares
+      // PASO 4: Ejecutar EBI2_RECIBOS_AP con accion 'APLICAR' solo en quincenas pares
       console.log(`\n${'─'.repeat(80)}`);
-      console.log(`📋 PASO 4: ${esQuincenaPar ? "Ejecutando EBI2_RECIBOS con accion 'APLICAR'" : 'Omitiendo EBI2_RECIBOS por quincena impar'}`);
+      console.log(`📋 PASO 4: ${esQuincenaPar ? "Ejecutando EBI2_RECIBOS_AP con accion 'APLICAR'" : 'Omitiendo EBI2_RECIBOS_AP por quincena impar'}`);
       console.log(`${'─'.repeat(80)}`);
 
       const paso4Start = Date.now();
@@ -300,43 +300,41 @@ export class AplicarBDIssspeaQNACommand {
         };
         logger.info({
           ...logContext,
-          step: 'EBI2_RECIBOS_omitido',
+          step: 'EBI2_RECIBOS_AP_omitido',
           quincena,
           quincenaNumero,
           elapsedMs: Date.now() - startTime
-        }, 'EBI2_RECIBOS omitido por quincena impar');
-        console.log(`⏭️  EBI2_RECIBOS omitido: quincena ${quincenaNumero} es impar`);
+        }, 'EBI2_RECIBOS_AP omitido por quincena impar');
+        console.log(`⏭️  EBI2_RECIBOS_AP omitido: quincena ${quincenaNumero} es impar`);
       } else {
         logger.info({
           ...logContext,
-          step: 'ejecutarEBI2_RECIBOS',
+          step: 'ejecutarEBI2_RECIBOS_AP',
           quincena,
           elapsedMs: Date.now() - startTime
-        }, `Ejecutando EBI2_RECIBOS para periodo ${quincena} con accion 'APLICAR'`);
-        console.log(`⏳ [${Date.now() - startTime}ms] Ejecutando EBI2_RECIBOS para periodo ${quincena} con accion 'APLICAR'...`);
+        }, `Ejecutando EBI2_RECIBOS_AP para periodo ${quincena} con accion 'APLICAR'`);
+        console.log(`⏳ [${Date.now() - startTime}ms] Ejecutando EBI2_RECIBOS_AP para periodo ${quincena} con accion 'APLICAR'...`);
 
         try {
-          const ebi2Result = await ejecutarEBI2_RECIBOS(quincena, 'APLICAR');
+          const ebi2Result = await ejecutarEBI2_RECIBOS_AP(data.org0, data.org1, '01', '01', quincena, 'APLICAR');
           const paso4Time = Date.now() - paso4Start;
-          idPeriodoFirebird = ebi2Result.idPeriodo;
           ejecuciones.ebi2Recibos = {
             exito: true,
             duracionMs: paso4Time,
             error: undefined,
-            idPeriodoFirebird: ebi2Result.idPeriodo,
+            idPeriodoFirebird: undefined,
             mensaje: ebi2Result.mensaje ?? null
           };
 
           logger.info({
             ...logContext,
-            step: 'EBI2_RECIBOS_exitoso',
+            step: 'EBI2_RECIBOS_AP_exitoso',
             quincena,
-            idPeriodoFirebird: ebi2Result.idPeriodo,
             mensajeFirebird: ebi2Result.mensaje,
             duracionMs: paso4Time,
             elapsedMs: Date.now() - startTime
-          }, '✅ EBI2_RECIBOS ejecutado exitosamente');
-          console.log(`✅ [${paso4Time}ms] EBI2_RECIBOS ejecutado exitosamente (ID_PERIODO=${ebi2Result.idPeriodo})`);
+          }, '✅ EBI2_RECIBOS_AP ejecutado exitosamente');
+          console.log(`✅ [${paso4Time}ms] EBI2_RECIBOS_AP ejecutado exitosamente`);
 
         } catch (error: any) {
           const paso4Time = Date.now() - paso4Start;
@@ -351,7 +349,7 @@ export class AplicarBDIssspeaQNACommand {
 
           logger.error({
             ...logContext,
-            step: 'errorEBI2_RECIBOS',
+            step: 'errorEBI2_RECIBOS_AP',
             quincena,
             error: {
               message: errorMsg,
@@ -360,9 +358,9 @@ export class AplicarBDIssspeaQNACommand {
             },
             duracionMs: paso4Time,
             elapsedMs: Date.now() - startTime
-          }, '❌ Error ejecutando EBI2_RECIBOS');
-          console.error(`❌ [${paso4Time}ms] Error ejecutando EBI2_RECIBOS: ${errorMsg}`);
-          throw new Error(`Error al ejecutar EBI2_RECIBOS: ${errorMsg}`);
+          }, '❌ Error ejecutando EBI2_RECIBOS_AP');
+          console.error(`❌ [${paso4Time}ms] Error ejecutando EBI2_RECIBOS_AP: ${errorMsg}`);
+          throw new Error(`Error al ejecutar EBI2_RECIBOS_AP: ${errorMsg}`);
         }
       }
 
@@ -382,8 +380,8 @@ export class AplicarBDIssspeaQNACommand {
 
       try {
         const mensajeBitacora = esQuincenaPar
-          ? `Proceso QNA completado - Quincena: ${quincena} (${quincenaNumero}/${anio}). Stored procedures ejecutados: AP_P_APLICAR(C), AP_P_APLICAR(F), EBI2_RECIBOS(APLICAR)`
-          : `Proceso QNA completado - Quincena: ${quincena} (${quincenaNumero}/${anio}). Stored procedures ejecutados: AP_P_APLICAR(C), AP_P_APLICAR(F). EBI2_RECIBOS omitido por quincena impar`;
+          ? `Proceso QNA completado - Quincena: ${quincena} (${quincenaNumero}/${anio}). Stored procedures ejecutados: AP_P_APLICAR(C), AP_P_APLICAR(F), EBI2_RECIBOS_AP(APLICAR)`
+          : `Proceso QNA completado - Quincena: ${quincena} (${quincenaNumero}/${anio}). Stored procedures ejecutados: AP_P_APLICAR(C), AP_P_APLICAR(F). EBI2_RECIBOS_AP omitido por quincena impar`;
         const bitacoraResult = await actualizarBitacoraAfectacionOrgTerminado(
           data.org0,
           data.org1,
@@ -469,11 +467,10 @@ export class AplicarBDIssspeaQNACommand {
       console.log(`⏱️  Tiempo total: ${Math.round(tiempoTotal / 1000)}s (${tiempoTotal}ms)`);
       console.log(`📊 Resumen:`);
       console.log(`   📋 Quincena: ${quincena} (${quincenaNumero}/${anio})`);
-      console.log(`   🔢 ID_PERIODO Firebird: ${idPeriodoFirebird ?? 'NO RESUELTO'}`);
       console.log(`   ✅ Obtener quincena: ${ejecuciones.obtenerQuincena.exito ? 'SÍ' : 'NO'} (${ejecuciones.obtenerQuincena.duracionMs}ms)`);
       console.log(`   ✅ AP_P_APLICAR(C): ${ejecuciones.aplicarC.exito ? 'SÍ' : 'NO'} (${ejecuciones.aplicarC.duracionMs}ms)`);
       console.log(`   ✅ AP_P_APLICAR(F): ${ejecuciones.aplicarF.exito ? 'SÍ' : 'NO'} (${ejecuciones.aplicarF.duracionMs}ms)`);
-      console.log(`   ✅ EBI2_RECIBOS(APLICAR): ${ejecuciones.ebi2Recibos.exito ? 'SÍ' : 'NO'} (${ejecuciones.ebi2Recibos.duracionMs}ms)`);
+      console.log(`   ✅ EBI2_RECIBOS_AP(APLICAR): ${ejecuciones.ebi2Recibos.exito ? 'SÍ' : 'NO'} (${ejecuciones.ebi2Recibos.duracionMs}ms)`);
       console.log(`   💾 Bitácora actualizada: ${bitacoraActualizada ? 'SÍ' : 'NO'} (${ejecuciones.actualizarBitacora.duracionMs}ms)`);
       console.log(`   📄 Log SFTP: ${logFtpPath || 'NO GENERADO'}`);
       console.log(`   🏢 Orgánica: ${data.org0}/${data.org1}`);

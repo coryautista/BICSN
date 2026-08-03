@@ -1,5 +1,5 @@
 import pino from 'pino';
-import { executeExecutableProcedure, executeSafeQuery, executeSelectableProcedure, FIREBIRD_TIMEOUTS } from '../../../../db/firebird.js';
+import { executeExecutableProcedure, executeSelectableProcedure, FIREBIRD_TIMEOUTS } from '../../../../db/firebird.js';
 
 const logger = pino({
   name: 'afiliado-bdisspea-firebird-service',
@@ -67,27 +67,37 @@ export async function ejecutarAP_P_APLICAR(
   }
 }
 
-export interface EBI2RecibosResult {
-  idPeriodo: number;
+export interface EBI2RecibosApResult {
   periodo: string;
   error?: boolean | null;
   mensaje?: string | null;
 }
 
-export async function ejecutarEBI2_RECIBOS(
+export async function ejecutarEBI2_RECIBOS_AP(
+  org0: string,
+  org1: string,
+  org2: string,
+  org3: string,
   periodo: string,
   accion: 'APLICAR'
-): Promise<EBI2RecibosResult> {
+): Promise<EBI2RecibosApResult> {
   const logContext = {
-    operation: 'ejecutarEBI2_RECIBOS',
+    operation: 'ejecutarEBI2_RECIBOS_AP',
+    org0,
+    org1,
+    org2,
+    org3,
     periodo,
     accion
   };
 
   const startTime = Date.now();
-  logger.info(logContext, 'Iniciando ejecución de EBI2_RECIBOS');
-  console.log(`[EBI2_RECIBOS] Iniciando ejecución con parámetros: periodo=${periodo}, accion=${accion}`);
+  logger.info(logContext, 'Iniciando ejecución de EBI2_RECIBOS_AP');
+  console.log(`[EBI2_RECIBOS_AP] Iniciando ejecución con parámetros: org0=${org0}, org1=${org1}, org2=${org2}, org3=${org3}, periodo=${periodo}, accion=${accion}`);
 
+  for (const [nombre, valor] of Object.entries({ org0, org1, org2, org3 })) {
+    if (!/^\d{2}$/.test(valor)) throw new Error(`Parámetro inválido para ${nombre}: ${valor}`);
+  }
   if (!/^\d{4}$/.test(periodo)) {
     throw new Error(`Parámetro inválido para periodo: ${periodo}`);
   }
@@ -97,33 +107,23 @@ export async function ejecutarEBI2_RECIBOS(
   }
 
   try {
-    const periodoRows = await executeSafeQuery(
-      'SELECT ID_PERIODO FROM EBI2_CAT_PERIODO WHERE PERIODO = ?',
-      [periodo],
-      FIREBIRD_TIMEOUTS.HEAVY_SP
-    );
-    const idPeriodo = periodoRows[0]?.ID_PERIODO;
-
-    if (idPeriodo == null) {
-      throw new Error(`No existe ID_PERIODO para PERIODO=${periodo} en EBI2_CAT_PERIODO`);
-    }
-
-    const resultRows = await executeSelectableProcedure('EBI2_RECIBOS', [idPeriodo, accion], {
+    const resultRows = await executeSelectableProcedure('EBI2_RECIBOS_AP', [org0, org1, org2, org3, periodo, accion], {
       timeoutMs: FIREBIRD_TIMEOUTS.HEAVY_SP
     });
     const result = resultRows[0] ?? {};
+    if (result.ERROR === true) {
+      throw new Error(result.MENSAJE || 'EBI2_RECIBOS_AP reportó un error sin mensaje.');
+    }
 
     const duration = Date.now() - startTime;
     logger.info({
       ...logContext,
-      idPeriodo,
       resultado: result,
       duracionMs: duration
-    }, 'EBI2_RECIBOS ejecutado exitosamente');
-    console.log(`[EBI2_RECIBOS] ✅ Ejecutado exitosamente en ${duration}ms (ID_PERIODO=${idPeriodo})`);
+    }, 'EBI2_RECIBOS_AP ejecutado exitosamente');
+    console.log(`[EBI2_RECIBOS_AP] ✅ Ejecutado exitosamente en ${duration}ms`);
 
     return {
-      idPeriodo: Number(idPeriodo),
       periodo,
       error: result.ERROR ?? null,
       mensaje: result.MENSAJE ?? null
@@ -139,9 +139,9 @@ export async function ejecutarEBI2_RECIBOS(
         stack: error.stack
       },
       duracionMs: duration
-    }, 'Error ejecutando EBI2_RECIBOS');
-    console.error(`[EBI2_RECIBOS] ❌ Error ejecutando stored procedure: ${error.message || String(error)}`);
-    throw new Error(`Error al ejecutar EBI2_RECIBOS: ${error.message || String(error)}`);
+    }, 'Error ejecutando EBI2_RECIBOS_AP');
+    console.error(`[EBI2_RECIBOS_AP] ❌ Error ejecutando stored procedure: ${error.message || String(error)}`);
+    throw new Error(`Error al ejecutar EBI2_RECIBOS_AP: ${error.message || String(error)}`);
   }
 }
 

@@ -477,6 +477,14 @@ import { AfiliadosReportesRepository } from '../modules/reportes/afiliados/infra
 import { GetHistorialMovimientosQuinQuery } from '../modules/reportes/afiliados/application/queries/GetHistorialMovimientosQuinQuery.js';
 import { GetHistorialMovPromedioSdoQuery } from '../modules/reportes/afiliados/application/queries/GetHistorialMovPromedioSdoQuery.js';
 
+// Estado de Cuenta de Ahorro Module (Submódulo de Reportes)
+import { EstadoCuentaAhorroRepository } from '../modules/reportes/estadoCuentaAhorro/infrastructure/persistence/EstadoCuentaAhorroRepository.js';
+import { GenerarEstadoCuentaAhorroCommand } from '../modules/reportes/estadoCuentaAhorro/application/commands/GenerarEstadoCuentaAhorroCommand.js';
+import { ObtenerEstadoCuentaAhorroHistoricoQuery } from '../modules/reportes/estadoCuentaAhorro/application/queries/ObtenerEstadoCuentaAhorroHistoricoQuery.js';
+import { ObtenerUltimoEstadoCuentaAhorroQuery } from '../modules/reportes/estadoCuentaAhorro/application/queries/ObtenerUltimoEstadoCuentaAhorroQuery.js';
+import { ObtenerEstadoCuentaAhorroPorPeriodoQuery } from '../modules/reportes/estadoCuentaAhorro/application/queries/ObtenerEstadoCuentaAhorroPorPeriodoQuery.js';
+import { EstadoCuentaAhorroExportador } from '../modules/reportes/estadoCuentaAhorro/infrastructure/export/EstadoCuentaAhorroExportador.js';
+
 // AfectacionOrg Service
 import { AfectacionOrgService } from '../modules/afectacionOrg/infrastructure/services/AfectacionOrgService.js';
 
@@ -1223,6 +1231,16 @@ container.register({
   // Queries (Scoped)
   getHistorialMovimientosQuinQuery: asClass(GetHistorialMovimientosQuinQuery).scoped(),
   getHistorialMovPromedioSdoQuery: asClass(GetHistorialMovPromedioSdoQuery).scoped(),
+
+  // ============================================================================
+  // ESTADO DE CUENTA DE AHORRO MODULE (Submódulo de Reportes)
+  // ============================================================================
+  estadoCuentaAhorroRepo: asClass(EstadoCuentaAhorroRepository).scoped(),
+  estadoCuentaAhorroExportador: asClass(EstadoCuentaAhorroExportador).scoped(),
+  generarEstadoCuentaAhorroCommand: asClass(GenerarEstadoCuentaAhorroCommand).scoped(),
+  obtenerEstadoCuentaAhorroHistoricoQuery: asClass(ObtenerEstadoCuentaAhorroHistoricoQuery).scoped(),
+  obtenerUltimoEstadoCuentaAhorroQuery: asClass(ObtenerUltimoEstadoCuentaAhorroQuery).scoped(),
+  obtenerEstadoCuentaAhorroPorPeriodoQuery: asClass(ObtenerEstadoCuentaAhorroPorPeriodoQuery).scoped(),
   
   // Queries (Scoped)
   getOrganica1ChildrenQuery: asClass(GetOrganica1ChildrenQuery).scoped(),
