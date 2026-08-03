@@ -248,9 +248,14 @@ export default async function eventoCalendarioRoutes(app: FastifyInstance) {
     }
   });
 
-  // Crear evento de calendario (requiere admin)
+  // Crear evento de calendario para los roles operativos autorizados.
   app.post('/eventos-calendario', {
-    preHandler: [requireAuth, requireRole('admin')],
+    preHandler: [requireAuth, async (req: any, reply) => {
+      const rolesAutorizados = ['admin', 'Capturista', 'JefeDepartamento'];
+      if (!rolesAutorizados.some((rol) => req.user?.roles?.includes(rol))) {
+        return reply.code(403).send({ ok: false, error: { code: 'FORBIDDEN', message: 'Insufficient role' } });
+      }
+    }],
     schema: {
       description: 'Create a new evento calendario',
       tags: ['eventos-calendario'],
@@ -282,6 +287,19 @@ export default async function eventoCalendarioRoutes(app: FastifyInstance) {
           }
         },
         400: {
+          type: 'object',
+          properties: {
+            ok: { type: 'boolean' },
+            error: {
+              type: 'object',
+              properties: {
+                code: { type: 'string' },
+                message: { type: 'string' }
+              }
+            }
+          }
+        },
+        403: {
           type: 'object',
           properties: {
             ok: { type: 'boolean' },
@@ -338,11 +356,16 @@ export default async function eventoCalendarioRoutes(app: FastifyInstance) {
 
     try {
       const createEventoCalendarioCommand = req.diScope.resolve<CreateEventoCalendarioCommand>('createEventoCalendarioCommand');
-      const evento = await createEventoCalendarioCommand.execute(parsed.data);
+      const org0 = String(req.user?.idOrganica0 || '').trim().padStart(2, '0');
+      const org1 = String(req.user?.idOrganica1 || '').trim().padStart(2, '0');
+      const evento = await createEventoCalendarioCommand.execute(parsed.data, { org0, org1 });
       return reply.code(201).send(ok(evento));
     } catch (error: any) {
       if (error.message === 'APLICACION_QNA_NO_FINALIZADA') {
-        return reply.code(409).send(fail('La QNA de la fecha seleccionada no ha sido aplicada.', 'APLICACION_QNA_NO_FINALIZADA'));
+        return reply.code(409).send(fail('Sin aplicación quincenal finalizada no se permite registrar el evento BA Movimiento.', 'APLICACION_QNA_NO_FINALIZADA'));
+      }
+      if (error.message === 'USER_ORGANICA_NOT_FOUND') {
+        return reply.code(400).send(fail('El usuario no tiene org0 y org1 configuradas.', 'USER_ORGANICA_NOT_FOUND'));
       }
       return handleEventoCalendarioError(error, reply);
     }

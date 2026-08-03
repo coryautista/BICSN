@@ -67,6 +67,7 @@ import { CreateCompleteAfiliadoCommand } from '../modules/afiliado/application/c
 import { AplicarBDIsspeaIndividualCommand } from '../modules/afiliado/application/commands/AplicarBDIsspeaIndividualCommand.js';
 import { AplicarBDIsspeaLoteCommand } from '../modules/afiliado/application/commands/AplicarBDIsspeaLoteCommand.js';
 import { AplicarBDIssspeaQNACommand } from '../modules/afiliado/application/commands/AplicarBDIssspeaQNACommand.js';
+import { RecuperarBaMovimientoCommand } from '../modules/afiliado/application/commands/RecuperarBaMovimientoCommand.js';
 import { UpdateBitacoraAfectacionOrgTerminadoCommand } from '../modules/afiliado/application/commands/UpdateBitacoraAfectacionOrgTerminadoCommand.js';
 import { CargarSemanasExtemporaneasLoteCommand } from '../modules/afiliado/application/commands/CargarSemanasExtemporaneasLoteCommand.js';
 import { FormatoExtemporaneaRepository } from '../modules/afiliado/infrastructure/persistence/FormatoExtemporaneaRepository.js';
@@ -620,6 +621,7 @@ container.register({
   aplicarBDIsspeaIndividualCommand: asClass(AplicarBDIsspeaIndividualCommand).scoped(),
   aplicarBDIsspeaLoteCommand: asClass(AplicarBDIsspeaLoteCommand).scoped(),
   aplicarBDIssspeaQNACommand: asClass(AplicarBDIssspeaQNACommand).scoped(),
+  recuperarBaMovimientoCommand: asClass(RecuperarBaMovimientoCommand).scoped(),
   updateBitacoraAfectacionOrgTerminadoCommand: asClass(UpdateBitacoraAfectacionOrgTerminadoCommand).scoped(),
   cargarSemanasExtemporaneasLoteCommand: asClass(CargarSemanasExtemporaneasLoteCommand).scoped(),
   

@@ -58,16 +58,15 @@ export async function lineaCapturaRoutes(fastify: FastifyInstance) {
   fastify.post('/linea-captura-periodo', {
     preHandler: [requireAuth],
     schema: {
-      description: 'Genera, guarda y reutiliza una línea de captura vigente por orgánica, período e importe. La fecha límite se toma del primer evento calendario tipo PAGO posterior al fin del período.',
-      summary: 'Generar línea de captura por período',
+      description: 'Recupera una Línea de Pago que no pudo generarse después del COMMIT Firebird. Calcula el importe desde históricos y finaliza la bitácora pendiente sin reaplicar la QNA.',
+      summary: 'Recuperar Línea de Pago pendiente',
       tags: ['reportes', 'aplicaciones-qna'],
       security: [{ bearerAuth: [] }],
       body: {
         type: 'object',
-        required: ['periodo', 'importe'],
+        required: ['periodo'],
         properties: {
           periodo: { type: 'string', pattern: '^\\d{4}$', description: 'Periodo QQAA, ejemplo 1026' },
-          importe: { type: 'number', minimum: 0.01 },
           idOrg0: { type: 'string', pattern: '^[A-Za-z0-9]{1,2}$' },
           idOrg1: { type: 'string', pattern: '^[A-Za-z0-9]{1,2}$' }
         }
@@ -131,8 +130,8 @@ export async function lineaCapturaRoutes(fastify: FastifyInstance) {
         org0: org.org0,
         org1: org.org1,
         periodo: parsed.data.periodo,
-        importe: parsed.data.importe,
-        usuarioId: user?.sub?.toString() ?? user?.id?.toString()
+        usuarioId: user?.sub?.toString() ?? user?.id?.toString(),
+        finalizarPendiente: true
       });
 
       return reply.code(result.reutilizada ? 200 : 201).send({ success: true, data: result, timestamp: new Date().toISOString() });
@@ -153,6 +152,12 @@ export async function lineaCapturaRoutes(fastify: FastifyInstance) {
         return reply.code(400).send({
           success: false,
           error: { code: 'HISTORICO_APLICADO_NOT_FOUND', message: 'No existe histórico aplicado para generar Línea de Pago.', timestamp: new Date().toISOString() }
+        });
+      }
+      if (error?.message === 'APLICACION_QNA_NO_HABILITA_LINEA_PAGO') {
+        return reply.code(409).send({
+          success: false,
+          error: { code: 'APLICACION_QNA_NO_HABILITA_LINEA_PAGO', message: 'La generación manual solo está disponible cuando falló la Línea de Pago después de confirmar Firebird.', timestamp: new Date().toISOString() }
         });
       }
       if (error?.message === 'LINEA_CAPTURA_IMPORTE_MISMATCH') {

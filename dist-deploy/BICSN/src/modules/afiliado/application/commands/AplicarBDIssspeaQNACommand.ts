@@ -544,15 +544,6 @@ export class AplicarBDIssspeaQNACommand {
     const hoy = new Date();
     hoy.setHours(12, 0, 0, 0);
     const inicio = new Date(hoy);
-    const siguienteInicio = new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate() <= 15 ? 16 : 1);
-    if (hoy.getDate() > 15) siguienteInicio.setMonth(siguienteInicio.getMonth() + 1);
-
-    const siguienteFin = new Date(siguienteInicio);
-    if (siguienteInicio.getDate() === 1) {
-      siguienteFin.setDate(15);
-    } else {
-      siguienteFin.setMonth(siguienteFin.getMonth() + 1, 0);
-    }
 
     const formato = (fecha: Date) => {
       const anio = fecha.getFullYear();
@@ -561,15 +552,16 @@ export class AplicarBDIssspeaQNACommand {
       return `${anio}-${mes}-${dia}`;
     };
     const hipotecarios = await this.eventoCalendarioRepo.findByDateRange(
-      formato(siguienteInicio),
-      formato(siguienteFin),
+      formato(hoy),
+      formato(new Date(hoy.getFullYear() + 1, hoy.getMonth(), hoy.getDate())),
       'HIPOTECARIO',
     );
     const corte = hipotecarios[0];
-    const fin = corte
-      ? new Date(`${corte.fecha}T12:00:00`)
-      : new Date(siguienteInicio);
-    if (corte) fin.setDate(fin.getDate() - 1);
+    if (!corte) {
+      throw new Error('CORTE_HIPOTECARIO_NO_ENCONTRADO');
+    }
+    const fin = new Date(`${corte.fecha}T12:00:00`);
+    fin.setDate(fin.getDate() - 1);
 
     let generados = 0;
     for (const fecha = new Date(inicio); fecha <= fin; fecha.setDate(fecha.getDate() + 1)) {

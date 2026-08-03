@@ -27,6 +27,7 @@ import { CreateCompleteAfiliadoCommand } from './application/commands/CreateComp
 import { AplicarBDIsspeaIndividualCommand } from './application/commands/AplicarBDIsspeaIndividualCommand.js';
 import { AplicarBDIsspeaLoteCommand } from './application/commands/AplicarBDIsspeaLoteCommand.js';
 import { AplicarBDIssspeaQNACommand } from './application/commands/AplicarBDIssspeaQNACommand.js';
+import { RecuperarBaMovimientoCommand } from './application/commands/RecuperarBaMovimientoCommand.js';
 import { UpdateBitacoraAfectacionOrgTerminadoCommand } from './application/commands/UpdateBitacoraAfectacionOrgTerminadoCommand.js';
 import { CargarSemanasExtemporaneasLoteCommand } from './application/commands/CargarSemanasExtemporaneasLoteCommand.js';
 import { GetSemanasExtemporaneasQuery } from './application/queries/GetSemanasExtemporaneasQuery.js';
@@ -4835,11 +4836,57 @@ export default async function afiliadoRoutes(app: FastifyInstance) {
     }
   });
 
+  // Recupera BA de una QNA histórica sin reaplicar procedimientos Firebird.
+  app.post('/afiliado/recuperar-ba-movimiento', {
+    preHandler: [requireAuth, requireRole('admin')],
+    schema: {
+      description: 'Recupera eventos BA_MOVIMIENTO faltantes entre la fecha de aplicación histórica y el siguiente evento HIPOTECARIO.',
+      tags: ['afiliado', 'calendario'],
+      security: [{ bearerAuth: [] }],
+      querystring: {
+        type: 'object',
+        required: ['periodo'],
+        properties: {
+          periodo: { type: 'string', pattern: '^\\d{4}$' },
+          org0: { type: 'string', pattern: '^\\d{1,2}$' },
+          org1: { type: 'string', pattern: '^\\d{1,2}$' },
+          preview: { type: 'boolean', default: false },
+          fechaAplicacion: { type: 'string', pattern: '^\\d{4}-\\d{2}-\\d{2}$' },
+          forzar: { type: 'boolean', default: false }
+        }
+      }
+    }
+  }, async (req, reply) => {
+    const query = req.query as { periodo?: string; org0?: string; org1?: string; preview?: boolean | string; fechaAplicacion?: string; forzar?: boolean | string };
+    const periodo = String(query.periodo || '').trim();
+    const org0 = String(query.org0 || req.user?.idOrganica0 || '').trim().padStart(2, '0');
+    const org1 = String(query.org1 || req.user?.idOrganica1 || '').trim().padStart(2, '0');
+    const preview = query.preview === true || query.preview === 'true';
+    const forzar = query.forzar === true || query.forzar === 'true';
+    const fechaAplicacion = query.fechaAplicacion?.trim();
+
+    if (!/^\d{4}$/.test(periodo) || !/^\d{2}$/.test(org0) || !/^\d{2}$/.test(org1)) {
+      return reply.code(400).send(fail('periodo, org0 y org1 son requeridos y deben tener formato válido.'));
+    }
+
+    try {
+      const command = req.diScope.resolve<RecuperarBaMovimientoCommand>('recuperarBaMovimientoCommand');
+      const resultado = await command.execute({ org0, org1, periodo, preview, fechaAplicacion, forzar });
+      return reply.send(ok(resultado));
+    } catch (error: any) {
+      const codigo = error.message || String(error);
+      if (codigo === 'APLICACION_QNA_HISTORICA_NO_FINALIZADA' || codigo === 'CORTE_HIPOTECARIO_NO_ENCONTRADO') {
+        return reply.code(409).send(fail(codigo));
+      }
+      return handleAfiliadoError(error, reply, { operation: 'recuperarBaMovimiento', user: req.user?.sub });
+    }
+  });
+
   // Aplicar BDISSPEA QNA - Ejecutar stored procedures de Firebird para aplicar QNA
   app.post('/afiliado/aplicar-bdisssspea-qna', {
     preHandler: [requireAuth],
     schema: {
-      description: 'Ejecutar stored procedures de Firebird para aplicar BDIssspea QNA. Ejecuta: 1) AP_G_APLICADO_TIPO para obtener quincena, 2) AP_P_APLICAR con tipo C, 3) AP_P_APLICAR con tipo F, 4) Actualizar BitacoraAfectacionOrg a TERMINADO',
+      description: 'Aplica la QNA en una transacción única de Firebird: AP_P_APLICAR(C), AP_P_APLICAR(F) y EBI2_RECIBOS_AP cuando corresponda. Ante cualquier fallo revierte Firebird, conserva la bitácora en APLICAR y guarda trazabilidad SFTP. Solo después del COMMIT actualiza SQL Server a TERMINADO.',
       tags: ['afiliado', 'firebird'],
       security: [{ bearerAuth: [] }],
       querystring: {
@@ -4898,6 +4945,14 @@ export default async function afiliadoRoutes(app: FastifyInstance) {
                         mensaje: { type: 'string', nullable: true }
                       }
                     },
+                    lineaPago: {
+                      type: 'object',
+                      properties: {
+                        exito: { type: 'boolean' },
+                        duracionMs: { type: 'number' },
+                        error: { type: 'string', nullable: true }
+                      }
+                    },
                     envioLayout: {
                       type: 'object',
                       properties: {
@@ -4926,6 +4981,9 @@ export default async function afiliadoRoutes(app: FastifyInstance) {
                   }
                 },
                 bitacoraActualizada: { type: 'boolean' },
+                firebirdTransaction: { type: 'string', enum: ['NO_INICIADA', 'COMMIT', 'ROLLBACK'] },
+                pasoFallido: { type: 'string', nullable: true },
+                lineaPago: { type: 'object', nullable: true, additionalProperties: true },
                 logFtpPath: { type: 'string', nullable: true },
                 idPeriodoFirebird: { type: 'number', nullable: true },
                 mensaje: { type: 'string' },

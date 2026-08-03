@@ -164,7 +164,7 @@ export async function verificarAplicacionMovimientosFinalizada(
   org1: string,
   quincena: number,
   anio: number
-): Promise<{ finalizada: boolean; afectacionId: number | null }> {
+): Promise<{ finalizada: boolean; afectacionId: number | null; resultado: string | null }> {
   const p = await getPool();
   const result = await p.request()
     .input('org0', sql.VarChar(30), org0)
@@ -172,7 +172,7 @@ export async function verificarAplicacionMovimientosFinalizada(
     .input('quincena', sql.Int, quincena)
     .input('anio', sql.Int, anio)
     .query(`
-      SELECT TOP 1 AfectacionId, AplicacionMovimientosFinalizada
+      SELECT TOP 1 AfectacionId, AplicacionMovimientosFinalizada, Resultado
       FROM afec.BitacoraAfectacionOrg
       WHERE Org0 = @org0
         AND Org1 = @org1
@@ -184,17 +184,44 @@ export async function verificarAplicacionMovimientosFinalizada(
 
   const row = result.recordset[0];
   if (!row) {
-    return { finalizada: false, afectacionId: null };
+    return { finalizada: false, afectacionId: null, resultado: null };
   }
 
   return {
     finalizada: row.AplicacionMovimientosFinalizada === true || row.AplicacionMovimientosFinalizada === 1,
-    afectacionId: Number(row.AfectacionId)
+    afectacionId: Number(row.AfectacionId),
+    resultado: row.Resultado ? String(row.Resultado) : null
   };
 }
 
+export async function marcarBitacoraPendienteLineaPago(
+  afectacionId: number,
+  usuarioId: string,
+  error: string
+): Promise<void> {
+  const p = await getPool();
+  const result = await p.request()
+    .input('afectacionId', sql.BigInt, afectacionId)
+    .input('usuarioId', sql.NVarChar(50), usuarioId)
+    .input('mensaje', sql.NVarChar(4000), `Firebird confirmado; Línea de Pago pendiente: ${error}`)
+    .query(`
+      UPDATE afec.BitacoraAfectacionOrg
+      SET Resultado = 'PENDIENTE',
+          Mensaje = @mensaje,
+          Usuario = @usuarioId,
+          ModifiedAt = SYSUTCDATETIME()
+      WHERE AfectacionId = @afectacionId
+        AND Accion = 'APLICAR'
+    `);
+  if ((result.rowsAffected[0] || 0) !== 1) {
+    throw new Error('BITACORA_PENDIENTE_LINEA_NO_ACTUALIZADA');
+  }
+}
+
 export async function actualizarBitacoraAfectacionOrgTerminadoPorAfectacionId(
-  afectacionId: number
+  afectacionId: number,
+  usuarioId?: string,
+  mensaje?: string
 ): Promise<{ actualizado: boolean; registrosAfectados: number }> {
   const logContext = {
     operation: 'actualizarBitacoraAfectacionOrgTerminadoPorAfectacionId',
@@ -221,10 +248,17 @@ export async function actualizarBitacoraAfectacionOrgTerminadoPorAfectacionId(
 
   const updateResult = await p.request()
     .input('afectacionId', sql.BigInt, afectacionId)
+    .input('usuarioId', sql.NVarChar(50), usuarioId || null)
+    .input('mensaje', sql.NVarChar(4000), mensaje || null)
     .query(`
       UPDATE afec.BitacoraAfectacionOrg
-      SET Accion = 'TERMINADO'
+      SET Accion = 'TERMINADO',
+          ModifiedAt = SYSUTCDATETIME(),
+          Usuario = COALESCE(@usuarioId, Usuario),
+          Resultado = 'OK',
+          Mensaje = COALESCE(@mensaje, Mensaje)
       WHERE AfectacionId = @afectacionId
+        AND Accion = 'APLICAR'
     `);
 
   const registrosAfectados = updateResult.rowsAffected[0] || 0;

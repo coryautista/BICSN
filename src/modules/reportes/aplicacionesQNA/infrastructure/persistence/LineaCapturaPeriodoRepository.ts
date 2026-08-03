@@ -57,6 +57,12 @@ export interface ImporteHistoricoPeriodo {
   totalRegistros: number;
 }
 
+export interface EstadoPeriodoLineaPago {
+  afectacionId: number;
+  habilitaLineaPago: boolean;
+  pendienteLineaPago: boolean;
+}
+
 export class LineaCapturaPeriodoRepository {
   constructor(private mssqlPool: ConnectionPool) {}
 
@@ -229,6 +235,58 @@ export class LineaCapturaPeriodoRepository {
       importe: Math.round((totalAportaciones + totalRetenciones) * 100) / 100,
       totalRegistros: Number(row.totalRegistros ?? 0)
     };
+  }
+
+  async findEstadoPeriodo(org0: string, org1: string, periodo: string): Promise<EstadoPeriodoLineaPago | null> {
+    const quincena = Number(periodo.slice(0, 2));
+    const anio = 2000 + Number(periodo.slice(2, 4));
+    const result = await this.mssqlPool.request()
+      .input('org0', sql.Char(2), org0)
+      .input('org1', sql.Char(2), org1)
+      .input('quincena', sql.TinyInt, quincena)
+      .input('anio', sql.SmallInt, anio)
+      .query(`
+        SELECT TOP 1 AfectacionId, Accion, Resultado
+        FROM afec.BitacoraAfectacionOrg
+        WHERE Org0 = @org0
+          AND Org1 = @org1
+          AND Quincena = @quincena
+          AND Anio = @anio
+          AND Entidad = 'AFILIADOS'
+          AND (
+            (Accion = 'TERMINADO' AND Resultado = 'OK')
+            OR (Accion = 'APLICAR' AND Resultado = 'PENDIENTE')
+          )
+        ORDER BY ModifiedAt DESC, CreatedAt DESC
+      `);
+    const row = result.recordset[0];
+    if (!row) return null;
+    const pendienteLineaPago = String(row.Resultado) === 'PENDIENTE';
+    return {
+      afectacionId: Number(row.AfectacionId),
+      habilitaLineaPago: true,
+      pendienteLineaPago
+    };
+  }
+
+  async finalizarAfectacion(afectacionId: number, usuarioId?: string): Promise<void> {
+    const result = await this.mssqlPool.request()
+      .input('afectacionId', sql.BigInt, afectacionId)
+      .input('usuarioId', sql.NVarChar(50), usuarioId || null)
+      .query(`
+        UPDATE afec.BitacoraAfectacionOrg
+        SET Accion = 'TERMINADO',
+            Resultado = 'OK',
+            Mensaje = 'Línea de Pago recuperada correctamente; aplicación QNA finalizada.',
+            Usuario = COALESCE(@usuarioId, Usuario),
+            ModifiedAt = SYSUTCDATETIME()
+        WHERE AfectacionId = @afectacionId
+          AND Accion = 'APLICAR'
+          AND Resultado = 'PENDIENTE'
+      `);
+    if ((result.rowsAffected[0] || 0) !== 1) {
+      throw new Error('BITACORA_PENDIENTE_LINEA_NO_ACTUALIZADA');
+    }
   }
 
   async findPrimerPagoPosterior(fechaFinalPeriodo: string): Promise<string | null> {

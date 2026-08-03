@@ -21,6 +21,8 @@ export interface AplicacionQnaLogPayload {
     usuarioId: string;
   };
   ejecuciones: Record<string, unknown>;
+  firebirdTransaction: 'NO_INICIADA' | 'COMMIT' | 'ROLLBACK';
+  pasoFallido?: string | null;
   timestamps: {
     inicioUtc: string;
     finUtc: string;
