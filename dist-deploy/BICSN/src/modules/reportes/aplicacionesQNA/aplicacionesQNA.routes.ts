@@ -966,11 +966,14 @@ export async function aplicacionesQNARoutes(fastify: FastifyInstance) {
           if (anteriorPendiente.recordset.length > 0) {
             await transaction.rollback();
             const pendiente = anteriorPendiente.recordset[0];
-            return reply.code(409).send({
-              success: false,
-              error: {
-                code: 'QNA_ANTERIOR_NO_FINALIZADA',
-                message: `La QNA ${String(pendiente.Quincena).padStart(2, '0')}${String(pendiente.Anio).slice(-2)} debe terminar y generar su Línea de Pago antes de sincronizar ${qnaFirebird}.`
+            return reply.send({
+              success: true,
+              data: {
+                periodo: `${String(pendiente.Quincena).padStart(2, '0')}${String(pendiente.Anio).slice(-2)}`,
+                quincena: Number(pendiente.Quincena),
+                anio: Number(pendiente.Anio),
+                created: false,
+                blockedByPendingQna: true
               },
               timestamp: new Date().toISOString()
             });
