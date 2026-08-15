@@ -309,6 +309,10 @@ async function setupApplication(app: FastifyInstance) {
   await connectDatabase();
   await connectFirebirdDatabase();
 
+  const revisionWorker = container.resolve<import('./modules/reportes/revision/application/RevisionWorker.js').RevisionWorker>('revisionWorker');
+  app.addHook('onReady', async () => revisionWorker.start());
+  app.addHook('onClose', async () => revisionWorker.stop());
+
   // Health checks
   app.get('/health', async () => {
     return performBasicHealthCheck();
@@ -482,14 +486,26 @@ async function setupApplication(app: FastifyInstance) {
 }
 
 (async () => {
+  let app: FastifyInstance | null = null;
   try {
-    const app = await buildApp();
+    app = await buildApp();
     await setupApplication(app);
     // Asegurar que el servidor escuche en todas las interfaces para permitir acceso externo
     const listenHost = env.host === 'localhost' || env.host === '127.0.0.1' ? '0.0.0.0' : env.host;
     await app.listen({ port: env.port, host: listenHost });
     app.log.info(`API up on :${env.port} (host: ${listenHost})`);
     app.log.info(`Swagger UI disponible en: http://${listenHost === '0.0.0.0' ? 'localhost' : listenHost}:${env.port}/docs`);
+
+    let cerrando = false;
+    const cerrar = async (signal: string) => {
+      if (cerrando || !app) return;
+      cerrando = true;
+      app.log.info({ signal }, 'Cerrando BICSN ordenadamente');
+      await app.close();
+      process.exit(0);
+    };
+    process.once('SIGINT', () => void cerrar('SIGINT'));
+    process.once('SIGTERM', () => void cerrar('SIGTERM'));
   } catch (e) {
     // eslint-disable-next-line no-console
     console.error(e);

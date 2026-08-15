@@ -356,17 +356,9 @@ export default async function eventoCalendarioRoutes(app: FastifyInstance) {
 
     try {
       const createEventoCalendarioCommand = req.diScope.resolve<CreateEventoCalendarioCommand>('createEventoCalendarioCommand');
-      const org0 = String(req.user?.idOrganica0 || '').trim().padStart(2, '0');
-      const org1 = String(req.user?.idOrganica1 || '').trim().padStart(2, '0');
-      const evento = await createEventoCalendarioCommand.execute(parsed.data, { org0, org1 });
+      const evento = await createEventoCalendarioCommand.execute(parsed.data);
       return reply.code(201).send(ok(evento));
     } catch (error: any) {
-      if (error.message === 'APLICACION_QNA_NO_FINALIZADA') {
-        return reply.code(409).send(fail('Sin aplicación quincenal finalizada no se permite registrar el evento BA Movimiento.', 'APLICACION_QNA_NO_FINALIZADA'));
-      }
-      if (error.message === 'USER_ORGANICA_NOT_FOUND') {
-        return reply.code(400).send(fail('El usuario no tiene org0 y org1 configuradas.', 'USER_ORGANICA_NOT_FOUND'));
-      }
       return handleEventoCalendarioError(error, reply);
     }
   });

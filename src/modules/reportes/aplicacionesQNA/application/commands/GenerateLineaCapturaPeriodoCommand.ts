@@ -1,6 +1,7 @@
 import { LineaCapturaService } from '../../domain/services/LineaCapturaService.js';
 import { LineaCapturaPeriodoRepository, LineaCapturaPeriodoRecord } from '../../infrastructure/persistence/LineaCapturaPeriodoRepository.js';
 import { getMexicoTodayDateOnly } from '../../../../../utils/sqlServerDate.js';
+import { RevisionScheduler } from '../../../revision/application/RevisionScheduler.js';
 
 export interface GenerateLineaCapturaPeriodoParams {
   org0: string;
@@ -18,7 +19,8 @@ export interface GenerateLineaCapturaPeriodoResult extends LineaCapturaPeriodoRe
 export class GenerateLineaCapturaPeriodoCommand {
   constructor(
     private lineaCapturaPeriodoRepo: LineaCapturaPeriodoRepository,
-    private lineaCapturaService: LineaCapturaService
+    private lineaCapturaService: LineaCapturaService,
+    private revisionScheduler: RevisionScheduler
   ) {}
 
   async execute(params: GenerateLineaCapturaPeriodoParams): Promise<GenerateLineaCapturaPeriodoResult> {
@@ -49,6 +51,7 @@ export class GenerateLineaCapturaPeriodoCommand {
       if (params.finalizarPendiente && estado?.pendienteLineaPago) {
         await this.lineaCapturaPeriodoRepo.finalizarAfectacion(estado.afectacionId, params.usuarioId);
       }
+      await this.programarRevision(params);
       return { ...existing, reutilizada: true };
     }
 
@@ -97,6 +100,7 @@ export class GenerateLineaCapturaPeriodoCommand {
       if (params.finalizarPendiente && estado?.pendienteLineaPago) {
         await this.lineaCapturaPeriodoRepo.finalizarAfectacion(estado.afectacionId, params.usuarioId);
       }
+      await this.programarRevision(params);
       return { ...created, reutilizada: false };
     } catch (error: any) {
       const duplicate = await this.lineaCapturaPeriodoRepo.findVigente(params.org0, params.org1, params.periodo);
@@ -112,10 +116,20 @@ export class GenerateLineaCapturaPeriodoCommand {
         if (params.finalizarPendiente && estado?.pendienteLineaPago) {
           await this.lineaCapturaPeriodoRepo.finalizarAfectacion(estado.afectacionId, params.usuarioId);
         }
+        await this.programarRevision(params);
         return { ...duplicate, reutilizada: true };
       }
       throw error;
     }
+  }
+
+  private async programarRevision(params: GenerateLineaCapturaPeriodoParams): Promise<void> {
+    await this.revisionScheduler.programar({
+      org0: params.org0,
+      org1: params.org1,
+      periodo: params.periodo,
+      usuarioId: params.usuarioId
+    });
   }
 }
 

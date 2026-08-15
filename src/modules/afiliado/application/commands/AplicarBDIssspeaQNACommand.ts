@@ -3,7 +3,6 @@ import { actualizarBitacoraAfectacionOrgTerminadoPorAfectacionId, marcarBitacora
 import { ejecutarAP_P_APLICAR, ejecutarEBI2_RECIBOS_AP } from '../../infrastructure/services/AfiliadoBdiSspeaFirebirdService.js';
 import { getQuincenaAplicacion } from '../../infrastructure/services/AfiliadoQuincenaService.js';
 import { crearAplicacionQnaLogPayload, guardarAplicacionQnaLogFtp } from '../../infrastructure/services/AplicacionQnaLogFtpService.js';
-import type { IEventoCalendarioRepository } from '../../../eventoCalendario/domain/repositories/IEventoCalendarioRepository.js';
 import { executeInTransaction } from '../../../../db/firebird.js';
 import { GenerateLineaCapturaPeriodoCommand, GenerateLineaCapturaPeriodoResult } from '../../../reportes/aplicacionesQNA/application/commands/GenerateLineaCapturaPeriodoCommand.js';
 
@@ -46,7 +45,6 @@ export interface AplicarBDIssspeaQNAResult {
 
 export class AplicarBDIssspeaQNACommand {
   constructor(
-    private eventoCalendarioRepo: IEventoCalendarioRepository,
     private generateLineaCapturaPeriodoCommand: GenerateLineaCapturaPeriodoCommand
   ) {}
 
@@ -510,15 +508,6 @@ export class AplicarBDIssspeaQNACommand {
                             ejecuciones.aplicarF.exito &&
                             ejecuciones.ebi2Recibos.exito &&
                             ejecuciones.lineaPago.exito;
-      if (todosExitosos && bitacoraActualizada) {
-        try {
-          baMovimiento = await this.generarBaMovimiento(quincena);
-        } catch (error: any) {
-          const errorMessage = error.message || String(error);
-          baMovimiento = { generados: 0, error: errorMessage };
-          logger.error({ ...logContext, quincena, error: errorMessage }, 'No se pudieron generar los eventos BA_MOVIMIENTO');
-        }
-      }
       const procesoCompleto = todosExitosos && bitacoraActualizada;
       const mensaje = procesoCompleto
         ? `Proceso completado exitosamente. Quincena: ${quincena} (${quincenaNumero}/${anio}).`
@@ -616,49 +605,5 @@ export class AplicarBDIssspeaQNACommand {
     }
   }
 
-  private async generarBaMovimiento(periodoQna: string): Promise<AplicarBDIssspeaQNAResult['baMovimiento']> {
-    const hoy = new Date();
-    hoy.setHours(12, 0, 0, 0);
-    const inicio = new Date(hoy);
-
-    const formato = (fecha: Date) => {
-      const anio = fecha.getFullYear();
-      const mes = String(fecha.getMonth() + 1).padStart(2, '0');
-      const dia = String(fecha.getDate()).padStart(2, '0');
-      return `${anio}-${mes}-${dia}`;
-    };
-    const hipotecarios = await this.eventoCalendarioRepo.findByDateRange(
-      formato(hoy),
-      formato(new Date(hoy.getFullYear() + 1, hoy.getMonth(), hoy.getDate())),
-      'HIPOTECARIO',
-    );
-    const corte = hipotecarios[0];
-    if (!corte) {
-      throw new Error('CORTE_HIPOTECARIO_NO_ENCONTRADO');
-    }
-    const fin = new Date(`${corte.fecha}T12:00:00`);
-    fin.setDate(fin.getDate() - 1);
-
-    let generados = 0;
-    for (const fecha = new Date(inicio); fecha <= fin; fecha.setDate(fecha.getDate() + 1)) {
-      try {
-        await this.eventoCalendarioRepo.create({
-          fecha: formato(fecha),
-          tipo: 'BA_MOVIMIENTO',
-          anio: fecha.getFullYear(),
-          origen: 'AUTOMATICO',
-          periodoQna,
-          eventoHipotecarioId: corte?.id ?? null,
-        });
-        generados += 1;
-      } catch (error: any) {
-        if (error.message !== 'EVENTO_CALENDARIO_ALREADY_EXISTS') {
-          throw error;
-        }
-      }
-    }
-
-    return { generados, fechaInicio: formato(inicio), fechaFin: formato(fin) };
-  }
 }
 

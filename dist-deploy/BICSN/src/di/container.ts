@@ -67,7 +67,6 @@ import { CreateCompleteAfiliadoCommand } from '../modules/afiliado/application/c
 import { AplicarBDIsspeaIndividualCommand } from '../modules/afiliado/application/commands/AplicarBDIsspeaIndividualCommand.js';
 import { AplicarBDIsspeaLoteCommand } from '../modules/afiliado/application/commands/AplicarBDIsspeaLoteCommand.js';
 import { AplicarBDIssspeaQNACommand } from '../modules/afiliado/application/commands/AplicarBDIssspeaQNACommand.js';
-import { RecuperarBaMovimientoCommand } from '../modules/afiliado/application/commands/RecuperarBaMovimientoCommand.js';
 import { UpdateBitacoraAfectacionOrgTerminadoCommand } from '../modules/afiliado/application/commands/UpdateBitacoraAfectacionOrgTerminadoCommand.js';
 import { CargarSemanasExtemporaneasLoteCommand } from '../modules/afiliado/application/commands/CargarSemanasExtemporaneasLoteCommand.js';
 import { FormatoExtemporaneaRepository } from '../modules/afiliado/infrastructure/persistence/FormatoExtemporaneaRepository.js';
@@ -485,6 +484,11 @@ import { ObtenerEstadoCuentaAhorroHistoricoQuery } from '../modules/reportes/est
 import { ObtenerUltimoEstadoCuentaAhorroQuery } from '../modules/reportes/estadoCuentaAhorro/application/queries/ObtenerUltimoEstadoCuentaAhorroQuery.js';
 import { ObtenerEstadoCuentaAhorroPorPeriodoQuery } from '../modules/reportes/estadoCuentaAhorro/application/queries/ObtenerEstadoCuentaAhorroPorPeriodoQuery.js';
 import { EstadoCuentaAhorroExportador } from '../modules/reportes/estadoCuentaAhorro/infrastructure/export/EstadoCuentaAhorroExportador.js';
+import { RevisionRepository } from '../modules/reportes/revision/infrastructure/persistence/RevisionRepository.js';
+import { RevisionScheduler } from '../modules/reportes/revision/application/RevisionScheduler.js';
+import { RevisionWorker } from '../modules/reportes/revision/application/RevisionWorker.js';
+import { ObtenerReporteRevisionQuery } from '../modules/reportes/revision/application/queries/ObtenerReporteRevisionQuery.js';
+import { GuardarAjusteRevisionCommand } from '../modules/reportes/revision/application/commands/GuardarAjusteRevisionCommand.js';
 
 // AfectacionOrg Service
 import { AfectacionOrgService } from '../modules/afectacionOrg/infrastructure/services/AfectacionOrgService.js';
@@ -506,6 +510,9 @@ container.register({
   // Database Pools (Singleton - shared across the application)
   mssqlPool: asFunction(getMssqlPool).singleton(),
   firebirdDb: asFunction(getFirebirdDb).singleton(),
+  revisionRepo: asClass(RevisionRepository).singleton(),
+  revisionScheduler: asClass(RevisionScheduler).singleton(),
+  revisionWorker: asClass(RevisionWorker).singleton(),
   
   // ============================================================================
   // AUTH MODULE
@@ -621,7 +628,6 @@ container.register({
   aplicarBDIsspeaIndividualCommand: asClass(AplicarBDIsspeaIndividualCommand).scoped(),
   aplicarBDIsspeaLoteCommand: asClass(AplicarBDIsspeaLoteCommand).scoped(),
   aplicarBDIssspeaQNACommand: asClass(AplicarBDIssspeaQNACommand).scoped(),
-  recuperarBaMovimientoCommand: asClass(RecuperarBaMovimientoCommand).scoped(),
   updateBitacoraAfectacionOrgTerminadoCommand: asClass(UpdateBitacoraAfectacionOrgTerminadoCommand).scoped(),
   cargarSemanasExtemporaneasLoteCommand: asClass(CargarSemanasExtemporaneasLoteCommand).scoped(),
   
@@ -1243,6 +1249,10 @@ container.register({
   obtenerEstadoCuentaAhorroHistoricoQuery: asClass(ObtenerEstadoCuentaAhorroHistoricoQuery).scoped(),
   obtenerUltimoEstadoCuentaAhorroQuery: asClass(ObtenerUltimoEstadoCuentaAhorroQuery).scoped(),
   obtenerEstadoCuentaAhorroPorPeriodoQuery: asClass(ObtenerEstadoCuentaAhorroPorPeriodoQuery).scoped(),
+
+  // REVISA MODULE (Submódulo de Reportes)
+  obtenerReporteRevisionQuery: asClass(ObtenerReporteRevisionQuery).scoped(),
+  guardarAjusteRevisionCommand: asClass(GuardarAjusteRevisionCommand).scoped(),
   
   // Queries (Scoped)
   getOrganica1ChildrenQuery: asClass(GetOrganica1ChildrenQuery).scoped(),

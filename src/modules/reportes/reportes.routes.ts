@@ -6,6 +6,7 @@ import { aplicacionesQNARoutes } from './aplicacionesQNA/aplicacionesQNA.routes.
 import { CAIRRoutes } from './CAIR/CAIR.routes.js';
 import { afiliadosReportesRoutes } from './afiliados/afiliados.routes.js';
 import { estadoCuentaAhorroRoutes } from './estadoCuentaAhorro/estadoCuentaAhorro.routes.js';
+import { revisionRoutes } from './revision/revision.routes.js';
 
 export async function reportesRoutes(fastify: FastifyInstance) {
   // Registrar submódulo aplicacionesQNA
@@ -18,6 +19,7 @@ export async function reportesRoutes(fastify: FastifyInstance) {
   await fastify.register(afiliadosReportesRoutes, { prefix: '/afiliados' });
 
   await fastify.register(estadoCuentaAhorroRoutes, { prefix: '/estado-cuenta-ahorro' });
+  await fastify.register(revisionRoutes, { prefix: '/revision' });
   
   // GET /reportes/mensual - Reporte mensual de personal con desglose por quincenas
   fastify.get('/mensual', async (request, reply) => {

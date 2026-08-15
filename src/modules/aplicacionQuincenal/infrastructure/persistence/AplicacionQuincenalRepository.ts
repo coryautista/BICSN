@@ -37,6 +37,23 @@ const logger = pino({
   level: process.env.LOG_LEVEL || 'info'
 });
 
+interface SnapshotAplicacionRevision {
+  org0: string;
+  org1: string;
+  periodo: string;
+  usuarioId: string;
+  registros: number;
+  CAIR: number;
+  FRA: number;
+  FRE: number;
+  FH: number;
+  FV: number;
+  FAA: number;
+  FAE: number;
+  FAT: number;
+  FAI: number;
+}
+
 export class AplicacionQuincenalRepository implements IAplicacionQuincenalRepository {
   async validarAplicacionQnaAportaciones(organica0: string, organica1: string, periodo: string): Promise<ValidarAplicacionQnaAportacionesResult> {
     const org0 = String(organica0).trim().toUpperCase().padStart(2, '0');
@@ -751,6 +768,24 @@ export class AplicacionQuincenalRepository implements IAplicacionQuincenalReposi
     const totalRegistros: Record<string, number> = {};
 
     try {
+      const referencia = data.ahorro?.header
+        || data.vivienda?.header
+        || data.prestaciones?.header
+        || data.cair?.header
+        || data.transitorio?.header
+        || data.guarderias?.header
+        || data.aguinaldo?.header;
+      if (!referencia) {
+        throw new Error('APLICACION_QUINCENAL_SIN_REFERENCIA');
+      }
+      const periodo = `${String(referencia.quincena).padStart(2, '0')}${String(referencia.anio).slice(-2)}`;
+      const snapshotRevision = await this.calcularSnapshotAplicacionRevision(
+        referencia.clave_organica_0,
+        referencia.clave_organica_1,
+        periodo,
+        String((req as any).user?.sub || referencia.usuario_id)
+      );
+
       await withDbContext(req, async (tx) => {
         // Procesar Ahorro (siempre, incluso con 0 registros)
         if (data.ahorro) {
@@ -835,6 +870,8 @@ export class AplicacionQuincenalRepository implements IAplicacionQuincenalReposi
             throw err;
           }
         }
+
+        await this.guardarSnapshotAplicacionRevision(tx, snapshotRevision);
       });
 
       const duration = Date.now() - startTime;
@@ -918,6 +955,95 @@ export class AplicacionQuincenalRepository implements IAplicacionQuincenalReposi
   }
 
   // Funciones helper privadas para cada tipo de aportación
+
+  private async calcularSnapshotAplicacionRevision(
+    org0: string,
+    org1: string,
+    periodo: string,
+    usuarioId: string
+  ): Promise<SnapshotAplicacionRevision> {
+    const rows = await executeSafeQuery(`
+      SELECT COUNT(*) AS REGISTROS,
+        COALESCE(SUM(SARE), 0) AS CAIR,
+        COALESCE(SUM(FRA), 0) AS FRA,
+        COALESCE(SUM(FRE), 0) AS FRE,
+        COALESCE(SUM(FHE), 0) AS FH,
+        COALESCE(SUM(FVE), 0) AS FV,
+        COALESCE(SUM(FAA), 0) AS FAA,
+        COALESCE(SUM(FAE), 0) AS FAE,
+        COALESCE(SUM(FAT), 0) AS FAT,
+        COALESCE(SUM(FAI), 0) AS FAI
+      FROM AP_S_FONDOS(?, ?, ?)
+    `, [org0, org1, periodo], FIREBIRD_TIMEOUTS.BATCH_OPERATION);
+    const row = rows[0] || {};
+    return {
+      org0,
+      org1,
+      periodo,
+      usuarioId,
+      registros: Number(row.REGISTROS || 0),
+      CAIR: Number(row.CAIR || 0),
+      FRA: Number(row.FRA || 0),
+      FRE: Number(row.FRE || 0),
+      FH: Number(row.FH || 0),
+      FV: Number(row.FV || 0),
+      FAA: Number(row.FAA || 0),
+      FAE: Number(row.FAE || 0),
+      FAT: Number(row.FAT || 0),
+      FAI: Number(row.FAI || 0)
+    };
+  }
+
+  private async guardarSnapshotAplicacionRevision(
+    tx: sql.Transaction,
+    snapshot: SnapshotAplicacionRevision
+  ): Promise<void> {
+    const request = new sql.Request(tx)
+      .input('org0', sql.Char(2), snapshot.org0)
+      .input('org1', sql.Char(2), snapshot.org1)
+      .input('periodo', sql.Char(4), snapshot.periodo)
+      .input('usuarioId', sql.UniqueIdentifier, snapshot.usuarioId)
+      .input('registros', sql.Int, snapshot.registros);
+    for (const fondo of ['CAIR', 'FRA', 'FRE', 'FH', 'FV', 'FAA', 'FAE', 'FAT', 'FAI'] as const) {
+      request.input(fondo, sql.Decimal(19, 2), snapshot[fondo]);
+    }
+    await request.query(`
+      DECLARE @id BIGINT;
+      SELECT @id = IdRevisionAplicacionHistorico
+      FROM conciliacion.RevisionAplicacionHistorico WITH (UPDLOCK, HOLDLOCK)
+      WHERE Organica0 = @org0 AND Organica1 = @org1
+        AND Organica2 = '01' AND Organica3 = '01' AND Periodo = @periodo;
+
+      IF @id IS NOT NULL AND EXISTS (
+        SELECT 1 FROM conciliacion.RevisionTarea
+        WHERE Organica0 = @org0 AND Organica1 = @org1
+          AND Organica2 = '01' AND Organica3 = '01' AND Periodo = @periodo
+      )
+        THROW 50031, 'REVISION_APLICACION_HISTORICO_CERRADO', 1;
+
+      IF @id IS NULL
+      BEGIN
+        INSERT INTO conciliacion.RevisionAplicacionHistorico (
+          Organica0, Organica1, Organica2, Organica3, Periodo,
+          CAIR, FRA, FRE, FH, FV, FAA, FAE, FAT, FAI,
+          RegistrosOrigen, UsuarioId
+        ) VALUES (
+          @org0, @org1, '01', '01', @periodo,
+          @CAIR, @FRA, @FRE, @FH, @FV, @FAA, @FAE, @FAT, @FAI,
+          @registros, @usuarioId
+        );
+      END
+      ELSE
+      BEGIN
+        UPDATE conciliacion.RevisionAplicacionHistorico
+        SET CAIR = @CAIR, FRA = @FRA, FRE = @FRE, FH = @FH, FV = @FV,
+          FAA = @FAA, FAE = @FAE, FAT = @FAT, FAI = @FAI,
+          RegistrosOrigen = @registros, UsuarioId = @usuarioId,
+          FechaActualizacion = SYSDATETIME()
+        WHERE IdRevisionAplicacionHistorico = @id;
+      END;
+    `);
+  }
 
   private async crearYEjecutarAhorro(
     tx: sql.Transaction,

@@ -27,7 +27,6 @@ import { CreateCompleteAfiliadoCommand } from './application/commands/CreateComp
 import { AplicarBDIsspeaIndividualCommand } from './application/commands/AplicarBDIsspeaIndividualCommand.js';
 import { AplicarBDIsspeaLoteCommand } from './application/commands/AplicarBDIsspeaLoteCommand.js';
 import { AplicarBDIssspeaQNACommand } from './application/commands/AplicarBDIssspeaQNACommand.js';
-import { RecuperarBaMovimientoCommand } from './application/commands/RecuperarBaMovimientoCommand.js';
 import { UpdateBitacoraAfectacionOrgTerminadoCommand } from './application/commands/UpdateBitacoraAfectacionOrgTerminadoCommand.js';
 import { CargarSemanasExtemporaneasLoteCommand } from './application/commands/CargarSemanasExtemporaneasLoteCommand.js';
 import { GetSemanasExtemporaneasQuery } from './application/queries/GetSemanasExtemporaneasQuery.js';
@@ -4833,52 +4832,6 @@ export default async function afiliadoRoutes(app: FastifyInstance) {
         return reply.code(400).send(fail(`No se puede finalizar la aplicacion de movimientos. Existen ${totalNoPermitidos} movimiento(s) fuera de los estados permitidos: Aprobado, Cancelado o Aplicado.`));
       }
       return handleAfiliadoError(error, reply, { operation: 'aplicarBDIsspeaLote', user: req.user?.sub });
-    }
-  });
-
-  // Recupera BA de una QNA histórica sin reaplicar procedimientos Firebird.
-  app.post('/afiliado/recuperar-ba-movimiento', {
-    preHandler: [requireAuth, requireRole('admin')],
-    schema: {
-      description: 'Recupera eventos BA_MOVIMIENTO faltantes entre la fecha de aplicación histórica y el siguiente evento HIPOTECARIO.',
-      tags: ['afiliado', 'calendario'],
-      security: [{ bearerAuth: [] }],
-      querystring: {
-        type: 'object',
-        required: ['periodo'],
-        properties: {
-          periodo: { type: 'string', pattern: '^\\d{4}$' },
-          org0: { type: 'string', pattern: '^\\d{1,2}$' },
-          org1: { type: 'string', pattern: '^\\d{1,2}$' },
-          preview: { type: 'boolean', default: false },
-          fechaAplicacion: { type: 'string', pattern: '^\\d{4}-\\d{2}-\\d{2}$' },
-          forzar: { type: 'boolean', default: false }
-        }
-      }
-    }
-  }, async (req, reply) => {
-    const query = req.query as { periodo?: string; org0?: string; org1?: string; preview?: boolean | string; fechaAplicacion?: string; forzar?: boolean | string };
-    const periodo = String(query.periodo || '').trim();
-    const org0 = String(query.org0 || req.user?.idOrganica0 || '').trim().padStart(2, '0');
-    const org1 = String(query.org1 || req.user?.idOrganica1 || '').trim().padStart(2, '0');
-    const preview = query.preview === true || query.preview === 'true';
-    const forzar = query.forzar === true || query.forzar === 'true';
-    const fechaAplicacion = query.fechaAplicacion?.trim();
-
-    if (!/^\d{4}$/.test(periodo) || !/^\d{2}$/.test(org0) || !/^\d{2}$/.test(org1)) {
-      return reply.code(400).send(fail('periodo, org0 y org1 son requeridos y deben tener formato válido.'));
-    }
-
-    try {
-      const command = req.diScope.resolve<RecuperarBaMovimientoCommand>('recuperarBaMovimientoCommand');
-      const resultado = await command.execute({ org0, org1, periodo, preview, fechaAplicacion, forzar });
-      return reply.send(ok(resultado));
-    } catch (error: any) {
-      const codigo = error.message || String(error);
-      if (codigo === 'APLICACION_QNA_HISTORICA_NO_FINALIZADA' || codigo === 'CORTE_HIPOTECARIO_NO_ENCONTRADO') {
-        return reply.code(409).send(fail(codigo));
-      }
-      return handleAfiliadoError(error, reply, { operation: 'recuperarBaMovimiento', user: req.user?.sub });
     }
   });
 
