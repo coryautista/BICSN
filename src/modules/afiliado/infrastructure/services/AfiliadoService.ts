@@ -225,7 +225,7 @@ export async function deleteAfiliadoService(id: number): Promise<void> {
 
 import type { MovimientoQuincenal } from '../../domain/entities/MovimientoQuincenal.js';
 import { getQuincenaAplicacion } from './AfiliadoQuincenaService.js';
-import { validarFechaMovimientoPeriodo } from '../../domain/services/MovimientoFechaPolicy.js';
+import { parsePeriodoMovimiento, validarFechaMovimientoPeriodo } from '../../domain/services/MovimientoFechaPolicy.js';
 import { validarMovimientoAntesDeTxt } from './MovimientoNominaDiasLaboradosService.js';
 
 export async function getMovimientosQuincenalesService(userOrg0: string, userOrg1: string): Promise<MovimientoQuincenal[]> {
@@ -441,6 +441,7 @@ export async function getMovimientosQuincenalesService(userOrg0: string, userOrg
 }
 
 export async function createAfiliadoAfiliadoOrgMovimientoService(data: {
+  periodo: string;
   // Afiliado fields
   folio?: number | null;
   apellidoPaterno?: string | null;
@@ -516,23 +517,9 @@ export async function createAfiliadoAfiliadoOrgMovimientoService(data: {
   creadoPor?: number | null;
   creadoPorUid?: string | null;
 }): Promise<{ afiliado: Afiliado; afiliadoOrg: AfiliadoOrg; movimiento: Movimiento }> {
-  // Calcular quincena y año basado en claveOrganica para generar fechas automáticamente
-  const claveOrganica0 = data.claveOrganica0 || '';
-  const claveOrganica1 = data.claveOrganica1;
-  const claveOrganica2 = data.claveOrganica2;
-  const claveOrganica3 = data.claveOrganica3;
-
-  const calculatedValues = await getQuincenaAplicacion(
-    claveOrganica0,
-    claveOrganica1,
-    claveOrganica2,
-    claveOrganica3,
-    data.creadoPor ?? undefined
-  );
-  
-  // Generar fechas basadas en la quincena calculada
-  const currentYear = calculatedValues.anio;
-  const quincena = calculatedValues.quincena;
+  const periodo = parsePeriodoMovimiento(data.periodo);
+  const currentYear = periodo.anio;
+  const quincena = periodo.quincena;
   validarFechaMovimientoPeriodo(data.tipoMovimientoId ?? 1, data.fechaMovimiento, currentYear, quincena);
   const pool = await getPool();
   await validarMovimientoAntesDeTxt({
@@ -609,7 +596,7 @@ export async function createAfiliadoAfiliadoOrgMovimientoService(data: {
       otrasPrestaciones: data.otrasPrestaciones ?? null,
       quinquenios: data.quinquenios ?? null,
       activo: data.activo ?? true,
-      fechaMovAlt: data.fechaMovAlt ?? fechaQuincena,
+      fechaMovAlt: data.fechaMovimiento ?? null,
       orgs1: data.orgs1 ?? null,
       orgs2: data.orgs2 ?? null,
       orgs3: data.orgs3 ?? null,

@@ -35,6 +35,45 @@ export interface SyncMovimientoNominaInput {
   };
 }
 
+export async function validarMovimientoUnicoEnPeriodo(input: {
+  executor: SqlExecutor;
+  interno: number | null | undefined;
+  anio: number;
+  quincena: number;
+}): Promise<void> {
+  if (!input.interno || input.interno <= 0) return;
+
+  const result = await input.executor.request()
+    .input('Interno', sql.Int, input.interno)
+    .input('Anio', sql.SmallInt, input.anio)
+    .input('Quincena', sql.TinyInt, input.quincena)
+    .query(`
+      SELECT TOP 1
+        a.id AS AfiliadoId,
+        a.numValidacion,
+        s.nombreStatus,
+        m.id AS MovimientoId,
+        m.tipoMovimientoId
+      FROM afi.Afiliado a WITH (UPDLOCK, HOLDLOCK)
+      INNER JOIN afi.Movimiento m ON m.afiliadoId = a.id
+      LEFT JOIN afi.AfiliadoStatusControl s ON s.numValidacion = a.numValidacion
+      WHERE a.interno = @Interno
+        AND a.anioAplicacion = @Anio
+        AND a.quincenaAplicacion = @Quincena
+        AND ISNULL(a.numValidacion, 1) <> 6
+      ORDER BY a.createdAt DESC, m.id DESC
+    `);
+
+  const existing = result.recordset[0];
+  if (!existing) return;
+  const periodo = `${String(input.quincena).padStart(2, '0')}${String(input.anio).slice(-2)}`;
+  throw new Error(
+    `MOVIMIENTO_EXISTENTE_EN_PERIODO: Ya existe el movimiento ${existing.MovimientoId} `
+    + `(tipo ${existing.tipoMovimientoId}, estado ${existing.nombreStatus ?? existing.numValidacion}) `
+    + `para el interno ${input.interno} en el periodo ${periodo}`
+  );
+}
+
 function normalizeOrg(value: string | null | undefined): string | null {
   const normalized = value?.trim();
   return normalized ? normalized : null;

@@ -32,6 +32,7 @@ const EntregaRendimientoSchema = z.preprocess((value) => {
 }, z.enum(['Si', 'No']).nullable().optional());
 
 export const CreateAfiliadoAfiliadoOrgMovimientoSchema = z.object({
+  periodo: z.string().regex(/^(0[1-9]|1\d|2[0-4])\d{2}$/, 'periodo debe tener formato QQAA'),
   // Afiliado fields
   folio: z.number().int().nullable().optional(),
   apellidoPaterno: z.string().max(255).nullable().optional(),

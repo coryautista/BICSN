@@ -2,9 +2,8 @@ import { getPool, sql } from '../../../../db/mssql.js';
 import type { AfiliadoOrg } from '../../../afiliadoOrg/afiliadoOrg.repo.js';
 import type { Movimiento } from '../../../movimiento/movimiento.repo.js';
 import type { Afiliado } from '../../domain/entities/Afiliado.js';
-import { AfiliadoAlreadyExistsError } from '../../domain/errors.js';
 import { getQuincenaAplicacion } from './AfiliadoQuincenaService.js';
-import { syncMovimientoNominaDiasLaborados } from './MovimientoNominaDiasLaboradosService.js';
+import { syncMovimientoNominaDiasLaborados, validarMovimientoUnicoEnPeriodo } from './MovimientoNominaDiasLaboradosService.js';
 
 export async function createAfiliadoAfiliadoOrgMovimiento(data: {
   afiliado: Omit<Afiliado, 'id' | 'createdAt' | 'updatedAt'>;
@@ -31,36 +30,16 @@ export async function createAfiliadoAfiliadoOrgMovimiento(data: {
     console.log(`Quincena calculada para orgánica ${data.afiliadoOrg.claveOrganica0}/${data.afiliadoOrg.claveOrganica1}/${data.afiliadoOrg.claveOrganica2}/${data.afiliadoOrg.claveOrganica3}: ${quincenaAplicacion}, Año: ${anioAplicacion}`);
   }
 
-  const interno = data.afiliado.interno;
-  if (interno != null && interno > 0 && quincenaAplicacion != null && anioAplicacion != null) {
-    const dupResult = await p.request()
-      .input('interno', sql.Int, interno)
-      .input('quincenaAplicacion', sql.TinyInt, quincenaAplicacion)
-      .input('anioAplicacion', sql.SmallInt, anioAplicacion)
-      .query(`
-        SELECT id, interno, quincenaAplicacion, anioAplicacion
-        FROM afi.Afiliado
-        WHERE interno = @interno
-           AND quincenaAplicacion = @quincenaAplicacion
-           AND anioAplicacion = @anioAplicacion
-           AND estatus = 1
-           AND numValidacion = 1
-       `);
-
-    if (dupResult.recordset.length > 0) {
-      const error = new AfiliadoAlreadyExistsError({
-        field: 'interno',
-        value: String(interno)
-      });
-      error.message = `Ya existe un registro para el interno ${interno} en la quincena ${quincenaAplicacion} del año ${anioAplicacion}`;
-      throw error;
-    }
-  }
-
   const transaction = p.transaction();
 
   try {
     await transaction.begin();
+    await validarMovimientoUnicoEnPeriodo({
+      executor: transaction,
+      interno: data.afiliado.interno,
+      quincena: quincenaAplicacion,
+      anio: anioAplicacion
+    });
 
     let folio = data.afiliado.folio;
     if (!folio || folio === 0) {
@@ -163,7 +142,7 @@ export async function createAfiliadoAfiliadoOrgMovimiento(data: {
       .input('otrasPrestaciones', sql.Decimal(12, 2), data.afiliadoOrg.otrasPrestaciones)
       .input('quinquenios', sql.Decimal(12, 2), data.afiliadoOrg.quinquenios)
       .input('activo', sql.Bit, data.afiliadoOrg.activo)
-      .input('fechaMovAlt', sql.Date, data.afiliadoOrg.fechaMovAlt ? new Date(data.afiliadoOrg.fechaMovAlt) : null)
+      .input('fechaMovAlt', sql.Date, data.movimiento.fechaMovimiento ? new Date(data.movimiento.fechaMovimiento) : null)
       .input('orgs1', sql.VarChar(200), data.afiliadoOrg.orgs1)
       .input('orgs2', sql.VarChar(200), data.afiliadoOrg.orgs2)
       .input('orgs3', sql.VarChar(200), data.afiliadoOrg.orgs3)

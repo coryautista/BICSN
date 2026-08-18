@@ -55,6 +55,7 @@ export interface MovimientoQuincenal {
     sueldo: number | null;
     otrasPrestaciones: number | null;
     quinquenios: number | null;
+    numQuinquenios: number | null;
     activo: boolean;
     fechaMovAlt: string | null;
     orgs1: string | null;

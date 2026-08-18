@@ -4,11 +4,8 @@ import { executeSerializedQuery, decodeFirebirdObject, executeSelectableProcedur
 import { CreateCompleteAfiliadoData, CompleteAfiliadoResult } from '../../domain/entities/CompleteAfiliado.js';
 import { getPool } from '../../../../db/mssql.js';
 import pino from 'pino';
-import {
-  AfiliadoAlreadyExistsError,
-  AfiliadoRegistrationError
-} from '../../domain/errors.js';
-import { syncMovimientoNominaDiasLaborados, validarMovimientoAntesDeTxt } from '../../infrastructure/services/MovimientoNominaDiasLaboradosService.js';
+import { AfiliadoRegistrationError } from '../../domain/errors.js';
+import { syncMovimientoNominaDiasLaborados, validarMovimientoAntesDeTxt, validarMovimientoUnicoEnPeriodo } from '../../infrastructure/services/MovimientoNominaDiasLaboradosService.js';
 import { validarFechaMovimientoPeriodo } from '../../domain/services/MovimientoFechaPolicy.js';
 
 const logger = pino({
@@ -83,38 +80,16 @@ export class CreateCompleteAfiliadoCommand {
       organica3: data.afiliadoOrg.claveOrganica3
     });
 
-    // Validar que no exista ya un registro para el mismo interno en la misma quincena y año
-    const interno = data.afiliado.interno;
-    if (interno != null && interno > 0 && quincenaAplicacion != null && anioAplicacion != null) {
-      const dupResult = await this.mssqlPool.request()
-        .input('interno', sql.Int, interno)
-        .input('quincenaAplicacion', sql.TinyInt, quincenaAplicacion)
-        .input('anioAplicacion', sql.SmallInt, anioAplicacion)
-        .query(`
-          SELECT id, interno, quincenaAplicacion, anioAplicacion
-          FROM afi.Afiliado
-          WHERE interno = @interno
-             AND quincenaAplicacion = @quincenaAplicacion
-             AND anioAplicacion = @anioAplicacion
-             AND estatus = 1
-             AND numValidacion = 1
-         `);
-
-      if (dupResult.recordset.length > 0) {
-        logger.warn({ ...logContext, interno, quincenaAplicacion, anioAplicacion, duplicateId: dupResult.recordset[0].id }, 'Ya existe registro para este interno en la misma quincena/año');
-        const error = new AfiliadoAlreadyExistsError({
-          field: 'interno',
-          value: String(interno)
-        });
-        error.message = `Ya existe un registro para el interno ${interno} en la quincena ${quincenaAplicacion} del año ${anioAplicacion}`;
-        throw error;
-      }
-    }
-
     // Iniciar transacción
     const p = await getPool();
     const transaction = p.transaction();
-    await transaction.begin();
+      await transaction.begin();
+      await validarMovimientoUnicoEnPeriodo({
+        executor: transaction,
+        interno: data.afiliado.interno,
+        quincena: quincenaAplicacion,
+        anio: anioAplicacion
+      });
 
     try {
       // Auto-generar folio si no se proporciona o es 0
@@ -225,7 +200,7 @@ export class CreateCompleteAfiliadoCommand {
         .input('otrasPrestaciones', sql.Decimal(12, 2), data.afiliadoOrg.otrasPrestaciones)
         .input('quinquenios', sql.Decimal(12, 2), data.afiliadoOrg.quinquenios)
         .input('activo', sql.Bit, data.afiliadoOrg.activo)
-        .input('fechaMovAlt', sql.Date, data.afiliadoOrg.fechaMovAlt ? new Date(data.afiliadoOrg.fechaMovAlt) : null)
+        .input('fechaMovAlt', sql.Date, data.movimiento.fechaMovimiento ? new Date(data.movimiento.fechaMovimiento) : null)
         .input('orgs1', sql.VarChar(200), data.afiliadoOrg.orgs1)
         .input('orgs2', sql.VarChar(200), data.afiliadoOrg.orgs2)
         .input('orgs3', sql.VarChar(200), data.afiliadoOrg.orgs3)
@@ -441,11 +416,10 @@ export class CreateCompleteAfiliadoCommand {
         stack: errorStack
       }, 'Error al crear afiliado completo, transacción revertida');
 
-      if (error instanceof AfiliadoAlreadyExistsError) {
-        throw error;
-      }
       if (error instanceof Error && (
         error.message.startsWith('MOVIMIENTO_FECHA_')
+        || error.message.startsWith('MOVIMIENTO_PERIODO_')
+        || error.message.startsWith('MOVIMIENTO_EXISTENTE_')
         || error.message.startsWith('MOVIMIENTO_NOMINA_')
         || error.message === 'MOVIMIENTO_POSTERIOR_TXT_NO_PERMITIDO'
       )) {

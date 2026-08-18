@@ -7,6 +7,14 @@ export const MOVIMIENTO_TIPO = {
   TERMINA_SUSPENSION_Y_BAJA: 6
 } as const;
 
+export function parsePeriodoMovimiento(periodo: string): { quincena: number; anio: number } {
+  if (!/^\d{4}$/.test(periodo)) throw new Error('MOVIMIENTO_PERIODO_INVALIDO');
+  const quincena = Number(periodo.slice(0, 2));
+  const anio = 2000 + Number(periodo.slice(2, 4));
+  if (quincena < 1 || quincena > 24) throw new Error('MOVIMIENTO_PERIODO_INVALIDO');
+  return { quincena, anio };
+}
+
 const TIPOS_BAJA = new Set<number>([
   MOVIMIENTO_TIPO.BAJA_PERMANENTE,
   MOVIMIENTO_TIPO.TERMINA_SUSPENSION_Y_BAJA

@@ -2,15 +2,17 @@ import assert from 'node:assert/strict';
 import {
   calcularDiasLaboradosMovimiento,
   MOVIMIENTO_TIPO,
+  parsePeriodoMovimiento,
   resolverFechaEfectivaMovimiento,
   validarFechaMovimientoPeriodo
 } from '../src/modules/afiliado/domain/services/MovimientoFechaPolicy.js';
 import {
   CreateAfiliadoAfiliadoOrgMovimientoSchema,
+  CreateBajaPermanenteSchema,
   CreateBajaTerminaSuspensionYBajaSchema
 } from '../src/modules/afiliado/afiliado.schemas.js';
 import { NominaDiasLaboradosResolver } from '../src/modules/aportacionesFondos/domain/services/NominaDiasLaboradosResolver.js';
-import { syncMovimientoNominaDiasLaborados } from '../src/modules/afiliado/infrastructure/services/MovimientoNominaDiasLaboradosService.js';
+import { syncMovimientoNominaDiasLaborados, validarMovimientoUnicoEnPeriodo } from '../src/modules/afiliado/infrastructure/services/MovimientoNominaDiasLaboradosService.js';
 
 const ANIO = 2026;
 const QUINCENA = 14; // 16 al 31 de julio
@@ -40,6 +42,9 @@ assert.equal(calcularDiasLaboradosMovimiento(MOVIMIENTO_TIPO.BAJA_PERMANENTE, '2
 assert.equal(calcularDiasLaboradosMovimiento(MOVIMIENTO_TIPO.BAJA_PERMANENTE, '2026-07-20', ANIO, QUINCENA), 5);
 assert.equal(calcularDiasLaboradosMovimiento(MOVIMIENTO_TIPO.TERMINA_SUSPENSION_Y_BAJA, '2026-07-31', ANIO, QUINCENA), 15);
 assert.equal(calcularDiasLaboradosMovimiento(MOVIMIENTO_TIPO.CAMBIO_SUELDO, '2026-07-20', ANIO, QUINCENA), null);
+assert.deepEqual(parsePeriodoMovimiento('1526'), { quincena: 15, anio: 2026 });
+assert.throws(() => parsePeriodoMovimiento('2526'), /MOVIMIENTO_PERIODO_INVALIDO/);
+assert.throws(() => parsePeriodoMovimiento('15-26'), /MOVIMIENTO_PERIODO_INVALIDO/);
 
 assert.deepEqual(
   resolverFechaEfectivaMovimiento({ fechaMovimiento: '2026-07-20', fecha: '2026-07-21', createdAt: '2026-07-22T10:00:00Z' }),
@@ -55,9 +60,11 @@ assert.deepEqual(
 );
 
 assert.equal(CreateAfiliadoAfiliadoOrgMovimientoSchema.safeParse({}).success, false);
-assert.equal(CreateAfiliadoAfiliadoOrgMovimientoSchema.safeParse({ fechaMovimiento: '2026-07-20' }).success, true);
+assert.equal(CreateAfiliadoAfiliadoOrgMovimientoSchema.safeParse({ periodo: '1426', fechaMovimiento: '2026-07-20' }).success, true);
+assert.equal(CreateAfiliadoAfiliadoOrgMovimientoSchema.safeParse({ periodo: '2526', fechaMovimiento: '2026-07-20' }).success, false);
+assert.equal(CreateBajaPermanenteSchema.safeParse({ interno: 85427, periodo: '1526', fechaMovimiento: '2026-07-31' }).success, true);
 assert.equal(CreateBajaTerminaSuspensionYBajaSchema.safeParse({ interno: 1 }).success, false);
-assert.equal(CreateBajaTerminaSuspensionYBajaSchema.safeParse({ interno: 1, fechaMovimiento: '2026-06-30' }).success, true);
+assert.equal(CreateBajaTerminaSuspensionYBajaSchema.safeParse({ interno: 1, periodo: '1426', fechaMovimiento: '2026-06-30' }).success, true);
 
 const resolver = new NominaDiasLaboradosResolver();
 const detalle13 = new Map([['RFC1', { dias: 13, baseCotizacionQuinquenios: null }]]);
@@ -69,6 +76,27 @@ assert.deepEqual(
 );
 assert.equal(resolver.resolve('RFC2', { tieneArchivo: false, fuente: 'movimiento', registros: detalle13 }, true).dias, 15);
 assert.equal(resolver.resolve('RFC1', { tieneArchivo: false, fuente: 'default', registros: new Map() }, true).dias, 15);
+
+const executorMovimientoExistente = {
+  request() {
+    return {
+      input() { return this; },
+      async query() {
+        return { recordset: [{ AfiliadoId: 25, MovimientoId: 22, tipoMovimientoId: 2, numValidacion: 1, nombreStatus: 'Registrado' }] };
+      }
+    };
+  }
+};
+await assert.rejects(
+  validarMovimientoUnicoEnPeriodo({ executor: executorMovimientoExistente as any, interno: 85427, anio: 2026, quincena: 15 }),
+  /MOVIMIENTO_EXISTENTE_EN_PERIODO.*1526/
+);
+const executorSinMovimiento = {
+  request() {
+    return { input() { return this; }, async query() { return { recordset: [] }; } };
+  }
+};
+await validarMovimientoUnicoEnPeriodo({ executor: executorSinMovimiento as any, interno: 85427, anio: 2026, quincena: 15 });
 
 const executorConflicto = {
   request() {

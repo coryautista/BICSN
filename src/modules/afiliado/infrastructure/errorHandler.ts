@@ -65,11 +65,15 @@ export function handleAfiliadoError(error: any, reply: FastifyReply, context?: a
   if (typeof error.message === 'string' && error.message.startsWith('MOTIVO_BAJA_')) {
     return reply.code(400).send(fail(error.message));
   }
-  if (typeof error.message === 'string' && error.message.startsWith('MOVIMIENTO_FECHA_')) {
+  if (typeof error.message === 'string' && (
+    error.message.startsWith('MOVIMIENTO_FECHA_')
+    || error.message.startsWith('MOVIMIENTO_PERIODO_')
+  )) {
     return reply.code(400).send(fail(error.message, error.message));
   }
   if (typeof error.message === 'string' && (
     error.message.startsWith('MOVIMIENTO_NOMINA_')
+    || error.message.startsWith('MOVIMIENTO_EXISTENTE_')
     || error.message === 'MOVIMIENTO_POSTERIOR_TXT_NO_PERMITIDO'
   )) {
     return reply.code(400).send(fail(error.message, error.message));
