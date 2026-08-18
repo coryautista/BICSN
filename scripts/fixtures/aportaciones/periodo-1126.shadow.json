@@ -1,0 +1,522 @@
+{
+  "schemaVersion": 1,
+  "reportId": "APORTACIONES-04-24-01-01-1126-SHADOW-D6-A2",
+  "source": {
+    "environment": "CALIDAD",
+    "database": "SII-ISSSSPEA",
+    "firebirdDatabase": "/db/db/dbQna1426.fdb",
+    "cargaId": 15,
+    "anio": 2026,
+    "quincena": 11,
+    "periodo": "1126",
+    "organica": [
+      "04",
+      "24",
+      "01",
+      "01"
+    ],
+    "closed": true,
+    "bitacoraResult": "OK",
+    "readOnly": true
+  },
+  "formulaCalculoVersionId": 1,
+  "precisionPolicy": "MXN-DETAIL6-AGG2-TRUNC-v1",
+  "comparisonNotice": "Legacy Firebird may include external adjustments; differences are diagnostic, not corrections.",
+  "summary": {
+    "totalCases": 13,
+    "calculated": 12,
+    "skippedNoFirebirdBase": 1
+  },
+  "cases": [
+    {
+      "caseId": "PARTIAL_001",
+      "origin": "MATCHED",
+      "status": "CALCULATED",
+      "diasLaborados": "12.00",
+      "bases": {
+        "sueldoD6": "4688.044000",
+        "otrasPrestacionesD6": "0.000000",
+        "quinqueniosD6": "0.000000"
+      },
+      "candidateD6": {
+        "cair": "93.760880",
+        "fra": "210.961980",
+        "fre": "1043.089790",
+        "fh": "16.408154",
+        "fv": "65.632616",
+        "faa": "234.402200",
+        "fae": "117.201100",
+        "fat": "351.603300"
+      },
+      "legacyFirebirdA2": {
+        "cair": "117.20",
+        "fra": "263.70",
+        "fre": "1303.86",
+        "fh": "20.51",
+        "fv": "82.04",
+        "faa": "293.00",
+        "fae": "146.50",
+        "fat": "439.50",
+        "fai": "0.00"
+      },
+      "differenceCandidateMinusLegacyD6": {
+        "cair": "-23.439120",
+        "fra": "-52.738020",
+        "fre": "-260.770210",
+        "fh": "-4.101846",
+        "fv": "-16.407384",
+        "faa": "-58.597800",
+        "fae": "-29.298900",
+        "fat": "-87.896700"
+      }
+    },
+    {
+      "caseId": "PARTIAL_002",
+      "origin": "MATCHED",
+      "status": "CALCULATED",
+      "diasLaborados": "13.00",
+      "bases": {
+        "sueldoD6": "5078.714333",
+        "otrasPrestacionesD6": "0.000000",
+        "quinqueniosD6": "0.000000"
+      },
+      "candidateD6": {
+        "cair": "101.574286",
+        "fra": "228.542144",
+        "fre": "1130.013939",
+        "fh": "17.775500",
+        "fv": "71.102000",
+        "faa": "253.935716",
+        "fae": "126.967858",
+        "fat": "380.903574"
+      },
+      "legacyFirebirdA2": {
+        "cair": "117.20",
+        "fra": "263.70",
+        "fre": "1303.86",
+        "fh": "20.51",
+        "fv": "82.04",
+        "faa": "293.00",
+        "fae": "146.50",
+        "fat": "439.50",
+        "fai": "0.00"
+      },
+      "differenceCandidateMinusLegacyD6": {
+        "cair": "-15.625714",
+        "fra": "-35.157856",
+        "fre": "-173.846061",
+        "fh": "-2.734500",
+        "fv": "-10.938000",
+        "faa": "-39.064284",
+        "fae": "-19.532142",
+        "fat": "-58.596426"
+      }
+    },
+    {
+      "caseId": "PARTIAL_003",
+      "origin": "MATCHED",
+      "status": "CALCULATED",
+      "diasLaborados": "13.00",
+      "bases": {
+        "sueldoD6": "5880.992000",
+        "otrasPrestacionesD6": "0.000000",
+        "quinqueniosD6": "0.000000"
+      },
+      "candidateD6": {
+        "cair": "117.619840",
+        "fra": "264.644640",
+        "fre": "1308.520720",
+        "fh": "20.583472",
+        "fv": "82.333888",
+        "faa": "294.049600",
+        "fae": "147.024800",
+        "fat": "441.074400"
+      },
+      "legacyFirebirdA2": {
+        "cair": "135.72",
+        "fra": "305.36",
+        "fre": "1509.83",
+        "fh": "23.75",
+        "fv": "95.00",
+        "faa": "339.29",
+        "fae": "169.64",
+        "fat": "508.93",
+        "fai": "0.00"
+      },
+      "differenceCandidateMinusLegacyD6": {
+        "cair": "-18.100160",
+        "fra": "-40.715360",
+        "fre": "-201.309280",
+        "fh": "-3.166528",
+        "fv": "-12.666112",
+        "faa": "-45.240400",
+        "fae": "-22.615200",
+        "fat": "-67.855600"
+      }
+    },
+    {
+      "caseId": "PARTIAL_004",
+      "origin": "MATCHED",
+      "status": "CALCULATED",
+      "diasLaborados": "13.00",
+      "bases": {
+        "sueldoD6": "8128.401666",
+        "otrasPrestacionesD6": "0.000000",
+        "quinqueniosD6": "0.000000"
+      },
+      "candidateD6": {
+        "cair": "162.568033",
+        "fra": "365.778074",
+        "fre": "1808.569370",
+        "fh": "28.449405",
+        "fv": "113.797623",
+        "faa": "406.420083",
+        "fae": "203.210041",
+        "fat": "609.630124"
+      },
+      "legacyFirebirdA2": {
+        "cair": "187.58",
+        "fra": "422.05",
+        "fre": "2086.81",
+        "fh": "32.83",
+        "fv": "131.30",
+        "faa": "468.95",
+        "fae": "234.47",
+        "fat": "703.42",
+        "fai": "0.00"
+      },
+      "differenceCandidateMinusLegacyD6": {
+        "cair": "-25.011967",
+        "fra": "-56.271926",
+        "fre": "-278.240630",
+        "fh": "-4.380595",
+        "fv": "-17.502377",
+        "faa": "-62.529917",
+        "fae": "-31.259959",
+        "fat": "-93.789876"
+      }
+    },
+    {
+      "caseId": "PARTIAL_005",
+      "origin": "MATCHED",
+      "status": "CALCULATED",
+      "diasLaborados": "14.00",
+      "bases": {
+        "sueldoD6": "5805.496666",
+        "otrasPrestacionesD6": "0.000000",
+        "quinqueniosD6": "0.000000"
+      },
+      "candidateD6": {
+        "cair": "116.109933",
+        "fra": "261.247349",
+        "fre": "1291.723008",
+        "fh": "20.319238",
+        "fv": "81.276953",
+        "faa": "290.274833",
+        "fae": "145.137416",
+        "fat": "435.412249"
+      },
+      "legacyFirebirdA2": {
+        "cair": "124.40",
+        "fra": "279.91",
+        "fre": "1383.99",
+        "fh": "21.77",
+        "fv": "87.08",
+        "faa": "311.01",
+        "fae": "155.50",
+        "fat": "466.51",
+        "fai": "0.00"
+      },
+      "differenceCandidateMinusLegacyD6": {
+        "cair": "-8.290067",
+        "fra": "-18.662651",
+        "fre": "-92.266992",
+        "fh": "-1.450762",
+        "fv": "-5.803047",
+        "faa": "-20.735167",
+        "fae": "-10.362584",
+        "fat": "-31.097751"
+      }
+    },
+    {
+      "caseId": "PARTIAL_006",
+      "origin": "MATCHED",
+      "status": "CALCULATED",
+      "diasLaborados": "14.00",
+      "bases": {
+        "sueldoD6": "5805.496666",
+        "otrasPrestacionesD6": "0.000000",
+        "quinqueniosD6": "0.000000"
+      },
+      "candidateD6": {
+        "cair": "116.109933",
+        "fra": "261.247349",
+        "fre": "1291.723008",
+        "fh": "20.319238",
+        "fv": "81.276953",
+        "faa": "290.274833",
+        "fae": "145.137416",
+        "fat": "435.412249"
+      },
+      "legacyFirebirdA2": {
+        "cair": "124.40",
+        "fra": "279.91",
+        "fre": "1383.99",
+        "fh": "21.77",
+        "fv": "87.08",
+        "faa": "311.01",
+        "fae": "155.50",
+        "fat": "466.51",
+        "fai": "0.00"
+      },
+      "differenceCandidateMinusLegacyD6": {
+        "cair": "-8.290067",
+        "fra": "-18.662651",
+        "fre": "-92.266992",
+        "fh": "-1.450762",
+        "fv": "-5.803047",
+        "faa": "-20.735167",
+        "fae": "-10.362584",
+        "fat": "-31.097751"
+      }
+    },
+    {
+      "caseId": "PARTIAL_007",
+      "origin": "MATCHED",
+      "status": "CALCULATED",
+      "diasLaborados": "14.00",
+      "bases": {
+        "sueldoD6": "7091.462000",
+        "otrasPrestacionesD6": "0.000000",
+        "quinqueniosD6": "0.000000"
+      },
+      "candidateD6": {
+        "cair": "141.829240",
+        "fra": "319.115790",
+        "fre": "1577.850295",
+        "fh": "24.820117",
+        "fv": "99.280468",
+        "faa": "354.573100",
+        "fae": "177.286550",
+        "fat": "531.859650"
+      },
+      "legacyFirebirdA2": {
+        "cair": "151.96",
+        "fra": "341.91",
+        "fre": "1690.55",
+        "fh": "26.59",
+        "fv": "106.37",
+        "faa": "379.90",
+        "fae": "189.95",
+        "fat": "569.85",
+        "fai": "0.00"
+      },
+      "differenceCandidateMinusLegacyD6": {
+        "cair": "-10.130760",
+        "fra": "-22.794210",
+        "fre": "-112.699705",
+        "fh": "-1.769883",
+        "fv": "-7.089532",
+        "faa": "-25.326900",
+        "fae": "-12.663450",
+        "fat": "-37.990350"
+      }
+    },
+    {
+      "caseId": "PARTIAL_008",
+      "origin": "MATCHED",
+      "status": "CALCULATED",
+      "diasLaborados": "14.00",
+      "bases": {
+        "sueldoD6": "7474.408666",
+        "otrasPrestacionesD6": "0.000000",
+        "quinqueniosD6": "0.000000"
+      },
+      "candidateD6": {
+        "cair": "149.488173",
+        "fra": "336.348389",
+        "fre": "1663.055928",
+        "fh": "26.160430",
+        "fv": "104.641721",
+        "faa": "373.720433",
+        "fae": "186.860216",
+        "fat": "560.580649"
+      },
+      "legacyFirebirdA2": {
+        "cair": "160.17",
+        "fra": "360.37",
+        "fre": "1781.84",
+        "fh": "28.03",
+        "fv": "112.12",
+        "faa": "400.41",
+        "fae": "200.21",
+        "fat": "600.62",
+        "fai": "0.00"
+      },
+      "differenceCandidateMinusLegacyD6": {
+        "cair": "-10.681827",
+        "fra": "-24.021611",
+        "fre": "-118.784072",
+        "fh": "-1.869570",
+        "fv": "-7.478279",
+        "faa": "-26.689567",
+        "fae": "-13.349784",
+        "fat": "-40.039351"
+      }
+    },
+    {
+      "caseId": "PARTIAL_009",
+      "origin": "MATCHED",
+      "status": "CALCULATED",
+      "diasLaborados": "14.00",
+      "bases": {
+        "sueldoD6": "7474.408666",
+        "otrasPrestacionesD6": "0.000000",
+        "quinqueniosD6": "0.000000"
+      },
+      "candidateD6": {
+        "cair": "149.488173",
+        "fra": "336.348389",
+        "fre": "1663.055928",
+        "fh": "26.160430",
+        "fv": "104.641721",
+        "faa": "373.720433",
+        "fae": "186.860216",
+        "fat": "560.580649"
+      },
+      "legacyFirebirdA2": {
+        "cair": "160.17",
+        "fra": "360.37",
+        "fre": "1781.84",
+        "fh": "28.03",
+        "fv": "112.12",
+        "faa": "400.41",
+        "fae": "200.21",
+        "fat": "600.62",
+        "fai": "0.00"
+      },
+      "differenceCandidateMinusLegacyD6": {
+        "cair": "-10.681827",
+        "fra": "-24.021611",
+        "fre": "-118.784072",
+        "fh": "-1.869570",
+        "fv": "-7.478279",
+        "faa": "-26.689567",
+        "fae": "-13.349784",
+        "fat": "-40.039351"
+      }
+    },
+    {
+      "caseId": "PARTIAL_010",
+      "origin": "MATCHED",
+      "status": "CALCULATED",
+      "diasLaborados": "14.00",
+      "bases": {
+        "sueldoD6": "7506.650666",
+        "otrasPrestacionesD6": "0.000000",
+        "quinqueniosD6": "0.000000"
+      },
+      "candidateD6": {
+        "cair": "150.133013",
+        "fra": "337.799279",
+        "fre": "1670.229773",
+        "fh": "26.273277",
+        "fv": "105.093109",
+        "faa": "375.332533",
+        "fae": "187.666266",
+        "fat": "562.998799"
+      },
+      "legacyFirebirdA2": {
+        "cair": "160.86",
+        "fra": "361.93",
+        "fre": "1789.53",
+        "fh": "28.15",
+        "fv": "112.60",
+        "faa": "402.14",
+        "fae": "201.07",
+        "fat": "603.21",
+        "fai": "0.00"
+      },
+      "differenceCandidateMinusLegacyD6": {
+        "cair": "-10.726987",
+        "fra": "-24.130721",
+        "fre": "-119.300227",
+        "fh": "-1.876723",
+        "fv": "-7.506891",
+        "faa": "-26.807467",
+        "fae": "-13.403734",
+        "fat": "-40.211201"
+      }
+    },
+    {
+      "caseId": "PARTIAL_011",
+      "origin": "MATCHED",
+      "status": "CALCULATED",
+      "diasLaborados": "14.00",
+      "bases": {
+        "sueldoD6": "8753.663333",
+        "otrasPrestacionesD6": "0.000000",
+        "quinqueniosD6": "0.000000"
+      },
+      "candidateD6": {
+        "cair": "175.073266",
+        "fra": "393.914849",
+        "fre": "1947.690091",
+        "fh": "30.637821",
+        "fv": "122.551286",
+        "faa": "437.683166",
+        "fae": "218.841583",
+        "fat": "656.524749"
+      },
+      "legacyFirebirdA2": {
+        "cair": "187.58",
+        "fra": "422.05",
+        "fre": "2086.81",
+        "fh": "32.83",
+        "fv": "131.30",
+        "faa": "468.95",
+        "fae": "234.47",
+        "fat": "703.42",
+        "fai": "0.00"
+      },
+      "differenceCandidateMinusLegacyD6": {
+        "cair": "-12.506734",
+        "fra": "-28.135151",
+        "fre": "-139.119909",
+        "fh": "-2.192179",
+        "fv": "-8.748714",
+        "faa": "-31.266834",
+        "fae": "-15.628417",
+        "fat": "-46.895251"
+      }
+    },
+    {
+      "caseId": "MISSING_PAYROLL_001",
+      "origin": "NOMINA_SIN_COINCIDENCIA",
+      "status": "CALCULATED",
+      "diasLaborados": "0.00",
+      "bases": {
+        "sueldoD6": "0.000000",
+        "otrasPrestacionesD6": "0.000000",
+        "quinqueniosD6": "0.000000"
+      },
+      "candidateD6": {
+        "cair": "0.000000",
+        "fra": "0.000000",
+        "fre": "0.000000",
+        "fh": "0.000000",
+        "fv": "0.000000",
+        "faa": "0.000000",
+        "fae": "0.000000",
+        "fat": "0.000000"
+      },
+      "legacyFirebirdA2": null,
+      "differenceCandidateMinusLegacyD6": null
+    },
+    {
+      "caseId": "MISSING_FIREBIRD_001",
+      "origin": "NOMINA_SIN_AFILIADO_FIREBIRD",
+      "status": "SKIPPED_NO_FIREBIRD_BASE"
+    }
+  ]
+}

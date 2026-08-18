@@ -1,5 +1,9 @@
 import { ConnectionPool, Transaction } from 'mssql';
 import { sql } from '../../../../db/mssql.js';
+import {
+  calcularDiasLaboradosMovimiento,
+  MOVIMIENTO_TIPO
+} from '../../domain/services/MovimientoFechaPolicy.js';
 
 type SqlExecutor = ConnectionPool | Transaction;
 
@@ -31,9 +35,6 @@ export interface SyncMovimientoNominaInput {
   };
 }
 
-const ALTA_TIPO_MOVIMIENTO_ID = 1;
-const BAJA_PERMANENTE_TIPO_MOVIMIENTO_ID = 2;
-
 function normalizeOrg(value: string | null | undefined): string | null {
   const normalized = value?.trim();
   return normalized ? normalized : null;
@@ -62,43 +63,37 @@ function parsePeriod(input: SyncMovimientoNominaInput): { anio: number; quincena
   };
 }
 
-function getQuincenaRange(anio: number, quincena: number): { inicio: Date; fin: Date } {
-  if (quincena < 1 || quincena > 24) {
-    throw new Error('MOVIMIENTO_NOMINA_QUINCENA_INVALIDA');
-  }
-
-  const mes = Math.ceil(quincena / 2) - 1;
-  const esImpar = quincena % 2 === 1;
-  const inicio = new Date(Date.UTC(anio, mes, esImpar ? 1 : 16));
-  const fin = esImpar
-    ? new Date(Date.UTC(anio, mes, 15))
-    : new Date(Date.UTC(anio, mes + 1, 0));
-
-  return { inicio, fin };
-}
-
-function calculateDiasLaborados(tipoMovimientoId: number, fechaMovimiento: string, anio: number, quincena: number): number {
-  const { inicio, fin } = getQuincenaRange(anio, quincena);
-  const fecha = new Date(`${fechaMovimiento}T00:00:00.000Z`);
-
-  if (Number.isNaN(fecha.getTime())) {
-    throw new Error('MOVIMIENTO_NOMINA_FECHA_INVALIDA');
-  }
-
-  let rawDias = 0;
-  const oneDayMs = 24 * 60 * 60 * 1000;
-
-  if (tipoMovimientoId === ALTA_TIPO_MOVIMIENTO_ID) {
-    rawDias = Math.floor((fin.getTime() - fecha.getTime()) / oneDayMs) + 1;
-  } else if (tipoMovimientoId === BAJA_PERMANENTE_TIPO_MOVIMIENTO_ID) {
-    rawDias = Math.floor((fecha.getTime() - inicio.getTime()) / oneDayMs) + 1;
-  }
-
-  return Math.min(15, Math.max(0, rawDias));
-}
-
 function roundMoney(value: number): number {
   return Math.round(value * 100) / 100;
+}
+
+export async function validarMovimientoAntesDeTxt(input: {
+  executor: SqlExecutor;
+  anio: number;
+  quincena: number;
+  organica0: string | null;
+  organica1: string | null;
+  organica2: string | null;
+  organica3: string | null;
+}): Promise<void> {
+  const result = await input.executor.request()
+    .input('Anio', sql.SmallInt, input.anio)
+    .input('Quincena', sql.TinyInt, input.quincena)
+    .input('Organica0', sql.VarChar(10), normalizeOrg(input.organica0))
+    .input('Organica1', sql.VarChar(10), normalizeOrg(input.organica1))
+    .input('Organica2', sql.VarChar(10), normalizeOrg(input.organica2))
+    .input('Organica3', sql.VarChar(10), normalizeOrg(input.organica3))
+    .query(`
+      SELECT TOP 1 Id
+      FROM dbo.NominaAplicacionQnalCarga
+      WHERE Anio=@Anio AND Quincena=@Quincena
+        AND Organica0=@Organica0
+        AND ((Organica1=@Organica1) OR (Organica1 IS NULL AND @Organica1 IS NULL))
+        AND ((Organica2=@Organica2) OR (Organica2 IS NULL AND @Organica2 IS NULL))
+        AND ((Organica3=@Organica3) OR (Organica3 IS NULL AND @Organica3 IS NULL))
+        AND TipoCarga='TXT' AND Estatus='APLICADA' AND EsVigente=1
+    `);
+  if (result.recordset.length > 0) throw new Error('MOVIMIENTO_POSTERIOR_TXT_NO_PERMITIDO');
 }
 
 async function getCategoriaPuestoOrg(executor: SqlExecutor, categoriaPuestoOrgId: number) {
@@ -141,23 +136,30 @@ async function createSyntheticCarga(executor: SqlExecutor, input: {
     .input('Organica3', sql.VarChar(10), input.organica3)
     .input('ArchivoNombre', sql.NVarChar(255), 'MOVIMIENTO_AFILIADO')
     .input('Estatus', sql.VarChar(20), 'APLICADA')
+    .input('TipoCarga', sql.VarChar(20), 'MOVIMIENTO')
+    .input('EsVigente', sql.Bit, false)
     .input('TotalLineas', sql.Int, 1)
     .input('TotalDetalles', sql.Int, 1)
     .input('MotivoRechazo', sql.NVarChar(1000), null)
     .input('UsuarioRegistro', sql.NVarChar(100), input.usuarioRegistro)
     .query(`
       INSERT INTO dbo.NominaAplicacionQnalCarga
-        (EntidadId, Anio, Quincena, Organica0, Organica1, Organica2, Organica3, ArchivoNombre, TotalLineas, TotalDetalles, Estatus, MotivoRechazo, UsuarioRegistro)
+        (EntidadId, Anio, Quincena, Organica0, Organica1, Organica2, Organica3, ArchivoNombre, TotalLineas, TotalDetalles, Estatus, TipoCarga, EsVigente, MotivoRechazo, UsuarioRegistro)
       OUTPUT INSERTED.Id
       VALUES
-        (@EntidadId, @Anio, @Quincena, @Organica0, @Organica1, @Organica2, @Organica3, @ArchivoNombre, @TotalLineas, @TotalDetalles, @Estatus, @MotivoRechazo, @UsuarioRegistro)
+        (@EntidadId, @Anio, @Quincena, @Organica0, @Organica1, @Organica2, @Organica3, @ArchivoNombre, @TotalLineas, @TotalDetalles, @Estatus, @TipoCarga, @EsVigente, @MotivoRechazo, @UsuarioRegistro)
     `);
 
   return result.recordset[0].Id;
 }
 
 export async function syncMovimientoNominaDiasLaborados(input: SyncMovimientoNominaInput): Promise<void> {
-  if (![ALTA_TIPO_MOVIMIENTO_ID, BAJA_PERMANENTE_TIPO_MOVIMIENTO_ID].includes(input.tipoMovimientoId)) {
+  const tiposConDias = new Set<number>([
+    MOVIMIENTO_TIPO.ALTA,
+    MOVIMIENTO_TIPO.BAJA_PERMANENTE,
+    MOVIMIENTO_TIPO.TERMINA_SUSPENSION_Y_BAJA
+  ]);
+  if (!tiposConDias.has(input.tipoMovimientoId)) {
     return;
   }
 
@@ -166,12 +168,12 @@ export async function syncMovimientoNominaDiasLaborados(input: SyncMovimientoNom
   }
 
   const { anio, quincena } = parsePeriod(input);
-  const diasLaborados = calculateDiasLaborados(input.tipoMovimientoId, input.fechaMovimiento, anio, quincena);
+  const diasLaborados = calcularDiasLaboradosMovimiento(input.tipoMovimientoId, input.fechaMovimiento, anio, quincena)!;
   const categoria = input.categoriaPuestoOrgId
     ? await getCategoriaPuestoOrg(input.executor, input.categoriaPuestoOrgId)
     : null;
 
-  if (input.tipoMovimientoId === ALTA_TIPO_MOVIMIENTO_ID && !categoria) {
+  if (input.tipoMovimientoId === MOVIMIENTO_TIPO.ALTA && !categoria) {
     throw new Error('MOVIMIENTO_NOMINA_CATEGORIA_REQUERIDA');
   }
 
@@ -193,7 +195,7 @@ export async function syncMovimientoNominaDiasLaborados(input: SyncMovimientoNom
     .filter(Boolean)
     .join(' ')
     .trim() || null;
-  const movimiento = input.tipoMovimientoId === ALTA_TIPO_MOVIMIENTO_ID ? 'AL' : 'BA';
+  const movimiento = input.tipoMovimientoId === MOVIMIENTO_TIPO.ALTA ? 'AL' : 'BA';
   const lineaOriginal = JSON.stringify({
     fuente: 'MOVIMIENTO_AFILIADO',
     movimiento,
@@ -210,18 +212,8 @@ export async function syncMovimientoNominaDiasLaborados(input: SyncMovimientoNom
     baseCotizacionQuinquenios
   });
 
-  const cargaId = await createSyntheticCarga(input.executor, {
-    entidadId: 1,
-    anio,
-    quincena,
-    organica0,
-    organica1,
-    organica2,
-    organica3,
-    usuarioRegistro: input.usuarioRegistro == null ? null : String(input.usuarioRegistro)
-  });
-
   const existing = await input.executor.request()
+    .input('EntidadId', sql.Int, 1)
     .input('Anio', sql.SmallInt, anio)
     .input('Quincena', sql.TinyInt, quincena)
     .input('Organica0', sql.VarChar(10), organica0)
@@ -230,17 +222,38 @@ export async function syncMovimientoNominaDiasLaborados(input: SyncMovimientoNom
     .input('Organica3', sql.VarChar(10), organica3)
     .input('RFC', sql.VarChar(13), input.afiliado.rfc)
     .query(`
-      SELECT TOP 1 Id
-      FROM dbo.NominaAplicacionQnalDetalle
-      WHERE Anio = @Anio
-        AND Quincena = @Quincena
-        AND Organica0 = @Organica0
-        AND ((Organica1 = @Organica1) OR (Organica1 IS NULL AND @Organica1 IS NULL))
-        AND ((Organica2 = @Organica2) OR (Organica2 IS NULL AND @Organica2 IS NULL))
-        AND ((Organica3 = @Organica3) OR (Organica3 IS NULL AND @Organica3 IS NULL))
-        AND UPPER(LTRIM(RTRIM(RFC))) = UPPER(LTRIM(RTRIM(@RFC)))
-      ORDER BY Id DESC
+      SELECT TOP 1 d.Id,d.CargaId,d.Movimiento
+      FROM dbo.NominaAplicacionQnalDetalle d WITH (UPDLOCK, HOLDLOCK)
+      INNER JOIN dbo.NominaAplicacionQnalCarga c ON c.Id=d.CargaId
+      WHERE d.EntidadId = @EntidadId
+        AND d.Anio = @Anio
+        AND d.Quincena = @Quincena
+        AND d.Organica0 = @Organica0
+        AND ((d.Organica1 = @Organica1) OR (d.Organica1 IS NULL AND @Organica1 IS NULL))
+        AND ((d.Organica2 = @Organica2) OR (d.Organica2 IS NULL AND @Organica2 IS NULL))
+        AND ((d.Organica3 = @Organica3) OR (d.Organica3 IS NULL AND @Organica3 IS NULL))
+        AND UPPER(LTRIM(RTRIM(d.RFC))) = UPPER(LTRIM(RTRIM(@RFC)))
+        AND c.TipoCarga='MOVIMIENTO'
+      ORDER BY d.Id DESC
     `);
+
+  const existingId = existing.recordset[0]?.Id;
+  const movimientoExistente = String(existing.recordset[0]?.Movimiento ?? '').trim().toUpperCase();
+  if (existingId && movimientoExistente && movimientoExistente !== movimiento) {
+    throw new Error('MOVIMIENTO_NOMINA_CONFLICTO_ALTA_BAJA');
+  }
+  const cargaId = existingId
+    ? Number(existing.recordset[0].CargaId)
+    : await createSyntheticCarga(input.executor, {
+        entidadId: 1,
+        anio,
+        quincena,
+        organica0,
+        organica1,
+        organica2,
+        organica3,
+        usuarioRegistro: input.usuarioRegistro == null ? null : String(input.usuarioRegistro)
+      });
 
   const request = input.executor.request()
     .input('CargaId', sql.BigInt, cargaId)
@@ -267,7 +280,6 @@ export async function syncMovimientoNominaDiasLaborados(input: SyncMovimientoNom
     .input('BaseCotizacionQuinquenios', sql.Decimal(18, 2), baseCotizacionQuinquenios)
     .input('DiasLaborados', sql.Decimal(5, 2), diasLaborados);
 
-  const existingId = existing.recordset[0]?.Id;
   if (existingId) {
     await request.input('Id', sql.BigInt, existingId).query(`
       UPDATE dbo.NominaAplicacionQnalDetalle

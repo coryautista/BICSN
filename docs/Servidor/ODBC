@@ -1,0 +1,51 @@
+isql -v "Driver=Firebird ODBC Driver;Dbname=10.20.1.9:/db/db/dbAfiliacion.fdb;Uid=sysdba;Pwd=hamburguesadelujo;"
+FIREBIRD_HOST=10.20.1.9
+FIREBIRD_PORT=3050
+FIREBIRD_DATABASE=/db/db/dbAfiliacion.fdb
+#FIREBIRD_DATABASE=/db/db/dbPresenta.fdb
+FIREBIRD_USER=SYSDBA
+FIREBIRD_PASSWORD=hamburguesadelujo
+FIREBIRD_CHARSET=NONE
+
+cd /tmp
+wget -O odbcfb.tar.gz \
+https://sourceforge.net/projects/firebird/files/firebird-ODBC-driver/2.0.1-Release/OdbcFb-LIB-2.0.1.152.amd64.tar.gz/download
+
+tar -xzf odbcfb.tar.gz
+
+tar -xzf odbcfb.tar.gz
+find . -name "libOdbcFb.so"
+APARECER ./OdbcFb-LIB-2.0.1.152.amd64/lib/libOdbcFb.so
+
+sudo apt update
+sudo apt install -y unixodbc odbcinst libfbclient2
+
+
+ls -l /usr/lib/x86_64-linux-gnu/libodbc.so.2
+
+sudo mkdir -p /usr/lib/x86_64-linux-gnu/odbc
+sudo cp OdbcFb-LIB-2.0.1.152.amd64/lib/libOdbcFb.so \
+        /usr/lib/x86_64-linux-gnu/odbc/libOdbcFb.so
+sudo chmod 644 /usr/lib/x86_64-linux-gnu/odbc/libOdbcFb.so
+
+sudo nano /etc/odbcinst.ini
+
+CONTENIDO DEL ARCHIVO /etc/odbcinst.ini
+[Firebird ODBC Driver]
+Description=Firebird ODBC Driver
+Driver=/usr/lib/x86_64-linux-gnu/odbc/libOdbcFb.so
+Threading=2
+FileUsage=1
+
+odbcinst -q -d
+DEBE SALIR:
+[Firebird ODBC Driver]
+
+isql -v "Driver=Firebird ODBC Driver;Dbname=localhost:/ruta/tu.fdb;Uid=sysdba;Pwd=masterkey;"
+
+METERLO A DOCLER
+COPY drivers/libOdbcFb.so /usr/lib/x86_64-linux-gnu/odbc/libOdbcFb.so
+COPY drivers/odbcinst.ini /etc/odbcinst.ini
+
+
+    

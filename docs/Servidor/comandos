@@ -1,0 +1,74 @@
+1) Crear las carpetas
+mkdir -p /home/des/sistema/.cifrado
+mkdir -p /home/des/sistema/privado
+
+2) Inicializar EncFS (poner contraseña nueva)
+encfs /home/des/sistema/.cifrado /home/des/sistema/privado
+
+encfs /home/des/back/.cifrado /home/des/back/privado
+encfs /home/administrador/back/.cifrado /home/administrador/back/privado
+
+encfs /home/des/admin/.cifrado /home/des/admin/privado
+encfs /home/administrador/admin/.cifrado /home/administrador/admin/privado
+
+Modo → p (preconfigurado)
+Crear nuevo filesystem → y
+Contraseña → cory
+3) Verificar que está montado
+mount | grep encfs
+ls -lah /home/des/sistema/privado
+4) Usar la carpeta
+Guarda archivos en:
+/home/des/sistema/privado
+En disco, los datos reales quedarán cifrados en:
+/home/des/sistema/.cifrado
+5) Cerrar (ocultar) la carpeta
+fusermount -u /home/des/sistema/privado
+fusermount -u /home/des/back/privado
+fusermount -u /home/administrador/back/privado
+fusermount -u /home/des/admin/privado
+fusermount -u /home/administrador/admin/privado
+6) Abrir de nuevo cuando lo necesites
+encfs /home/des/sistema/.cifrado /home/des/sistema/privado
+encfs /home/des/back/.cifrado /home/des/back/privado
+encfs /home/administrador/back/.cifrado /home/administrador/back/privado
+
+unrar x archivo.rar
+
+docker compose -f docker-compose.yml up -d --build --force-recreate
+
+
+/proyecto/
+├── Dockerfile              ← CREAR
+├── .dockerignore          ← CREAR
+├── docker-compose.yml     ← CREAR (opcional)
+├── .env                   ← Tu archivo con variables
+├── package.json           ← Copiar
+├── package-lock.json      ← Copiar
+├── tsconfig.json          ← Copiar
+├── src/                   ← Copiar carpeta completa
+└── types/                 ← Copiar carpeta completa
+
+# 1. Copiar todos los archivos al servidor
+
+# 2. Construir la imagen
+docker build -t bicsn-api .
+
+# 3. Ejecutar con docker-compose (recomendado)
+docker-compose up -d
+
+# O ejecutar manualmente
+docker run -d \
+  --name bicsn-api \
+  -p 8080:8080 \
+  --env-file .env \
+  -v $(pwd)/logs:/app/logs \
+  -v $(pwd)/archivosTmp:/app/archivosTmp \
+  bicsn-api
+docker logs -f bicsn-api
+curl http://localhost:8080/health
+
+docker builder prune -a -f
+
+
+

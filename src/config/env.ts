@@ -5,6 +5,11 @@ export const env = {
   port: Number(process.env.PORT ?? 4000),
   nodeEnv: process.env.NODE_ENV ?? 'development',
   logLevel: process.env.LOG_LEVEL ?? 'info',
+  features: {
+    snapshotCalculoV2ShadowEnabled: process.env.SNAPSHOT_CALCULO_V2_SHADOW_ENABLED === 'true',
+    snapshotCalculoV2ReadEnabled: process.env.SNAPSHOT_CALCULO_V2_READ_ENABLED === 'true',
+    snapshotCalculoV2OfficialReadEnabled: process.env.SNAPSHOT_CALCULO_V2_OFFICIAL_READ_ENABLED === 'true'
+  },
   sql: {
     user: process.env.SQLSERVER_USER!,
     password: process.env.SQLSERVER_PASSWORD!,

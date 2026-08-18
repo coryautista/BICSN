@@ -9,7 +9,7 @@
 import { env as config } from "../config/env.js";
 import iconv from "iconv-lite";
 import { createNativeClient, getDefaultLibraryFilename } from "node-firebird-driver-native";
-import type { Attachment, Transaction } from "node-firebird-driver";
+import type { Attachment, Transaction, TransactionOptions } from "node-firebird-driver";
 
 const POOL_SIZE = Number((config.firebird as any).poolSize || 5);
 const SERIALIZE_ALL = Boolean((config.firebird as any).serialize) || false;
@@ -89,18 +89,24 @@ function invalidateAttachment(): void {
 /**
  * Wrapper de transacción que maneja reconexión en caso de error de conexión
  */
-async function withTransaction<T>(fn: (att: Attachment, tx: Transaction) => Promise<T>): Promise<T> {
+async function withTransaction<T>(
+  fn: (att: Attachment, tx: Transaction) => Promise<T>,
+  options?: TransactionOptions
+): Promise<T> {
   let att: Attachment;
   let tx: Transaction;
+  const transactionOptions = options ?? (
+    process.env.FIREBIRD_READ_ONLY === 'true' ? { accessMode: 'READ_ONLY' as const } : undefined
+  );
 
   try {
     att = await getAttachment();
-    tx = await att.startTransaction();
+    tx = await att.startTransaction(transactionOptions);
   } catch (connectError: any) {
     // Error al conectar/iniciar tx: invalidar y reintentar una vez
     invalidateAttachment();
     att = await getAttachment();
-    tx = await att.startTransaction();
+    tx = await att.startTransaction(transactionOptions);
   }
 
   try {

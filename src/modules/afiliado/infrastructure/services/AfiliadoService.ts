@@ -225,6 +225,8 @@ export async function deleteAfiliadoService(id: number): Promise<void> {
 
 import type { MovimientoQuincenal } from '../../domain/entities/MovimientoQuincenal.js';
 import { getQuincenaAplicacion } from './AfiliadoQuincenaService.js';
+import { validarFechaMovimientoPeriodo } from '../../domain/services/MovimientoFechaPolicy.js';
+import { validarMovimientoAntesDeTxt } from './MovimientoNominaDiasLaboradosService.js';
 
 export async function getMovimientosQuincenalesService(userOrg0: string, userOrg1: string): Promise<MovimientoQuincenal[]> {
   const logContext = {
@@ -531,6 +533,17 @@ export async function createAfiliadoAfiliadoOrgMovimientoService(data: {
   // Generar fechas basadas en la quincena calculada
   const currentYear = calculatedValues.anio;
   const quincena = calculatedValues.quincena;
+  validarFechaMovimientoPeriodo(data.tipoMovimientoId ?? 1, data.fechaMovimiento, currentYear, quincena);
+  const pool = await getPool();
+  await validarMovimientoAntesDeTxt({
+    executor: pool,
+    anio: currentYear,
+    quincena,
+    organica0: data.claveOrganica0 ?? null,
+    organica1: data.claveOrganica1 ?? null,
+    organica2: data.claveOrganica2 ?? null,
+    organica3: data.claveOrganica3 ?? null
+  });
   
   // Calcular fecha de la quincena (aproximada)
   const monthFromQuincena = Math.ceil(quincena / 2);
@@ -576,8 +589,8 @@ export async function createAfiliadoAfiliadoOrgMovimientoService(data: {
       fechaAlta: data.fechaAlta ?? fechaQuincena,
       celular: data.celular ?? null,
       expediente: data.expediente ?? null,
-      quincenaAplicacion: data.quincenaAplicacion ?? null,
-      anioAplicacion: data.anioAplicacion ?? null,
+      quincenaAplicacion: quincena,
+      anioAplicacion: currentYear,
       codigoPostal: data.domicilioCodigoPostal ?? null,
       numValidacion: 1,
       afiliadosComplete: 0
@@ -611,7 +624,7 @@ export async function createAfiliadoAfiliadoOrgMovimientoService(data: {
       categoriaPuestoOrgId: data.categoriaPuestoOrgId ?? null
     },
     movimiento: {
-      quincenaId: data.quincenaId ?? quincenaId,
+      quincenaId,
       tipoMovimientoId: data.tipoMovimientoId ?? 1,
       fecha: data.fechaMov ?? null,
       fechaMovimiento: data.fechaMovimiento ?? null,

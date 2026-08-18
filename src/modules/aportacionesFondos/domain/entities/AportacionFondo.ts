@@ -14,7 +14,7 @@ export interface AportacionFondo {
   total: number;
   tipo: string;
   dias_laborados: number;
-  dias_laborados_origen: 'nomina' | 'default';
+  dias_laborados_origen: 'nomina' | 'movimiento' | 'default' | 'nomina_sin_coincidencia';
   base_cotizacion_quinquenios?: number | null;
   quinquenios_aplicado?: number | null;
 }

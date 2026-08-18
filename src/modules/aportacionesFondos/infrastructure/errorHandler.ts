@@ -45,6 +45,10 @@ function getStatusCode(errorCode: string): number {
       return 404;
     case 'PERIODO_NO_ENCONTRADO':
       return 404;
+    case 'SNAPSHOT_V2_NO_ENCONTRADO':
+      return 404;
+    case 'SNAPSHOT_V2_NO_DECIDIBLE':
+      return 409;
     case 'ERROR_FIREBIRD_CONEXION':
       return 503; // Service Unavailable
     case 'ERROR_FIREBIRD_PROCEDIMIENTO':

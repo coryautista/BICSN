@@ -1,0 +1,52 @@
+# ---------- Build ----------
+    FROM node:22-slim AS build
+    WORKDIR /app
+    
+    ENV NEXT_TELEMETRY_DISABLED=1 \
+        NODE_ENV=production \
+        NEXT_DISABLE_SOURCEMAPS=1 \
+        HUSKY=0
+    
+    # Herramientas para compilar módulos nativos (sharp/canvas)
+    RUN apt-get update && apt-get install -y --no-install-recommends \
+        python3 make g++ ca-certificates \
+     && rm -rf /var/lib/apt/lists/*
+    
+    COPY package.json package-lock.json* ./
+    RUN npm ci
+    
+    COPY . .
+    # Si usas Prisma, descomenta:
+    # COPY prisma ./prisma
+    # RUN npx prisma generate
+    ARG NEXT_PUBLIC_API_URL
+    ENV NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL}
+    
+    
+    RUN npm run build
+    # Deja solo deps de producción
+    RUN npm ci --omit=dev
+    
+    # ---------- Runtime ----------
+    FROM node:22-slim AS runtime
+    WORKDIR /app
+    ENV NODE_ENV=production \
+        PORT=3000
+    
+    # Runtime deps para pdf-poppler y fuentes básicas
+    RUN apt-get update && apt-get install -y --no-install-recommends \
+        poppler-utils fonts-dejavu ca-certificates \
+     && rm -rf /var/lib/apt/lists/*
+    
+    # Usuario no-root
+    RUN useradd -m -u 10001 nextjs
+    USER 10001
+    
+    # Copia solo el bundle standalone
+    COPY --from=build /app/.next/standalone ./
+    COPY --from=build /app/.next/static ./.next/static
+    COPY --from=build /app/public ./public
+    
+    EXPOSE 3000
+    CMD ["node","server.js"]
+    

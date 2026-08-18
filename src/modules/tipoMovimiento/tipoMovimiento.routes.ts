@@ -141,7 +141,7 @@ export default async function tipoMovimientoRoutes(app: FastifyInstance) {
         required: ['id', 'nombre'],
         properties: {
           id: { type: 'number' },
-          abreviatura: { type: 'string', maxLength: 1 },
+          abreviatura: { type: 'string', maxLength: 2 },
           nombre: { type: 'string', minLength: 1, maxLength: 64 }
         }
       },
@@ -230,7 +230,7 @@ export default async function tipoMovimientoRoutes(app: FastifyInstance) {
       body: {
         type: 'object',
         properties: {
-          abreviatura: { type: 'string', maxLength: 1 },
+          abreviatura: { type: 'string', maxLength: 2 },
           nombre: { type: 'string', minLength: 1, maxLength: 64 }
         }
       },

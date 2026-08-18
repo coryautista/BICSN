@@ -3,10 +3,13 @@ import sql from 'mssql';
 import {
   NominaAplicacionQnalQueryFilters,
   NominaAplicacionQnalQueryResult,
+  NominaAplicacionQnalCargaVigente,
   NominaAplicacionQnalRegistroParsed,
+  NominaAplicacionQnalScope,
   NominaAplicacionQnalUploadInput,
   NominaAplicacionQnalUploadResult
 } from '../../domain/entities/NominaAplicacionQnalTxt.js';
+import { NominaCargaInconsistenteError } from '../../domain/errors.js';
 import { INominaAplicacionQnalTxtRepository } from '../../domain/repositories/INominaAplicacionQnalTxtRepository.js';
 
 export class NominaAplicacionQnalTxtRepository implements INominaAplicacionQnalTxtRepository {
@@ -47,6 +50,13 @@ export class NominaAplicacionQnalTxtRepository implements INominaAplicacionQnalT
     await transaction.begin();
 
     try {
+      await this.applyScopeInputs(new sql.Request(transaction), input).query(`
+        UPDATE dbo.NominaAplicacionQnalCarga
+        SET EsVigente = 0
+        WHERE EntidadId = @EntidadId AND Anio = @Anio AND Quincena = @Quincena
+          AND Organica0 = @Organica0 AND Organica1 = @Organica1 AND Organica2 = @Organica2 AND Organica3 = @Organica3
+          AND TipoCarga = 'TXT' AND EsVigente = 1
+      `);
       const cargaId = await this.insertCarga(transaction, input, 'ACEPTADA', registros.length, 0);
       const baseRequest = this.applyScopeInputs(new sql.Request(transaction), input)
         .input('CargaId', sql.BigInt, cargaId);
@@ -65,15 +75,19 @@ export class NominaAplicacionQnalTxtRepository implements INominaAplicacionQnalT
            AportacionEntidadFondoAhorro, AportacionAfiliadoEBI, AportacionEntidadEBI, DescuentoPrestamoCortoPlazo, DescuentoPrestamoHipotecario,
            DescuentoPrestamoMedianoPlazo, DescuentosOtros, Calle, Colonia, Ciudad, Estado, Municipio, CodigoPostal, Telefono, FechaNacimiento,
            Sexo, EstadoCivil, CAIR, CAIRVoluntario, FechaRegistro
-        FROM dbo.NominaAplicacionQnalDetalle
-        WHERE EntidadId = @EntidadId AND Anio = @Anio AND Quincena = @Quincena
-          AND Organica0 = @Organica0 AND Organica1 = @Organica1 AND Organica2 = @Organica2 AND Organica3 = @Organica3
+        FROM dbo.NominaAplicacionQnalDetalle d
+        WHERE d.EntidadId = @EntidadId AND d.Anio = @Anio AND d.Quincena = @Quincena
+          AND d.Organica0 = @Organica0 AND d.Organica1 = @Organica1 AND d.Organica2 = @Organica2 AND d.Organica3 = @Organica3
+          AND EXISTS (SELECT 1 FROM dbo.NominaAplicacionQnalCarga c WHERE c.Id=d.CargaId AND c.TipoCarga='TXT')
       `);
 
       await this.applyScopeInputs(new sql.Request(transaction), input).query(`
-        DELETE FROM dbo.NominaAplicacionQnalDetalle
-        WHERE EntidadId = @EntidadId AND Anio = @Anio AND Quincena = @Quincena
-          AND Organica0 = @Organica0 AND Organica1 = @Organica1 AND Organica2 = @Organica2 AND Organica3 = @Organica3
+        DELETE d
+        FROM dbo.NominaAplicacionQnalDetalle d
+        INNER JOIN dbo.NominaAplicacionQnalCarga c ON c.Id=d.CargaId
+        WHERE d.EntidadId = @EntidadId AND d.Anio = @Anio AND d.Quincena = @Quincena
+          AND d.Organica0 = @Organica0 AND d.Organica1 = @Organica1 AND d.Organica2 = @Organica2 AND d.Organica3 = @Organica3
+          AND c.TipoCarga='TXT'
       `);
 
       for (const registro of registros) {
@@ -104,12 +118,26 @@ export class NominaAplicacionQnalTxtRepository implements INominaAplicacionQnalT
       FROM dbo.NominaAplicacionQnalDetalle
       WHERE EntidadId = @EntidadId AND Anio = @Anio AND Quincena = @Quincena
         AND Organica0 = @Organica0 AND Organica1 = @Organica1 AND Organica2 = @Organica2 AND Organica3 = @Organica3
+        AND CargaId = (
+          SELECT TOP 1 Id FROM dbo.NominaAplicacionQnalCarga
+          WHERE EntidadId=@EntidadId AND Anio=@Anio AND Quincena=@Quincena
+            AND Organica0=@Organica0 AND Organica1=@Organica1 AND Organica2=@Organica2 AND Organica3=@Organica3
+            AND TipoCarga='TXT' AND Estatus='APLICADA' AND EsVigente=1
+          ORDER BY Id DESC
+        )
         ${whereBuscar};
 
       SELECT *
       FROM dbo.NominaAplicacionQnalDetalle
       WHERE EntidadId = @EntidadId AND Anio = @Anio AND Quincena = @Quincena
         AND Organica0 = @Organica0 AND Organica1 = @Organica1 AND Organica2 = @Organica2 AND Organica3 = @Organica3
+        AND CargaId = (
+          SELECT TOP 1 Id FROM dbo.NominaAplicacionQnalCarga
+          WHERE EntidadId=@EntidadId AND Anio=@Anio AND Quincena=@Quincena
+            AND Organica0=@Organica0 AND Organica1=@Organica1 AND Organica2=@Organica2 AND Organica3=@Organica3
+            AND TipoCarga='TXT' AND Estatus='APLICADA' AND EsVigente=1
+          ORDER BY Id DESC
+        )
         ${whereBuscar}
       ORDER BY LineaNumero
       OFFSET @Offset ROWS FETCH NEXT @PageSize ROWS ONLY;
@@ -128,6 +156,112 @@ export class NominaAplicacionQnalTxtRepository implements INominaAplicacionQnalT
     };
   }
 
+  async consultarCargaVigente(scope: NominaAplicacionQnalScope): Promise<NominaAplicacionQnalCargaVigente | null> {
+    const transaction = new sql.Transaction(this.mssqlPool);
+    await transaction.begin(sql.ISOLATION_LEVEL.SERIALIZABLE);
+    let rows: Record<string, any>[];
+    try {
+      const result = await this.applyScopeInputs(new sql.Request(transaction), scope).query(`
+      WITH CargaActiva AS (
+        SELECT
+          Id AS CargaId, EntidadId, Anio, Quincena,
+          Organica0, Organica1, Organica2, Organica3,
+          ArchivoNombre, TipoCarga, Estatus, EsVigente,
+          TotalLineas, TotalDetalles, FechaRegistro
+        FROM dbo.NominaAplicacionQnalCarga
+        WHERE EntidadId = @EntidadId AND Anio = @Anio AND Quincena = @Quincena
+          AND Organica0 = @Organica0 AND Organica1 = @Organica1 AND Organica2 = @Organica2 AND Organica3 = @Organica3
+          AND TipoCarga = 'TXT' AND Estatus = 'APLICADA' AND EsVigente = 1
+      ),
+      DetalleAmbito AS (
+        SELECT CargaId, RFC, DiasLaborados
+        FROM dbo.NominaAplicacionQnalDetalle
+        WHERE EntidadId = @EntidadId AND Anio = @Anio AND Quincena = @Quincena
+          AND Organica0 = @Organica0 AND Organica1 = @Organica1 AND Organica2 = @Organica2 AND Organica3 = @Organica3
+          AND CargaId IN (SELECT CargaId FROM CargaActiva)
+      ),
+      Estadisticas AS (
+        SELECT
+          COUNT(*) AS RegistrosVigentes,
+          COUNT(DISTINCT CargaId) AS CargasEnDetalle,
+          COUNT(DISTINCT NULLIF(UPPER(LTRIM(RTRIM(RFC))), '')) AS RfcUnicos,
+          SUM(CASE WHEN DiasLaborados > 0 AND DiasLaborados < 15 THEN 1 ELSE 0 END) AS DiasParciales,
+          SUM(CASE WHEN DiasLaborados = 0 THEN 1 ELSE 0 END) AS DiasCero,
+          SUM(CASE WHEN DiasLaborados IS NULL THEN 1 ELSE 0 END) AS DiasNulos,
+          SUM(CASE WHEN DiasLaborados = 15 THEN 1 ELSE 0 END) AS DiasQuince
+        FROM DetalleAmbito
+      ),
+      Duplicados AS (
+        SELECT COALESCE(SUM(x.Repeticiones - 1), 0) AS RfcDuplicados
+        FROM (
+          SELECT COUNT(*) AS Repeticiones
+          FROM DetalleAmbito
+          WHERE NULLIF(LTRIM(RTRIM(RFC)), '') IS NOT NULL
+          GROUP BY UPPER(LTRIM(RTRIM(RFC)))
+          HAVING COUNT(*) > 1
+        ) x
+      )
+      SELECT
+        c.*,
+        (SELECT COUNT(*) FROM DetalleAmbito n WHERE n.CargaId = c.CargaId) AS RegistrosCargaBase,
+        (SELECT COUNT(*) FROM DetalleAmbito n WHERE n.CargaId <> c.CargaId) AS RegistrosComplementarios,
+        s.RegistrosVigentes,
+        s.CargasEnDetalle,
+        s.RfcUnicos,
+        s.DiasParciales,
+        s.DiasCero,
+        s.DiasNulos,
+        s.DiasQuince,
+        d.RfcDuplicados
+      FROM CargaActiva c
+      CROSS JOIN Estadisticas s
+      CROSS JOIN Duplicados d
+      ORDER BY c.FechaRegistro DESC, c.CargaId DESC
+      `);
+      rows = result.recordset;
+      await transaction.commit();
+    } catch (error) {
+      await transaction.rollback().catch(() => undefined);
+      throw error;
+    }
+
+    if (rows.length === 0) return null;
+    if (rows.length !== 1) {
+      throw new NominaCargaInconsistenteError('MULTIPLES_CARGAS_BASE');
+    }
+    const load = rows[0];
+    const duplicateCount = Number(load.RfcDuplicados ?? 0);
+    if (duplicateCount > 0) throw new NominaCargaInconsistenteError('RFC_DUPLICADO');
+
+    return {
+      cargaId: String(load.CargaId),
+      entidadId: Number(load.EntidadId),
+      anio: Number(load.Anio),
+      quincena: Number(load.Quincena),
+      organica0: String(load.Organica0).trim(),
+      organica1: String(load.Organica1).trim(),
+      organica2: String(load.Organica2).trim(),
+      organica3: String(load.Organica3).trim(),
+      archivoNombre: String(load.ArchivoNombre),
+      tipoCarga: 'TXT',
+      estatus: 'APLICADA',
+      esVigente: true,
+      totalLineas: Number(load.TotalLineas),
+      totalDetallesDeclarados: Number(load.TotalDetalles),
+      fechaRegistro: load.FechaRegistro?.toISOString?.() ?? String(load.FechaRegistro),
+      registrosVigentes: Number(load.RegistrosVigentes ?? 0),
+      registrosCargaBase: Number(load.RegistrosCargaBase ?? 0),
+      registrosComplementarios: Number(load.RegistrosComplementarios ?? 0),
+      cargasEnDetalle: Number(load.CargasEnDetalle ?? 0),
+      rfcUnicos: Number(load.RfcUnicos ?? 0),
+      rfcDuplicados: duplicateCount,
+      diasParciales: Number(load.DiasParciales ?? 0),
+      diasCero: Number(load.DiasCero ?? 0),
+      diasNulos: Number(load.DiasNulos ?? 0),
+      diasQuince: Number(load.DiasQuince ?? 0)
+    };
+  }
+
   private async insertCarga(
     transaction: Transaction,
     input: NominaAplicacionQnalUploadInput,
@@ -138,16 +272,18 @@ export class NominaAplicacionQnalTxtRepository implements INominaAplicacionQnalT
     const result = await this.applyScopeInputs(new sql.Request(transaction), input)
       .input('ArchivoNombre', sql.NVarChar(255), input.archivoNombre)
       .input('Estatus', sql.VarChar(20), estado === 'ACEPTADA' ? 'APLICADA' : 'RECHAZADA')
+      .input('TipoCarga', sql.VarChar(20), 'TXT')
+      .input('EsVigente', sql.Bit, estado === 'ACEPTADA')
       .input('TotalLineas', sql.Int, totalRegistros)
       .input('TotalDetalles', sql.Int, totalRegistros)
       .input('MotivoRechazo', sql.NVarChar(1000), totalErrores > 0 ? 'La carga contiene errores de validacion.' : null)
       .input('UsuarioRegistro', sql.NVarChar(100), input.usuarioId ?? null)
       .query(`
         INSERT INTO dbo.NominaAplicacionQnalCarga
-          (EntidadId, Anio, Quincena, Organica0, Organica1, Organica2, Organica3, ArchivoNombre, TotalLineas, TotalDetalles, Estatus, MotivoRechazo, UsuarioRegistro)
+          (EntidadId, Anio, Quincena, Organica0, Organica1, Organica2, Organica3, ArchivoNombre, TotalLineas, TotalDetalles, Estatus, TipoCarga, EsVigente, MotivoRechazo, UsuarioRegistro)
         OUTPUT INSERTED.Id
         VALUES
-          (@EntidadId, @Anio, @Quincena, @Organica0, @Organica1, @Organica2, @Organica3, @ArchivoNombre, @TotalLineas, @TotalDetalles, @Estatus, @MotivoRechazo, @UsuarioRegistro)
+          (@EntidadId, @Anio, @Quincena, @Organica0, @Organica1, @Organica2, @Organica3, @ArchivoNombre, @TotalLineas, @TotalDetalles, @Estatus, @TipoCarga, @EsVigente, @MotivoRechazo, @UsuarioRegistro)
       `);
 
     return result.recordset[0].Id;

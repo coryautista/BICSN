@@ -36,6 +36,93 @@ afpa = (sueldo_base) * 0.0450         // Contribución empleado
 afe = ((sueldo / 30) * 15) * 0.020    // Contribución patronal
 ```
 
+### 4. Días de nómina TXT (opt-in)
+
+Con `usarDiasLaboradosNomina=1`, el cálculo consulta únicamente las cargas TXT aplicadas y vigentes para el periodo y las orgánicas solicitadas:
+
+- Sin TXT vigente se conserva el cálculo existente de 15 días con origen `default`.
+- Con TXT, se usa `DiasLaborados` y se conserva cero; un valor nulo se interpreta como cero.
+- Si existe TXT pero un RFC de Firebird no tiene coincidencia, se usan cero días con origen `nomina_sin_coincidencia`.
+- Los detalles se seleccionan por `CargaId`; movimientos y cargas reemplazadas no participan.
+- Días fuera de `0..15` o un RFC ambiguo entre cargas vigentes detienen el cálculo.
+
+La validación de coincidencia entre plantilla y archivo permanece en el frontend. Este módulo no vuelve a comparar el TXT contra la plantilla ni agrega un bloqueo de carga equivalente.
+
+Firebird se consulta únicamente para la QNA vigente o la última QNA indicada por `afec.BitacoraAfectacionOrg`. Las QNA anteriores se leen desde las tablas históricas de SQL Server y no se enriquecen ni reconstruyen con PERSONAL u ORG_PERSONAL actuales.
+
+La frontera puede verificarse en modo de solo lectura con `npm run verify:aportaciones:phase3:e2e`. El comando no carga archivos ni modifica históricos.
+
+### 5. Snapshot de cálculo V2 (sombra)
+
+`aportaciones.SnapshotCalculoV2` y `aportaciones.SnapshotCalculoV2Detalle` almacenan una captura aditiva e inmutable del cálculo. La persistencia:
+
+- identifica fórmula, carga TXT, política de precisión y fuentes;
+- conserva importes individuales D6 y agregados A2;
+- calcula un SHA-256 canónico del contenido;
+- asigna revisiones por ámbito y evita duplicados por hash;
+- inserta encabezado y detalle en una sola transacción;
+- rechaza actualizaciones y eliminaciones mediante triggers.
+
+Esta infraestructura no modifica ni sustituye Línea de Pago, REVISA o los históricos existentes. Tampoco está conectada todavía a una lectura oficial. La sombra `1426` de Calidad se verifica con `npm run shadow:aportaciones:snapshot-v2:1426`.
+
+La doble escritura automática se controla con `SNAPSHOT_CALCULO_V2_SHADOW_ENABLED=true` y permanece desactivada por defecto. Cuando está habilitada:
+
+- exige ahorro, vivienda, prestaciones y CAIR con el mismo conjunto de internos;
+- exige una única carga `TXT/APLICADA/EsVigente=1` para el periodo y ámbito;
+- obtiene RFC y FAI mediante `AP_S_FONDOS` para el periodo solicitado;
+- resuelve días desde el TXT y conserva la política de cero para RFC sin coincidencia;
+- guarda únicamente snapshots `COMPLETO` dentro de la misma transacción que los históricos;
+- omite la sombra sin interrumpir el guardado existente cuando falta TXT, fórmula o algún fondo.
+
+La bandera habilita escritura sombra, no lectura oficial. El comportamiento puro se verifica con `npm run test:aportaciones:phase4`.
+
+### 6. Consulta y conciliación V2
+
+Con `SNAPSHOT_CALCULO_V2_READ_ENABLED=true`, un administrador puede consultar:
+
+```text
+GET /v1/aportacionesFondos/snapshots/v2/comparacion
+```
+
+La consulta requiere entidad, año, quincena y las cuatro orgánicas. Acepta `fuente`, `revision` e `incluirDetalles=1`. Devuelve importes como cadenas decimales, compara cada fondo contra REVISA e históricos SQL y agrega Línea de Pago solo como contexto. Los detalles no incluyen RFC ni nombre; únicamente exponen una clave SHA-256 por empleado. Esta ruta no sustituye ninguna lectura oficial.
+
+### 7. Bandeja de conciliación
+
+La Fase 6 agrega dos operaciones administrativas bajo la misma bandera de lectura:
+
+```text
+GET  /v1/aportacionesFondos/snapshots/v2
+POST /v1/aportacionesFondos/snapshots/v2/:snapshotId/decision
+```
+
+La bandeja es paginada y permite filtrar por año, quincena, entidad, orgánicas, fuente y estado. La política `MXN-A2-DIFF-0.20-v1` clasifica cada comparación como coincidencia, diferencia esperada de precisión, diferencia a revisar o ausencia de baseline. El veredicto general puede ser `APROBADO`, `OBSERVADO` o `INCOMPLETO`.
+
+Las decisiones humanas `APROBADO` y `OBSERVADO` son registros append-only asociados al snapshot, usuario, comentario y versión de política. No actualizan el snapshot ni el veredicto automático y no pueden modificarse ni eliminarse.
+
+### 8. Lectura oficial agregada controlada
+
+La Fase 7 agrega una lectura administrativa aislada, sin sustituir los históricos detallados ni conectar Línea de Pago:
+
+```text
+GET /v1/aportacionesFondos/snapshots/v2/oficial
+```
+
+La ruta se controla exclusivamente con `SNAPSHOT_CALCULO_V2_OFFICIAL_READ_ENABLED=true`, desactivada por defecto. Exige indicar el ámbito completo, `fuente` y `revision`; nunca selecciona implícitamente la revisión más reciente.
+
+El Snapshot V2 solicitado se promueve únicamente cuando está `COMPLETO`, cerrado y su última decisión humana es `APROBADO` bajo la política de aceptación vigente. Si no existe, está incompleto, abierto, sin decisión, fue decidido con otra política o la última decisión es `OBSERVADO`, la respuesta usa los totales históricos de SQL Server e informa la causa en `fallback.motivo`. Si tampoco existen registros históricos, responde `404 LECTURA_OFICIAL_NO_DISPONIBLE` en lugar de fabricar totales cero.
+
+La respuesta conserva importes como cadenas decimales. El fallback histórico devuelve `FAI: null` porque esa fuente no tiene un baseline equivalente. La ruta permanece restringida a administradores durante la promoción controlada.
+
+### 9. Expediente administrativo e historial
+
+La Fase 8 expone el historial completo de decisiones para la interfaz de conciliación:
+
+```text
+GET /v1/aportacionesFondos/snapshots/v2/:snapshotId/decisiones
+```
+
+La respuesta conserva todas las decisiones en orden descendente por fecha e identificador, e indica la última decisión sin modificar registros anteriores. El registro de una decisión se limita a snapshots `COMPLETO` y cerrados; una observación exige comentario. La persistencia continúa protegida por el trigger append-only existente y no requiere migraciones adicionales.
+
 ## Arquitectura
 
 ### Estructura del Módulo
@@ -69,6 +156,8 @@ src/modules/aportacionesFondos/
 - `tipo`: Tipo de fondo (ahorro, vivienda, prestaciones, cair)
 - `clave_organica_0`: (Opcional, requerido si isEntidad = 0)
 - `clave_organica_1`: (Opcional, requerido si isEntidad = 0)
+- `usarDiasLaboradosNomina`: (Opcional) `1` activa la resolución de días desde TXT vigente
+- `periodo`: (Opcional) periodo `QQAA` usado para seleccionar la carga TXT
 
 **Respuesta:**
 ```json
@@ -134,6 +223,7 @@ src/modules/aportacionesFondos/
 ```typescript
 // Repositories (Scoped)
 aportacionFondoRepo: asClass(AportacionFondoRepository).scoped(),
+snapshotCalculoV2Repo: asClass(SnapshotCalculoV2Repository).scoped(),
 
 // Queries (Scoped)
 getAportacionesIndividualesQuery: asClass(GetAportacionesIndividualesQuery).scoped(),

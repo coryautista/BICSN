@@ -26,7 +26,7 @@ export interface AportacionGuarderia {
   menor_sala: string | null;
   estatus: string | null;
   dias_laborados?: number;
-  dias_laborados_origen?: 'nomina' | 'default';
+  dias_laborados_origen?: 'nomina' | 'movimiento' | 'default' | 'nomina_sin_coincidencia';
 }
 
 // Response structure for aportación guarderías endpoint

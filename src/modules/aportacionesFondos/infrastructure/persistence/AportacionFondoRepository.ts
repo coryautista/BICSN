@@ -14,12 +14,11 @@ import { getOrgPersonalByClavesOrganicas } from '../../../orgPersonal/infrastruc
 import { getPool, sql } from '../../../../db/mssql.js';
 import { executeSerializedQuery, decodeFirebirdObject, executeSelectableProcedure, FIREBIRD_TIMEOUTS } from '../../../../db/firebird.js';
 import { normalizeTextDeep } from '../../../../utils/encoding.js';
-
-type NominaAportacionInfo = {
-  dias: number;
-  origen: 'nomina' | 'default';
-  baseCotizacionQuinquenios: number | null;
-};
+import {
+  NominaDiasContext,
+  NominaDiasLaboradosResolver,
+  NominaDiasResultado
+} from '../../domain/services/NominaDiasLaboradosResolver.js';
 
 const MONEY_SCALE = 1_000_000;
 
@@ -33,6 +32,7 @@ function sumMoney(values: number[]): number {
 
 export class AportacionFondoRepository implements IAportacionFondoRepository {
   private readonly DIAS_LABORADOS_DEFAULT = 15;
+  private readonly nominaDiasResolver = new NominaDiasLaboradosResolver(this.DIAS_LABORADOS_DEFAULT);
 
   /**
    * Convierte un valor a número de forma segura, evitando NaN.
@@ -1229,20 +1229,20 @@ export class AportacionFondoRepository implements IAportacionFondoRepository {
     org1?: string
   ): Promise<AportacionFondo[]> {
     const porcentajes = await this.obtenerPorcentajeFondoVigente(tipo);
-    const diasMap = usarDiasLaboradosNomina && periodo && org0 && org1
+    const diasContext = usarDiasLaboradosNomina && periodo && org0 && org1
       ? await this.obtenerDiasLaboradosNominaMap(
           registros.map((registro) => registro.rfc).filter(Boolean),
           periodo,
           org0,
           org1
         )
-      : new Map<string, NominaAportacionInfo>();
+      : { tieneArchivo: false, registros: new Map() };
 
     return registros.map(registro => {
       const sueldo = registro.sueldo || 0;
       const otrasPrestaciones = registro.otras_prestaciones || 0;
       const quinquenios = registro.quinquenios || 0;
-      const diasInfo = this.resolveDiasLaborados(registro.rfc, diasMap, usarDiasLaboradosNomina);
+      const diasInfo = this.nominaDiasResolver.resolve(registro.rfc, diasContext, usarDiasLaboradosNomina);
 
       const sueldoProporcional = roundMoney((sueldo / 30) * diasInfo.dias);
       const otrasPrestacionesProporcional = roundMoney((otrasPrestaciones / 30) * diasInfo.dias);
@@ -1439,50 +1439,110 @@ export class AportacionFondoRepository implements IAportacionFondoRepository {
     };
   }
 
-  private resolveDiasLaborados(
-    rfc: string | null | undefined,
-    diasMap: Map<string, NominaAportacionInfo>,
-    usarDiasLaboradosNomina: boolean
-  ): NominaAportacionInfo {
-    if (!usarDiasLaboradosNomina) {
-      return { dias: this.DIAS_LABORADOS_DEFAULT, origen: 'default', baseCotizacionQuinquenios: null };
-    }
-
-    const key = this.normalizeRfc(rfc);
-    const found = key ? diasMap.get(key) : undefined;
-    if (!found || found.dias == null || !Number.isFinite(found.dias) || found.dias <= 0) {
-      return { dias: this.DIAS_LABORADOS_DEFAULT, origen: 'default', baseCotizacionQuinquenios: found?.baseCotizacionQuinquenios ?? null };
-    }
-
-    return found;
-  }
-
   private async obtenerDiasLaboradosNominaMap(
     rfcs: Array<string | null | undefined>,
     periodo: string,
     org0: string,
-    org1: string
-  ): Promise<Map<string, NominaAportacionInfo>> {
-    const map = new Map<string, NominaAportacionInfo>();
-    const uniqueRfcs = [...new Set(rfcs.map((rfc) => this.normalizeRfc(rfc)).filter((rfc): rfc is string => !!rfc))];
-    if (uniqueRfcs.length === 0 || !/^\d{4}$/.test(periodo)) {
-      return map;
+    org1: string,
+    scope?: { organica2: string; organica3: string }
+  ): Promise<NominaDiasContext> {
+    const registros = new Map<string, { dias: number | null; baseCotizacionQuinquenios: number | null }>();
+    if (!/^\d{4}$/.test(periodo)) {
+      return { tieneArchivo: false, fuente: 'default', registros };
     }
 
     const quincena = Number(periodo.slice(0, 2));
     const anio = 2000 + Number(periodo.slice(2, 4));
     if (!Number.isInteger(quincena) || quincena < 1 || quincena > 24) {
-      return map;
+      return { tieneArchivo: false, fuente: 'default', registros };
     }
 
     const pool = await getPool();
-    for (let i = 0; i < uniqueRfcs.length; i += 500) {
-      const batch = uniqueRfcs.slice(i, i + 500);
-      const request = pool.request()
+    const cargaRequest = pool.request()
+      .input('entidadId', sql.Int, 1)
+      .input('anio', sql.SmallInt, anio)
+      .input('quincena', sql.TinyInt, quincena)
+      .input('org0', sql.Char(2), org0)
+      .input('org1', sql.Char(2), org1);
+    const scopeFilter = scope
+      ? 'AND Organica2 = @org2 AND Organica3 = @org3'
+      : '';
+    if (scope) {
+      cargaRequest
+        .input('org2', sql.Char(2), scope.organica2)
+        .input('org3', sql.Char(2), scope.organica3);
+    }
+    const cargaResult = await cargaRequest.query(`
+        SELECT Id AS CargaId
+        FROM dbo.NominaAplicacionQnalCarga
+        WHERE EntidadId = @entidadId
+          AND Anio = @anio
+          AND Quincena = @quincena
+          AND Organica0 = @org0
+          AND Organica1 = @org1
+          ${scopeFilter}
+          AND TipoCarga = 'TXT'
+          AND Estatus = 'APLICADA'
+          AND EsVigente = 1
+      `);
+    if (cargaResult.recordset.length > 1) {
+      throw new AportacionFondoDomainError(
+        'Existen multiples cargas TXT vigentes para el ambito',
+        AportacionFondoError.ERROR_CALCULO_APORTACION
+      );
+    }
+
+    const uniqueRfcs = [
+      ...new Set(
+        rfcs
+          .map((rfc) => this.nominaDiasResolver.normalizeRfc(rfc))
+          .filter((rfc): rfc is string => !!rfc)
+      )
+    ];
+    if (uniqueRfcs.length === 0) {
+      return {
+        tieneArchivo: cargaResult.recordset.length === 1,
+        fuente: cargaResult.recordset.length === 1 ? 'txt' : 'default',
+        registros
+      };
+    }
+
+    let fuente: 'txt' | 'movimiento' | 'default' = cargaResult.recordset.length === 1 ? 'txt' : 'default';
+    let cargaIds = cargaResult.recordset.map((row) => String(row.CargaId));
+    if (cargaIds.length === 0) {
+      const movimientosRequest = pool.request()
+        .input('entidadId', sql.Int, 1)
         .input('anio', sql.SmallInt, anio)
         .input('quincena', sql.TinyInt, quincena)
-        .input('org0', sql.VarChar(2), org0)
-        .input('org1', sql.VarChar(2), org1);
+        .input('org0', sql.Char(2), org0)
+        .input('org1', sql.Char(2), org1);
+      if (scope) {
+        movimientosRequest
+          .input('org2', sql.Char(2), scope.organica2)
+          .input('org3', sql.Char(2), scope.organica3);
+      }
+      const movimientosResult = await movimientosRequest.query(`
+        SELECT Id AS CargaId
+        FROM dbo.NominaAplicacionQnalCarga
+        WHERE EntidadId=@entidadId AND Anio=@anio AND Quincena=@quincena
+          AND Organica0=@org0 AND Organica1=@org1
+          ${scopeFilter}
+          AND TipoCarga='MOVIMIENTO' AND Estatus='APLICADA'
+        ORDER BY Id DESC
+      `);
+      cargaIds = movimientosResult.recordset.map((row) => String(row.CargaId));
+      fuente = cargaIds.length > 0 ? 'movimiento' : 'default';
+    }
+    if (fuente === 'default') return { tieneArchivo: false, fuente, registros };
+
+    for (let i = 0; i < uniqueRfcs.length; i += 500) {
+      const batch = uniqueRfcs.slice(i, i + 500);
+      const request = pool.request();
+      const cargaPlaceholders = cargaIds.map((cargaId, index) => {
+        const name = `cargaId${index}`;
+        request.input(name, sql.BigInt, cargaId);
+        return `@${name}`;
+      }).join(', ');
       const placeholders = batch.map((rfc, index) => {
         const name = `rfc${index}`;
         request.input(name, sql.VarChar(13), rfc);
@@ -1490,36 +1550,30 @@ export class AportacionFondoRepository implements IAportacionFondoRepository {
       }).join(', ');
 
       const result = await request.query(`
-        SELECT UPPER(LTRIM(RTRIM(RFC))) AS RFC, DiasLaborados, BaseCotizacionQuinquenios
+        SELECT Id,UPPER(LTRIM(RTRIM(RFC))) AS RFC,DiasLaborados,BaseCotizacionQuinquenios
         FROM dbo.NominaAplicacionQnalDetalle
-        WHERE Anio = @anio
-          AND Quincena = @quincena
-          AND Organica0 = @org0
-          AND Organica1 = @org1
+        WHERE CargaId IN (${cargaPlaceholders})
           AND UPPER(LTRIM(RTRIM(RFC))) IN (${placeholders})
-          AND (DiasLaborados IS NOT NULL OR BaseCotizacionQuinquenios IS NOT NULL)
+        ORDER BY Id DESC
       `);
 
       for (const row of result.recordset) {
-        const key = this.normalizeRfc(row.RFC);
+        const key = this.nominaDiasResolver.normalizeRfc(row.RFC);
         const dias = this.safeNumber(row.DiasLaborados);
         const baseCotizacionQuinquenios = this.safeNumber(row.BaseCotizacionQuinquenios);
         if (key) {
-          map.set(key, {
-            dias: dias != null && dias > 0 ? dias : this.DIAS_LABORADOS_DEFAULT,
-            origen: dias != null && dias > 0 ? 'nomina' : 'default',
-            baseCotizacionQuinquenios
-          });
+          if (registros.has(key) && fuente === 'txt') {
+            throw new AportacionFondoDomainError(
+              `RFC repetido entre cargas TXT vigentes del ámbito: ${key}`,
+              AportacionFondoError.ERROR_CALCULO_APORTACION
+            );
+          }
+          if (!registros.has(key)) registros.set(key, { dias, baseCotizacionQuinquenios });
         }
       }
     }
 
-    return map;
-  }
-
-  private normalizeRfc(rfc: string | null | undefined): string | null {
-    const normalized = String(rfc || '').trim().toUpperCase();
-    return normalized || null;
+    return { tieneArchivo: fuente === 'txt', fuente, registros };
   }
 
   private async enriquecerConDiasLaborados<T>(
@@ -1528,14 +1582,15 @@ export class AportacionFondoRepository implements IAportacionFondoRepository {
     org0: string,
     org1: string,
     usarDiasLaboradosNomina: boolean,
-    getRfc: (registro: T) => string | null | undefined
-  ): Promise<Array<T & { dias_laborados: number; dias_laborados_origen: 'nomina' | 'default' }>> {
-    const diasMap = usarDiasLaboradosNomina
-      ? await this.obtenerDiasLaboradosNominaMap(registros.map(getRfc), periodo, org0, org1)
-      : new Map<string, NominaAportacionInfo>();
+    getRfc: (registro: T) => string | null | undefined,
+    nominaScope?: { organica2: string; organica3: string }
+  ): Promise<Array<T & { dias_laborados: number; dias_laborados_origen: NominaDiasResultado['origen'] }>> {
+    const diasContext = usarDiasLaboradosNomina
+      ? await this.obtenerDiasLaboradosNominaMap(registros.map(getRfc), periodo, org0, org1, nominaScope)
+      : { tieneArchivo: false, registros: new Map() };
 
     return registros.map((registro) => {
-      const dias = this.resolveDiasLaborados(getRfc(registro), diasMap, usarDiasLaboradosNomina);
+      const dias = this.nominaDiasResolver.resolve(getRfc(registro), diasContext, usarDiasLaboradosNomina);
       return {
         ...registro,
         dias_laborados: dias.dias,
@@ -2132,7 +2187,8 @@ export class AportacionFondoRepository implements IAportacionFondoRepository {
                 org0,
                 org1,
                 usarDiasLaboradosNomina,
-                (registro) => registro.rfc
+                (registro) => registro.rfc,
+                { organica2: org2, organica3: org3 }
               ).then((registrosEnriquecidos) => {
                 console.log('[APORTACIONES_FONDOS] [PENSION_NOMINA_TRANSITORIO] Consulta completada exitosamente', {
                   ...logContext,

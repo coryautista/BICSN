@@ -1,0 +1,335 @@
+SET TERM ^ ;
+
+CREATE OR ALTER PROCEDURE AP_RESUMEN_ORG_QNA_ALL (
+    ORG0     VARCHAR(2),
+    ORG1     VARCHAR(2),
+    PERIODO  VARCHAR(4)
+)
+RETURNS (
+    PORG0 VARCHAR(2),
+    PORG1 VARCHAR(2),
+    QNA   VARCHAR(4),
+    NORG  VARCHAR(40),
+    AFILIADOS INTEGER,
+    SDO   NUMERIC(12,2),
+    SDOBC NUMERIC(12,2),
+    OP    NUMERIC(12,2),
+    OPBC  NUMERIC(12,2),
+    QNQ   NUMERIC(12,2),
+    QNQBC NUMERIC(12,2),
+    PCP   NUMERIC(9,2),
+    PCP_M NUMERIC(9,2),
+    PH    NUMERIC(9,2),
+    PH_M  NUMERIC(9,2),
+    EV    NUMERIC(9,2),
+    EV_M  NUMERIC(9,2),
+    PC    NUMERIC(9,2),
+    PC_M  NUMERIC(9,2),
+    FAA   NUMERIC(9,2),
+    FAE   NUMERIC(9,2),
+    FAT   NUMERIC(9,2),
+    FO_FAA NUMERIC(9,2),
+    FO_FAE NUMERIC(9,2),
+    FO_FAT NUMERIC(9,2),
+    FM_FAA NUMERIC(9,2),
+    FM_FAE NUMERIC(9,2),
+    FM_FAT NUMERIC(9,2),
+    FR_FAA NUMERIC(9,2),
+    FR_FAE NUMERIC(9,2),
+    FR_FAT NUMERIC(9,2),
+    FRA   NUMERIC(9,2),
+    FRE   NUMERIC(9,2),
+    FRT   NUMERIC(9,2),
+    FO_FRA NUMERIC(9,2),
+    FO_FRE NUMERIC(9,2),
+    FO_FRT NUMERIC(9,2),
+    FM_FRA NUMERIC(9,2),
+    FM_FRE NUMERIC(9,2),
+    FM_FRT NUMERIC(9,2),
+    FR_FRA NUMERIC(9,2),
+    FR_FRE NUMERIC(9,2),
+    FR_FRT NUMERIC(9,2),
+    FV     NUMERIC(9,2),
+    FO_FV  NUMERIC(9,2),
+    FM_FV  NUMERIC(9,2),
+    FR_FV  NUMERIC(9,2),
+    FH     NUMERIC(9,2),
+    FO_FH  NUMERIC(9,2),
+    FM_FH  NUMERIC(9,2),
+    FR_FH  NUMERIC(9,2),
+    SAR    NUMERIC(9,2),
+    FO_SAR NUMERIC(9,2),
+    FM_SAR NUMERIC(9,2),
+    FR_SAR NUMERIC(9,2),
+    SARV   NUMERIC(9,2),
+    EBIA   NUMERIC(9,2),
+    EBIE   NUMERIC(9,2),
+    EBIT   NUMERIC(9,2),
+    AGUI   NUMERIC(15,2),
+    P_TRANS NUMERIC(12,2),
+    P_FORAN NUMERIC(12,2),
+    PMP_GM_M NUMERIC(9,2),
+    PMP_GM   NUMERIC(9,2),
+    PMP_AV_M NUMERIC(9,2),
+    PMP_AV   NUMERIC(9,2),
+    PMP_ET_M NUMERIC(9,2),
+    PMP_ET   NUMERIC(9,2),
+    PMP_HO_M NUMERIC(9,2),
+    PMP_HO   NUMERIC(9,2),
+    PMP_TU_M NUMERIC(9,2),
+    PMP_TU   NUMERIC(9,2),
+    PMP_ED_M NUMERIC(9,2),
+    PMP_ED   NUMERIC(9,2),
+    PMP_OT_M NUMERIC(9,2),
+    PMP_OT   NUMERIC(9,2),
+    CONCEPTO VARCHAR(255),
+    MONTO    NUMERIC(16,2)
+)
+AS
+DECLARE VARIABLE TMPORG0     VARCHAR(2);
+DECLARE VARIABLE TMPORG1     VARCHAR(2);
+DECLARE VARIABLE TMPPERIODO  VARCHAR(4);
+DECLARE VARIABLE TMPCONCEPTO VARCHAR(20);
+DECLARE VARIABLE TMPTL       NUMERIC(9,2);
+DECLARE VARIABLE TMPMORA     NUMERIC(9,2);
+BEGIN
+  -- Iniciales fijas
+  PORG0 = ORG0;
+  PORG1 = ORG1;
+  QNA   = PERIODO;
+
+  -- Nombre de la orgánica
+  SELECT FIRST 1 NORG
+  FROM FN_ENTIDADES_TOTAL
+  WHERE org0 = :org0 AND org1 = :org1
+  INTO :NORG;
+
+  -- Resumen principal (todo con COALESCE)
+  SELECT
+      COALESCE(SUM(pcp_cobro),0), COALESCE(SUM(pcp_cobro_m),0),
+      COALESCE(SUM(ppv_hip),0),  COALESCE(SUM(ppv_hip_m),0),
+      COALESCE(SUM(pmp_ev),0),   COALESCE(SUM(pmp_ev_m),0),
+      COALESCE(SUM(ppv_pc),0),   COALESCE(SUM(ppv_pc_m),0),
+
+      COALESCE(SUM(fo_faa+fm_faa+fr_faa),0),
+      COALESCE(SUM(fo_fae+fm_fae+fr_fae),0),
+      COALESCE(SUM(fo_faa+fm_faa+fr_faa+fo_fae+fm_fae+fr_fae),0),
+
+      COALESCE(SUM(fo_faa),0), COALESCE(SUM(fo_fae),0), COALESCE(SUM(fo_faa+fo_fae),0),
+      COALESCE(SUM(fm_faa),0), COALESCE(SUM(fm_fae),0), COALESCE(SUM(fm_faa+fm_fae),0),
+      COALESCE(SUM(fr_faa),0), COALESCE(SUM(fr_fae),0), COALESCE(SUM(fr_faa+fr_fae),0),
+
+      COALESCE(SUM(fo_fra+fm_fra+fr_fra),0),
+      COALESCE(SUM(fo_fre+fm_fre+fr_fre),0),
+      COALESCE(SUM(fo_fra+fm_fra+fr_fra+fo_fre+fm_fre+fr_fre),0),
+
+      COALESCE(SUM(fo_fra),0), COALESCE(SUM(fo_fre),0), COALESCE(SUM(fo_fra+fo_fre),0),
+      COALESCE(SUM(fm_fra),0), COALESCE(SUM(fm_fre),0), COALESCE(SUM(fm_fra+fm_fre),0),
+      COALESCE(SUM(fr_fra),0), COALESCE(SUM(fr_fre),0), COALESCE(SUM(fr_fra+fr_fre),0),
+
+      COALESCE(SUM(fo_fve+fm_fve+fr_fve),0),
+      COALESCE(SUM(fo_fve),0), COALESCE(SUM(fm_fve),0), COALESCE(SUM(fr_fve),0),
+
+      COALESCE(SUM(fo_fhe+fm_fhe+fr_fhe),0),
+      COALESCE(SUM(fo_fhe),0), COALESCE(SUM(fm_fhe),0), COALESCE(SUM(fr_fhe),0),
+
+      COALESCE(SUM(fo_sar+fm_sar+fr_sar),0),
+      COALESCE(SUM(fo_sar),0), COALESCE(SUM(fm_sar),0), COALESCE(SUM(fr_sar),0),
+
+      COALESCE(SUM(ebia),0), COALESCE(SUM(ebie),0), COALESCE(SUM(ebia+ebie),0),
+      COALESCE(SUM(fv_sar),0), COALESCE(SUM(agui_fre),0),
+      COALESCE(SUM(pens_trans),0), COALESCE(SUM(pens_foran),0),
+
+      COALESCE(SUM(fo_afil),0),
+      COALESCE(SUM(fo_sdo),0),  COALESCE(SUM(fo_sdob),0),
+      COALESCE(SUM(fo_op),0),   COALESCE(SUM(fo_opb),0),
+      COALESCE(SUM(fo_q),0),    COALESCE(SUM(fo_qb),0)
+  FROM aportacion_quincenal_resumen
+  WHERE org0 = :org0
+    AND org1 = :org1
+    AND periodo = :periodo
+  INTO
+      :pcp, :pcp_m, :ph, :ph_m, :ev, :ev_m, :pc, :pc_m,
+      :faa, :fae, :fat,
+      :fo_faa, :fo_fae, :fo_fat,
+      :fm_faa, :fm_fae, :fm_fat,
+      :fr_faa, :fr_fae, :fr_fat,
+      :fra, :fre, :frt,
+      :fo_fra, :fo_fre, :fo_frt,
+      :fm_fra, :fm_fre, :fm_frt,
+      :fr_fra, :fr_fre, :fr_frt,
+      :fv, :fo_fv, :fm_fv, :fr_fv,
+      :fh, :fo_fh, :fm_fh, :fr_fh,
+      :sar, :fo_sar, :fm_sar, :fr_sar,
+      :ebia, :ebie, :ebit, :sarv, :agui, :p_trans, :p_foran,
+      :afiliados, :sdo, :sdobc, :op, :opbc, :qnq, :qnqbc;
+
+  -- Si hay algo que reportar
+  IF ((COALESCE(afiliados,0) + COALESCE(sdo,0) + COALESCE(sdobc,0)
+       + COALESCE(op,0) + COALESCE(opbc,0) + COALESCE(qnq,0) + COALESCE(qnqbc,0)) > 0) THEN
+  BEGIN
+    -- EBI sólo en quincena par
+    IF (MOD(CAST(SUBSTRING(:periodo FROM 1 FOR 2) AS INTEGER), 2) = 0) THEN
+    BEGIN
+      SELECT
+          ES.org0,
+          IIF(ES.org0 IN ('01','02'), '01', ES.org1),
+          ES.periodo,
+          SUM(ES.total_afi),
+          SUM(ES.total_ent),
+          SUM(ES.total)
+      FROM siiebi_recibos ES
+      WHERE ES.estatus = 'Q'
+        AND ES.periodo = :PERIODO
+        AND ES.org0 = :ORG0
+        AND IIF(ES.org0 IN ('01','02'), '01', ES.org1) = :ORG1
+      GROUP BY ES.org0, IIF(ES.org0 IN ('01','02'), '01', ES.org1), ES.periodo
+      INTO :TMPORG0, :TMPORG1, :TMPPERIODO, :EBIA, :EBIE, :EBIT;
+    END
+
+    -- Inicializa PMP
+    PMP_GM_M=0; PMP_GM=0; PMP_AV_M=0; PMP_AV=0; PMP_ET_M=0; PMP_ET=0;
+    PMP_HO=0;  PMP_HO_M=0; PMP_TU=0; PMP_TU_M=0; PMP_ED=0; PMP_ED_M=0; PMP_OT=0; PMP_OT_M=0;
+
+    -- Detalle PMP por clase (orgánica especial para org0 01/02)
+    IF (org0 IN ('01','02')) THEN
+    BEGIN
+      FOR
+        SELECT
+          (CASE PT.clave_clase
+             WHEN 2  THEN 'GASTO MEDICO'  WHEN 13 THEN 'GASTO MEDICO' WHEN 14 THEN 'GASTO MEDICO'
+             WHEN 20 THEN 'GASTO MEDICO'  WHEN 21 THEN 'GASTO MEDICO' WHEN 29 THEN 'GASTO MEDICO' WHEN 30 THEN 'GASTO MEDICO'
+             WHEN 3  THEN 'VEHICULOS'     WHEN 7  THEN 'VEHICULOS'    WHEN 9  THEN 'VEHICULOS'
+             WHEN 22 THEN 'VEHICULOS'     WHEN 23 THEN 'VEHICULOS'    WHEN 24 THEN 'VEHICULOS' WHEN 31 THEN 'VEHICULOS' WHEN 33 THEN 'VEHICULOS'
+             WHEN 5  THEN 'TECNOLOGIA'    WHEN 10 THEN 'TECNOLOGIA'   WHEN 16 THEN 'TECNOLOGIA' WHEN 25 THEN 'TECNOLOGIA'
+             WHEN 11 THEN 'HOGAR'         WHEN 26 THEN 'HOGAR'
+             WHEN 12 THEN 'TURISTICO'     WHEN 18 THEN 'TURISTICO'    WHEN 27 THEN 'TURISTICO'
+             WHEN 15 THEN 'EDUCATIVO'     WHEN 19 THEN 'EDUCATIVO'    WHEN 28 THEN 'EDUCATIVO'
+             ELSE 'OTROS' END) AS concepto,
+          COALESCE(SUM(pp.capital_pagar + pp.seguro_pagar + pg.interes),0) AS total,
+          COALESCE(SUM(pp.moratorio_pagar),0)                               AS mora
+        FROM pmp_pagos pp
+        JOIN pmp_pagos_interes pg ON (pp.no_prestamo = pg.no_prestamo AND pp.no_pago = pg.no_pago)
+        JOIN pmp pm               ON (pm.no_prestamo = pp.no_prestamo)
+        JOIN prestamos_tipo_clase pt ON (pm.clave_clase = pt.clave_clase AND pt.clave_prestamo = 2)
+        WHERE pp.org0 = :org0
+          AND pp.status = 'P'
+          AND pp.periodo_pago = :periodo
+          AND pp.via_pago = 'N'
+        GROUP BY
+          (CASE PT.clave_clase
+             WHEN 2  THEN 20 WHEN 13 THEN 20 WHEN 14 THEN 20 WHEN 20 THEN 20 WHEN 21 THEN 20 WHEN 29 THEN 20 WHEN 30 THEN 20
+             WHEN 3  THEN 30 WHEN 7  THEN 30 WHEN 9  THEN 30 WHEN 22 THEN 30 WHEN 23 THEN 30 WHEN 24 THEN 30 WHEN 31 THEN 30 WHEN 33 THEN 30
+             WHEN 5  THEN 40 WHEN 10 THEN 40 WHEN 16 THEN 40 WHEN 25 THEN 40
+             WHEN 11 THEN 50 WHEN 26 THEN 50
+             WHEN 12 THEN 60 WHEN 18 THEN 60 WHEN 27 THEN 60
+             WHEN 15 THEN 70 WHEN 19 THEN 70 WHEN 28 THEN 70
+             ELSE 80 END),
+          (CASE PT.clave_clase
+             WHEN 2  THEN 'GASTO MEDICO' WHEN 13 THEN 'GASTO MEDICO' WHEN 14 THEN 'GASTO MEDICO'
+             WHEN 20 THEN 'GASTO MEDICO' WHEN 21 THEN 'GASTO MEDICO' WHEN 29 THEN 'GASTO MEDICO' WHEN 30 THEN 'GASTO MEDICO'
+             WHEN 3  THEN 'VEHICULOS'    WHEN 7  THEN 'VEHICULOS'    WHEN 9  THEN 'VEHICULOS' WHEN 22 THEN 'VEHICULOS' WHEN 23 THEN 'VEHICULOS' WHEN 24 THEN 'VEHICULOS' WHEN 31 THEN 'VEHICULOS' WHEN 33 THEN 'VEHICULOS'
+             WHEN 5  THEN 'TECNOLOGIA'   WHEN 10 THEN 'TECNOLOGIA'   WHEN 16 THEN 'TECNOLOGIA' WHEN 25 THEN 'TECNOLOGIA'
+             WHEN 11 THEN 'HOGAR'        WHEN 26 THEN 'HOGAR'
+             WHEN 12 THEN 'TURISTICO'    WHEN 18 THEN 'TURISTICO'    WHEN 27 THEN 'TURISTICO'
+             WHEN 15 THEN 'EDUCATIVO'    WHEN 19 THEN 'EDUCATIVO'    WHEN 28 THEN 'EDUCATIVO'
+             ELSE 'OTROS' END)
+        INTO :TMPCONCEPTO, :TMPTL, :TMPMORA
+      DO
+      BEGIN
+        IF (TMPCONCEPTO='GASTO MEDICO') THEN BEGIN PMP_GM = TMPTL; PMP_GM_M = TMPMORA; END
+        IF (TMPCONCEPTO='VEHICULOS')     THEN BEGIN PMP_AV = TMPTL; PMP_AV_M = TMPMORA; END
+        IF (TMPCONCEPTO='TECNOLOGIA')    THEN BEGIN PMP_ET = TMPTL; PMP_ET_M = TMPMORA; END
+        IF (TMPCONCEPTO='HOGAR')         THEN BEGIN PMP_HO = TMPTL; PMP_HO_M = TMPMORA; END
+        IF (TMPCONCEPTO='TURISTICO')     THEN BEGIN PMP_TU = TMPTL; PMP_TU_M = TMPMORA; END
+        IF (TMPCONCEPTO='EDUCATIVO')     THEN BEGIN PMP_ED = TMPTL; PMP_ED_M = TMPMORA; END
+        IF (TMPCONCEPTO='OTROS')         THEN BEGIN PMP_OT = TMPTL; PMP_OT_M = TMPMORA; END
+      END
+    END
+    ELSE
+    BEGIN
+      -- Versión con org1 normal
+      FOR
+        SELECT
+          (CASE PT.clave_clase
+             WHEN 2  THEN 'GASTO MEDICO'  WHEN 13 THEN 'GASTO MEDICO' WHEN 14 THEN 'GASTO MEDICO'
+             WHEN 20 THEN 'GASTO MEDICO'  WHEN 21 THEN 'GASTO MEDICO' WHEN 29 THEN 'GASTO MEDICO' WHEN 30 THEN 'GASTO MEDICO'
+             WHEN 3  THEN 'VEHICULOS'     WHEN 7  THEN 'VEHICULOS'    WHEN 9  THEN 'VEHICULOS'
+             WHEN 22 THEN 'VEHICULOS'     WHEN 23 THEN 'VEHICULOS'    WHEN 24 THEN 'VEHICULOS' WHEN 31 THEN 'VEHICULOS' WHEN 33 THEN 'VEHICULOS'
+             WHEN 5  THEN 'TECNOLOGIA'    WHEN 10 THEN 'TECNOLOGIA'   WHEN 16 THEN 'TECNOLOGIA' WHEN 25 THEN 'TECNOLOGIA'
+             WHEN 11 THEN 'HOGAR'         WHEN 26 THEN 'HOGAR'
+             WHEN 12 THEN 'TURISTICO'     WHEN 18 THEN 'TURISTICO'    WHEN 27 THEN 'TURISTICO'
+             WHEN 15 THEN 'EDUCATIVO'     WHEN 19 THEN 'EDUCATIVO'    WHEN 28 THEN 'EDUCATIVO'
+             ELSE 'OTROS' END) AS concepto,
+          COALESCE(SUM(pp.capital_pagar + pp.seguro_pagar + pg.interes),0) AS total,
+          COALESCE(SUM(pp.moratorio_pagar),0)                               AS mora
+        FROM pmp_pagos pp
+        JOIN pmp_pagos_interes pg ON (pp.no_prestamo = pg.no_prestamo AND pp.no_pago = pg.no_pago)
+        JOIN pmp pm               ON (pm.no_prestamo = pp.no_prestamo)
+        JOIN prestamos_tipo_clase pt ON (pm.clave_clase = pt.clave_clase AND pt.clave_prestamo = 2)
+        WHERE pp.org0 = :org0
+          AND pp.org1 = :org1
+          AND pp.status = 'P'
+          AND pp.periodo_pago = :periodo
+          AND pp.via_pago = 'N'
+        GROUP BY
+          (CASE PT.clave_clase
+             WHEN 2  THEN 20 WHEN 13 THEN 20 WHEN 14 THEN 20 WHEN 20 THEN 20 WHEN 21 THEN 20 WHEN 29 THEN 20 WHEN 30 THEN 20
+             WHEN 3  THEN 30 WHEN 7  THEN 30 WHEN 9  THEN 30 WHEN 22 THEN 30 WHEN 23 THEN 30 WHEN 24 THEN 30 WHEN 31 THEN 30 WHEN 33 THEN 30
+             WHEN 5  THEN 40 WHEN 10 THEN 40 WHEN 16 THEN 40 WHEN 25 THEN 40
+             WHEN 11 THEN 50 WHEN 26 THEN 50
+             WHEN 12 THEN 60 WHEN 18 THEN 60 WHEN 27 THEN 60
+             WHEN 15 THEN 70 WHEN 19 THEN 70 WHEN 28 THEN 70
+             ELSE 80 END),
+          (CASE PT.clave_clase
+             WHEN 2  THEN 'GASTO MEDICO' WHEN 13 THEN 'GASTO MEDICO' WHEN 14 THEN 'GASTO MEDICO'
+             WHEN 20 THEN 'GASTO MEDICO' WHEN 21 THEN 'GASTO MEDICO' WHEN 29 THEN 'GASTO MEDICO' WHEN 30 THEN 'GASTO MEDICO'
+             WHEN 3  THEN 'VEHICULOS'    WHEN 7  THEN 'VEHICULOS'    WHEN 9  THEN 'VEHICULOS' WHEN 22 THEN 'VEHICULOS' WHEN 23 THEN 'VEHICULOS' WHEN 24 THEN 'VEHICULOS' WHEN 31 THEN 'VEHICULOS' WHEN 33 THEN 'VEHICULOS'
+             WHEN 5  THEN 'TECNOLOGIA'   WHEN 10 THEN 'TECNOLOGIA'   WHEN 16 THEN 'TECNOLOGIA' WHEN 25 THEN 'TECNOLOGIA'
+             WHEN 11 THEN 'HOGAR'        WHEN 26 THEN 'HOGAR'
+             WHEN 12 THEN 'TURISTICO'    WHEN 18 THEN 'TURISTICO'    WHEN 27 THEN 'TURISTICO'
+             WHEN 15 THEN 'EDUCATIVO'    WHEN 19 THEN 'EDUCATIVO'    WHEN 28 THEN 'EDUCATIVO'
+             ELSE 'OTROS' END)
+        INTO :TMPCONCEPTO, :TMPTL, :TMPMORA
+      DO
+      BEGIN
+        IF (TMPCONCEPTO='GASTO MEDICO') THEN BEGIN PMP_GM = TMPTL; PMP_GM_M = TMPMORA; END
+        IF (TMPCONCEPTO='VEHICULOS')     THEN BEGIN PMP_AV = TMPTL; PMP_AV_M = TMPMORA; END
+        IF (TMPCONCEPTO='TECNOLOGIA')    THEN BEGIN PMP_ET = TMPTL; PMP_ET_M = TMPMORA; END
+        IF (TMPCONCEPTO='HOGAR')         THEN BEGIN PMP_HO = TMPTL; PMP_HO_M = TMPMORA; END
+        IF (TMPCONCEPTO='TURISTICO')     THEN BEGIN PMP_TU = TMPTL; PMP_TU_M = TMPMORA; END
+        IF (TMPCONCEPTO='EDUCATIVO')     THEN BEGIN PMP_ED = TMPTL; PMP_ED_M = TMPMORA; END
+        IF (TMPCONCEPTO='OTROS')         THEN BEGIN PMP_OT = TMPTL; PMP_OT_M = TMPMORA; END
+      END
+    END
+
+    -- Emite la fila “principal”
+    SUSPEND;
+
+    -- Fila(s) extra por adeudos de aportación extra (si existen)
+    CONCEPTO = NULL; MONTO = NULL;
+    FOR
+      SELECT CONCEPTO, MONTO
+      FROM ADEUDO_APORTACION_EXTRA XT
+      WHERE XT.org0 = :ORG0 AND XT.org1 = :ORG1 AND XT.periodo = :PERIODO
+      INTO :CONCEPTO, :MONTO
+    DO
+    BEGIN
+      -- Resto de columnas quedan NULL (ya están con último valor suspendido)
+      SUSPEND;
+    END
+  END
+
+END^
+
+SET TERM ; ^
+
+
+// Índices
+CREATE INDEX IX_AQR_ORG0_ORG1_PERIODO ON aportacion_quincenal_resumen (org0, org1, periodo);
+CREATE INDEX IX_SIIEBI_RESUMEN ON siiebi_recibos (estatus, periodo, org0, org1);
+CREATE INDEX IX_PMP_PAGOS_FILTRO ON pmp_pagos (org0, org1, status, periodo_pago, via_pago);
+CREATE INDEX IX_PMP_INTERES_JOIN ON pmp_pagos_interes (no_prestamo, no_pago);
+CREATE INDEX IX_PMP_JOIN ON pmp (no_prestamo);
+CREATE INDEX IX_PTC ON prestamos_tipo_clase (clave_clase, clave_prestamo);
+

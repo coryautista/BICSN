@@ -31,6 +31,19 @@ export type MovimientoAltasBajas = 'AL' | 'BA' | 'LB';
 export type MovimientoRendimiento = 'B' | 'E';
 export type EstatusRendimiento = 'A' | 'L';
 
+export function resolverEstatusReporteRevision(
+  estatus: unknown,
+  error: unknown,
+  conceptosGuardados: number
+): ReporteRevision['estatusProceso'] {
+  const estado = String(estatus || 'COMPLETADA').trim() as ReporteRevision['estatusProceso'];
+  const mensaje = String(error || '');
+  const falloFtpOpcional = estado === 'ERROR'
+    && conceptosGuardados > 0
+    && (mensaje.includes('upload text to FTP') || mensaje.includes('FTP_OPCIONAL_NO_DISPONIBLE'));
+  return falloFtpOpcional ? 'COMPLETADA' : estado;
+}
+
 export class RevisionRepository {
   constructor(private mssqlPool: ConnectionPool) {}
 
@@ -345,7 +358,7 @@ export class RevisionRepository {
 
     const [tareaResultado, conceptosResultado] = await Promise.all([
       crearRequest().query(`
-        SELECT TOP (1) Estatus, Intentos, FechaAlta, FechaInicio, FechaFin
+        SELECT TOP (1) Estatus, Intentos, Error, FechaAlta, FechaInicio, FechaFin
         FROM conciliacion.RevisionTarea
         WHERE Organica0 = @org0 AND Organica1 = @org1
           AND Organica2 = @org2 AND Organica3 = @org3
@@ -371,7 +384,7 @@ export class RevisionRepository {
     if (!tarea && filas.length === 0) return null;
 
     const estatusProceso = tarea
-      ? String(tarea.Estatus).trim() as ReporteRevision['estatusProceso']
+      ? resolverEstatusReporteRevision(tarea.Estatus, tarea.Error, filas.length)
       : 'COMPLETADA';
     const conceptos = estatusProceso === 'COMPLETADA'
       ? filas.map((row) => ({
@@ -578,14 +591,20 @@ export class RevisionRepository {
       };
   }
 
-  async completarTarea(idRevisionTarea: number, rutaReporteFtp: string, claimToken: string): Promise<void> {
+  async completarTarea(
+    idRevisionTarea: number,
+    rutaReporteFtp: string | null,
+    claimToken: string,
+    advertencia: string | null = null
+  ): Promise<void> {
     await this.mssqlPool.request()
       .input('id', sql.BigInt, idRevisionTarea)
       .input('ruta', sql.NVarChar(500), rutaReporteFtp)
       .input('claimToken', sql.UniqueIdentifier, claimToken)
+      .input('advertencia', sql.NVarChar(2000), advertencia)
       .query(`
         UPDATE conciliacion.RevisionTarea
-        SET Estatus = 'COMPLETADA', FechaFin = SYSDATETIME(), Error = NULL,
+        SET Estatus = 'COMPLETADA', FechaFin = SYSDATETIME(), Error = @advertencia,
             RutaReporteFtp = @ruta, ClaimToken = NULL
         WHERE IdRevisionTarea = @id AND ClaimToken = @claimToken AND Estatus = 'PROCESANDO';
         IF @@ROWCOUNT = 0 THROW 50021, 'REVISION_TAREA_CLAIM_PERDIDO', 1;

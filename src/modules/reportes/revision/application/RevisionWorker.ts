@@ -1,7 +1,7 @@
 import pino from 'pino';
 import { crearImportesRevision, ImportesRevision, ResultadoConceptoRevision, RevisionTarea } from '../domain/Revision.types.js';
 import { RevisionRepository } from '../infrastructure/persistence/RevisionRepository.js';
-import { guardarRevisionLogFtp } from '../infrastructure/services/RevisionLogFtpService.js';
+import { guardarRevisionLogFtp, guardarRevisionLogFtpOpcional } from '../infrastructure/services/RevisionLogFtpService.js';
 
 const logger = pino({ name: 'revisionWorker', level: process.env.LOG_LEVEL || 'info' });
 
@@ -73,7 +73,7 @@ export class RevisionWorker {
         },
         {
           numeroConcepto: 2,
-          fuente: 'conciliacion.RevisionAplicacionHistorico',
+          fuente: 'conciliacion.RevisionAplicacionHistorico (AP_S_FONDOS ajustado por DiasLaborados; default 15)',
           calcular: () => this.revisionRepo.calcularAplicacionQuincenal(tarea)
         },
         {
@@ -193,9 +193,21 @@ export class RevisionWorker {
         });
       }
 
-      const ruta = await guardarRevisionLogFtp(tarea, conceptos, inicioUtc, Date.now() - inicio);
-      await this.revisionRepo.completarTarea(tarea.idRevisionTarea, ruta, tarea.claimToken);
-      logger.info({ idRevisionTarea: tarea.idRevisionTarea, ruta }, 'Tarea REVISA completada');
+      const entrega = await guardarRevisionLogFtpOpcional(tarea, conceptos, inicioUtc, Date.now() - inicio);
+      await this.revisionRepo.completarTarea(
+        tarea.idRevisionTarea,
+        entrega.ruta,
+        tarea.claimToken,
+        entrega.advertencia
+      );
+      if (entrega.advertencia) {
+        logger.warn({
+          idRevisionTarea: tarea.idRevisionTarea,
+          advertencia: entrega.advertencia
+        }, 'Tarea REVISA completada sin entrega FTP opcional');
+      } else {
+        logger.info({ idRevisionTarea: tarea.idRevisionTarea, ruta: entrega.ruta }, 'Tarea REVISA completada');
+      }
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       let rutaError: string | undefined;

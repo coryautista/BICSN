@@ -9,7 +9,13 @@ export enum AportacionFondoError {
   ERROR_FIREBIRD_CONEXION = 'ERROR_FIREBIRD_CONEXION',
   ERROR_FIREBIRD_PROCEDIMIENTO = 'ERROR_FIREBIRD_PROCEDIMIENTO',
   CLAVE_ORGANICA_INVALIDA = 'CLAVE_ORGANICA_INVALIDA',
-  PARAMETRO_INVALIDO = 'PARAMETRO_INVALIDO'
+  PARAMETRO_INVALIDO = 'PARAMETRO_INVALIDO',
+  FORMULA_CALCULO_NO_ENCONTRADA = 'FORMULA_CALCULO_NO_ENCONTRADA',
+  FORMULA_CALCULO_TRASLAPADA = 'FORMULA_CALCULO_TRASLAPADA',
+  FORMULA_CALCULO_PARAMETROS_INVALIDOS = 'FORMULA_CALCULO_PARAMETROS_INVALIDOS',
+  ERROR_SQL_FORMULA_CALCULO = 'ERROR_SQL_FORMULA_CALCULO',
+  SNAPSHOT_V2_NO_ENCONTRADO = 'SNAPSHOT_V2_NO_ENCONTRADO',
+  SNAPSHOT_V2_NO_DECIDIBLE = 'SNAPSHOT_V2_NO_DECIDIBLE'
 }
 
 export class AportacionFondoDomainError extends Error {
@@ -34,5 +40,11 @@ export const AportacionFondoErrorMessages = {
   [AportacionFondoError.ERROR_FIREBIRD_CONEXION]: 'Error de conexión con la base de datos Firebird',
   [AportacionFondoError.ERROR_FIREBIRD_PROCEDIMIENTO]: 'Error al ejecutar procedimiento almacenado en Firebird',
   [AportacionFondoError.CLAVE_ORGANICA_INVALIDA]: 'Clave orgánica inválida. Debe tener máximo 2 caracteres',
-  [AportacionFondoError.PARAMETRO_INVALIDO]: 'Parámetro inválido en la solicitud'
+  [AportacionFondoError.PARAMETRO_INVALIDO]: 'Parámetro inválido en la solicitud',
+  [AportacionFondoError.FORMULA_CALCULO_NO_ENCONTRADA]: 'No existe una fórmula activa para el periodo',
+  [AportacionFondoError.FORMULA_CALCULO_TRASLAPADA]: 'Existen fórmulas activas traslapadas para el periodo',
+  [AportacionFondoError.FORMULA_CALCULO_PARAMETROS_INVALIDOS]: 'La fórmula de cálculo contiene parámetros inválidos',
+  [AportacionFondoError.ERROR_SQL_FORMULA_CALCULO]: 'Error al consultar la fórmula de cálculo',
+  [AportacionFondoError.SNAPSHOT_V2_NO_ENCONTRADO]: 'Snapshot V2 no encontrado',
+  [AportacionFondoError.SNAPSHOT_V2_NO_DECIDIBLE]: 'Solo se pueden decidir snapshots completos y cerrados'
 };

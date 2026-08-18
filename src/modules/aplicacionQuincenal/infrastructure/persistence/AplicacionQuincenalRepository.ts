@@ -2,7 +2,14 @@ import { FastifyRequest } from 'fastify';
 import { executeSerializedQuery, decodeFirebirdObject, executeSelectableProcedure, executeSafeQuery, FIREBIRD_TIMEOUTS } from '../../../../db/firebird.js';
 import { withDbContext, sql } from '../../../../db/context.js';
 import { getPool } from '../../../../db/mssql.js';
+import { env } from '../../../../config/env.js';
+import { resolveDatabaseEnvironment } from '../../../../config/databaseEnvironments.js';
+import type { SnapshotCalculoV2Input } from '../../../aportacionesFondos/domain/entities/SnapshotCalculoV2.js';
+import { SnapshotCalculoV2Factory, seleccionarCargaTxtSnapshotV2 } from '../../../aportacionesFondos/domain/services/SnapshotCalculoV2Factory.js';
+import { SnapshotCalculoV2Repository } from '../../../aportacionesFondos/infrastructure/persistence/SnapshotCalculoV2Repository.js';
+import type { NominaDiasContext } from '../../../aportacionesFondos/domain/services/NominaDiasLaboradosResolver.js';
 import { IAplicacionQuincenalRepository, GuardarHistoricoAportacionesResult, GuardarHistoricoRetencionesResult, ValidarAplicacionQnaAportacionesResult } from '../../domain/repositories/IAplicacionQuincenalRepository.js';
+import { RevisionAplicacionDiasFactory } from '../../domain/services/RevisionAplicacionDiasFactory.js';
 import { AportacionQuincenalResumen } from '../../domain/entities/AportacionQuincenalResumen.js';
 import { ResumenOrgQnaAll } from '../../domain/entities/ResumenOrgQnaAll.js';
 import { AplicacionQuincenalError, AplicacionQuincenalErrorCode } from '../../domain/errors.js';
@@ -55,6 +62,11 @@ interface SnapshotAplicacionRevision {
 }
 
 export class AplicacionQuincenalRepository implements IAplicacionQuincenalRepository {
+  private readonly snapshotCalculoV2Factory = new SnapshotCalculoV2Factory();
+  private readonly revisionAplicacionDiasFactory = new RevisionAplicacionDiasFactory();
+
+  constructor(private readonly snapshotCalculoV2Repo: SnapshotCalculoV2Repository) {}
+
   async validarAplicacionQnaAportaciones(organica0: string, organica1: string, periodo: string): Promise<ValidarAplicacionQnaAportacionesResult> {
     const org0 = String(organica0).trim().toUpperCase().padStart(2, '0');
     const org1 = String(organica1).trim().toUpperCase().padStart(2, '0');
@@ -785,6 +797,9 @@ export class AplicacionQuincenalRepository implements IAplicacionQuincenalReposi
         periodo,
         String((req as any).user?.sub || referencia.usuario_id)
       );
+      const snapshotV2 = env.features.snapshotCalculoV2ShadowEnabled
+        ? await this.prepararSnapshotCalculoV2(data, referencia, String((req as any).user?.sub || referencia.usuario_id))
+        : null;
 
       await withDbContext(req, async (tx) => {
         // Procesar Ahorro (siempre, incluso con 0 registros)
@@ -872,6 +887,15 @@ export class AplicacionQuincenalRepository implements IAplicacionQuincenalReposi
         }
 
         await this.guardarSnapshotAplicacionRevision(tx, snapshotRevision);
+        if (snapshotV2) {
+          const result = await this.snapshotCalculoV2Repo.guardarEnTransaccion(tx, snapshotV2);
+          logger.info({
+            ...logContext,
+            snapshotId: result.snapshotId,
+            snapshotRevision: result.revision,
+            snapshotIdempotente: result.idempotente
+          }, 'Snapshot de calculo V2 guardado en sombra');
+        }
       });
 
       const duration = Date.now() - startTime;
@@ -956,42 +980,251 @@ export class AplicacionQuincenalRepository implements IAplicacionQuincenalReposi
 
   // Funciones helper privadas para cada tipo de aportación
 
+  private async prepararSnapshotCalculoV2(
+    data: GuardarHistoricoAportaciones,
+    referencia: AhorroHeader | ViviendaHeader | PrestacionesHeader | CairHeader | TransitorioHeader | GuarderiasHeader | AguinaldoHeader,
+    usuarioId: string
+  ): Promise<SnapshotCalculoV2Input | null> {
+    const scope = {
+      org0: referencia.clave_organica_0,
+      org1: referencia.clave_organica_1,
+      anio: referencia.anio,
+      quincena: referencia.quincena
+    };
+    const omit = (reason: string, context: Record<string, unknown> = {}): null => {
+      logger.warn({ operation: 'prepararSnapshotCalculoV2', ...scope, reason, ...context }, 'Snapshot V2 omitido');
+      return null;
+    };
+
+    if (!data.ahorro || !data.vivienda || !data.prestaciones || !data.cair) {
+      return omit('FONDOS_INCOMPLETOS');
+    }
+    if ([data.ahorro.detalle, data.vivienda.detalle, data.prestaciones.detalle, data.cair.detalle].some((rows) => rows.length === 0)) {
+      return omit('FONDOS_SIN_DETALLE');
+    }
+
+    const ambiente = resolveDatabaseEnvironment(env.sql.database, env.firebird.database);
+    if (!ambiente) return omit('AMBIENTE_FUERA_DE_MATRIZ');
+    const pool = await getPool();
+    const metadata = await pool.request()
+      .input('Anio', sql.SmallInt, scope.anio)
+      .input('Quincena', sql.TinyInt, scope.quincena)
+      .input('Organica0', sql.Char(2), scope.org0)
+      .input('Organica1', sql.Char(2), scope.org1)
+      .query(`
+        SELECT Id AS CargaId,EntidadId,Organica2,Organica3,TipoCarga
+        FROM dbo.NominaAplicacionQnalCarga
+        WHERE Anio=@Anio AND Quincena=@Quincena
+          AND Organica0=@Organica0 AND Organica1=@Organica1
+          AND Estatus='APLICADA'
+          AND ((TipoCarga='TXT' AND EsVigente=1) OR TipoCarga='MOVIMIENTO')
+        ORDER BY Id;
+
+        SELECT FormulaCalculoVersionId
+        FROM aportaciones.FormulaCalculoVersion
+        WHERE AnioVigencia=@Anio AND Estado='ACTIVA'
+        ORDER BY NumeroVersion DESC,FormulaCalculoVersionId DESC;
+      `);
+    const sets = metadata.recordsets as Array<Array<Record<string, unknown>>>;
+    const cargasTxt = sets[0].filter((row) => row.TipoCarga === 'TXT').map((row) => ({
+      CargaId: row.CargaId,
+      EntidadId: row.EntidadId,
+      Organica2: row.Organica2,
+      Organica3: row.Organica3
+    }));
+    const cargaSeleccionada = seleccionarCargaTxtSnapshotV2(cargasTxt);
+    if (!cargaSeleccionada.carga && cargaSeleccionada.reason === 'TXT_VIGENTE_AMBIGUO') {
+      return omit(cargaSeleccionada.reason, { cargas: cargasTxt.length });
+    }
+    if (sets[1].length === 0) return omit('SIN_FORMULA_ACTIVA');
+    const cargasMovimiento = sets[0].filter((row) => row.TipoCarga === 'MOVIMIENTO');
+    const ambitosMovimiento = new Map<string, Record<string, unknown>>();
+    for (const row of cargasMovimiento) {
+      ambitosMovimiento.set(`${row.EntidadId}|${row.Organica2}|${row.Organica3}`, row);
+    }
+    if (!cargaSeleccionada.carga && ambitosMovimiento.size === 0) return omit('SIN_TXT_NI_MOVIMIENTO');
+    if (!cargaSeleccionada.carga && ambitosMovimiento.size !== 1) {
+      return omit('MOVIMIENTO_AMBITO_AMBIGUO', { ambitos: ambitosMovimiento.size });
+    }
+    const carga = cargaSeleccionada.carga ?? [...ambitosMovimiento.values()][0];
+    const formula = sets[1][0];
+    const cargaId = cargaSeleccionada.carga ? String(carga.CargaId) : null;
+    const fuenteNomina = cargaSeleccionada.carga ? 'txt' : 'movimiento';
+
+    const nominaRequest = pool.request()
+      .input('CargaId', sql.BigInt, cargaId)
+      .input('Anio', sql.SmallInt, scope.anio)
+      .input('Quincena', sql.TinyInt, scope.quincena)
+      .input('Organica0', sql.Char(2), scope.org0)
+      .input('Organica1', sql.Char(2), scope.org1)
+      .input('Organica2', sql.Char(2), String(carga.Organica2))
+      .input('Organica3', sql.Char(2), String(carga.Organica3));
+    const nominaResult = await nominaRequest
+      .query(`
+        SELECT d.RFC,d.DiasLaborados,d.BaseCotizacionQuinquenios,d.Id
+        FROM dbo.NominaAplicacionQnalDetalle d
+        INNER JOIN dbo.NominaAplicacionQnalCarga c ON c.Id=d.CargaId
+        WHERE (@CargaId IS NOT NULL AND d.CargaId=@CargaId)
+           OR (@CargaId IS NULL AND c.TipoCarga='MOVIMIENTO' AND c.Estatus='APLICADA'
+             AND c.Anio=@Anio AND c.Quincena=@Quincena
+             AND c.Organica0=@Organica0 AND c.Organica1=@Organica1
+             AND c.Organica2=@Organica2 AND c.Organica3=@Organica3)
+        ORDER BY d.Id DESC;
+      `);
+    if (nominaResult.recordset.length === 0) return omit(`${fuenteNomina.toUpperCase()}_SIN_DETALLE`, { cargaId });
+    const nomina = new Map<string, { dias: number | null; baseCotizacionQuinquenios: number | null }>();
+    for (const row of nominaResult.recordset) {
+      const rfc = String(row.RFC ?? '').trim().toUpperCase();
+      if (!rfc) continue;
+      if (nomina.has(rfc) && fuenteNomina === 'txt') return omit('TXT_RFC_DUPLICADO', { cargaId });
+      if (nomina.has(rfc)) continue;
+      nomina.set(rfc, {
+        dias: row.DiasLaborados === null ? null : Number(row.DiasLaborados),
+        baseCotizacionQuinquenios: row.BaseCotizacionQuinquenios === null ? null : Number(row.BaseCotizacionQuinquenios)
+      });
+    }
+
+    const periodo = `${String(scope.quincena).padStart(2, '0')}${String(scope.anio).slice(-2)}`;
+    const firebirdRows = await executeSafeQuery(`
+      SELECT INTERNO,RFC,CAST(FAI AS VARCHAR(40)) AS FAI
+      FROM AP_S_FONDOS(?, ?, ?)
+    `, [scope.org0, scope.org1, periodo], FIREBIRD_TIMEOUTS.BATCH_OPERATION);
+    if (firebirdRows.length === 0) return omit('FIREBIRD_SIN_DETALLE');
+
+    try {
+      return this.snapshotCalculoV2Factory.crear({
+        entidadId: Number(carga.EntidadId),
+        anio: scope.anio,
+        quincena: scope.quincena,
+        organica0: scope.org0,
+        organica1: scope.org1,
+        organica2: String(carga.Organica2),
+        organica3: String(carga.Organica3),
+        ambiente,
+        formulaCalculoVersionId: String(formula.FormulaCalculoVersionId),
+        nominaCargaId: cargaId,
+        usuarioId,
+        ahorro: data.ahorro.detalle,
+        vivienda: data.vivienda.detalle,
+        prestaciones: data.prestaciones.detalle,
+        cair: data.cair.detalle,
+        identidadesFai: firebirdRows.map((row) => ({
+          interno: Number(row.INTERNO),
+          rfc: row.RFC === null || row.RFC === undefined ? null : String(row.RFC),
+          faiD6: String(row.FAI ?? '0')
+        })),
+        nomina: { tieneArchivo: fuenteNomina === 'txt', fuente: fuenteNomina, registros: nomina }
+      });
+    } catch (error) {
+      return omit('DATOS_INCOMPLETOS', {
+        detail: error instanceof Error ? error.message : String(error)
+      });
+    }
+  }
+
   private async calcularSnapshotAplicacionRevision(
     org0: string,
     org1: string,
     periodo: string,
     usuarioId: string
   ): Promise<SnapshotAplicacionRevision> {
-    const rows = await executeSafeQuery(`
-      SELECT COUNT(*) AS REGISTROS,
-        COALESCE(SUM(SARE), 0) AS CAIR,
-        COALESCE(SUM(FRA), 0) AS FRA,
-        COALESCE(SUM(FRE), 0) AS FRE,
-        COALESCE(SUM(FHE), 0) AS FH,
-        COALESCE(SUM(FVE), 0) AS FV,
-        COALESCE(SUM(FAA), 0) AS FAA,
-        COALESCE(SUM(FAE), 0) AS FAE,
-        COALESCE(SUM(FAT), 0) AS FAT,
-        COALESCE(SUM(FAI), 0) AS FAI
-      FROM AP_S_FONDOS(?, ?, ?)
-    `, [org0, org1, periodo], FIREBIRD_TIMEOUTS.BATCH_OPERATION);
-    const row = rows[0] || {};
+    const [rows, nomina] = await Promise.all([
+      executeSafeQuery(`
+        SELECT RFC,SARE,FRA,FRE,FHE,FVE,FAA,FAE,FAI
+        FROM AP_S_FONDOS(?, ?, ?)
+      `, [org0, org1, periodo], FIREBIRD_TIMEOUTS.BATCH_OPERATION),
+      this.obtenerNominaRevisionContext(org0, org1, periodo)
+    ]);
+    const calculo = this.revisionAplicacionDiasFactory.crear(rows, nomina);
+    logger.info({
+      operation: 'calcularSnapshotAplicacionRevision',
+      org0,
+      org1,
+      periodo,
+      registros: calculo.registros,
+      registrosNomina: calculo.registrosNomina,
+      registrosMovimiento: calculo.registrosMovimiento,
+      registrosDefault: calculo.registrosDefault
+    }, 'Snapshot de aplicacion para REVISA calculado con dias laborados');
     return {
       org0,
       org1,
       periodo,
       usuarioId,
-      registros: Number(row.REGISTROS || 0),
-      CAIR: Number(row.CAIR || 0),
-      FRA: Number(row.FRA || 0),
-      FRE: Number(row.FRE || 0),
-      FH: Number(row.FH || 0),
-      FV: Number(row.FV || 0),
-      FAA: Number(row.FAA || 0),
-      FAE: Number(row.FAE || 0),
-      FAT: Number(row.FAT || 0),
-      FAI: Number(row.FAI || 0)
+      registros: calculo.registros,
+      CAIR: calculo.CAIR,
+      FRA: calculo.FRA,
+      FRE: calculo.FRE,
+      FH: calculo.FH,
+      FV: calculo.FV,
+      FAA: calculo.FAA,
+      FAE: calculo.FAE,
+      FAT: calculo.FAT,
+      FAI: calculo.FAI
     };
+  }
+
+  private async obtenerNominaRevisionContext(
+    org0: string,
+    org1: string,
+    periodo: string
+  ): Promise<NominaDiasContext> {
+    const registros = new Map<string, { dias: number | null; baseCotizacionQuinquenios: number | null }>();
+    const quincena = Number(periodo.slice(0, 2));
+    const anio = 2000 + Number(periodo.slice(2, 4));
+    const pool = await getPool();
+    const cargasResult = await pool.request()
+      .input('anio', sql.SmallInt, anio)
+      .input('quincena', sql.TinyInt, quincena)
+      .input('org0', sql.Char(2), org0)
+      .input('org1', sql.Char(2), org1)
+      .query(`
+        SELECT Id AS CargaId,TipoCarga
+        FROM dbo.NominaAplicacionQnalCarga
+        WHERE Anio=@anio AND Quincena=@quincena
+          AND Organica0=@org0 AND Organica1=@org1
+          AND Estatus='APLICADA'
+          AND ((TipoCarga='TXT' AND EsVigente=1) OR TipoCarga='MOVIMIENTO')
+        ORDER BY Id DESC;
+      `);
+    const cargasTxt = cargasResult.recordset.filter((row) => String(row.TipoCarga).trim() === 'TXT');
+    if (cargasTxt.length > 1) throw new Error('REVISION_APLICACION_TXT_VIGENTE_AMBIGUO');
+    const fuente: 'txt' | 'movimiento' | 'default' = cargasTxt.length === 1
+      ? 'txt'
+      : cargasResult.recordset.length > 0
+        ? 'movimiento'
+        : 'default';
+    if (fuente === 'default') return { tieneArchivo: false, fuente, registros };
+    const cargasSeleccionadas = fuente === 'txt' ? cargasTxt : cargasResult.recordset;
+
+    const detalleRequest = pool.request();
+    const cargaPlaceholders = cargasSeleccionadas.map((row, index) => {
+      const name = `cargaId${index}`;
+      detalleRequest.input(name, sql.BigInt, String(row.CargaId));
+      return `@${name}`;
+    }).join(',');
+    const detalles = await detalleRequest.query(`
+        SELECT Id,RFC,DiasLaborados
+        FROM dbo.NominaAplicacionQnalDetalle
+        WHERE CargaId IN (${cargaPlaceholders})
+        ORDER BY Id DESC;
+      `);
+    if (detalles.recordset.length === 0 && fuente === 'txt') throw new Error('REVISION_APLICACION_TXT_VIGENTE_SIN_DETALLE');
+
+    for (const row of detalles.recordset) {
+      const rfc = String(row.RFC ?? '').trim().toUpperCase();
+      if (!rfc) continue;
+      if (registros.has(rfc) && fuente === 'txt') throw new Error(`REVISION_APLICACION_TXT_RFC_DUPLICADO:${rfc}`);
+      if (registros.has(rfc)) continue;
+      if (row.DiasLaborados === null || row.DiasLaborados === undefined) {
+        throw new Error(`REVISION_APLICACION_TXT_DIAS_NULOS:${rfc}`);
+      }
+      registros.set(rfc, {
+        dias: Number(row.DiasLaborados),
+        baseCotizacionQuinquenios: null
+      });
+    }
+    return { tieneArchivo: fuente === 'txt', fuente, registros };
   }
 
   private async guardarSnapshotAplicacionRevision(
@@ -2258,30 +2491,14 @@ export class AplicacionQuincenalRepository implements IAplicacionQuincenalReposi
         }
       }, 'Consulta de histórico de aportaciones completada');
 
-      const diasMap = await this.obtenerDiasLaboradosHistoricoMap(
-        p,
-        org0,
-        org1,
-        quincena,
-        anio,
-        [
-          ahorroResult.recordset,
-          viviendaResult.recordset,
-          prestacionesResult.recordset,
-          cairResult.recordset,
-          transitorioResult.recordset,
-          guarderiasResult.recordset,
-          aguinaldoResult.recordset
-        ].flat()
-      );
       return {
-        ahorro: this.enriquecerHistoricoConDiasLaborados(ahorroResult.recordset, diasMap),
-        vivienda: this.enriquecerHistoricoConDiasLaborados(viviendaResult.recordset, diasMap),
-        prestaciones: this.enriquecerHistoricoConDiasLaborados(prestacionesResult.recordset, diasMap),
-        cair: this.enriquecerHistoricoConDiasLaborados(cairResult.recordset, diasMap),
-        transitorio: this.enriquecerHistoricoConDiasLaborados(transitorioResult.recordset, diasMap),
-        guarderias: this.enriquecerHistoricoConDiasLaborados(guarderiasResult.recordset, diasMap),
-        aguinaldo: this.enriquecerHistoricoConDiasLaborados(aguinaldoResult.recordset, diasMap)
+        ahorro: ahorroResult.recordset,
+        vivienda: viviendaResult.recordset,
+        prestaciones: prestacionesResult.recordset,
+        cair: cairResult.recordset,
+        transitorio: transitorioResult.recordset,
+        guarderias: guarderiasResult.recordset,
+        aguinaldo: aguinaldoResult.recordset
       };
     } catch (error: any) {
       const duration = Date.now() - startTime;
@@ -2396,150 +2613,5 @@ export class AplicacionQuincenalRepository implements IAplicacionQuincenalReposi
     }
   }
 
-  private normalizarRfcHistorico(value: unknown): string | null {
-    const rfc = String(value ?? '').trim().toUpperCase();
-    return rfc ? rfc : null;
-  }
-
-  private obtenerRfcHistorico(row: any): string | null {
-    return this.normalizarRfcHistorico(row?.rfc ?? row?.RFC ?? row?.titular_rfc ?? row?.TitularRFC);
-  }
-
-  private normalizarInternoHistorico(value: unknown): string | null {
-    const interno = String(value ?? '').trim();
-    return interno ? interno : null;
-  }
-
-  private obtenerInternoHistorico(row: any): string | null {
-    return this.normalizarInternoHistorico(row?.interno ?? row?.INTERNO ?? row?.titular_no_empleado ?? row?.TitularNoEmpleado);
-  }
-
-  private async obtenerRfcPorInternoHistoricoMap(
-    org0: string,
-    org1: string,
-    rows: any[]
-  ): Promise<Map<string, string>> {
-    const internos = Array.from(new Set(rows
-      .map((row) => this.obtenerInternoHistorico(row))
-      .filter((interno): interno is string => Boolean(interno))));
-
-    if (internos.length === 0) {
-      return new Map();
-    }
-
-    const params: any[] = [org0, org1, ...internos];
-    const internoPlaceholders = internos.map(() => '?').join(', ');
-    const result = await executeSafeQuery(`
-      SELECT
-        CAST(p.INTERNO AS VARCHAR(30)) AS INTERNO,
-        p.RFC
-      FROM PERSONAL p
-      INNER JOIN ORG_PERSONAL o ON o.INTERNO = p.INTERNO
-      WHERE o.CLAVE_ORGANICA_0 = ?
-        AND o.CLAVE_ORGANICA_1 = ?
-        AND CAST(p.INTERNO AS VARCHAR(30)) IN (${internoPlaceholders})
-    `, params);
-
-    const map = new Map<string, string>();
-    result.forEach((row: any) => {
-      const interno = this.normalizarInternoHistorico(row.INTERNO ?? row.interno);
-      const rfc = this.normalizarRfcHistorico(row.RFC ?? row.rfc);
-      if (interno && rfc && !map.has(interno)) {
-        map.set(interno, rfc);
-      }
-    });
-
-    return map;
-  }
-
-  private async obtenerDiasLaboradosHistoricoMap(
-    pool: any,
-    org0: string,
-    org1: string,
-    quincena: number,
-    anio: number,
-    rows: any[]
-  ): Promise<Map<string, { dias: number; baseCotizacionQuinquenios: number | null }>> {
-    const rfcPorInterno = await this.obtenerRfcPorInternoHistoricoMap(org0, org1, rows);
-    const rfcs = Array.from(new Set(rows
-      .map((row) => this.obtenerRfcHistorico(row) ?? rfcPorInterno.get(this.obtenerInternoHistorico(row) ?? ''))
-      .filter((rfc): rfc is string => Boolean(rfc))));
-
-    if (rfcs.length === 0) {
-      return new Map();
-    }
-
-    const request = pool.request()
-      .input('org0', sql.Char(2), org0)
-      .input('org1', sql.Char(2), org1)
-      .input('quincena', sql.Int, quincena)
-      .input('anio', sql.Int, anio);
-
-    const rfcParams = rfcs.map((rfc, index) => {
-      const paramName = `rfc${index}`;
-      request.input(paramName, sql.VarChar(20), rfc);
-      return `@${paramName}`;
-    });
-
-    const result = await request.query(`
-        SELECT
-          UPPER(LTRIM(RTRIM(d.RFC))) AS rfc,
-          MAX(d.DiasLaborados) AS dias_laborados,
-          MAX(d.BaseCotizacionQuinquenios) AS base_cotizacion_quinquenios
-        FROM [SII-ISSSSPEA].[dbo].[NominaAplicacionQnalDetalle] d
-        WHERE d.Organica0 = @org0
-          AND d.Organica1 = @org1
-          AND d.Anio = @anio
-          AND d.Quincena = @quincena
-          AND UPPER(LTRIM(RTRIM(d.RFC))) IN (${rfcParams.join(', ')})
-        GROUP BY UPPER(LTRIM(RTRIM(d.RFC)))
-      `);
-
-    const diasMap = new Map<string, { dias: number; baseCotizacionQuinquenios: number | null }>();
-    result.recordset.forEach((row: any) => {
-      const rfc = this.normalizarRfcHistorico(row.rfc);
-      const dias = row.dias_laborados == null ? null : Number(row.dias_laborados);
-      const baseCotizacionQuinquenios = row.base_cotizacion_quinquenios == null ? null : Number(row.base_cotizacion_quinquenios);
-      if (rfc && dias !== null && Number.isFinite(dias)) {
-        diasMap.set(rfc, {
-          dias,
-          baseCotizacionQuinquenios: Number.isFinite(baseCotizacionQuinquenios) ? baseCotizacionQuinquenios : null
-        });
-      } else if (rfc && baseCotizacionQuinquenios !== null && Number.isFinite(baseCotizacionQuinquenios)) {
-        diasMap.set(rfc, {
-          dias: 15,
-          baseCotizacionQuinquenios
-        });
-      }
-    });
-
-    const diasPorInterno = new Map<string, { dias: number; baseCotizacionQuinquenios: number | null }>();
-    rfcPorInterno.forEach((rfc, interno) => {
-      const info = diasMap.get(rfc);
-      if (info !== undefined) {
-        diasPorInterno.set(interno, info);
-      }
-    });
-
-    return new Map([...diasMap, ...diasPorInterno]);
-  }
-
-  private enriquecerHistoricoConDiasLaborados(
-    rows: any[],
-    diasMap: Map<string, { dias: number; baseCotizacionQuinquenios: number | null }>
-  ): any[] {
-    return rows.map((row) => {
-      const rfc = this.obtenerRfcHistorico(row);
-      const interno = this.obtenerInternoHistorico(row);
-      const info = (rfc ? diasMap.get(rfc) : undefined) ?? (interno ? diasMap.get(interno) : undefined);
-      const nominaInfo = info ?? { dias: 15, baseCotizacionQuinquenios: null };
-
-      return {
-        ...row,
-        dias_laborados: nominaInfo.dias,
-        dias_laborados_origen: info === undefined ? 'categoriapuesto' : 'txt'
-      };
-    });
-  }
 }
 

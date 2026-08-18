@@ -60,7 +60,7 @@ export interface PensionNominaTransitorio {
   transnorg0: string | null;
   transnorg1: string | null;
   dias_laborados?: number;
-  dias_laborados_origen?: 'nomina' | 'default';
+  dias_laborados_origen?: 'nomina' | 'movimiento' | 'default' | 'nomina_sin_coincidencia';
 }
 
 // Response structure for pensión nómina transitorio endpoint

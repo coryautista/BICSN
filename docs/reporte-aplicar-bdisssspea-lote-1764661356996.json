@@ -1,0 +1,68 @@
+{
+  "timestamp": "2025-12-02T07:42:36.997Z",
+  "duracionMs": 16204,
+  "respuesta": {
+    "ok": true,
+    "data": {
+      "message": "Proceso de aplicación a BDIsspea completado. 0 afiliados cambiados a estado 7.",
+      "afiliadosProcesados": [
+        {
+          "afiliadoId": 1,
+          "folio": 1,
+          "nombreCompleto": "JOSE LUIS MERCADO TORRES",
+          "estadoAnterior": "Aprobado",
+          "estadoNuevo": "",
+          "exito": false,
+          "mensaje": "Algunos movimientos fallaron en la migración a Firebird"
+        },
+        {
+          "afiliadoId": 2,
+          "folio": 2,
+          "nombreCompleto": "CYNTHIA LIZETH MARTINEZ DURON",
+          "estadoAnterior": "Aprobado",
+          "estadoNuevo": "",
+          "exito": false,
+          "mensaje": "Algunos movimientos fallaron en la migración a Firebird"
+        },
+        {
+          "afiliadoId": 5,
+          "folio": 5,
+          "nombreCompleto": "CESAR IVAN VERTIZ ALVAREZ",
+          "estadoAnterior": "Aprobado",
+          "estadoNuevo": "",
+          "exito": false,
+          "mensaje": "Algunos movimientos fallaron en la migración a Firebird"
+        },
+        {
+          "afiliadoId": 6,
+          "folio": 6,
+          "nombreCompleto": "RUBEN ISRAEL PEREZ GONZALEZ",
+          "estadoAnterior": "Aprobado",
+          "estadoNuevo": "",
+          "exito": false,
+          "mensaje": "Algunos movimientos fallaron en la migración a Firebird"
+        }
+      ],
+      "afiliadosCambiadosEstado": 0,
+      "afiliadosFallidos": 4,
+      "afiliadosCompletos": 0,
+      "bitacoraActualizada": 0,
+      "resumen": {
+        "totalEncontrados": 4,
+        "procesadosExitosamente": 0,
+        "procesadosConError": 4,
+        "organica": "04/24"
+      },
+      "detalles": {
+        "organica": "04/24",
+        "estadosOrigen": [
+          2,
+          3
+        ],
+        "estadoDestino": 7,
+        "motivo": "Ejecución automática desde script",
+        "observaciones": "Ejecutado el 2/12/2025, 1:42:20 a.m."
+      }
+    }
+  }
+}

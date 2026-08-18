@@ -26,6 +26,21 @@ export class CargarNominaAplicacionQnalTxtCommand {
       });
     }
 
+    const rfcLines = new Map<string, number>();
+    for (const registro of parseResult.registros) {
+      const rfc = registro.rfc.trim().toUpperCase();
+      const previousLine = rfcLines.get(rfc);
+      if (previousLine !== undefined) {
+        parseResult.errores.push({
+          numeroLinea: registro.numeroLinea,
+          campo: 'rfc',
+          mensaje: `RFC duplicado en las líneas ${previousLine} y ${registro.numeroLinea}.`
+        });
+      } else {
+        rfcLines.set(rfc, registro.numeroLinea);
+      }
+    }
+
     if (parseResult.errores.length > 0) {
       return this.nominaAplicacionQnalTxtRepo.registrarCargaRechazada(input, parseResult.errores, parseResult.registros.length);
     }

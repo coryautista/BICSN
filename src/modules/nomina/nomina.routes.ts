@@ -2,7 +2,9 @@ import { FastifyInstance } from 'fastify';
 import { requireAuth } from '../auth/auth.middleware.js';
 import { CargarNominaAplicacionQnalTxtCommand } from './application/commands/CargarNominaAplicacionQnalTxtCommand.js';
 import { GetNominaAplicacionQnalTxtRegistrosQuery } from './application/queries/GetNominaAplicacionQnalTxtRegistrosQuery.js';
-import { CargarNominaAplicacionQnalTxtFieldsSchema, GetNominaAplicacionQnalTxtRegistrosSchema } from './nomina.schemas.js';
+import { GetNominaAplicacionQnalCargaVigenteQuery } from './application/queries/GetNominaAplicacionQnalCargaVigenteQuery.js';
+import { NominaCargaInconsistenteError } from './domain/errors.js';
+import { CargarNominaAplicacionQnalTxtFieldsSchema, GetNominaAplicacionQnalCargaVigenteSchema, GetNominaAplicacionQnalTxtRegistrosSchema } from './nomina.schemas.js';
 
 export default async function nominaRoutes(app: FastifyInstance) {
   await app.register(import('@fastify/multipart'), {
@@ -72,6 +74,42 @@ export default async function nominaRoutes(app: FastifyInstance) {
     const query = request.diScope.resolve<GetNominaAplicacionQnalTxtRegistrosQuery>('getNominaAplicacionQnalTxtRegistrosQuery');
     const result = await query.execute({ ...parsed.data, ...organicas.data });
     return reply.send({ ok: true, ...result });
+  });
+
+  app.get('/nomina/aplicacion-qnal-txt/carga-vigente', {
+    preHandler: [requireAuth],
+    schema: {
+      description: 'Obtiene la carga TXT base vigente y estadísticas del ámbito completo, sin consultar registros paginados.',
+      summary: 'Consulta carga TXT vigente',
+      tags: ['nomina'],
+      security: [{ bearerAuth: [] }]
+    }
+  }, async (request, reply) => {
+    const parsed = GetNominaAplicacionQnalCargaVigenteSchema.safeParse(request.query);
+    if (!parsed.success) {
+      return reply.code(400).send({ ok: false, error: { code: 'VALIDATION_ERROR', message: 'Parámetros inválidos.', details: parsed.error.issues } });
+    }
+    const organicas = resolveOrganicas(request.user, parsed.data);
+    if (!organicas.ok) {
+      return reply.code(400).send({ ok: false, error: { code: 'MISSING_ORGANICA_KEYS', message: organicas.message } });
+    }
+    try {
+      const query = request.diScope.resolve<GetNominaAplicacionQnalCargaVigenteQuery>('getNominaAplicacionQnalCargaVigenteQuery');
+      const result = await query.execute({ ...parsed.data, ...organicas.data });
+      return reply.send({ ok: true, data: result });
+    } catch (error) {
+      if (error instanceof NominaCargaInconsistenteError) {
+        return reply.code(409).send({
+          ok: false,
+          error: {
+            code: 'NOMINA_CARGA_INCONSISTENTE',
+            message: 'La carga vigente no cumple las reglas de integridad.',
+            reason: error.reason
+          }
+        });
+      }
+      throw error;
+    }
   });
 }
 

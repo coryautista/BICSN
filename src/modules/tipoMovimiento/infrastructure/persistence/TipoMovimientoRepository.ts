@@ -54,13 +54,13 @@ export class TipoMovimientoRepository implements ITipoMovimientoRepository {
     if (data.nombre.length > 64) {
       throw new Error('Nombre must not exceed 64 characters');
     }
-    if (data.abreviatura && data.abreviatura.length > 1) {
-      throw new Error('Abreviatura must not exceed 1 character');
+    if (data.abreviatura && data.abreviatura.length > 2) {
+      throw new Error('Abreviatura must not exceed 2 characters');
     }
 
     const result = await this.mssqlPool.request()
       .input('id', sql.Int, data.id)
-      .input('abreviatura', sql.Char(1), data.abreviatura)
+      .input('abreviatura', sql.Char(2), data.abreviatura)
       .input('nombre', sql.NVarChar(64), data.nombre)
       .query(`
         INSERT INTO afi.TipoMovimiento (id, abreviatura, nombre)
@@ -91,8 +91,8 @@ export class TipoMovimientoRepository implements ITipoMovimientoRepository {
         throw new Error('Nombre must not exceed 64 characters');
       }
     }
-    if (data.abreviatura !== undefined && data.abreviatura && data.abreviatura.length > 1) {
-      throw new Error('Abreviatura must not exceed 1 character');
+    if (data.abreviatura !== undefined && data.abreviatura && data.abreviatura.length > 2) {
+      throw new Error('Abreviatura must not exceed 2 characters');
     }
 
     const updates: string[] = [];
@@ -100,7 +100,7 @@ export class TipoMovimientoRepository implements ITipoMovimientoRepository {
 
     if (data.abreviatura !== undefined) {
       updates.push('abreviatura = @abreviatura');
-      request.input('abreviatura', sql.Char(1), data.abreviatura);
+      request.input('abreviatura', sql.Char(2), data.abreviatura);
     }
     if (data.nombre !== undefined) {
       updates.push('nombre = @nombre');

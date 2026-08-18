@@ -1,0 +1,461 @@
+{
+  "schemaVersion": 1,
+  "fixtureId": "APORTACIONES-04-24-01-01-1126",
+  "source": {
+    "environment": "CALIDAD",
+    "database": "SII-ISSSSPEA",
+    "firebirdDatabase": "/db/db/dbQna1426.fdb",
+    "cargaId": 15,
+    "anio": 2026,
+    "quincena": 11,
+    "periodo": "1126",
+    "organica": [
+      "04",
+      "24",
+      "01",
+      "01"
+    ],
+    "closed": true,
+    "bitacoraResult": "OK",
+    "readOnly": true
+  },
+  "formula": {
+    "formulaCalculoVersionId": 1,
+    "clave": "APORTACIONES-NOMINA",
+    "anioVigencia": 2026,
+    "numeroVersion": 1,
+    "quincenaDesde": 1,
+    "quincenaHasta": 24,
+    "precisionPolicy": "MXN-DETAIL6-AGG2-TRUNC-v1",
+    "estado": "ACTIVA",
+    "parameters": {
+      "CAIR_SUELDO": {
+        "value": "0.020000000",
+        "unit": "TASA",
+        "source": "SARE Firebird"
+      },
+      "DIAS_DEFAULT_SIN_TXT": {
+        "value": "15.000000000",
+        "unit": "DIAS",
+        "source": "Regla aprobada"
+      },
+      "DIAS_MAX": {
+        "value": "15.000000000",
+        "unit": "DIAS",
+        "source": "Regla aprobada"
+      },
+      "DIAS_MES": {
+        "value": "30.000000000",
+        "unit": "DIVISOR",
+        "source": "Regla de calculo"
+      },
+      "DIAS_MIN": {
+        "value": "0.000000000",
+        "unit": "DIAS",
+        "source": "Regla aprobada"
+      },
+      "FAA_SUELDO": {
+        "value": "0.050000000",
+        "unit": "TASA",
+        "source": "FAA Firebird"
+      },
+      "FAE_SUELDO": {
+        "value": "0.025000000",
+        "unit": "TASA",
+        "source": "FAE Firebird"
+      },
+      "FH_SUELDO": {
+        "value": "0.003500000",
+        "unit": "TASA",
+        "source": "FHE Firebird"
+      },
+      "FRA_OTRAS": {
+        "value": "0.000000000",
+        "unit": "TASA",
+        "source": "FPEAA Firebird"
+      },
+      "FRA_QUINQUENIOS": {
+        "value": "0.000000000",
+        "unit": "TASA",
+        "source": "FPEQA Firebird"
+      },
+      "FRA_SUELDO": {
+        "value": "0.045000000",
+        "unit": "TASA",
+        "source": "FPESA Firebird"
+      },
+      "FRE_OTRAS": {
+        "value": "0.267500000",
+        "unit": "TASA",
+        "source": "FPEAE Firebird"
+      },
+      "FRE_QUINQUENIOS": {
+        "value": "0.267500000",
+        "unit": "TASA",
+        "source": "FPEQE Firebird"
+      },
+      "FRE_SUELDO": {
+        "value": "0.222500000",
+        "unit": "TASA",
+        "source": "FPESE Firebird"
+      },
+      "FV_SUELDO": {
+        "value": "0.014000000",
+        "unit": "TASA",
+        "source": "FVE Firebird"
+      }
+    }
+  },
+  "coverage": {
+    "payrollRows": 169,
+    "payrollUniqueKeys": 169,
+    "firebirdRows": 169,
+    "firebirdUniqueKeys": 169,
+    "matched": 168,
+    "payrollOnly": 1,
+    "firebirdOnly": 1,
+    "daysDistribution": {
+      "15.00": 158,
+      "14.00": 7,
+      "13.00": 3,
+      "12.00": 1
+    }
+  },
+  "cases": [
+    {
+      "caseId": "PARTIAL_001",
+      "origin": "MATCHED",
+      "diasLaborados": "12.00",
+      "baseCotizacionSueldoTxt": "4688.04",
+      "baseCotizacionQuinqueniosTxt": "0.00",
+      "sueldoMensualFirebird": "11720.11",
+      "otrasPrestacionesFirebird": "0.00",
+      "quinqueniosFirebird": "0.00",
+      "legacyFirebird": {
+        "cair": "117.20",
+        "fra": "263.70",
+        "fre": "1303.86",
+        "fh": "20.51",
+        "fv": "82.04",
+        "faa": "293.00",
+        "fae": "146.50",
+        "fat": "439.50",
+        "fai": "0.00"
+      }
+    },
+    {
+      "caseId": "PARTIAL_002",
+      "origin": "MATCHED",
+      "diasLaborados": "13.00",
+      "baseCotizacionSueldoTxt": "5078.71",
+      "baseCotizacionQuinqueniosTxt": "0.00",
+      "sueldoMensualFirebird": "11720.11",
+      "otrasPrestacionesFirebird": "0.00",
+      "quinqueniosFirebird": "0.00",
+      "legacyFirebird": {
+        "cair": "117.20",
+        "fra": "263.70",
+        "fre": "1303.86",
+        "fh": "20.51",
+        "fv": "82.04",
+        "faa": "293.00",
+        "fae": "146.50",
+        "fat": "439.50",
+        "fai": "0.00"
+      }
+    },
+    {
+      "caseId": "PARTIAL_003",
+      "origin": "MATCHED",
+      "diasLaborados": "13.00",
+      "baseCotizacionSueldoTxt": "5880.99",
+      "baseCotizacionQuinqueniosTxt": "0.00",
+      "sueldoMensualFirebird": "13571.52",
+      "otrasPrestacionesFirebird": "0.00",
+      "quinqueniosFirebird": "0.00",
+      "legacyFirebird": {
+        "cair": "135.72",
+        "fra": "305.36",
+        "fre": "1509.83",
+        "fh": "23.75",
+        "fv": "95.00",
+        "faa": "339.29",
+        "fae": "169.64",
+        "fat": "508.93",
+        "fai": "0.00"
+      }
+    },
+    {
+      "caseId": "PARTIAL_004",
+      "origin": "MATCHED",
+      "diasLaborados": "13.00",
+      "baseCotizacionSueldoTxt": "8128.40",
+      "baseCotizacionQuinqueniosTxt": "0.00",
+      "sueldoMensualFirebird": "18757.85",
+      "otrasPrestacionesFirebird": "0.00",
+      "quinqueniosFirebird": "0.00",
+      "legacyFirebird": {
+        "cair": "187.58",
+        "fra": "422.05",
+        "fre": "2086.81",
+        "fh": "32.83",
+        "fv": "131.30",
+        "faa": "468.95",
+        "fae": "234.47",
+        "fat": "703.42",
+        "fai": "0.00"
+      }
+    },
+    {
+      "caseId": "PARTIAL_005",
+      "origin": "MATCHED",
+      "diasLaborados": "14.00",
+      "baseCotizacionSueldoTxt": "5805.50",
+      "baseCotizacionQuinqueniosTxt": "0.00",
+      "sueldoMensualFirebird": "12440.35",
+      "otrasPrestacionesFirebird": "0.00",
+      "quinqueniosFirebird": "0.00",
+      "legacyFirebird": {
+        "cair": "124.40",
+        "fra": "279.91",
+        "fre": "1383.99",
+        "fh": "21.77",
+        "fv": "87.08",
+        "faa": "311.01",
+        "fae": "155.50",
+        "fat": "466.51",
+        "fai": "0.00"
+      }
+    },
+    {
+      "caseId": "PARTIAL_006",
+      "origin": "MATCHED",
+      "diasLaborados": "14.00",
+      "baseCotizacionSueldoTxt": "5805.50",
+      "baseCotizacionQuinqueniosTxt": "0.00",
+      "sueldoMensualFirebird": "12440.35",
+      "otrasPrestacionesFirebird": "0.00",
+      "quinqueniosFirebird": "0.00",
+      "legacyFirebird": {
+        "cair": "124.40",
+        "fra": "279.91",
+        "fre": "1383.99",
+        "fh": "21.77",
+        "fv": "87.08",
+        "faa": "311.01",
+        "fae": "155.50",
+        "fat": "466.51",
+        "fai": "0.00"
+      }
+    },
+    {
+      "caseId": "PARTIAL_007",
+      "origin": "MATCHED",
+      "diasLaborados": "14.00",
+      "baseCotizacionSueldoTxt": "7091.46",
+      "baseCotizacionQuinqueniosTxt": "0.00",
+      "sueldoMensualFirebird": "15195.99",
+      "otrasPrestacionesFirebird": "0.00",
+      "quinqueniosFirebird": "0.00",
+      "legacyFirebird": {
+        "cair": "151.96",
+        "fra": "341.91",
+        "fre": "1690.55",
+        "fh": "26.59",
+        "fv": "106.37",
+        "faa": "379.90",
+        "fae": "189.95",
+        "fat": "569.85",
+        "fai": "0.00"
+      }
+    },
+    {
+      "caseId": "PARTIAL_008",
+      "origin": "MATCHED",
+      "diasLaborados": "14.00",
+      "baseCotizacionSueldoTxt": "7474.41",
+      "baseCotizacionQuinqueniosTxt": "0.00",
+      "sueldoMensualFirebird": "16016.59",
+      "otrasPrestacionesFirebird": "0.00",
+      "quinqueniosFirebird": "0.00",
+      "legacyFirebird": {
+        "cair": "160.17",
+        "fra": "360.37",
+        "fre": "1781.84",
+        "fh": "28.03",
+        "fv": "112.12",
+        "faa": "400.41",
+        "fae": "200.21",
+        "fat": "600.62",
+        "fai": "0.00"
+      }
+    },
+    {
+      "caseId": "PARTIAL_009",
+      "origin": "MATCHED",
+      "diasLaborados": "14.00",
+      "baseCotizacionSueldoTxt": "7474.41",
+      "baseCotizacionQuinqueniosTxt": "0.00",
+      "sueldoMensualFirebird": "16016.59",
+      "otrasPrestacionesFirebird": "0.00",
+      "quinqueniosFirebird": "0.00",
+      "legacyFirebird": {
+        "cair": "160.17",
+        "fra": "360.37",
+        "fre": "1781.84",
+        "fh": "28.03",
+        "fv": "112.12",
+        "faa": "400.41",
+        "fae": "200.21",
+        "fat": "600.62",
+        "fai": "0.00"
+      }
+    },
+    {
+      "caseId": "PARTIAL_010",
+      "origin": "MATCHED",
+      "diasLaborados": "14.00",
+      "baseCotizacionSueldoTxt": "7506.65",
+      "baseCotizacionQuinqueniosTxt": "0.00",
+      "sueldoMensualFirebird": "16085.68",
+      "otrasPrestacionesFirebird": "0.00",
+      "quinqueniosFirebird": "0.00",
+      "legacyFirebird": {
+        "cair": "160.86",
+        "fra": "361.93",
+        "fre": "1789.53",
+        "fh": "28.15",
+        "fv": "112.60",
+        "faa": "402.14",
+        "fae": "201.07",
+        "fat": "603.21",
+        "fai": "0.00"
+      }
+    },
+    {
+      "caseId": "PARTIAL_011",
+      "origin": "MATCHED",
+      "diasLaborados": "14.00",
+      "baseCotizacionSueldoTxt": "8753.66",
+      "baseCotizacionQuinqueniosTxt": "0.00",
+      "sueldoMensualFirebird": "18757.85",
+      "otrasPrestacionesFirebird": "0.00",
+      "quinqueniosFirebird": "0.00",
+      "legacyFirebird": {
+        "cair": "187.58",
+        "fra": "422.05",
+        "fre": "2086.81",
+        "fh": "32.83",
+        "fv": "131.30",
+        "faa": "468.95",
+        "fae": "234.47",
+        "fat": "703.42",
+        "fai": "0.00"
+      }
+    },
+    {
+      "caseId": "MISSING_PAYROLL_001",
+      "origin": "NOMINA_SIN_COINCIDENCIA",
+      "diasLaborados": "0.00",
+      "sueldoMensualFirebird": "18757.85",
+      "otrasPrestacionesFirebird": "0.00",
+      "quinqueniosFirebird": "0.00",
+      "expectedProportionalBase": "0.000000"
+    },
+    {
+      "caseId": "MISSING_FIREBIRD_001",
+      "origin": "NOMINA_SIN_AFILIADO_FIREBIRD",
+      "diasLaborados": "15.00",
+      "baseCotizacionSueldoTxt": "6410.38",
+      "baseCotizacionQuinqueniosTxt": "0.00"
+    }
+  ],
+  "baselines": {
+    "detailHistory": [
+      {
+        "fund": "AHORRO",
+        "rows": 169,
+        "component1D6": "68692.410000",
+        "component2D6": "34345.950000",
+        "totalD6": "103038.390000"
+      },
+      {
+        "fund": "PRESTACIONES",
+        "rows": 169,
+        "component1D6": "63728.320000",
+        "component2D6": "315101.750000",
+        "totalD6": "378830.100000"
+      },
+      {
+        "fund": "VIVIENDA",
+        "rows": 169,
+        "component1D6": null,
+        "component2D6": "24042.090000",
+        "totalD6": "24042.090000"
+      },
+      {
+        "fund": "CAIR",
+        "rows": 169,
+        "component1D6": null,
+        "component2D6": "27477.070000",
+        "totalD6": "27477.070000"
+      }
+    ],
+    "summaryHistory": [
+      {
+        "endpoint": "aguinaldo",
+        "employees": 0,
+        "contributionD6": "0.000000",
+        "salaryBaseD6": "0.000000"
+      },
+      {
+        "endpoint": "guarderias",
+        "employees": 0,
+        "contributionD6": "0.000000",
+        "salaryBaseD6": "0.000000"
+      },
+      {
+        "endpoint": "individuales/ahorro",
+        "employees": 169,
+        "contributionD6": "103038.460000",
+        "salaryBaseD6": "1416187.740000"
+      },
+      {
+        "endpoint": "individuales/cair",
+        "employees": 169,
+        "contributionD6": "27476.920000",
+        "salaryBaseD6": "1416187.740000"
+      },
+      {
+        "endpoint": "individuales/prestaciones",
+        "employees": 169,
+        "contributionD6": "378830.220000",
+        "salaryBaseD6": "1416187.740000"
+      },
+      {
+        "endpoint": "individuales/vivienda",
+        "employees": 169,
+        "contributionD6": "24042.310000",
+        "salaryBaseD6": "1416187.740000"
+      },
+      {
+        "endpoint": "pension-nomina-transitorio",
+        "employees": 0,
+        "contributionD6": "0.000000",
+        "salaryBaseD6": "0.000000"
+      }
+    ],
+    "firebirdA2": {
+      "registros": 169,
+      "cair": "27536.45",
+      "fra": "61956.55",
+      "fre": "318153.05",
+      "fh": "4818.87",
+      "fv": "19275.28",
+      "faa": "68840.85",
+      "fae": "34420.17",
+      "fat": "103261.02",
+      "fai": "0.00"
+    }
+  }
+}

@@ -1,9 +1,14 @@
 import { FastifyInstance } from 'fastify';
-import { requireAuth } from '../auth/auth.middleware.js';
+import { requireAuth, requireRole } from '../auth/auth.middleware.js';
 import {
   AportacionesIndividualesSchema,
   AportacionesCompletasSchema,
-  NumerosEmpleadoLookupSchema
+  NumerosEmpleadoLookupSchema,
+  SnapshotCalculoV2ConsultaSchema,
+  SnapshotCalculoV2BandejaSchema,
+  SnapshotCalculoV2DecisionParamsSchema,
+  SnapshotCalculoV2DecisionSchema,
+  SnapshotCalculoV2OfficialSchema
 } from './aportacionesFondos.schemas.js';
 import { ok, fail, unauthorized } from '../../utils/http.js';
 import { normalizeClaveOrganica } from '../../utils/organica.js';
@@ -17,9 +22,180 @@ import { GetPensionNominaTransitorioQuery } from './application/queries/GetPensi
 import { GetAguinaldoQuery } from './application/queries/GetAguinaldoQuery.js';
 import { GetNumerosEmpleadoQuery } from './application/queries/GetNumerosEmpleadoQuery.js';
 import { handleAportacionesFondosError } from './infrastructure/errorHandler.js';
+import { GetSnapshotCalculoV2Query } from './application/queries/GetSnapshotCalculoV2Query.js';
+import { env } from '../../config/env.js';
+import { ListSnapshotCalculoV2Query } from './application/queries/ListSnapshotCalculoV2Query.js';
+import { CreateSnapshotCalculoV2DecisionCommand } from './application/commands/CreateSnapshotCalculoV2DecisionCommand.js';
+import { GetSnapshotCalculoV2OfficialQuery } from './application/queries/GetSnapshotCalculoV2OfficialQuery.js';
+import { ListSnapshotCalculoV2DecisionsQuery } from './application/queries/ListSnapshotCalculoV2DecisionsQuery.js';
 
 // Routes for fund contributions operations
 export default async function aportacionesFondosRoutes(app: FastifyInstance) {
+
+  app.get('/aportacionesFondos/snapshots/v2/oficial', {
+    preHandler: [requireAuth, requireRole('admin')],
+    schema: {
+      description: '[SQL SERVER] Lectura agregada oficial: usa el Snapshot V2 solicitado si esta completo, cerrado y aprobado; en otro caso usa historicos.',
+      tags: ['aportacionesFondos', 'sql-server', 'admin'],
+      security: [{ bearerAuth: [] }],
+      querystring: {
+        type: 'object', additionalProperties: false,
+        required: ['entidadId', 'anio', 'quincena', 'organica0', 'organica1', 'organica2', 'organica3', 'fuente', 'revision'],
+        properties: {
+          entidadId: { type: 'string' }, anio: { type: 'string' }, quincena: { type: 'string' },
+          organica0: { type: 'string', minLength: 2, maxLength: 2 },
+          organica1: { type: 'string', minLength: 2, maxLength: 2 },
+          organica2: { type: 'string', minLength: 2, maxLength: 2 },
+          organica3: { type: 'string', minLength: 2, maxLength: 2 },
+          fuente: { type: 'string', enum: ['LIQUIDACION_V2', 'HISTORICO_SQL'] },
+          revision: { type: 'string' }
+        }
+      }
+    }
+  }, async (req, reply) => {
+    try {
+      if (!env.features.snapshotCalculoV2OfficialReadEnabled) {
+        return reply.code(404).send(fail('Lectura oficial Snapshot V2 no habilitada', 'SNAPSHOT_V2_OFFICIAL_READ_DISABLED'));
+      }
+      const parsed = SnapshotCalculoV2OfficialSchema.safeParse(req.query);
+      if (!parsed.success) return reply.code(400).send(fail('Parametros de consulta invalidos', 'PARAMETRO_INVALIDO'));
+      const query = req.diScope.resolve<GetSnapshotCalculoV2OfficialQuery>('getSnapshotCalculoV2OfficialQuery');
+      const result = await query.execute(parsed.data);
+      if (!result) return reply.code(404).send(fail('No existe Snapshot V2 elegible ni historico para fallback', 'LECTURA_OFICIAL_NO_DISPONIBLE'));
+      return reply.send(ok(result));
+    } catch (error: any) {
+      return handleAportacionesFondosError(error, reply);
+    }
+  });
+
+  app.get('/aportacionesFondos/snapshots/v2', {
+    preHandler: [requireAuth, requireRole('admin')],
+    schema: {
+      description: '[SQL SERVER] Bandeja administrativa paginada de conciliacion Snapshot V2.',
+      tags: ['aportacionesFondos', 'sql-server', 'admin'],
+      security: [{ bearerAuth: [] }],
+      querystring: {
+        type: 'object', additionalProperties: false,
+        properties: {
+          pagina: { type: 'string', default: '1' }, tamanio: { type: 'string', default: '20' },
+          anio: { type: 'string' }, quincena: { type: 'string' }, entidadId: { type: 'string' },
+          organica0: { type: 'string', minLength: 2, maxLength: 2 },
+          organica1: { type: 'string', minLength: 2, maxLength: 2 },
+          fuente: { type: 'string', enum: ['LIQUIDACION_V2', 'HISTORICO_SQL'] },
+          estado: { type: 'string', enum: ['COMPLETO', 'AGREGADO_LEGADO', 'INCOMPLETO'] }
+        }
+      }
+    }
+  }, async (req, reply) => {
+    try {
+      if (!env.features.snapshotCalculoV2ReadEnabled) {
+        return reply.code(404).send(fail('Lectura Snapshot V2 no habilitada', 'SNAPSHOT_V2_READ_DISABLED'));
+      }
+      const parsed = SnapshotCalculoV2BandejaSchema.safeParse(req.query);
+      if (!parsed.success) return reply.code(400).send(fail('Parametros de consulta invalidos', 'PARAMETRO_INVALIDO'));
+      const query = req.diScope.resolve<ListSnapshotCalculoV2Query>('listSnapshotCalculoV2Query');
+      return reply.send(ok(await query.execute(parsed.data)));
+    } catch (error: any) {
+      return handleAportacionesFondosError(error, reply);
+    }
+  });
+
+  app.get('/aportacionesFondos/snapshots/v2/:snapshotId/decisiones', {
+    preHandler: [requireAuth, requireRole('admin')],
+    schema: {
+      description: '[SQL SERVER] Historial administrativo inmutable de decisiones de un Snapshot V2.',
+      tags: ['aportacionesFondos', 'sql-server', 'admin'],
+      security: [{ bearerAuth: [] }],
+      params: { type: 'object', required: ['snapshotId'], properties: { snapshotId: { type: 'string', pattern: '^\\d+$' } } }
+    }
+  }, async (req, reply) => {
+    try {
+      if (!env.features.snapshotCalculoV2ReadEnabled) {
+        return reply.code(404).send(fail('Lectura Snapshot V2 no habilitada', 'SNAPSHOT_V2_READ_DISABLED'));
+      }
+      const parsed = SnapshotCalculoV2DecisionParamsSchema.safeParse(req.params);
+      if (!parsed.success) return reply.code(400).send(fail('Snapshot invalido', 'PARAMETRO_INVALIDO'));
+      const query = req.diScope.resolve<ListSnapshotCalculoV2DecisionsQuery>('listSnapshotCalculoV2DecisionsQuery');
+      const result = await query.execute(parsed.data.snapshotId);
+      if (!result) return reply.code(404).send(fail('Snapshot V2 no encontrado', 'SNAPSHOT_V2_NO_ENCONTRADO'));
+      return reply.send(ok(result));
+    } catch (error: any) {
+      return handleAportacionesFondosError(error, reply);
+    }
+  });
+
+  app.post('/aportacionesFondos/snapshots/v2/:snapshotId/decision', {
+    preHandler: [requireAuth, requireRole('admin')],
+    schema: {
+      description: '[SQL SERVER] Registra una decision administrativa inmutable para un Snapshot V2.',
+      tags: ['aportacionesFondos', 'sql-server', 'admin'],
+      security: [{ bearerAuth: [] }],
+      params: { type: 'object', required: ['snapshotId'], properties: { snapshotId: { type: 'string', pattern: '^\\d+$' } } },
+      body: {
+        type: 'object', additionalProperties: false, required: ['decision'],
+        properties: {
+          decision: { type: 'string', enum: ['APROBADO', 'OBSERVADO'] },
+          comentario: { type: ['string', 'null'], maxLength: 500 }
+        }
+      }
+    }
+  }, async (req, reply) => {
+    try {
+      if (!env.features.snapshotCalculoV2ReadEnabled) {
+        return reply.code(404).send(fail('Lectura Snapshot V2 no habilitada', 'SNAPSHOT_V2_READ_DISABLED'));
+      }
+      const params = SnapshotCalculoV2DecisionParamsSchema.safeParse(req.params);
+      const body = SnapshotCalculoV2DecisionSchema.safeParse(req.body);
+      if (!params.success || !body.success) return reply.code(400).send(fail('Decision invalida', 'PARAMETRO_INVALIDO'));
+      const command = req.diScope.resolve<CreateSnapshotCalculoV2DecisionCommand>('createSnapshotCalculoV2DecisionCommand');
+      const result = await command.execute(params.data.snapshotId, body.data.decision, body.data.comentario, String(req.user!.sub));
+      return reply.code(201).send(ok(result));
+    } catch (error: any) {
+      return handleAportacionesFondosError(error, reply);
+    }
+  });
+
+  app.get('/aportacionesFondos/snapshots/v2/comparacion', {
+    preHandler: [requireAuth, requireRole('admin')],
+    schema: {
+      description: '[SQL SERVER] Consulta administrativa en sombra de Snapshot V2 y compara contra REVISA e historicos.',
+      tags: ['aportacionesFondos', 'sql-server', 'admin'],
+      security: [{ bearerAuth: [] }],
+      querystring: {
+        type: 'object',
+        additionalProperties: false,
+        required: ['entidadId', 'anio', 'quincena', 'organica0', 'organica1', 'organica2', 'organica3'],
+        properties: {
+          entidadId: { type: 'string' },
+          anio: { type: 'string' },
+          quincena: { type: 'string' },
+          organica0: { type: 'string', minLength: 2, maxLength: 2 },
+          organica1: { type: 'string', minLength: 2, maxLength: 2 },
+          organica2: { type: 'string', minLength: 2, maxLength: 2 },
+          organica3: { type: 'string', minLength: 2, maxLength: 2 },
+          fuente: { type: 'string', enum: ['LIQUIDACION_V2', 'HISTORICO_SQL'], default: 'LIQUIDACION_V2' },
+          revision: { type: 'string' },
+          incluirDetalles: { type: 'string', enum: ['0', '1'], default: '0' }
+        }
+      }
+    }
+  }, async (req, reply) => {
+    try {
+      if (!env.features.snapshotCalculoV2ReadEnabled) {
+        return reply.code(404).send(fail('Lectura Snapshot V2 no habilitada', 'SNAPSHOT_V2_READ_DISABLED'));
+      }
+      const parsed = SnapshotCalculoV2ConsultaSchema.safeParse(req.query);
+      if (!parsed.success) {
+        return reply.code(400).send(fail('Parametros de consulta invalidos', 'PARAMETRO_INVALIDO'));
+      }
+      const query = req.diScope.resolve<GetSnapshotCalculoV2Query>('getSnapshotCalculoV2Query');
+      const result = await query.execute(parsed.data);
+      if (!result) return reply.code(404).send(fail('Snapshot V2 no encontrado', 'SNAPSHOT_V2_NO_ENCONTRADO'));
+      return reply.send(ok(result));
+    } catch (error: any) {
+      return handleAportacionesFondosError(error, reply);
+    }
+  });
 
   app.post('/aportacionesFondos/no-empleados', {
     preHandler: [requireAuth],
@@ -110,7 +286,7 @@ export default async function aportacionesFondosRoutes(app: FastifyInstance) {
                       total: { type: 'number' },
                       tipo: { type: 'string' },
                       dias_laborados: { type: 'number' },
-                      dias_laborados_origen: { type: 'string', enum: ['nomina', 'default'] },
+                      dias_laborados_origen: { type: 'string', enum: ['nomina', 'default', 'nomina_sin_coincidencia'] },
                       base_cotizacion_quinquenios: { type: 'number', nullable: true },
                       quinquenios_aplicado: { type: 'number', nullable: true }
                     }
@@ -820,7 +996,9 @@ export default async function aportacionesFondosRoutes(app: FastifyInstance) {
         type: 'object',
         properties: {
           clave_organica_0: { type: 'string', maxLength: 2 },
-          clave_organica_1: { type: 'string', maxLength: 2 }
+          clave_organica_1: { type: 'string', maxLength: 2 },
+          usarDiasLaboradosNomina: { type: 'string' },
+          periodo: { type: 'string', minLength: 4, maxLength: 4 }
         }
       },
       response: {
@@ -866,7 +1044,7 @@ export default async function aportacionesFondosRoutes(app: FastifyInstance) {
                       menor_sala: { type: 'string', nullable: true },
                       estatus: { type: 'string', nullable: true },
                       dias_laborados: { type: 'number' },
-                      dias_laborados_origen: { type: 'string', enum: ['nomina', 'default'] }
+                      dias_laborados_origen: { type: 'string', enum: ['nomina', 'default', 'nomina_sin_coincidencia'] }
                     }
                   }
                 }
@@ -977,7 +1155,9 @@ export default async function aportacionesFondosRoutes(app: FastifyInstance) {
         type: 'object',
         properties: {
           clave_organica_0: { type: 'string', maxLength: 2 },
-          clave_organica_1: { type: 'string', maxLength: 2 }
+          clave_organica_1: { type: 'string', maxLength: 2 },
+          usarDiasLaboradosNomina: { type: 'string' },
+          periodo: { type: 'string', minLength: 4, maxLength: 4 }
         }
       },
       response: {
@@ -1057,7 +1237,7 @@ export default async function aportacionesFondosRoutes(app: FastifyInstance) {
                       transnorg0: { type: 'string', nullable: true },
                       transnorg1: { type: 'string', nullable: true },
                       dias_laborados: { type: 'number' },
-                      dias_laborados_origen: { type: 'string', enum: ['nomina', 'default'] }
+                      dias_laborados_origen: { type: 'string', enum: ['nomina', 'default', 'nomina_sin_coincidencia'] }
                     }
                   }
                 }
@@ -1168,7 +1348,9 @@ export default async function aportacionesFondosRoutes(app: FastifyInstance) {
         type: 'object',
         properties: {
           clave_organica_0: { type: 'string', maxLength: 2 },
-          clave_organica_1: { type: 'string', maxLength: 2 }
+          clave_organica_1: { type: 'string', maxLength: 2 },
+          usarDiasLaboradosNomina: { type: 'string' },
+          periodo: { type: 'string', minLength: 4, maxLength: 4 }
         }
       },
       response: {
@@ -1226,7 +1408,7 @@ export default async function aportacionesFondosRoutes(app: FastifyInstance) {
                       norg2: { type: 'string', nullable: true },
                       norg3: { type: 'string', nullable: true },
                       dias_laborados: { type: 'number' },
-                      dias_laborados_origen: { type: 'string', enum: ['nomina', 'default'] }
+                      dias_laborados_origen: { type: 'string', enum: ['nomina', 'default', 'nomina_sin_coincidencia'] }
                     }
                   }
                 }

@@ -54,16 +54,12 @@ function getTokenUserForMovimiento(user: any): { userId: number | null; userUid:
   return { userId, userUid };
 }
 
-async function puedeCapturarMovimiento(fecha: string | null | undefined): Promise<boolean> {
-  if (!fecha) return false;
-
+async function puedeCapturarMovimiento(): Promise<boolean> {
   const pool = await getPool();
-  const result = await pool.request()
-    .input('fecha', sql.Date, fecha)
-    .query(`
+  const result = await pool.request().query(`
       SELECT TOP 1 id
       FROM dbo.EventoCalendario
-      WHERE fecha = @fecha
+      WHERE fecha = CONVERT(date, (SYSUTCDATETIME() AT TIME ZONE 'UTC') AT TIME ZONE 'Central Standard Time (Mexico)')
         AND tipo IN ('ALTA_BAJA_CAMBIO', 'BA_MOVIMIENTO')
     `);
 
@@ -1625,7 +1621,7 @@ export default async function afiliadoRoutes(app: FastifyInstance) {
       security: [{ bearerAuth: [] }],
       body: {
         type: 'object',
-        required: ['nombre', 'apellidoPaterno', 'apellidoMaterno', 'curp', 'rfc', 'numeroSeguroSocial', 'fechaNacimiento', 'entidadFederativaNacId', 'domicilioCalle', 'domicilioNumeroExterior', 'domicilioColonia', 'domicilioCodigoPostal', 'telefono', 'estadoCivilId', 'sexo', 'correoElectronico', 'noEmpleado', 'localidad', 'municipio', 'estado', 'pais', 'nacionalidad', 'celular', 'expediente', 'sueldo', 'otrasPrestaciones', 'quinquenios'],
+        required: ['nombre', 'apellidoPaterno', 'apellidoMaterno', 'curp', 'rfc', 'numeroSeguroSocial', 'fechaNacimiento', 'entidadFederativaNacId', 'domicilioCalle', 'domicilioNumeroExterior', 'domicilioColonia', 'domicilioCodigoPostal', 'telefono', 'estadoCivilId', 'sexo', 'correoElectronico', 'noEmpleado', 'localidad', 'municipio', 'estado', 'pais', 'nacionalidad', 'celular', 'expediente', 'sueldo', 'otrasPrestaciones', 'quinquenios', 'fechaMovimiento'],
         properties: {
           // Afiliado fields
           apellidoPaterno: { type: 'string', maxLength: 255 },
@@ -1679,7 +1675,7 @@ export default async function afiliadoRoutes(app: FastifyInstance) {
           orgs3: { type: 'string', maxLength: 200, nullable: true },
           orgs4: { type: 'string', maxLength: 200, nullable: true },
           // Movimiento fields
-          fechaMovimiento: { type: 'string', format: 'date', nullable: true, description: 'Fecha efectiva del alta para calcular días laborados' },
+          fechaMovimiento: { type: 'string', format: 'date', description: 'Fecha efectiva del alta para calcular días laborados' },
           observaciones: { type: 'string', maxLength: 1024, nullable: true },
           entregaRendimiento: { type: 'string', enum: ['Si', 'No'], nullable: true, description: 'Indica si se entrega rendimiento' }
         }
@@ -1830,8 +1826,8 @@ export default async function afiliadoRoutes(app: FastifyInstance) {
       if (!parsed.data.fechaMovimiento) {
         return reply.code(400).send(fail('FECHA_MOVIMIENTO_REQUIRED: fechaMovimiento es requerida para alta'));
       }
-      if (!(await puedeCapturarMovimiento(parsed.data.fechaMovimiento))) {
-        return reply.code(400).send(fail('La fecha de movimiento no tiene una ventana ALTA_BAJA_CAMBIO o BA_MOVIMIENTO activa.', 'MOVIMIENTO_FUERA_DE_VENTANA'));
+      if (!(await puedeCapturarMovimiento())) {
+        return reply.code(400).send(fail('No existe una ventana ALTA_BAJA_CAMBIO o BA_MOVIMIENTO activa para la fecha actual de captura.', 'MOVIMIENTO_FUERA_DE_VENTANA'));
       }
       if (!parsed.data.categoriaPuestoOrgId) {
         return reply.code(400).send(fail('CATEGORIA_PUESTO_ORG_REQUIRED: categoriaPuestoOrgId es requerida para alta'));
@@ -1958,7 +1954,7 @@ export default async function afiliadoRoutes(app: FastifyInstance) {
       security: [{ bearerAuth: [] }],
       body: {
         type: 'object',
-        required: ['nombre', 'apellidoPaterno', 'apellidoMaterno', 'curp', 'rfc', 'numeroSeguroSocial', 'fechaNacimiento', 'entidadFederativaNacId', 'domicilioCalle', 'domicilioNumeroExterior', 'domicilioColonia', 'domicilioCodigoPostal', 'telefono', 'estadoCivilId', 'sexo', 'correoElectronico', 'noEmpleado', 'localidad', 'municipio', 'estado', 'pais', 'nacionalidad', 'celular', 'sueldo', 'otrasPrestaciones', 'quinquenios', 'interno'],
+        required: ['nombre', 'apellidoPaterno', 'apellidoMaterno', 'curp', 'rfc', 'numeroSeguroSocial', 'fechaNacimiento', 'entidadFederativaNacId', 'domicilioCalle', 'domicilioNumeroExterior', 'domicilioColonia', 'domicilioCodigoPostal', 'telefono', 'estadoCivilId', 'sexo', 'correoElectronico', 'noEmpleado', 'localidad', 'municipio', 'estado', 'pais', 'nacionalidad', 'celular', 'sueldo', 'otrasPrestaciones', 'quinquenios', 'interno', 'fechaMovimiento'],
         properties: {
           // Afiliado fields
           apellidoPaterno: { type: 'string', maxLength: 255 },
@@ -2011,7 +2007,7 @@ export default async function afiliadoRoutes(app: FastifyInstance) {
           orgs3: { type: 'string', maxLength: 200, nullable: true },
           orgs4: { type: 'string', maxLength: 200, nullable: true },
           // Movimiento fields
-          fechaMovimiento: { type: 'string', format: 'date', nullable: true, description: 'Fecha efectiva del cambio; no afecta nómina' },
+          fechaMovimiento: { type: 'string', format: 'date', description: 'Fecha efectiva del cambio; no afecta nómina' },
           observaciones: { type: 'string', maxLength: 1024, nullable: true },
           entregaRendimiento: { type: 'string', enum: ['Si', 'No'], nullable: true, description: 'Indica si se entrega rendimiento' }
         }
@@ -2172,8 +2168,8 @@ export default async function afiliadoRoutes(app: FastifyInstance) {
     }
 
     try {
-      if (!(await puedeCapturarMovimiento(parsed.data.fechaMovimiento || parsed.data.fechaMov))) {
-        return reply.code(400).send(fail('La fecha de movimiento no tiene una ventana ALTA_BAJA_CAMBIO o BA_MOVIMIENTO activa.', 'MOVIMIENTO_FUERA_DE_VENTANA'));
+      if (!(await puedeCapturarMovimiento())) {
+        return reply.code(400).send(fail('No existe una ventana ALTA_BAJA_CAMBIO o BA_MOVIMIENTO activa para la fecha actual de captura.', 'MOVIMIENTO_FUERA_DE_VENTANA'));
       }
       // Validar que el interno exista en Firebird
       const validateInternoInFirebirdQuery = req.diScope.resolve<ValidateInternoInFirebirdQuery>('validateInternoInFirebirdQuery');
@@ -2251,7 +2247,7 @@ export default async function afiliadoRoutes(app: FastifyInstance) {
       security: [{ bearerAuth: [] }],
       body: {
         type: 'object',
-        required: ['nombre', 'apellidoPaterno', 'apellidoMaterno', 'curp', 'rfc', 'numeroSeguroSocial', 'fechaNacimiento', 'entidadFederativaNacId', 'domicilioCalle', 'domicilioNumeroExterior', 'domicilioColonia', 'domicilioCodigoPostal', 'telefono', 'estadoCivilId', 'sexo', 'correoElectronico', 'noEmpleado', 'localidad', 'municipio', 'estado', 'pais', 'nacionalidad', 'celular', 'sueldo', 'otrasPrestaciones', 'quinquenios', 'interno'],
+        required: ['nombre', 'apellidoPaterno', 'apellidoMaterno', 'curp', 'rfc', 'numeroSeguroSocial', 'fechaNacimiento', 'entidadFederativaNacId', 'domicilioCalle', 'domicilioNumeroExterior', 'domicilioColonia', 'domicilioCodigoPostal', 'telefono', 'estadoCivilId', 'sexo', 'correoElectronico', 'noEmpleado', 'localidad', 'municipio', 'estado', 'pais', 'nacionalidad', 'celular', 'sueldo', 'otrasPrestaciones', 'quinquenios', 'interno', 'fechaMovimiento'],
         properties: {
           // Afiliado fields
           apellidoPaterno: { type: 'string', maxLength: 255 },
@@ -2304,7 +2300,7 @@ export default async function afiliadoRoutes(app: FastifyInstance) {
           orgs3: { type: 'string', maxLength: 200, nullable: true },
           orgs4: { type: 'string', maxLength: 200, nullable: true },
           // Movimiento fields
-          fechaMovimiento: { type: 'string', format: 'date', nullable: true, description: 'Fecha efectiva de la baja para calcular días laborados' },
+          fechaMovimiento: { type: 'string', format: 'date', description: 'Fecha efectiva de la baja para calcular días laborados' },
           observaciones: { type: 'string', maxLength: 1024, nullable: true },
           entregaRendimiento: { type: 'string', enum: ['Si', 'No', null], nullable: true, description: 'Indica si se entrega rendimiento' },
           motivoBajaId: { type: 'number', minimum: 1, nullable: true, description: 'Motivo de baja seleccionado del catalogo afi.CatalogoMotivoBaja' }
@@ -2470,8 +2466,8 @@ export default async function afiliadoRoutes(app: FastifyInstance) {
       if (!parsed.data.fechaMovimiento) {
         return reply.code(400).send(fail('FECHA_MOVIMIENTO_REQUIRED: fechaMovimiento es requerida para baja permanente'));
       }
-      if (!(await puedeCapturarMovimiento(parsed.data.fechaMovimiento))) {
-        return reply.code(400).send(fail('La fecha de movimiento no tiene una ventana ALTA_BAJA_CAMBIO o BA_MOVIMIENTO activa.', 'MOVIMIENTO_FUERA_DE_VENTANA'));
+      if (!(await puedeCapturarMovimiento())) {
+        return reply.code(400).send(fail('No existe una ventana ALTA_BAJA_CAMBIO o BA_MOVIMIENTO activa para la fecha actual de captura.', 'MOVIMIENTO_FUERA_DE_VENTANA'));
       }
       await validarMotivoBaja(parsed.data.motivoBajaId, 'bajaPermanente');
 
@@ -2566,7 +2562,7 @@ export default async function afiliadoRoutes(app: FastifyInstance) {
       security: [{ bearerAuth: [] }],
       body: {
         type: 'object',
-        required: ['nombre', 'apellidoPaterno', 'apellidoMaterno', 'curp', 'rfc', 'numeroSeguroSocial', 'fechaNacimiento', 'entidadFederativaNacId', 'domicilioCalle', 'domicilioNumeroExterior', 'domicilioColonia', 'domicilioCodigoPostal', 'telefono', 'estadoCivilId', 'sexo', 'correoElectronico', 'noEmpleado', 'localidad', 'municipio', 'estado', 'pais', 'nacionalidad', 'celular', 'sueldo', 'otrasPrestaciones', 'quinquenios', 'interno'],
+        required: ['nombre', 'apellidoPaterno', 'apellidoMaterno', 'curp', 'rfc', 'numeroSeguroSocial', 'fechaNacimiento', 'entidadFederativaNacId', 'domicilioCalle', 'domicilioNumeroExterior', 'domicilioColonia', 'domicilioCodigoPostal', 'telefono', 'estadoCivilId', 'sexo', 'correoElectronico', 'noEmpleado', 'localidad', 'municipio', 'estado', 'pais', 'nacionalidad', 'celular', 'sueldo', 'otrasPrestaciones', 'quinquenios', 'interno', 'fechaMovimiento'],
         properties: {
           // Afiliado fields
           apellidoPaterno: { type: 'string', maxLength: 255 },
@@ -2619,6 +2615,7 @@ export default async function afiliadoRoutes(app: FastifyInstance) {
           orgs3: { type: 'string', maxLength: 200, nullable: true },
           orgs4: { type: 'string', maxLength: 200, nullable: true },
           // Movimiento fields
+          fechaMovimiento: { type: 'string', format: 'date', description: 'Fecha efectiva de la suspensión' },
           observaciones: { type: 'string', maxLength: 1024, nullable: true },
           entregaRendimiento: { type: 'string', enum: ['Si', 'No'], nullable: true, description: 'Indica si se entrega rendimiento' },
           motivoBajaId: { type: 'number', minimum: 1, nullable: true, description: 'Motivo de baja seleccionado del catalogo afi.CatalogoMotivoBaja' }
@@ -2780,8 +2777,8 @@ export default async function afiliadoRoutes(app: FastifyInstance) {
     }
 
     try {
-      if (!(await puedeCapturarMovimiento(parsed.data.fechaMovimiento || parsed.data.fechaMov))) {
-        return reply.code(400).send(fail('La fecha de movimiento no tiene una ventana ALTA_BAJA_CAMBIO o BA_MOVIMIENTO activa.', 'MOVIMIENTO_FUERA_DE_VENTANA'));
+      if (!(await puedeCapturarMovimiento())) {
+        return reply.code(400).send(fail('No existe una ventana ALTA_BAJA_CAMBIO o BA_MOVIMIENTO activa para la fecha actual de captura.', 'MOVIMIENTO_FUERA_DE_VENTANA'));
       }
       await validarMotivoBaja(parsed.data.motivoBajaId, 'suspension');
 
@@ -2860,7 +2857,7 @@ export default async function afiliadoRoutes(app: FastifyInstance) {
       security: [{ bearerAuth: [] }],
       body: {
         type: 'object',
-        required: ['nombre', 'apellidoPaterno', 'apellidoMaterno', 'curp', 'rfc', 'numeroSeguroSocial', 'fechaNacimiento', 'entidadFederativaNacId', 'domicilioCalle', 'domicilioNumeroExterior', 'domicilioColonia', 'domicilioCodigoPostal', 'telefono', 'estadoCivilId', 'sexo', 'correoElectronico', 'noEmpleado', 'localidad', 'municipio', 'estado', 'pais', 'nacionalidad', 'celular', 'sueldo', 'otrasPrestaciones', 'quinquenios', 'interno'],
+        required: ['nombre', 'apellidoPaterno', 'apellidoMaterno', 'curp', 'rfc', 'numeroSeguroSocial', 'fechaNacimiento', 'entidadFederativaNacId', 'domicilioCalle', 'domicilioNumeroExterior', 'domicilioColonia', 'domicilioCodigoPostal', 'telefono', 'estadoCivilId', 'sexo', 'correoElectronico', 'noEmpleado', 'localidad', 'municipio', 'estado', 'pais', 'nacionalidad', 'celular', 'sueldo', 'otrasPrestaciones', 'quinquenios', 'interno', 'fechaMovimiento'],
         properties: {
           apellidoPaterno: { type: 'string', maxLength: 255 },
           apellidoMaterno: { type: 'string', maxLength: 255 },
@@ -2910,6 +2907,7 @@ export default async function afiliadoRoutes(app: FastifyInstance) {
           orgs2: { type: 'string', maxLength: 200, nullable: true },
           orgs3: { type: 'string', maxLength: 200, nullable: true },
           orgs4: { type: 'string', maxLength: 200, nullable: true },
+          fechaMovimiento: { type: 'string', format: 'date', description: 'Fecha efectiva de la terminación de suspensión' },
           observaciones: { type: 'string', maxLength: 1024, nullable: true },
           entregaRendimiento: { type: 'string', enum: ['Si', 'No'], nullable: true, description: 'Indica si se entrega rendimiento' }
         }
@@ -2922,8 +2920,8 @@ export default async function afiliadoRoutes(app: FastifyInstance) {
     }
 
     try {
-      if (!(await puedeCapturarMovimiento(parsed.data.fechaMovimiento || parsed.data.fechaMov))) {
-        return reply.code(400).send(fail('La fecha de movimiento no tiene una ventana ALTA_BAJA_CAMBIO o BA_MOVIMIENTO activa.', 'MOVIMIENTO_FUERA_DE_VENTANA'));
+      if (!(await puedeCapturarMovimiento())) {
+        return reply.code(400).send(fail('No existe una ventana ALTA_BAJA_CAMBIO o BA_MOVIMIENTO activa para la fecha actual de captura.', 'MOVIMIENTO_FUERA_DE_VENTANA'));
       }
       // Validar que el interno exista en Firebird
       const validateInternoInFirebirdQuery = req.diScope.resolve<ValidateInternoInFirebirdQuery>('validateInternoInFirebirdQuery');
@@ -3000,7 +2998,7 @@ export default async function afiliadoRoutes(app: FastifyInstance) {
       security: [{ bearerAuth: [] }],
       body: {
         type: 'object',
-        required: ['nombre', 'apellidoPaterno', 'apellidoMaterno', 'curp', 'rfc', 'numeroSeguroSocial', 'fechaNacimiento', 'entidadFederativaNacId', 'domicilioCalle', 'domicilioNumeroExterior', 'domicilioColonia', 'domicilioCodigoPostal', 'telefono', 'estadoCivilId', 'sexo', 'correoElectronico', 'noEmpleado', 'localidad', 'municipio', 'estado', 'pais', 'nacionalidad', 'celular', 'sueldo', 'otrasPrestaciones', 'quinquenios', 'interno'],
+        required: ['nombre', 'apellidoPaterno', 'apellidoMaterno', 'curp', 'rfc', 'numeroSeguroSocial', 'fechaNacimiento', 'entidadFederativaNacId', 'domicilioCalle', 'domicilioNumeroExterior', 'domicilioColonia', 'domicilioCodigoPostal', 'telefono', 'estadoCivilId', 'sexo', 'correoElectronico', 'noEmpleado', 'localidad', 'municipio', 'estado', 'pais', 'nacionalidad', 'celular', 'sueldo', 'otrasPrestaciones', 'quinquenios', 'interno', 'fechaMovimiento'],
         properties: {
           apellidoPaterno: { type: 'string', maxLength: 255 },
           apellidoMaterno: { type: 'string', maxLength: 255 },
@@ -3050,6 +3048,7 @@ export default async function afiliadoRoutes(app: FastifyInstance) {
           orgs2: { type: 'string', maxLength: 200, nullable: true },
           orgs3: { type: 'string', maxLength: 200, nullable: true },
           orgs4: { type: 'string', maxLength: 200, nullable: true },
+          fechaMovimiento: { type: 'string', format: 'date', description: 'Fecha efectiva de la baja combinada para calcular días laborados' },
           observaciones: { type: 'string', maxLength: 1024, nullable: true },
           entregaRendimiento: { type: 'string', enum: ['Si', 'No'], nullable: true, description: 'Indica si se entrega rendimiento' },
           motivoBajaId: { type: 'number', minimum: 1, nullable: true, description: 'Motivo de baja seleccionado del catalogo afi.CatalogoMotivoBaja' }
@@ -3063,8 +3062,8 @@ export default async function afiliadoRoutes(app: FastifyInstance) {
     }
 
     try {
-      if (!(await puedeCapturarMovimiento(parsed.data.fechaMovimiento || parsed.data.fechaMov))) {
-        return reply.code(400).send(fail('La fecha de movimiento no tiene una ventana ALTA_BAJA_CAMBIO o BA_MOVIMIENTO activa.', 'MOVIMIENTO_FUERA_DE_VENTANA'));
+      if (!(await puedeCapturarMovimiento())) {
+        return reply.code(400).send(fail('No existe una ventana ALTA_BAJA_CAMBIO o BA_MOVIMIENTO activa para la fecha actual de captura.', 'MOVIMIENTO_FUERA_DE_VENTANA'));
       }
       await validarMotivoBaja(parsed.data.motivoBajaId, 'bajaPermanente');
 

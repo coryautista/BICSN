@@ -8,7 +8,8 @@ import {
   AfiliadoAlreadyExistsError,
   AfiliadoRegistrationError
 } from '../../domain/errors.js';
-import { syncMovimientoNominaDiasLaborados } from '../../infrastructure/services/MovimientoNominaDiasLaboradosService.js';
+import { syncMovimientoNominaDiasLaborados, validarMovimientoAntesDeTxt } from '../../infrastructure/services/MovimientoNominaDiasLaboradosService.js';
+import { validarFechaMovimientoPeriodo } from '../../domain/services/MovimientoFechaPolicy.js';
 
 const logger = pino({
   name: 'createCompleteAfiliadoCommand',
@@ -66,6 +67,21 @@ export class CreateCompleteAfiliadoCommand {
         claveOrganica3: data.afiliadoOrg.claveOrganica3
       }, 'Quincena calculada para orgánica');
     }
+    validarFechaMovimientoPeriodo(
+      data.movimiento.tipoMovimientoId,
+      data.movimiento.fechaMovimiento,
+      anioAplicacion,
+      quincenaAplicacion
+    );
+    await validarMovimientoAntesDeTxt({
+      executor: this.mssqlPool,
+      anio: anioAplicacion,
+      quincena: quincenaAplicacion,
+      organica0: data.afiliadoOrg.claveOrganica0,
+      organica1: data.afiliadoOrg.claveOrganica1,
+      organica2: data.afiliadoOrg.claveOrganica2,
+      organica3: data.afiliadoOrg.claveOrganica3
+    });
 
     // Validar que no exista ya un registro para el mismo interno en la misma quincena y año
     const interno = data.afiliado.interno;
@@ -426,6 +442,13 @@ export class CreateCompleteAfiliadoCommand {
       }, 'Error al crear afiliado completo, transacción revertida');
 
       if (error instanceof AfiliadoAlreadyExistsError) {
+        throw error;
+      }
+      if (error instanceof Error && (
+        error.message.startsWith('MOVIMIENTO_FECHA_')
+        || error.message.startsWith('MOVIMIENTO_NOMINA_')
+        || error.message === 'MOVIMIENTO_POSTERIOR_TXT_NO_PERMITIDO'
+      )) {
         throw error;
       }
 

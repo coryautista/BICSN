@@ -191,6 +191,8 @@ import { DeleteOrgPersonalCommand } from '../modules/orgPersonal/application/com
 
 // AportacionesFondos Module
 import { AportacionFondoRepository } from '../modules/aportacionesFondos/infrastructure/persistence/AportacionFondoRepository.js';
+import { FormulaCalculoRepository } from '../modules/aportacionesFondos/infrastructure/persistence/FormulaCalculoRepository.js';
+import { SnapshotCalculoV2Repository } from '../modules/aportacionesFondos/infrastructure/persistence/SnapshotCalculoV2Repository.js';
 import { GetAportacionesIndividualesQuery } from '../modules/aportacionesFondos/application/queries/GetAportacionesIndividualesQuery.js';
 import { GetAportacionesCompletasQuery } from '../modules/aportacionesFondos/application/queries/GetAportacionesCompletasQuery.js';
 import { GetPrestamosQuery } from '../modules/aportacionesFondos/application/queries/GetPrestamosQuery.js';
@@ -200,6 +202,11 @@ import { GetAportacionGuarderiasQuery } from '../modules/aportacionesFondos/appl
 import { GetPensionNominaTransitorioQuery } from '../modules/aportacionesFondos/application/queries/GetPensionNominaTransitorioQuery.js';
 import { GetAguinaldoQuery } from '../modules/aportacionesFondos/application/queries/GetAguinaldoQuery.js';
 import { GetNumerosEmpleadoQuery } from '../modules/aportacionesFondos/application/queries/GetNumerosEmpleadoQuery.js';
+import { GetSnapshotCalculoV2Query } from '../modules/aportacionesFondos/application/queries/GetSnapshotCalculoV2Query.js';
+import { ListSnapshotCalculoV2Query } from '../modules/aportacionesFondos/application/queries/ListSnapshotCalculoV2Query.js';
+import { CreateSnapshotCalculoV2DecisionCommand } from '../modules/aportacionesFondos/application/commands/CreateSnapshotCalculoV2DecisionCommand.js';
+import { GetSnapshotCalculoV2OfficialQuery } from '../modules/aportacionesFondos/application/queries/GetSnapshotCalculoV2OfficialQuery.js';
+import { ListSnapshotCalculoV2DecisionsQuery } from '../modules/aportacionesFondos/application/queries/ListSnapshotCalculoV2DecisionsQuery.js';
 import { CatalogoPorcentajeFondoRepository } from '../modules/catalogoPorcentajeFondo/infrastructure/persistence/CatalogoPorcentajeFondoRepository.js';
 import { GetAllCatalogoPorcentajeFondoQuery } from '../modules/catalogoPorcentajeFondo/application/queries/GetAllCatalogoPorcentajeFondoQuery.js';
 import { GetCatalogoPorcentajeFondoByIdQuery } from '../modules/catalogoPorcentajeFondo/application/queries/GetCatalogoPorcentajeFondoByIdQuery.js';
@@ -314,6 +321,7 @@ import { RegistrarAfectacionCommand } from '../modules/afectacionOrg/application
 import { NominaAplicacionQnalTxtRepository } from '../modules/nomina/infrastructure/persistence/NominaAplicacionQnalTxtRepository.js';
 import { CargarNominaAplicacionQnalTxtCommand } from '../modules/nomina/application/commands/CargarNominaAplicacionQnalTxtCommand.js';
 import { GetNominaAplicacionQnalTxtRegistrosQuery } from '../modules/nomina/application/queries/GetNominaAplicacionQnalTxtRegistrosQuery.js';
+import { GetNominaAplicacionQnalCargaVigenteQuery } from '../modules/nomina/application/queries/GetNominaAplicacionQnalCargaVigenteQuery.js';
 
 // HistoricosQuincenales Module
 import { HistoricosQuincenalesRepository } from '../modules/historicosQuincenales/infrastructure/persistence/HistoricosQuincenalesRepository.js';
@@ -917,6 +925,7 @@ container.register({
   nominaAplicacionQnalTxtRepo: asClass(NominaAplicacionQnalTxtRepository).scoped(),
   cargarNominaAplicacionQnalTxtCommand: asClass(CargarNominaAplicacionQnalTxtCommand).scoped(),
   getNominaAplicacionQnalTxtRegistrosQuery: asClass(GetNominaAplicacionQnalTxtRegistrosQuery).scoped(),
+  getNominaAplicacionQnalCargaVigenteQuery: asClass(GetNominaAplicacionQnalCargaVigenteQuery).scoped(),
 
   // ============================================================================
   // HISTORICOS QUINCENALES MODULE
@@ -1299,6 +1308,8 @@ container.register({
   
   // Repositories (Scoped)
   aportacionFondoRepo: asClass(AportacionFondoRepository).scoped(),
+  formulaCalculoRepo: asClass(FormulaCalculoRepository).scoped(),
+  snapshotCalculoV2Repo: asClass(SnapshotCalculoV2Repository).scoped(),
   
   // Queries (Scoped)
   getAportacionesIndividualesQuery: asClass(GetAportacionesIndividualesQuery).scoped(),
@@ -1310,6 +1321,11 @@ container.register({
   getPensionNominaTransitorioQuery: asClass(GetPensionNominaTransitorioQuery).scoped(),
   getAguinaldoQuery: asClass(GetAguinaldoQuery).scoped(),
   getNumerosEmpleadoQuery: asClass(GetNumerosEmpleadoQuery).scoped(),
+  getSnapshotCalculoV2Query: asClass(GetSnapshotCalculoV2Query).scoped(),
+  listSnapshotCalculoV2Query: asClass(ListSnapshotCalculoV2Query).scoped(),
+  createSnapshotCalculoV2DecisionCommand: asClass(CreateSnapshotCalculoV2DecisionCommand).scoped(),
+  getSnapshotCalculoV2OfficialQuery: asClass(GetSnapshotCalculoV2OfficialQuery).scoped(),
+  listSnapshotCalculoV2DecisionsQuery: asClass(ListSnapshotCalculoV2DecisionsQuery).scoped(),
 
   // ============================================================================
   // CATALOGO PORCENTAJE FONDO MODULE

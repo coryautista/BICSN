@@ -1,7 +1,9 @@
 import {
   NominaAplicacionQnalQueryFilters,
   NominaAplicacionQnalQueryResult,
+  NominaAplicacionQnalCargaVigente,
   NominaAplicacionQnalRegistroParsed,
+  NominaAplicacionQnalScope,
   NominaAplicacionQnalUploadInput,
   NominaAplicacionQnalUploadResult
 } from '../entities/NominaAplicacionQnalTxt.js';
@@ -19,4 +21,5 @@ export interface INominaAplicacionQnalTxtRepository {
   ): Promise<NominaAplicacionQnalUploadResult>;
 
   consultarRegistros(filters: NominaAplicacionQnalQueryFilters): Promise<NominaAplicacionQnalQueryResult>;
+  consultarCargaVigente(scope: NominaAplicacionQnalScope): Promise<NominaAplicacionQnalCargaVigente | null>;
 }

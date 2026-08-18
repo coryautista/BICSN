@@ -48,3 +48,29 @@ export async function guardarRevisionLogFtp(
   await ftpService.uploadText(`${JSON.stringify(payload, null, 2)}\n`, remotePath);
   return remotePath;
 }
+
+export interface RevisionLogFtpOpcionalResultado {
+  ruta: string | null;
+  advertencia: string | null;
+}
+
+export async function guardarRevisionLogFtpOpcional(
+  tarea: RevisionTarea,
+  conceptos: ResultadoConceptoRevision[],
+  inicioUtc: string,
+  tiempoTotalMs: number,
+  guardar: typeof guardarRevisionLogFtp = guardarRevisionLogFtp
+): Promise<RevisionLogFtpOpcionalResultado> {
+  try {
+    return {
+      ruta: await guardar(tarea, conceptos, inicioUtc, tiempoTotalMs),
+      advertencia: null
+    };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    return {
+      ruta: null,
+      advertencia: `FTP_OPCIONAL_NO_DISPONIBLE: ${message}`.slice(0, 2000)
+    };
+  }
+}

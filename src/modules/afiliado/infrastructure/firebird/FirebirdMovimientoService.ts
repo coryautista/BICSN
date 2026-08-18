@@ -6,6 +6,7 @@ import { getAfiliadoById, actualizarInternoAfiliado } from '../services/Afiliado
 import type { Movimiento } from '../../../movimiento/movimiento.repo.js';
 import type { Afiliado } from '../../domain/entities/Afiliado.js';
 import pino from 'pino';
+import { resolverFechaEfectivaMovimiento } from '../../domain/services/MovimientoFechaPolicy.js';
 
 const logger = pino({
   name: 'firebirdMovimientoService',
@@ -1463,23 +1464,17 @@ export async function prepararLogEjecucionDPEditaEntidad(
     // 3. Obtener INTERNO
     const interno = await obtenerInterno(movimiento.afiliadoId);
 
-    // 4. Formatear fecha - usar fecha del movimiento o createdAt como fallback
-    logger.debug({ movimientoId: movimiento.id, fecha: movimiento.fecha, createdAt: movimiento.createdAt, tipoFecha: typeof movimiento.fecha }, 'Intentando formatear fecha');
-    let fechaAFormatear = movimiento.fecha;
-    
-    // Si la fecha es null, usar createdAt como fallback
-    if (!fechaAFormatear && movimiento.createdAt) {
-      logger.debug({ movimientoId: movimiento.id }, 'Fecha es null, usando createdAt como fallback');
-      fechaAFormatear = movimiento.createdAt;
-    }
+    // Los movimientos nuevos usan la fecha efectiva; los campos anteriores son fallback histórico.
+    const { valor: fechaAFormatear, fuente: fechaFuente } = resolverFechaEfectivaMovimiento(movimiento);
+    logger.debug({ movimientoId: movimiento.id, fechaFuente, fechaAFormatear }, 'Intentando formatear fecha efectiva');
     
     const fecha = formatearFecha(fechaAFormatear);
     if (!fecha) {
       log.validaciones.fecha = {
         valido: false,
-        mensaje: `No se pudo formatear fecha del movimiento. Fecha recibida: ${movimiento.fecha}, createdAt: ${movimiento.createdAt}`
+        mensaje: `No se pudo formatear fecha del movimiento. Fuente: ${fechaFuente}, valor: ${fechaAFormatear}`
       };
-      log.errores.push(`No se pudo formatear fecha. Valor: ${movimiento.fecha}, createdAt: ${movimiento.createdAt}`);
+      log.errores.push(`No se pudo formatear fecha. Fuente: ${fechaFuente}, valor: ${fechaAFormatear}`);
       return log;
     }
     log.validaciones.fecha = { valido: true, fechaFormateada: fecha };
@@ -1780,14 +1775,9 @@ export async function migrarMovimientoAFirebird(
       };
     }
 
-    // 4. Formatear fecha - usar fecha del movimiento o createdAt como fallback
-    let fechaAFormatear = movimiento.fecha;
-    
-    // Si la fecha es null, usar createdAt como fallback
-    if (!fechaAFormatear && movimiento.createdAt) {
-      logger.debug(logContext, 'Fecha es null, usando createdAt como fallback');
-      fechaAFormatear = movimiento.createdAt;
-    }
+    // Los movimientos nuevos usan la fecha efectiva; los campos anteriores son fallback histórico.
+    const { valor: fechaAFormatear, fuente: fechaFuente } = resolverFechaEfectivaMovimiento(movimiento);
+    logger.debug({ ...logContext, fechaFuente, fechaAFormatear }, 'Formateando fecha efectiva del movimiento');
     
     let fecha;
     try {
@@ -1798,6 +1788,7 @@ export async function migrarMovimientoAFirebird(
         step: 'formatearFecha',
         movimientoId: movimiento.id,
         afiliadoId: movimiento.afiliadoId,
+        fechaFuente,
         fechaOriginal: fechaAFormatear,
         error: {
           message: error.message,

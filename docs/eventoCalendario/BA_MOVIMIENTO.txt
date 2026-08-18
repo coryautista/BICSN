@@ -1,0 +1,12 @@
+BA_MOVIMIENTO se guarda por dia.
+
+El frontend solicita cada evento mediante POST /v1/eventos-calendario con fecha,
+tipo BA_MOVIMIENTO y anio. La creacion no requiere organica ni que la Aplicacion
+QNA de la fecha seleccionada este finalizada.
+
+Aplicar QNA no crea, recupera ni modifica eventos BA_MOVIMIENTO. El endpoint
+POST /v1/afiliado/recuperar-ba-movimiento esta deshabilitado.
+
+Los BA automaticos existentes se conservan como datos historicos. Cambiar o
+eliminar un HIPOTECARIO con BA automaticos relacionados requiere
+confirmarImpactoBA=true. Los BA existentes no se recalculan.

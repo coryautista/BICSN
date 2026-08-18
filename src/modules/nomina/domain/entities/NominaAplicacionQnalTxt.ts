@@ -46,7 +46,7 @@ export interface NominaAplicacionQnalUploadResult {
   errores: Array<{ numeroLinea: number; campo?: string; mensaje: string }>;
 }
 
-export interface NominaAplicacionQnalQueryFilters {
+export interface NominaAplicacionQnalScope {
   entidadId: number;
   anio: number;
   quincena: number;
@@ -54,9 +54,40 @@ export interface NominaAplicacionQnalQueryFilters {
   organica1: string;
   organica2: string;
   organica3: string;
+}
+
+export interface NominaAplicacionQnalQueryFilters extends NominaAplicacionQnalScope {
   buscar?: string;
   page: number;
   pageSize: number;
+}
+
+export interface NominaAplicacionQnalCargaVigente {
+  cargaId: string;
+  entidadId: number;
+  anio: number;
+  quincena: number;
+  organica0: string;
+  organica1: string;
+  organica2: string;
+  organica3: string;
+  archivoNombre: string;
+  tipoCarga: 'TXT';
+  estatus: 'APLICADA';
+  esVigente: true;
+  totalLineas: number;
+  totalDetallesDeclarados: number;
+  fechaRegistro: string;
+  registrosVigentes: number;
+  registrosCargaBase: number;
+  registrosComplementarios: number;
+  cargasEnDetalle: number;
+  rfcUnicos: number;
+  rfcDuplicados: number;
+  diasParciales: number;
+  diasCero: number;
+  diasNulos: number;
+  diasQuince: number;
 }
 
 export interface NominaAplicacionQnalQueryResult {

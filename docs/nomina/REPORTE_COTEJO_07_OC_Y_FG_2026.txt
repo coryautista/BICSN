@@ -1,0 +1,201 @@
+# Reporte de Cotejo XLSX vs TXT
+
+## Archivos revisados
+
+- Archivo de layout/regla: `Formato Archivo TXT de longitud Fija para Aplicacion Qnal(OBSERVACIONES EQUIPO DESARROLLO) (1).xlsx`
+- Archivo TXT generado: `07 OC Y FG 2026.txt`
+- Archivo base de referencia de reporte: `REPORTE_COTEJO_PLANTILLA_TXT.txt`
+
+## Objetivo
+
+Validar si el archivo TXT generado contiene la informacion definida en el layout esperado para el archivo de aplicacion quincenal.
+
+## Resumen ejecutivo
+
+El TXT `07 OC Y FG 2026.txt` contiene un encabezado y registros individuales de detalle para el lote `0126007`.
+
+- El TXT tiene 163 lineas.
+- La primera linea corresponde al encabezado, con tipo de registro `1`.
+- Las lineas 2 a 163 corresponden al detalle, con tipo de registro `2`.
+- El separador usado en el TXT es `@`.
+- El encabezado tiene 17 campos.
+- Cada registro detalle tiene 20 campos.
+- El layout esperado, segun la referencia usada, contempla 35 campos por cada registro detalle.
+- Por lo tanto, faltan 15 campos por cada registro detalle para cumplir completamente con el layout esperado.
+- Los totales principales del encabezado cuadran internamente contra las sumas calculadas desde los registros detalle.
+
+## Encabezado
+
+El encabezado del TXT contiene los campos principales esperados para el resumen del lote.
+
+| Campo | Valor en TXT | Estatus |
+|---|---:|---|
+| Lote | `0126007` | Existe |
+| Tipo registro | `1` | Existe |
+| Organica I | `01` | Existe |
+| Organica II | `00` | Existe |
+| Fecha inicial | `20260401` | Existe |
+| Fecha final | `20260415` | Existe |
+| Base cotizacion sueldo | `001321268.38` | Existe |
+| Base cotizacion quinquenios | `0041736.72` | Existe |
+| Aportacion afiliado fondo ahorro | `0059456.96` | Existe |
+| Aportacion entidad fondo ahorro | `0066063.57` | Existe |
+| Aportacion EBI afiliado | `0058399.32` | Existe |
+| Aportacion EBI entidad | `0095549.60` | Existe |
+| Prestamo corto plazo | espacios/vacio | Existe vacio |
+| Prestamo hipotecario / importe relacionado | `0026425.50` | Existe |
+| Prestamo vivienda / mediano plazo | `0000000.00` | Existe |
+| CAIR | `0000000.00` | Existe |
+| CAIR voluntario | `0000000.00` | Existe |
+
+## Registro detalle esperado segun layout
+
+El layout esperado contempla 35 campos por cada registro tipo `2`.
+
+| # | Campo esperado | Existe en TXT actual | Observacion |
+|---:|---|---|---|
+| 1 | Lote | Si | Ejemplo: `0126007` |
+| 2 | Tipo de registro | Si | Valor `2` |
+| 3 | Organica I | No | Falta |
+| 4 | Organica II | No | Falta |
+| 5 | Organica III | No | Falta |
+| 6 | RFC | Si | Esta en campo 4 del TXT |
+| 7 | Clave de personal | Si | Esta en campo 3 del TXT |
+| 8 | Nombre del afiliado | Si | Esta en campo 5 del TXT |
+| 9 | Movimiento | No | Falta `AL`, `BA` o blanco segun regla |
+| 10 | Fecha movimiento | Si | Esta en campo 15 del TXT |
+| 11 | Sueldo mensual | No claro | No aparece en posicion esperada |
+| 12 | Ayudas mensuales | No claro | No aparece en posicion esperada |
+| 13 | Quinquenios mensual | No claro | No aparece en posicion esperada |
+| 14 | Base cotizacion sueldo | Si | Existe como importe en detalle |
+| 15 | Base cotizacion quinquenios | Si | Existe como importe en detalle |
+| 16 | Aportacion afiliado fondo ahorro | Si | Existe como importe en detalle |
+| 17 | Aportacion entidad fondo ahorro | Si | Existe como importe en detalle |
+| 18 | Aportacion afiliado EBI | Si | Existe como importe en detalle |
+| 19 | Aportacion entidad EBI | Si | Existe como importe en detalle |
+| 20 | Descuento prestamos PCP | Si | Existe como importe en detalle, requiere confirmacion de mapeo |
+| 21 | Descuento prestamo hipotecario | Si | Existe como importe en detalle, requiere confirmacion de mapeo |
+| 22 | Descuento prestamos PMP | Si | Existe como importe en detalle, requiere confirmacion de mapeo |
+| 23 | Descuentos otros | Si | Existe como importe en detalle, requiere confirmacion de mapeo |
+| 24 | Calle | No | Falta |
+| 25 | Colonia | No | Falta |
+| 26 | Ciudad | No | Falta |
+| 27 | Estado | No | Falta |
+| 28 | Municipio | No | Falta |
+| 29 | Codigo postal | No | Falta |
+| 30 | Telefono | No | Falta |
+| 31 | Fecha nacimiento | No | Falta |
+| 32 | Sexo | No | Falta |
+| 33 | Estado civil | No | Falta |
+| 34 | CAIR | Si | Existe como importe |
+| 35 | CAIR voluntario | Si | Existe como importe |
+
+## Campos que contiene el TXT actual en el detalle
+
+Cada registro detalle actual contiene 20 campos.
+
+| # TXT | Campo identificado | Ejemplo |
+|---:|---|---|
+| 1 | Lote | `0126007` |
+| 2 | Tipo registro | `2` |
+| 3 | Clave empleado / clave personal | `3100011328` |
+| 4 | RFC | `SOLJ620804NT3` |
+| 5 | Nombre | `SOTO/LOPEZ/JESUS` |
+| 6 | Importe aportacion afiliado FA | `0000699.28` |
+| 7 | Importe aportacion entidad FA | `0000776.98` |
+| 8 | Importe EBI afiliado | `0002568.77` |
+| 9 | Importe EBI entidad | `0000000.00` |
+| 10 | Base cotizacion sueldo | `0015539.58` |
+| 11 | Base cotizacion quinquenios | `0000000.00` |
+| 12 | Importe base/sueldo relacionado | `0031079.15` |
+| 13 | Importe descuento | `0000000.00` |
+| 14 | Importe descuento | `0000000.00` |
+| 15 | Fecha movimiento / fecha fin quincena | `20260415` |
+| 16 | Importe CAIR/otro | `000000.00` |
+| 17 | Importe CAIR/otro | `0000310.79` |
+| 18 | Importe final | `0000000.00` |
+| 19 | Importe final | `0000000.00` |
+| 20 | Importe final | `0000000.00` |
+
+## Campos faltantes claros
+
+Estos campos del layout esperado no estan presentes en el TXT actual:
+
+| Campo faltante | Comentario |
+|---|---|
+| Organica I | Debe venir antes del RFC en el detalle |
+| Organica II | Debe venir antes del RFC en el detalle |
+| Organica III | Debe venir antes del RFC en el detalle |
+| Movimiento | Debe contener `AL`, `BA` o blanco segun corresponda |
+| Calle | Domicilio del afiliado |
+| Colonia | Domicilio del afiliado |
+| Ciudad | Domicilio del afiliado |
+| Estado | Clave INEGI de estado |
+| Municipio | Clave INEGI de municipio |
+| Codigo postal | 5 digitos |
+| Telefono | 10 caracteres |
+| Fecha nacimiento | Formato `AAAAMMDD` |
+| Sexo | `F` o `M` |
+| Estado civil | `S`, `C`, `V`, `D`, `O` |
+
+## Campos con duda de mapeo
+
+Estos campos existen como importes en el TXT, pero no estan en el orden esperado por el layout o requieren confirmacion funcional:
+
+| Campo esperado | Observacion |
+|---|---|
+| Sueldo mensual | No se identifica claramente en el TXT actual |
+| Ayudas mensuales | No se identifica claramente en el TXT actual |
+| Quinquenios mensual | No se identifica claramente en el TXT actual |
+| PCP / Hipotecario / PMP / Otros | Hay importes en campos 13, 14, 17, 18, 19 y 20, pero se debe confirmar el mapeo de cada concepto |
+| Campo 12 del TXT | Suma `2,654,169.41`; parece importe derivado de base/sueldo, pero no se identifica como campo de encabezado |
+| Campo 14 del TXT | Suma `83,473.44`; no tiene correspondencia clara con un total del encabezado |
+
+## Cotejo de totales principales
+
+Los siguientes importes del encabezado coinciden con sumas calculadas desde el detalle:
+
+| Concepto | Encabezado | Suma detalle | Estatus |
+|---|---:|---:|---|
+| Base cotizacion sueldo | `1,321,268.38` | `1,321,268.38` | Cuadra |
+| Base cotizacion quinquenios | `41,736.72` | `41,736.72` | Cuadra |
+| FA afiliado | `59,456.96` | `59,456.96` | Cuadra |
+| FA entidad | `66,063.57` | `66,063.57` | Cuadra |
+| EBI afiliado | `58,399.32` | `58,399.32` | Cuadra |
+| EBI entidad | `95,549.60` | `95,549.60` | Cuadra |
+| Prestamo hipotecario / importe relacionado | `26,425.50` | `26,425.50` | Cuadra |
+| Prestamo vivienda / mediano plazo | `0.00` | `0.00` | Cuadra |
+| CAIR | `0.00` | `0.00` | Cuadra |
+| CAIR voluntario | `0.00` | `0.00` | Cuadra |
+
+## Totales adicionales detectados en detalle
+
+Estos importes se calcularon desde campos del detalle, pero no tienen correspondencia directa clara con un campo del encabezado revisado:
+
+| Campo TXT | Suma detalle | Observacion |
+|---:|---:|---|
+| 12 | `2,654,169.41` | Importe base/sueldo relacionado; requiere confirmacion funcional |
+| 13 | `0.00` | Importe descuento sin total de encabezado claro |
+| 14 | `83,473.44` | Importe descuento sin total de encabezado claro |
+| 16 | `0.00` | Importe CAIR/otro |
+
+## Observaciones de integridad
+
+- Todos los registros de detalle usan el tipo de registro `2`.
+- Todos los registros de detalle tienen 20 campos.
+- La fecha de movimiento/fin de quincena en los registros de detalle es `20260415`.
+- El archivo mantiene consistencia interna en los totales principales.
+- El archivo no cumple completamente el layout esperado de 35 campos para el detalle.
+
+## Conclusion
+
+El TXT `07 OC Y FG 2026.txt` contiene informacion util y sus totales principales cuadran internamente contra los registros de detalle.
+
+Sin embargo, el TXT no cumple completamente con el layout esperado para el registro individual tipo `2`, ya que:
+
+- El layout esperado contempla 35 campos por registro detalle.
+- El TXT actual solo trae 20 campos por registro detalle.
+- Faltan principalmente campos de organica, movimiento, domicilio y datos personales del afiliado.
+- Algunos importes existen, pero no estan en el orden documentado o requieren confirmacion funcional para mapearlos correctamente.
+
+Para cumplir el layout, el generador del TXT debe emitir cada registro tipo `2` con los 35 campos definidos, respetando el orden esperado y agregando los campos faltantes.

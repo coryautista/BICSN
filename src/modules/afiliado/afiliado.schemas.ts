@@ -114,7 +114,7 @@ export const CreateAfiliadoAfiliadoOrgMovimientoSchema = z.object({
   quincenaId: z.string().max(30).nullable().optional(),
   tipoMovimientoId: z.number().int().optional().default(1),
   fechaMov: z.union([z.string().date(), z.null()]).optional(),
-  fechaMovimiento: z.union([z.string().date(), z.null()]).optional(),
+  fechaMovimiento: z.string().date(),
   observaciones: z.string().max(1024).nullable().optional(),
   entregaRendimiento: EntregaRendimientoSchema,
   motivoBajaId: z.number().int().positive().nullable().optional(),
