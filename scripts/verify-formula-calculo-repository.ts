@@ -26,9 +26,16 @@ async function main(): Promise<void> {
       const formula = await new FormulaCalculoRepository(pool).obtenerPorPeriodo(2026, 11);
       assert.equal(formula.claveFormula, FORMULA_CALCULO_CLAVE);
       assert.equal(formula.precisionPolicy, FORMULA_PRECISION_POLICY);
-      assert.deepEqual([formula.anioVigencia, formula.numeroVersion], [2026, 1]);
+      assert.equal(formula.anioVigencia, 2026);
+      assert.ok(formula.numeroVersion >= 1);
       assert.equal(formula.detalleParametros.length, 15);
       assert.equal(formula.parametros.FRE_OTRAS, '0.267500000');
+      assert.equal(formula.parametros.FRE_QUINQUENIOS, '0.267500000');
+      assert.equal(formula.parametros.FH_SUELDO, '0.003500000');
+      assert.equal(formula.parametros.FV_SUELDO, '0.014000000');
+      assert.ok(formula.detalleParametros
+        .filter((parameter) => parameter.unidad === 'TASA')
+        .every((parameter) => parameter.fuente.startsWith('CatalogoPorcentajeFondo:')));
       console.log(`${database}: FORMULA_REPOSITORY_OK`);
     } finally {
       await pool.close();

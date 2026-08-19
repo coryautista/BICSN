@@ -25,6 +25,7 @@ export interface Aguinaldo {
   porcentaje_a: number | null;
   diario: number | null;
   general: number | null;
+  general_d6: string;
   porcentaje: number | null;
   proporcion: number | null;
   mensaje: string | null;

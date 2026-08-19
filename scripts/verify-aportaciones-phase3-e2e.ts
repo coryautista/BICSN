@@ -34,10 +34,12 @@ process.env.FIREBIRD_READ_ONLY = 'true';
 assertDatabaseEnvironment('CALIDAD', process.env.SQLSERVER_DB, process.env.FIREBIRD_DATABASE);
 
 async function main(): Promise<void> {
-  const [mssql, firebird, aportacionesModule, aplicacionModule] = await Promise.all([
+  const [mssql, firebird, aportacionesModule, formulaModule, snapshotModule, aplicacionModule] = await Promise.all([
     import('../src/db/mssql.js'),
     import('../src/db/firebird.js'),
     import('../src/modules/aportacionesFondos/infrastructure/persistence/AportacionFondoRepository.js'),
+    import('../src/modules/aportacionesFondos/infrastructure/persistence/FormulaCalculoRepository.js'),
+    import('../src/modules/aportacionesFondos/infrastructure/persistence/SnapshotCalculoV2Repository.js'),
     import('../src/modules/aplicacionQuincenal/infrastructure/persistence/AplicacionQuincenalRepository.js')
   ]);
   assertDatabaseEnvironment(
@@ -45,8 +47,9 @@ async function main(): Promise<void> {
     process.env.SQLSERVER_DB ?? '',
     process.env.FIREBIRD_DATABASE ?? ''
   );
-  await mssql.connectDatabase();
-  const repository = new aportacionesModule.AportacionFondoRepository();
+  const pool = await mssql.connectDatabase();
+  const formulaRepository = new formulaModule.FormulaCalculoRepository(pool);
+  const repository = new aportacionesModule.AportacionFondoRepository(formulaRepository);
   const probe = repository as unknown as RepositoryProbe;
 
   try {
@@ -102,7 +105,10 @@ async function main(): Promise<void> {
       );
     }
 
-    const historicoRepository = new aplicacionModule.AplicacionQuincenalRepository();
+    const historicoRepository = new aplicacionModule.AplicacionQuincenalRepository(
+      new snapshotModule.SnapshotCalculoV2Repository(pool),
+      formulaRepository
+    );
     const quincenaHistorica = Number(PERIODO_HISTORICO.slice(0, 2));
     const anioHistorico = 2000 + Number(PERIODO_HISTORICO.slice(2, 4));
     const historico = await historicoRepository.obtenerHistoricoAportaciones(

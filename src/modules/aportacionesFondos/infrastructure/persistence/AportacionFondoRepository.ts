@@ -6,6 +6,7 @@ import { AportacionIndividual, AportacionCompleta, TipoFondo, AportacionFondo } 
 import { Prestamo } from '../../domain/entities/Prestamo.js';
 import { PrestamoMedianoPlazo } from '../../domain/entities/PrestamoMedianoPlazo.js';
 import { PrestamoHipotecario } from '../../domain/entities/PrestamoHipotecario.js';
+import { d2ToD6, d6ToLegacyNumber } from '../../domain/entities/PrestamoMoney.js';
 import { AportacionGuarderia } from '../../domain/entities/AportacionGuarderia.js';
 import { PensionNominaTransitorio } from '../../domain/entities/PensionNominaTransitorio.js';
 import { Aguinaldo } from '../../domain/entities/Aguinaldo.js';
@@ -19,20 +20,20 @@ import {
   NominaDiasLaboradosResolver,
   NominaDiasResultado
 } from '../../domain/services/NominaDiasLaboradosResolver.js';
-
-const MONEY_SCALE = 1_000_000;
-
-function roundMoney(value: number): number {
-  return Math.round((value + Number.EPSILON) * MONEY_SCALE) / MONEY_SCALE;
-}
-
-function sumMoney(values: number[]): number {
-  return values.reduce((sum, value) => sum + Math.round(value * MONEY_SCALE), 0) / MONEY_SCALE;
-}
+import { AportacionesMonetaryKernel } from '../../domain/services/AportacionesMonetaryKernel.js';
+import type { FormulaCalculo } from '../../domain/entities/FormulaCalculo.js';
+import type { IFormulaCalculoRepository } from '../../domain/repositories/IFormulaCalculoRepository.js';
+import { AportacionFondoCalculator } from '../../domain/services/AportacionFondoCalculator.js';
+import { decimalSourceToD6 } from '../../domain/entities/Money.js';
+import { createHash } from 'node:crypto';
 
 export class AportacionFondoRepository implements IAportacionFondoRepository {
   private readonly DIAS_LABORADOS_DEFAULT = 15;
   private readonly nominaDiasResolver = new NominaDiasLaboradosResolver(this.DIAS_LABORADOS_DEFAULT);
+  private readonly monetaryKernel = new AportacionesMonetaryKernel();
+  private readonly aportacionCalculator = new AportacionFondoCalculator(this.monetaryKernel);
+
+  constructor(private readonly formulaCalculoRepo: IFormulaCalculoRepository) {}
 
   /**
    * Convierte un valor a número de forma segura, evitando NaN.
@@ -75,6 +76,19 @@ export class AportacionFondoRepository implements IAportacionFondoRepository {
         );
       }
 
+      const periodoInfo = !periodo ? await this.obtenerPeriodoAplicacion(claveOrganica0, claveOrganica1) : null;
+      const periodoCalculo = periodo || periodoInfo?.periodo;
+      if (periodo) {
+        const historico = await this.obtenerAportacionesHistoricasCerradas(
+          tipo,
+          claveOrganica0,
+          claveOrganica1,
+          periodo
+        );
+        if (historico) return historico;
+      }
+      const formula = await this.obtenerFormulaPeriodo(periodoCalculo);
+
       // Obtener registros filtrados por claves orgánicas con nombre de PERSONAL
       const registros = await this.obtenerOrgPersonalConNombre(claveOrganica0, claveOrganica1);
 
@@ -95,14 +109,14 @@ export class AportacionFondoRepository implements IAportacionFondoRepository {
       }
 
       // Calcular aportaciones según el tipo
-      const periodoInfo = usarDiasLaboradosNomina && !periodo ? await this.obtenerPeriodoAplicacion(claveOrganica0, claveOrganica1) : null;
       const datos = await this.calcularAportaciones(
         registros,
         tipo,
         usarDiasLaboradosNomina,
-        periodo || periodoInfo?.periodo,
+        periodoCalculo,
         claveOrganica0,
-        claveOrganica1
+        claveOrganica1,
+        formula
       );
 
       // Debug (solo LOG_LEVEL=debug): verificar que los datos tengan nombre después del cálculo
@@ -115,10 +129,16 @@ export class AportacionFondoRepository implements IAportacionFondoRepository {
       }
 
       // Calcular resumen
+      const totalContribucionA2 = this.monetaryKernel.agregarA2(datos.map((item) => item.total_d6));
+      const totalSueldoBaseA2 = this.monetaryKernel.agregarA2(datos.map((item) => item.sueldo_base_d6));
+      const componentesA2 = this.calcularComponentesA2(tipo, datos);
       const resumen = {
         total_empleados: datos.length,
-        total_contribucion: sumMoney(datos.map((item) => item.total)),
-        total_sueldo_base: sumMoney(datos.map((item) => item.sueldo_base))
+        total_contribucion: Number(totalContribucionA2),
+        total_sueldo_base: Number(totalSueldoBaseA2),
+        total_contribucion_a2: totalContribucionA2,
+        total_sueldo_base_a2: totalSueldoBaseA2,
+        componentes_a2: componentesA2
       };
 
       return {
@@ -126,7 +146,10 @@ export class AportacionFondoRepository implements IAportacionFondoRepository {
         clave_organica_0: claveOrganica0,
         clave_organica_1: claveOrganica1,
         datos,
-        resumen
+        resumen,
+        precision_policy: formula.precisionPolicy,
+        formula_version_id: formula.formulaCalculoVersionId,
+        fuente_datos: 'CALCULO_VIVO'
       };
     } catch (error) {
       if (error instanceof AportacionFondoDomainError) {
@@ -155,6 +178,11 @@ export class AportacionFondoRepository implements IAportacionFondoRepository {
         );
       }
 
+      const periodoInfo = await this.obtenerPeriodoAplicacion(claveOrganica0, claveOrganica1);
+      const formula = await this.obtenerFormulaPeriodo(periodoInfo.periodo);
+      let totalContribucionGeneralA2 = this.monetaryKernel.truncarA2('0');
+      let totalSueldoBaseGeneralA2 = this.monetaryKernel.truncarA2('0');
+
       // Construir resultado completo
       const resultado: AportacionCompleta = {
         clave_organica_0: claveOrganica0,
@@ -163,31 +191,52 @@ export class AportacionFondoRepository implements IAportacionFondoRepository {
           total_empleados: registros.length,
           total_contribucion_general: 0,
           total_sueldo_base_general: 0,
+          total_contribucion_general_a2: totalContribucionGeneralA2,
+          total_sueldo_base_general_a2: totalSueldoBaseGeneralA2,
           fondos_incluidos: []
-        }
+        },
+        precision_policy: formula.precisionPolicy,
+        formula_version_id: formula.formulaCalculoVersionId,
+        fuente_datos: 'CALCULO_VIVO'
       };
 
       // Calcular aportaciones para todos los tipos desde los mismos datos
       const tiposFondo: TipoFondo[] = ['ahorro', 'vivienda', 'prestaciones', 'cair'];
       
       for (const tipo of tiposFondo) {
-        try {
-          const datos = await this.calcularAportaciones(registros, tipo);
+          const datos = await this.calcularAportaciones(
+            registros,
+            tipo,
+            true,
+            periodoInfo.periodo,
+            claveOrganica0,
+            claveOrganica1,
+            formula
+          );
           
           // Calcular resumen para este tipo
+          const totalContribucionA2 = this.monetaryKernel.agregarA2(datos.map((item) => item.total_d6));
+          const totalSueldoBaseA2 = this.monetaryKernel.agregarA2(datos.map((item) => item.sueldo_base_d6));
+          const componentesA2 = this.calcularComponentesA2(tipo, datos);
           const resumen = {
             total_empleados: datos.length,
-            total_contribucion: sumMoney(datos.map((item) => item.total)),
-            total_sueldo_base: sumMoney(datos.map((item) => item.sueldo_base))
+            total_contribucion: Number(totalContribucionA2),
+            total_sueldo_base: Number(totalSueldoBaseA2),
+            total_contribucion_a2: totalContribucionA2,
+            total_sueldo_base_a2: totalSueldoBaseA2,
+            componentes_a2: componentesA2
           };
 
           // Agregar al resultado
-          const resultadoTipo = {
+          const resultadoTipo: AportacionIndividual = {
             tipo,
             clave_organica_0: claveOrganica0,
             clave_organica_1: claveOrganica1,
             datos,
-            resumen
+            resumen,
+            precision_policy: formula.precisionPolicy,
+            formula_version_id: formula.formulaCalculoVersionId,
+            fuente_datos: 'CALCULO_VIVO'
           };
 
           // Asignar al resultado según el tipo
@@ -207,14 +256,19 @@ export class AportacionFondoRepository implements IAportacionFondoRepository {
           }
 
           // Actualizar resumen general
-          resultado.resumen_general.total_contribucion_general += resumen.total_contribucion;
-          resultado.resumen_general.total_sueldo_base_general += resumen.total_sueldo_base;
+          totalContribucionGeneralA2 = this.monetaryKernel.sumarA2([
+            totalContribucionGeneralA2,
+            resumen.total_contribucion_a2
+          ]);
+          totalSueldoBaseGeneralA2 = this.monetaryKernel.sumarA2([
+            totalSueldoBaseGeneralA2,
+            resumen.total_sueldo_base_a2
+          ]);
+          resultado.resumen_general.total_contribucion_general_a2 = totalContribucionGeneralA2;
+          resultado.resumen_general.total_sueldo_base_general_a2 = totalSueldoBaseGeneralA2;
+          resultado.resumen_general.total_contribucion_general = Number(totalContribucionGeneralA2);
+          resultado.resumen_general.total_sueldo_base_general = Number(totalSueldoBaseGeneralA2);
           resultado.resumen_general.fondos_incluidos.push(tipo);
-
-        } catch (error) {
-          console.warn(`[APORTACIONES_FONDOS] Error calculando tipo ${tipo}:`, error instanceof Error ? error.message : String(error));
-          // Continue with other types even if one fails
-        }
       }
 
       return resultado;
@@ -405,11 +459,11 @@ export class AportacionFondoRepository implements IAportacionFondoRepository {
         p.PLAZO, 
         p.PERIODO_C, 
         p.FECHA_C, 
-        p.CAPITAL, 
-        p.INTERES, 
-        p.MONTO, 
-        p.MORATORIOS, 
-        p.TOTAL, 
+        CAST(p.CAPITAL AS VARCHAR(40)) AS CAPITAL_D2,
+        CAST(p.INTERES AS VARCHAR(40)) AS INTERES_D2,
+        CAST(p.MONTO AS VARCHAR(40)) AS MONTO_D2,
+        CAST(p.MORATORIOS AS VARCHAR(40)) AS MORATORIOS_D2,
+        CAST(p.TOTAL AS VARCHAR(40)) AS TOTAL_D2,
         p.RESULTADO, 
         p.TD, 
         p.ORG0, 
@@ -462,7 +516,10 @@ export class AportacionFondoRepository implements IAportacionFondoRepository {
 
             if (!result) {
               console.warn('[APORTACIONES_FONDOS] [AP_S_PCP] Resultado nulo recibido', { ...logContext, duracionMs: duration });
-              resolve([]);
+              reject(new AportacionFondoDomainError(
+                'AP_S_PCP devolvió un resultado nulo',
+                AportacionFondoError.ERROR_FIREBIRD_PROCEDIMIENTO
+              ));
               return;
             }
 
@@ -479,6 +536,11 @@ export class AportacionFondoRepository implements IAportacionFondoRepository {
             console.log('[APORTACIONES_FONDOS] [AP_S_PCP] Mapeando resultados', { ...logContext, totalRegistros: decodedResult.length });
             const prestamos: Prestamo[] = decodedResult.map((row: any, index: number) => {
               try {
+                const capitalD6 = d2ToD6(row.CAPITAL_D2);
+                const interesD6 = d2ToD6(row.INTERES_D2);
+                const montoD6 = d2ToD6(row.MONTO_D2);
+                const moratoriosD6 = d2ToD6(row.MORATORIOS_D2);
+                const totalD6 = d2ToD6(row.TOTAL_D2);
                 return {
                   interno: row.INTERNO || 0,
                   rfc: row.RFC || null,
@@ -488,11 +550,16 @@ export class AportacionFondoRepository implements IAportacionFondoRepository {
                   plazo: row.PLAZO || null,
                   periodo_c: row.PERIODO_C || null,
                   fecha_c: row.FECHA_C ? new Date(row.FECHA_C) : null,
-                  capital: row.CAPITAL || null,
-                  interes: row.INTERES || null,
-                  monto: row.MONTO || null,
-                  moratorios: row.MORATORIOS || null,
-                  total: row.TOTAL || null,
+                  capital: d6ToLegacyNumber(capitalD6),
+                  capital_d6: capitalD6,
+                  interes: d6ToLegacyNumber(interesD6),
+                  interes_d6: interesD6,
+                  monto: d6ToLegacyNumber(montoD6),
+                  monto_d6: montoD6,
+                  moratorios: d6ToLegacyNumber(moratoriosD6),
+                  moratorios_d6: moratoriosD6,
+                  total: d6ToLegacyNumber(totalD6),
+                  total_d6: totalD6,
                   resultado: row.RESULTADO || null,
                   td: row.TD || null,
                   org0: row.ORG0 || null,
@@ -505,12 +572,12 @@ export class AportacionFondoRepository implements IAportacionFondoRepository {
                   norg3: row.NORG3 || null
                 };
               } catch (mapError) {
-                console.warn('[APORTACIONES_FONDOS] [AP_S_PCP] Error mapeando registro', {
+                console.error('[APORTACIONES_FONDOS] [AP_S_PCP] Error mapeando registro', {
                   ...logContext,
                   index,
                   error: mapError instanceof Error ? mapError.message : String(mapError)
                 });
-                return null;
+                throw mapError;
               }
             }).filter((p: Prestamo | null): p is Prestamo => p !== null);
 
@@ -642,11 +709,11 @@ export class AportacionFondoRepository implements IAportacionFondoRepository {
         p.PLAZO, 
         p.PERIODO_C, 
         p.FECHA_C, 
-        p.CAPITAL, 
-        p.MORATORIOS, 
-        p.INTERES, 
-        p.SEGURO, 
-        p.TOTAL, 
+        CAST(p.CAPITAL AS VARCHAR(40)) AS CAPITAL_D2,
+        CAST(p.MORATORIOS AS VARCHAR(40)) AS MORATORIOS_D2,
+        CAST(p.INTERES AS VARCHAR(40)) AS INTERES_D2,
+        CAST(p.SEGURO AS VARCHAR(40)) AS SEGURO_D2,
+        CAST(p.TOTAL AS VARCHAR(40)) AS TOTAL_D2,
         p.RESULTADO, 
         p.CLASE, 
         p.ORG0, 
@@ -707,7 +774,10 @@ export class AportacionFondoRepository implements IAportacionFondoRepository {
 
             if (!result) {
               console.warn('[APORTACIONES_FONDOS] [AP_S_VIV] Resultado nulo recibido', { ...logContext, duracionMs: duration });
-              resolve([]);
+              reject(new AportacionFondoDomainError(
+                'AP_S_VIV devolvió un resultado nulo',
+                AportacionFondoError.ERROR_FIREBIRD_PROCEDIMIENTO
+              ));
               return;
             }
 
@@ -724,6 +794,11 @@ export class AportacionFondoRepository implements IAportacionFondoRepository {
             console.log('[APORTACIONES_FONDOS] [AP_S_VIV] Mapeando resultados', { ...logContext, totalRegistros: decodedResult.length });
             const prestamos: PrestamoMedianoPlazo[] = decodedResult.map((row: any, index: number) => {
               try {
+                const capitalD6 = d2ToD6(row.CAPITAL_D2);
+                const moratoriosD6 = d2ToD6(row.MORATORIOS_D2);
+                const interesD6 = d2ToD6(row.INTERES_D2);
+                const seguroD6 = d2ToD6(row.SEGURO_D2);
+                const totalD6 = d2ToD6(row.TOTAL_D2);
                 return {
                   interno: row.INTERNO || 0,
                   rfc: row.RFC || null,
@@ -733,11 +808,16 @@ export class AportacionFondoRepository implements IAportacionFondoRepository {
                   plazo: row.PLAZO || null,
                   periodo_c: row.PERIODO_C || null,
                   fecha_c: row.FECHA_C ? new Date(row.FECHA_C) : null,
-                  capital: row.CAPITAL || null,
-                  moratorios: row.MORATORIOS || null,
-                  interes: row.INTERES || null,
-                  seguro: row.SEGURO || null,
-                  total: row.TOTAL || null,
+                  capital: d6ToLegacyNumber(capitalD6),
+                  capital_d6: capitalD6,
+                  moratorios: d6ToLegacyNumber(moratoriosD6),
+                  moratorios_d6: moratoriosD6,
+                  interes: d6ToLegacyNumber(interesD6),
+                  interes_d6: interesD6,
+                  seguro: d6ToLegacyNumber(seguroD6),
+                  seguro_d6: seguroD6,
+                  total: d6ToLegacyNumber(totalD6),
+                  total_d6: totalD6,
                   resultado: row.RESULTADO || null,
                   clase: row.CLASE || null,
                   org0: row.ORG0 || null,
@@ -758,12 +838,12 @@ export class AportacionFondoRepository implements IAportacionFondoRepository {
                   fecha_origen: row.FECHA_ORIGEN ? new Date(row.FECHA_ORIGEN) : null
                 };
               } catch (mapError) {
-                console.warn('[APORTACIONES_FONDOS] [AP_S_VIV] Error mapeando registro', {
+                console.error('[APORTACIONES_FONDOS] [AP_S_VIV] Error mapeando registro', {
                   ...logContext,
                   index,
                   error: mapError instanceof Error ? mapError.message : String(mapError)
                 });
-                return null;
+                throw mapError;
               }
             }).filter((p: PrestamoMedianoPlazo | null): p is PrestamoMedianoPlazo => p !== null);
 
@@ -845,15 +925,15 @@ export class AportacionFondoRepository implements IAportacionFondoRepository {
         p.INTERNO, 
         p.NOMBRE, 
         p.NOEMPLEADO, 
-        p.CANTIDAD, 
+        CAST(p.CANTIDAD AS VARCHAR(40)) AS CANTIDAD_D2,
         p.STATUS, 
         p.REFERENCIA_1, 
         p.REFERENCIA_2, 
-        p.CAPITAL_PAGAR, 
-        p.INTERES_PAGAR, 
-        p.INTERES_DIFERIDO_PAGAR, 
-        p.SEGURO_PAGAR, 
-        p.MORATORIO_PAGAR, 
+        CAST(p.CAPITAL_PAGAR AS VARCHAR(40)) AS CAPITAL_PAGAR_D2,
+        CAST(p.INTERES_PAGAR AS VARCHAR(40)) AS INTERES_PAGAR_D2,
+        CAST(p.INTERES_DIFERIDO_PAGAR AS VARCHAR(40)) AS INTERES_DIFERIDO_PAGAR_D2,
+        CAST(p.SEGURO_PAGAR AS VARCHAR(40)) AS SEGURO_PAGAR_D2,
+        CAST(p.MORATORIO_PAGAR AS VARCHAR(40)) AS MORATORIO_PAGAR_D2,
         p.PNO_SOLICITUD, 
         p.PANO, 
         p.PCLAVE_CLASE_PRESTAMO, 
@@ -871,7 +951,7 @@ export class AportacionFondoRepository implements IAportacionFondoRepository {
         p.PRESTAMO_DESC, 
         p.TIPO, 
         p.PERIODO_C, 
-        p.DESCTO, 
+        CAST(p.DESCTO AS VARCHAR(40)) AS DESCTO_D2,
         p.FECHA_C, 
         p.RESULTADO, 
         p.PO, 
@@ -919,7 +999,10 @@ export class AportacionFondoRepository implements IAportacionFondoRepository {
 
             if (!result) {
               console.warn(`[APORTACIONES_FONDOS] [HIPOTECARIOS] Resultado nulo recibido`, { ...logContext, duracionMs: duration });
-              resolve([]);
+              reject(new AportacionFondoDomainError(
+                `${procedimiento} devolvió un resultado nulo`,
+                AportacionFondoError.ERROR_FIREBIRD_PROCEDIMIENTO
+              ));
               return;
             }
 
@@ -936,19 +1019,32 @@ export class AportacionFondoRepository implements IAportacionFondoRepository {
             console.log(`[APORTACIONES_FONDOS] [HIPOTECARIOS] Mapeando resultados`, { ...logContext, totalRegistros: decodedResult.length });
             const prestamos: PrestamoHipotecario[] = decodedResult.map((row: any, index: number) => {
               try {
+                const cantidadD6 = d2ToD6(row.CANTIDAD_D2);
+                const capitalPagarD6 = d2ToD6(row.CAPITAL_PAGAR_D2);
+                const interesPagarD6 = d2ToD6(row.INTERES_PAGAR_D2);
+                const interesDiferidoPagarD6 = d2ToD6(row.INTERES_DIFERIDO_PAGAR_D2);
+                const seguroPagarD6 = d2ToD6(row.SEGURO_PAGAR_D2);
+                const moratorioPagarD6 = d2ToD6(row.MORATORIO_PAGAR_D2);
+                const desctoD6 = d2ToD6(row.DESCTO_D2);
                 return {
                   interno: row.INTERNO || 0,
                   nombre: row.NOMBRE || null,
                   noempleado: row.NOEMPLEADO || null,
-                  cantidad: row.CANTIDAD || null,
+                  cantidad: d6ToLegacyNumber(cantidadD6),
+                  cantidad_d6: cantidadD6,
                   status: row.STATUS || null,
                   referencia_1: row.REFERENCIA_1 || null,
                   referencia_2: row.REFERENCIA_2 || null,
-                  capital_pagar: row.CAPITAL_PAGAR || null,
-                  interes_pagar: row.INTERES_PAGAR || null,
-                  interes_diferido_pagar: row.INTERES_DIFERIDO_PAGAR || null,
-                  seguro_pagar: row.SEGURO_PAGAR || null,
-                  moratorio_pagar: row.MORATORIO_PAGAR || null,
+                  capital_pagar: d6ToLegacyNumber(capitalPagarD6),
+                  capital_pagar_d6: capitalPagarD6,
+                  interes_pagar: d6ToLegacyNumber(interesPagarD6),
+                  interes_pagar_d6: interesPagarD6,
+                  interes_diferido_pagar: d6ToLegacyNumber(interesDiferidoPagarD6),
+                  interes_diferido_pagar_d6: interesDiferidoPagarD6,
+                  seguro_pagar: d6ToLegacyNumber(seguroPagarD6),
+                  seguro_pagar_d6: seguroPagarD6,
+                  moratorio_pagar: d6ToLegacyNumber(moratorioPagarD6),
+                  moratorio_pagar_d6: moratorioPagarD6,
                   pno_solicitud: row.PNO_SOLICITUD || null,
                   pano: row.PANO || null,
                   pclave_clase_prestamo: row.PCLAVE_CLASE_PRESTAMO || null,
@@ -966,7 +1062,8 @@ export class AportacionFondoRepository implements IAportacionFondoRepository {
                   prestamo_desc: row.PRESTAMO_DESC || null,
                   tipo: row.TIPO || null,
                   periodo_c: row.PERIODO_C || null,
-                  descto: row.DESCTO || null,
+                  descto: d6ToLegacyNumber(desctoD6),
+                  descto_d6: desctoD6,
                   fecha_c: row.FECHA_C ? new Date(row.FECHA_C) : null,
                   resultado: row.RESULTADO || null,
                   po: row.PO || null,
@@ -974,12 +1071,12 @@ export class AportacionFondoRepository implements IAportacionFondoRepository {
                   plazo: row.PLAZO || null
                 };
               } catch (mapError) {
-                console.warn(`[APORTACIONES_FONDOS] [HIPOTECARIOS] Error mapeando registro`, {
+                console.error(`[APORTACIONES_FONDOS] [HIPOTECARIOS] Error mapeando registro`, {
                   ...logContext,
                   index,
                   error: mapError instanceof Error ? mapError.message : String(mapError)
                 });
-                return null;
+                throw mapError;
               }
             }).filter((p: PrestamoHipotecario | null): p is PrestamoHipotecario => p !== null);
 
@@ -1023,6 +1120,206 @@ export class AportacionFondoRepository implements IAportacionFondoRepository {
   }
 
   /**
+   * Los periodos terminados son evidencia financiera: se devuelven tal como
+   * fueron persistidos y nunca se mezclan con ORG_PERSONAL vigente.
+   */
+  private async obtenerAportacionesHistoricasCerradas(
+    tipo: TipoFondo,
+    claveOrganica0: string,
+    claveOrganica1: string,
+    periodo: string
+  ): Promise<AportacionIndividual | null> {
+    const quincena = Number(periodo.slice(0, 2));
+    const anio = 2000 + Number(periodo.slice(2, 4));
+    const config = {
+      ahorro: {
+        table: 'IndividualesAhorroHistorico',
+        contributions: 'afae, afaa, NULL AS afe, NULL AS afpe, NULL AS afpa'
+      },
+      vivienda: {
+        table: 'IndividualesViviendaHistorico',
+        contributions: 'NULL AS afae, NULL AS afaa, afe, NULL AS afpe, NULL AS afpa'
+      },
+      prestaciones: {
+        table: 'IndividualesPrestacionesHistorico',
+        contributions: 'NULL AS afae, NULL AS afaa, NULL AS afe, afpe, afpa'
+      },
+      cair: {
+        table: 'IndividualesCairHistorico',
+        contributions: 'NULL AS afae, NULL AS afaa, afe, NULL AS afpe, NULL AS afpa'
+      }
+    }[tipo];
+
+    const pool = await getPool();
+    const result = await pool.request()
+      .input('org0', sql.Char(2), claveOrganica0)
+      .input('org1', sql.Char(2), claveOrganica1)
+      .input('quincena', sql.Int, quincena)
+      .input('anio', sql.Int, anio)
+      .query(`
+        SELECT CASE WHEN EXISTS (
+          SELECT 1
+          FROM afec.BitacoraAfectacionOrg
+          WHERE Entidad = 'AFILIADOS'
+            AND Org0 = @org0
+            AND Org1 = @org1
+            AND Quincena = @quincena
+            AND Anio = @anio
+            AND Accion = 'TERMINADO'
+        ) THEN 1 ELSE 0 END AS Cerrado;
+
+        SELECT interno, nombre, sueldo, quinquenios, otras_prestaciones,
+          sueldo_base, ${config.contributions}, total
+        FROM aportaciones.${config.table}
+        WHERE clave_organica_0 = @org0
+          AND clave_organica_1 = @org1
+          AND quincena = @quincena
+          AND anio = @anio
+        ORDER BY id;
+
+        SELECT s.Organica2, s.Organica3, s.FormulaCalculoVersionId,
+          s.PrecisionPolicy, d.EmpleadoClaveHash, d.DiasLaborados, d.DiasOrigen
+        FROM aportaciones.SnapshotCalculoV2 s
+        INNER JOIN aportaciones.SnapshotCalculoV2Detalle d ON d.SnapshotId = s.SnapshotId
+        WHERE s.Organica0 = @org0
+          AND s.Organica1 = @org1
+          AND s.Quincena = @quincena
+          AND s.Anio = @anio
+          AND s.Estado = 'COMPLETO'
+          AND s.EsCerrado = 1;
+      `);
+    const recordsets = result.recordsets as any[];
+    if (Number(recordsets[0]?.[0]?.Cerrado ?? 0) !== 1) return null;
+
+    const rows = recordsets[1] ?? [];
+    if (rows.length === 0) {
+      throw new AportacionFondoDomainError(
+        `El periodo cerrado ${periodo} no tiene histórico persistido para ${tipo}`,
+        AportacionFondoError.DATOS_NO_ENCONTRADOS
+      );
+    }
+    if (new Set(rows.map((row: any) => Number(row.interno))).size !== rows.length) {
+      throw new AportacionFondoDomainError(
+        `El histórico ${tipo} del periodo ${periodo} contiene internos duplicados`,
+        AportacionFondoError.ERROR_CALCULO_APORTACION
+      );
+    }
+
+    const snapshotRows = recordsets[2] ?? [];
+    const diasSnapshot = new Map<string, { dias: number; origen: string }>();
+    for (const row of snapshotRows) {
+      const hash = String(row.EmpleadoClaveHash ?? '').trim().toUpperCase();
+      const dias = Number(row.DiasLaborados);
+      if (!hash || !Number.isFinite(dias)) continue;
+      const existente = diasSnapshot.get(hash);
+      if (existente && existente.dias !== dias) {
+        throw new AportacionFondoDomainError(
+          `Snapshots históricos contradictorios para el periodo ${periodo}`,
+          AportacionFondoError.ERROR_CALCULO_APORTACION
+        );
+      }
+      diasSnapshot.set(hash, { dias, origen: String(row.DiasOrigen ?? '') });
+    }
+    const scopes: string[] = [...new Set<string>(snapshotRows.map((row: any): string =>
+      `${String(row.Organica2).trim()}|${String(row.Organica3).trim()}`
+    ))];
+    const formulaVersionIds: string[] = [...new Set<string>(snapshotRows.flatMap((row: any): string[] =>
+      row.FormulaCalculoVersionId == null ? [] : [String(row.FormulaCalculoVersionId)]
+    ))];
+    const precisionPolicies: string[] = [...new Set<string>(snapshotRows.flatMap((row: any): string[] => {
+      const policy = String(row.PrecisionPolicy ?? '').trim();
+      return policy ? [policy] : [];
+    }))];
+    if (formulaVersionIds.length > 1 || precisionPolicies.length > 1) {
+      throw new AportacionFondoDomainError(
+        `Snapshots históricos con metadatos contradictorios para el periodo ${periodo}`,
+        AportacionFondoError.ERROR_CALCULO_APORTACION
+      );
+    }
+
+    const datos: AportacionFondo[] = rows.map((row: any): AportacionFondo => {
+      const sueldoD6 = decimalSourceToD6(row.sueldo ?? 0);
+      const quinqueniosD6 = decimalSourceToD6(row.quinquenios ?? 0);
+      const otrasPrestacionesD6 = decimalSourceToD6(row.otras_prestaciones ?? 0);
+      const sueldoBaseD6 = decimalSourceToD6(row.sueldo_base ?? 0);
+      const totalD6 = decimalSourceToD6(row.total ?? 0);
+      const coincidenciasDias = scopes
+        .map((scope) => {
+          const [org2, org3] = scope.split('|');
+          const hash = createHash('sha256')
+            .update(`${periodo}|${claveOrganica0}|${claveOrganica1}|${org2}|${org3}|${Number(row.interno)}`)
+            .digest('hex')
+            .toUpperCase();
+          return diasSnapshot.get(hash);
+        })
+        .filter((value): value is { dias: number; origen: string } => value !== undefined);
+      if (coincidenciasDias.length > 1) {
+        throw new AportacionFondoDomainError(
+          `El interno ${Number(row.interno)} coincide con múltiples snapshots del periodo ${periodo}`,
+          AportacionFondoError.ERROR_CALCULO_APORTACION
+        );
+      }
+      const diasHistoricos = coincidenciasDias[0];
+      const diasAplicados = diasHistoricos?.dias ?? 15;
+      const sueldoProporcionalD6 = this.monetaryKernel.proporcionarBaseA2D6(
+        sueldoD6,
+        String(diasAplicados),
+        '30'
+      );
+      const dato: AportacionFondo = {
+        interno: Number(row.interno),
+        nombre: row.nombre == null ? null : String(row.nombre),
+        sueldo: row.sueldo == null ? null : Number(sueldoD6),
+        quinquenios: row.quinquenios == null ? null : Number(quinqueniosD6),
+        otras_prestaciones: row.otras_prestaciones == null ? null : Number(otrasPrestacionesD6),
+        sueldo_proporcional: Number(sueldoProporcionalD6),
+        sueldo_base: Number(sueldoBaseD6),
+        total: Number(totalD6),
+        tipo,
+        dias_laborados: diasAplicados,
+        dias_laborados_origen: diasHistoricos ? 'historico_snapshot' : 'historico_sin_dias',
+        base_cotizacion_quinquenios: null,
+        quinquenios_aplicado: null,
+        base_cotizacion_quinquenios_d6: null,
+        quinquenios_aplicado_d6: null,
+        sueldo_d6: sueldoD6,
+        quinquenios_d6: quinqueniosD6,
+        otras_prestaciones_d6: otrasPrestacionesD6,
+        sueldo_proporcional_d6: sueldoProporcionalD6,
+        sueldo_base_d6: sueldoBaseD6,
+        total_d6: totalD6
+      };
+      for (const field of ['afae', 'afaa', 'afe', 'afpe', 'afpa'] as const) {
+        if (row[field] == null) continue;
+        const valueD6 = decimalSourceToD6(row[field]);
+        dato[field] = Number(valueD6);
+        dato[`${field}_d6`] = valueD6;
+      }
+      return dato;
+    });
+    const totalContribucionA2 = this.monetaryKernel.agregarA2(datos.map((item) => item.total_d6));
+    const totalSueldoBaseA2 = this.monetaryKernel.agregarA2(datos.map((item) => item.sueldo_base_d6));
+
+    return {
+      tipo,
+      clave_organica_0: claveOrganica0,
+      clave_organica_1: claveOrganica1,
+      datos,
+      resumen: {
+        total_empleados: datos.length,
+        total_contribucion: Number(totalContribucionA2),
+        total_sueldo_base: Number(totalSueldoBaseA2),
+        total_contribucion_a2: totalContribucionA2,
+        total_sueldo_base_a2: totalSueldoBaseA2,
+        componentes_a2: this.calcularComponentesA2(tipo, datos)
+      },
+      precision_policy: precisionPolicies[0] ?? 'HISTORICO_SQL_SIN_POLITICA_REGISTRADA',
+      formula_version_id: formulaVersionIds[0] ?? '0',
+      fuente_datos: 'HISTORICO_SQL'
+    };
+  }
+
+  /**
    * Obtiene registros de ORG_PERSONAL con nombre de PERSONAL
    */
   private async obtenerOrgPersonalConNombre(
@@ -1044,6 +1341,9 @@ export class AportacionFondoRepository implements IAportacionFondoRepository {
         o.SUELDO,
         o.OTRAS_PRESTACIONES,
         o.QUINQUENIOS,
+        CAST(o.SUELDO AS VARCHAR(40)) AS SUELDO_DECIMAL,
+        CAST(o.OTRAS_PRESTACIONES AS VARCHAR(40)) AS OTRAS_PRESTACIONES_DECIMAL,
+        CAST(o.QUINQUENIOS AS VARCHAR(40)) AS QUINQUENIOS_DECIMAL,
         o.ACTIVO,
         o.FECHA_MOV_ALT,
         o.ORGS1,
@@ -1185,9 +1485,12 @@ export class AportacionFondoRepository implements IAportacionFondoRepository {
               clave_organica_1: row.CLAVE_ORGANICA_1 || row.clave_organica_1 || null,
               clave_organica_2: row.CLAVE_ORGANICA_2 || row.clave_organica_2 || null,
               clave_organica_3: row.CLAVE_ORGANICA_3 || row.clave_organica_3 || null,
-              sueldo: row.SUELDO || row.sueldo || null,
-              otras_prestaciones: row.OTRAS_PRESTACIONES || row.otras_prestaciones || null,
-              quinquenios: row.QUINQUENIOS || row.quinquenios || null,
+              sueldo: row.SUELDO ?? row.sueldo ?? null,
+              otras_prestaciones: row.OTRAS_PRESTACIONES ?? row.otras_prestaciones ?? null,
+              quinquenios: row.QUINQUENIOS ?? row.quinquenios ?? null,
+              sueldo_decimal: row.SUELDO_DECIMAL ?? row.sueldo_decimal ?? row.SUELDO ?? row.sueldo ?? null,
+              otras_prestaciones_decimal: row.OTRAS_PRESTACIONES_DECIMAL ?? row.otras_prestaciones_decimal ?? row.OTRAS_PRESTACIONES ?? row.otras_prestaciones ?? null,
+              quinquenios_decimal: row.QUINQUENIOS_DECIMAL ?? row.quinquenios_decimal ?? row.QUINQUENIOS ?? row.quinquenios ?? null,
               activo: row.ACTIVO || row.activo || null,
               fecha_mov_alt: toIsoString(row.FECHA_MOV_ALT || row.fecha_mov_alt),
               orgs1: row.ORGS1 || row.orgs1 || null,
@@ -1226,9 +1529,15 @@ export class AportacionFondoRepository implements IAportacionFondoRepository {
     usarDiasLaboradosNomina = false,
     periodo?: string,
     org0?: string,
-    org1?: string
+    org1?: string,
+    formula?: FormulaCalculo
   ): Promise<AportacionFondo[]> {
-    const porcentajes = await this.obtenerPorcentajeFondoVigente(tipo);
+    const formulaCalculo = formula ?? await this.obtenerFormulaPeriodo(periodo);
+    const diasResolver = new NominaDiasLaboradosResolver(
+      Number(formulaCalculo.parametros.DIAS_DEFAULT_SIN_TXT),
+      Number(formulaCalculo.parametros.DIAS_MIN),
+      Number(formulaCalculo.parametros.DIAS_MAX)
+    );
     const diasContext = usarDiasLaboradosNomina && periodo && org0 && org1
       ? await this.obtenerDiasLaboradosNominaMap(
           registros.map((registro) => registro.rfc).filter(Boolean),
@@ -1239,97 +1548,39 @@ export class AportacionFondoRepository implements IAportacionFondoRepository {
       : { tieneArchivo: false, registros: new Map() };
 
     return registros.map(registro => {
-      const sueldo = registro.sueldo || 0;
-      const otrasPrestaciones = registro.otras_prestaciones || 0;
-      const quinquenios = registro.quinquenios || 0;
-      const diasInfo = this.nominaDiasResolver.resolve(registro.rfc, diasContext, usarDiasLaboradosNomina);
-
-      const sueldoProporcional = roundMoney((sueldo / 30) * diasInfo.dias);
-      const otrasPrestacionesProporcional = roundMoney((otrasPrestaciones / 30) * diasInfo.dias);
-      const quinqueniosAplicado = tipo === 'prestaciones'
-        ? roundMoney(diasInfo.baseCotizacionQuinquenios ?? (quinquenios / 2))
-        : roundMoney((quinquenios / 30) * diasInfo.dias);
-      const sueldoBase = sumMoney([
-        sueldoProporcional,
-        otrasPrestacionesProporcional,
-        quinqueniosAplicado,
-      ]);
-
-      // Debug: verificar que el nombre esté presente
-      const nombre = registro.nombre || null;
-      
-      // Debug (solo LOG_LEVEL=debug) para el primer registro
-      if (process.env.LOG_LEVEL === 'debug' && registros.indexOf(registro) === 0) {
-        console.log('[APORTACIONES_FONDOS] [DEBUG] calcularAportaciones - Primer registro:', {
-          interno: registro.interno,
-          nombre: registro.nombre,
-          tieneNombre: !!registro.nombre
-        });
+      const sueldoFuente = this.decimalFuente(registro.sueldo_decimal ?? registro.sueldo);
+      const otrasPrestacionesFuente = this.decimalFuente(registro.otras_prestaciones_decimal ?? registro.otras_prestaciones);
+      const quinqueniosFuente = this.decimalFuente(registro.quinquenios_decimal ?? registro.quinquenios);
+      const diasInfo = diasResolver.resolve(registro.rfc, diasContext, usarDiasLaboradosNomina);
+      const rfc = this.nominaDiasResolver.normalizeRfc(registro.rfc) ?? 'SIN_RFC';
+      if (diasInfo.origen === 'nomina_sin_coincidencia') {
+        throw new AportacionFondoDomainError(
+          `El RFC ${rfc} no existe en el TXT vigente del período ${periodo}`,
+          AportacionFondoError.NOMINA_RFC_SIN_COINCIDENCIA
+        );
       }
-      
-      if (process.env.LOG_LEVEL === 'debug' && !nombre && registro.interno) {
-        console.warn(`[APORTACIONES_FONDOS] [DEBUG] Registro sin nombre para interno: ${registro.interno}`);
+      if (diasInfo.origen === 'nomina'
+          && (diasInfo.baseCotizacionSueldo == null || diasInfo.baseCotizacionQuinquenios == null)) {
+        throw new AportacionFondoDomainError(
+          `El RFC ${rfc} no tiene BaseCotizacionSueldo y BaseCotizacionQuinquenios válidas en el período ${periodo}`,
+          AportacionFondoError.NOMINA_BASE_COTIZACION_INVALIDA
+        );
       }
-
-      // Calcular aportaciones según el tipo
-      const aportacion: AportacionFondo = {
-        interno: registro.interno,
-        nombre: nombre,
-        sueldo: registro.sueldo,
-        quinquenios: registro.quinquenios,
-        otras_prestaciones: registro.otras_prestaciones,
-        sueldo_base: sueldoBase,
-        total: 0, // Initialize total
-        tipo,
-        dias_laborados: diasInfo.dias,
-        dias_laborados_origen: diasInfo.origen,
-        base_cotizacion_quinquenios: diasInfo.baseCotizacionQuinquenios,
-        quinquenios_aplicado: tipo === 'prestaciones' ? quinqueniosAplicado : null
-      };
-      
-      // Debug (solo LOG_LEVEL=debug): verificar que el nombre se asignó correctamente
-      if (process.env.LOG_LEVEL === 'debug' && registros.indexOf(registro) === 0) {
-        console.log('[APORTACIONES_FONDOS] [DEBUG] Aportacion creada:', {
-          interno: aportacion.interno,
-          nombre: aportacion.nombre,
-          tieneNombre: !!aportacion.nombre
-        });
-      }
-
-      switch (tipo) {
-        case 'ahorro':
-          aportacion.afae = roundMoney(sueldoProporcional * porcentajes.porcentajePatron);
-          aportacion.afaa = roundMoney(
-            sueldoProporcional * (porcentajes.porcentajeAfiliado ?? 0),
-          );
-          aportacion.total = sumMoney([aportacion.afae, aportacion.afaa]);
-          break;
-        
-        case 'vivienda':
-          aportacion.afe = roundMoney(sueldoProporcional * porcentajes.porcentajePatron);
-          aportacion.total = aportacion.afe;
-          break;
-        
-        case 'prestaciones':
-          {
-            const porcentajeAfiliado = porcentajes.porcentajeAfiliado ?? 0;
-            const basePatron = sumMoney([sueldoProporcional, otrasPrestacionesProporcional]);
-            aportacion.afpe = roundMoney(
-              (basePatron * porcentajes.porcentajePatron)
-                + (quinqueniosAplicado * (porcentajes.porcentajePatron + porcentajeAfiliado)),
-            );
-            aportacion.afpa = roundMoney(sueldoProporcional * porcentajeAfiliado);
-          }
-          aportacion.total = sumMoney([aportacion.afpe || 0, aportacion.afpa || 0]);
-          break;
-        
-        case 'cair':
-          aportacion.afe = roundMoney(sueldoProporcional * porcentajes.porcentajePatron);
-          aportacion.total = aportacion.afe;
-          break;
-      }
-
-      return aportacion;
+      return this.aportacionCalculator.calcular(tipo, {
+        interno: Number(registro.interno),
+        nombre: registro.nombre || null,
+        sueldoMensual: sueldoFuente,
+        otrasPrestacionesMensuales: otrasPrestacionesFuente,
+        quinqueniosMensual: quinqueniosFuente,
+        diasLaborados: diasInfo.dias,
+        diasOrigen: diasInfo.origen,
+        baseCotizacionSueldo: diasInfo.baseCotizacionSueldo == null
+          ? null
+          : this.decimalFuente(diasInfo.baseCotizacionSueldo),
+        baseCotizacionQuinquenios: diasInfo.baseCotizacionQuinquenios == null
+          ? null
+          : this.decimalFuente(diasInfo.baseCotizacionQuinquenios)
+      }, formulaCalculo);
     });
   }
 
@@ -1417,26 +1668,39 @@ export class AportacionFondoRepository implements IAportacionFondoRepository {
     }));
   }
 
-  private async obtenerPorcentajeFondoVigente(tipo: TipoFondo): Promise<{ porcentajePatron: number; porcentajeAfiliado: number | null }> {
-    const pool = await getPool();
-    const result = await pool.request()
-      .input('tipoFondo', sql.VarChar(30), tipo)
-      .query(`
-        SELECT TOP 1 PorcentajePatron, PorcentajeAfiliado
-        FROM aportaciones.CatalogoPorcentajeFondo
-        WHERE TipoFondo = @tipoFondo AND Vigente = 1
-        ORDER BY AnioVigencia DESC, CatalogoPorcentajeFondoId DESC
-      `);
-
-    const row = result.recordset[0];
-    if (!row) {
-      throw new Error(`No existe porcentaje vigente para el fondo ${tipo}`);
+  private async obtenerFormulaPeriodo(periodo?: string): Promise<FormulaCalculo> {
+    if (!periodo || !/^\d{4}$/.test(periodo)) {
+      throw new AportacionFondoDomainError(
+        `Periodo inválido para resolver fórmula: ${String(periodo)}`,
+        AportacionFondoError.PARAMETRO_INVALIDO
+      );
     }
+    const quincena = Number(periodo.slice(0, 2));
+    const anio = 2000 + Number(periodo.slice(2, 4));
+    return this.formulaCalculoRepo.obtenerPorPeriodo(anio, quincena);
+  }
 
-    return {
-      porcentajePatron: Number(row.PorcentajePatron),
-      porcentajeAfiliado: row.PorcentajeAfiliado == null ? null : Number(row.PorcentajeAfiliado)
-    };
+  private decimalFuente(value: unknown): string {
+    if (value === null || value === undefined || value === '') return '0';
+    const decimal = String(value).trim();
+    if (!/^[+-]?\d+(?:\.\d{1,9})?$/.test(decimal)) {
+      throw new AportacionFondoDomainError(
+        `Valor decimal de fuente inválido: ${decimal}`,
+        AportacionFondoError.PARAMETRO_INVALIDO
+      );
+    }
+    return decimal;
+  }
+
+  private calcularComponentesA2(
+    tipo: TipoFondo,
+    datos: AportacionFondo[]
+  ): Partial<Record<'afae' | 'afaa' | 'afe' | 'afpe' | 'afpa', ReturnType<AportacionesMonetaryKernel['agregarComponenteA2']>>> {
+    const agregar = (campo: 'afae_d6' | 'afaa_d6' | 'afe_d6' | 'afpe_d6' | 'afpa_d6') =>
+      this.monetaryKernel.agregarComponenteA2(datos.map((item) => String(item[campo] ?? '0')));
+    if (tipo === 'ahorro') return { afae: agregar('afae_d6'), afaa: agregar('afaa_d6') };
+    if (tipo === 'prestaciones') return { afpe: agregar('afpe_d6'), afpa: agregar('afpa_d6') };
+    return { afe: agregar('afe_d6') };
   }
 
   private async obtenerDiasLaboradosNominaMap(
@@ -1446,7 +1710,11 @@ export class AportacionFondoRepository implements IAportacionFondoRepository {
     org1: string,
     scope?: { organica2: string; organica3: string }
   ): Promise<NominaDiasContext> {
-    const registros = new Map<string, { dias: number | null; baseCotizacionQuinquenios: number | null }>();
+    const registros = new Map<string, {
+      dias: number | null;
+      baseCotizacionSueldo: string | null;
+      baseCotizacionQuinquenios: string | null;
+    }>();
     if (!/^\d{4}$/.test(periodo)) {
       return { tieneArchivo: false, fuente: 'default', registros };
     }
@@ -1550,7 +1818,9 @@ export class AportacionFondoRepository implements IAportacionFondoRepository {
       }).join(', ');
 
       const result = await request.query(`
-        SELECT Id,UPPER(LTRIM(RTRIM(RFC))) AS RFC,DiasLaborados,BaseCotizacionQuinquenios
+        SELECT Id,UPPER(LTRIM(RTRIM(RFC))) AS RFC,DiasLaborados,
+          CONVERT(VARCHAR(40), BaseCotizacionSueldo) AS BaseCotizacionSueldo,
+          CONVERT(VARCHAR(40), BaseCotizacionQuinquenios) AS BaseCotizacionQuinquenios
         FROM dbo.NominaAplicacionQnalDetalle
         WHERE CargaId IN (${cargaPlaceholders})
           AND UPPER(LTRIM(RTRIM(RFC))) IN (${placeholders})
@@ -1560,7 +1830,8 @@ export class AportacionFondoRepository implements IAportacionFondoRepository {
       for (const row of result.recordset) {
         const key = this.nominaDiasResolver.normalizeRfc(row.RFC);
         const dias = this.safeNumber(row.DiasLaborados);
-        const baseCotizacionQuinquenios = this.safeNumber(row.BaseCotizacionQuinquenios);
+        const baseCotizacionSueldo = row.BaseCotizacionSueldo == null ? null : String(row.BaseCotizacionSueldo);
+        const baseCotizacionQuinquenios = row.BaseCotizacionQuinquenios == null ? null : String(row.BaseCotizacionQuinquenios);
         if (key) {
           if (registros.has(key) && fuente === 'txt') {
             throw new AportacionFondoDomainError(
@@ -1568,7 +1839,11 @@ export class AportacionFondoRepository implements IAportacionFondoRepository {
               AportacionFondoError.ERROR_CALCULO_APORTACION
             );
           }
-          if (!registros.has(key)) registros.set(key, { dias, baseCotizacionQuinquenios });
+          if (!registros.has(key)) registros.set(key, {
+            dias,
+            baseCotizacionSueldo,
+            baseCotizacionQuinquenios
+          });
         }
       }
     }
@@ -1776,7 +2051,8 @@ export class AportacionFondoRepository implements IAportacionFondoRepository {
         p.TITULAR_ORG3_NOMBRE,
         p.ENTIDAD_MONTO, 
         p.RECIBO_AJUSTE, 
-        p.RECIBO_TOTAL, 
+        p.RECIBO_TOTAL,
+        CAST(p.RECIBO_TOTAL AS VARCHAR(40)) AS RECIBO_TOTAL_D6,
         p.RECIBO_MES_ANO,
         p.RECIBO_FECHA_VENC, 
         p.RECIBO_FOLIO, 
@@ -1863,6 +2139,7 @@ export class AportacionFondoRepository implements IAportacionFondoRepository {
                 entidad_monto: row.ENTIDAD_MONTO !== null && row.ENTIDAD_MONTO !== undefined ? Number(row.ENTIDAD_MONTO) : null,
                 recibo_ajuste: row.RECIBO_AJUSTE !== null && row.RECIBO_AJUSTE !== undefined ? Number(row.RECIBO_AJUSTE) : null,
                 recibo_total: row.RECIBO_TOTAL !== null && row.RECIBO_TOTAL !== undefined ? Number(row.RECIBO_TOTAL) : null,
+                recibo_total_d6: decimalSourceToD6(row.RECIBO_TOTAL_D6),
                 recibo_mes_ano: row.RECIBO_MES_ANO || null,
                 recibo_fecha_venc: row.RECIBO_FECHA_VENC ? new Date(row.RECIBO_FECHA_VENC) : null,
                 recibo_folio: row.RECIBO_FOLIO !== null && row.RECIBO_FOLIO !== undefined ? String(row.RECIBO_FOLIO) : null,
@@ -2046,7 +2323,8 @@ export class AportacionFondoRepository implements IAportacionFondoRepository {
         p.OTROD6, 
         p.TPERCEP, 
         p.TDEDUC,
-        p.TOTAL, 
+        p.TOTAL,
+        CAST(p.TOTAL AS VARCHAR(40)) AS TOTAL_D6,
         p.FIN, 
         p.INICIO, 
         p.ANIO, 
@@ -2167,6 +2445,7 @@ export class AportacionFondoRepository implements IAportacionFondoRepository {
                 tpercep: this.safeNumber(row.TPERCEP),
                 tdeduc: this.safeNumber(row.TDEDUC),
                 total: this.safeNumber(row.TOTAL),
+                total_d6: decimalSourceToD6(row.TOTAL_D6),
                 fin: row.FIN ? new Date(row.FIN) : null,
                 inicio: row.INICIO ? new Date(row.INICIO) : null,
                 anio: this.safeNumber(row.ANIO),
@@ -2304,9 +2583,10 @@ export class AportacionFondoRepository implements IAportacionFondoRepository {
         p.ACTIVO,
         p.NOM_ACTIVO, 
         p.QNA_A, 
-        p.PORCENTAJE_A, 
-        p.DIARIO, 
-        p.GENERAL, 
+        p.PORCENTAJE_A,
+        p.DIARIO,
+        p.GENERAL,
+        CAST(p.GENERAL AS VARCHAR(40)) AS GENERAL_D6,
         p.PORCENTAJE,
         p.PROPORCION, 
         p.MENSAJE, 
@@ -2404,6 +2684,7 @@ export class AportacionFondoRepository implements IAportacionFondoRepository {
                 porcentaje_a: row.PORCENTAJE_A !== null && row.PORCENTAJE_A !== undefined ? Number(row.PORCENTAJE_A) : null,
                 diario: row.DIARIO !== null && row.DIARIO !== undefined ? Number(row.DIARIO) : null,
                 general: row.GENERAL !== null && row.GENERAL !== undefined ? Number(row.GENERAL) : null,
+                general_d6: decimalSourceToD6(row.GENERAL_D6),
                 porcentaje: row.PORCENTAJE !== null && row.PORCENTAJE !== undefined ? Number(row.PORCENTAJE) : null,
                 proporcion: row.PROPORCION !== null && row.PROPORCION !== undefined ? Number(row.PROPORCION) : null,
                 mensaje: row.MENSAJE || null,

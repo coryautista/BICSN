@@ -25,6 +25,7 @@ import { GetPrestamosMedianoPlazoQuery } from '../aportacionesFondos/application
 import { GetPrestamosHipotecariosQuery } from '../aportacionesFondos/application/queries/GetPrestamosHipotecariosQuery.js';
 import { IAportacionFondoRepository } from '../aportacionesFondos/domain/repositories/IAportacionFondoRepository.js';
 import { normalizeClaveOrganica } from '../../utils/organica.js';
+import { PRESTAMOS_PRECISION_POLICY, PRESTAMOS_SOURCE_SCALE, sumD6ToA2 } from '../aportacionesFondos/domain/entities/PrestamoMoney.js';
 
 export default async function aplicacionQuincenalRoutes(app: FastifyInstance) {
   // GET /aplicacion-quincenal/validar-aplicacion-qna-aportaciones
@@ -1006,13 +1007,13 @@ export default async function aplicacionQuincenalRoutes(app: FastifyInstance) {
         transitorioData,
         guarderiasData
       ] = await Promise.all([
-        getAportacionesIndividualesQuery.execute('ahorro', userClave0, userClave1, isEntidad, org0, org1, userId?.toString(), true, periodo).catch(() => null),
-        getAportacionesIndividualesQuery.execute('vivienda', userClave0, userClave1, isEntidad, org0, org1, userId?.toString(), true, periodo).catch(() => null),
-        getAportacionesIndividualesQuery.execute('prestaciones', userClave0, userClave1, isEntidad, org0, org1, userId?.toString(), true, periodo).catch(() => null),
-        getAportacionesIndividualesQuery.execute('cair', userClave0, userClave1, isEntidad, org0, org1, userId?.toString(), true, periodo).catch(() => null),
-        getAguinaldoQuery.execute(userClave0, userClave1, isEntidad, org0, org1, userId?.toString(), true, periodo).catch(() => null),
-        getPensionNominaTransitorioQuery.execute(userClave0, userClave1, isEntidad, org0, org1, userId?.toString(), true, periodo).catch(() => null),
-        getAportacionGuarderiasQuery.execute(userClave0, userClave1, isEntidad, org0, org1, userId?.toString(), true, periodo).catch(() => null)
+        getAportacionesIndividualesQuery.execute('ahorro', userClave0, userClave1, isEntidad, org0, org1, userId?.toString(), true, periodo),
+        getAportacionesIndividualesQuery.execute('vivienda', userClave0, userClave1, isEntidad, org0, org1, userId?.toString(), true, periodo),
+        getAportacionesIndividualesQuery.execute('prestaciones', userClave0, userClave1, isEntidad, org0, org1, userId?.toString(), true, periodo),
+        getAportacionesIndividualesQuery.execute('cair', userClave0, userClave1, isEntidad, org0, org1, userId?.toString(), true, periodo),
+        getAguinaldoQuery.execute(userClave0, userClave1, isEntidad, org0, org1, userId?.toString(), true, periodo),
+        getPensionNominaTransitorioQuery.execute(userClave0, userClave1, isEntidad, org0, org1, userId?.toString(), true, periodo),
+        getAportacionGuarderiasQuery.execute(userClave0, userClave1, isEntidad, org0, org1, userId?.toString(), true, periodo)
       ]);
 
       // Transformar datos al formato esperado
@@ -1029,7 +1030,9 @@ export default async function aplicacionQuincenalRoutes(app: FastifyInstance) {
           usuario_id: userId?.toString() || '',
           total_empleados: ahorroData?.resumen?.total_empleados || 0,
           total_contribucion: ahorroData?.resumen?.total_contribucion || 0,
-          total_sueldo_base: ahorroData?.resumen?.total_sueldo_base || 0
+          total_sueldo_base: ahorroData?.resumen?.total_sueldo_base || 0,
+          total_contribucion_a2: ahorroData?.resumen?.total_contribucion_a2,
+          total_sueldo_base_a2: ahorroData?.resumen?.total_sueldo_base_a2
         },
         detalle: (ahorroData?.datos || []).map(d => ({
           clave_organica_0: org0,
@@ -1044,7 +1047,14 @@ export default async function aplicacionQuincenalRoutes(app: FastifyInstance) {
           sueldo_base: d.sueldo_base || 0,
           afae: d.afae || 0,
           afaa: d.afaa || 0,
-          total: d.total || 0
+          total: d.total || 0,
+          sueldo_d6: d.sueldo_d6,
+          quinquenios_d6: d.quinquenios_d6,
+          otras_prestaciones_d6: d.otras_prestaciones_d6,
+          sueldo_base_d6: d.sueldo_base_d6,
+          afae_d6: d.afae_d6!,
+          afaa_d6: d.afaa_d6!,
+          total_d6: d.total_d6
         }))
       };
 
@@ -1058,7 +1068,9 @@ export default async function aplicacionQuincenalRoutes(app: FastifyInstance) {
           usuario_id: userId?.toString() || '',
           total_empleados: viviendaData?.resumen?.total_empleados || 0,
           total_contribucion: viviendaData?.resumen?.total_contribucion || 0,
-          total_sueldo_base: viviendaData?.resumen?.total_sueldo_base || 0
+          total_sueldo_base: viviendaData?.resumen?.total_sueldo_base || 0,
+          total_contribucion_a2: viviendaData?.resumen?.total_contribucion_a2,
+          total_sueldo_base_a2: viviendaData?.resumen?.total_sueldo_base_a2
         },
         detalle: (viviendaData?.datos || []).map(d => ({
           clave_organica_0: org0,
@@ -1072,7 +1084,15 @@ export default async function aplicacionQuincenalRoutes(app: FastifyInstance) {
           otras_prestaciones: d.otras_prestaciones ?? null,
           sueldo_base: d.sueldo_base || 0,
           afe: d.afe || 0,
-          total: d.total || 0
+          total: d.total || 0,
+          sueldo_d6: d.sueldo_d6,
+          quinquenios_d6: d.quinquenios_d6,
+          otras_prestaciones_d6: d.otras_prestaciones_d6,
+          sueldo_base_d6: d.sueldo_base_d6,
+          afe_d6: d.afe_d6!,
+          fh_d6: d.fh_d6!,
+          fv_d6: d.fv_d6!,
+          total_d6: d.total_d6
         }))
       };
 
@@ -1086,7 +1106,9 @@ export default async function aplicacionQuincenalRoutes(app: FastifyInstance) {
           usuario_id: userId?.toString() || '',
           total_empleados: prestacionesData?.resumen?.total_empleados || 0,
           total_contribucion: prestacionesData?.resumen?.total_contribucion || 0,
-          total_sueldo_base: prestacionesData?.resumen?.total_sueldo_base || 0
+          total_sueldo_base: prestacionesData?.resumen?.total_sueldo_base || 0,
+          total_contribucion_a2: prestacionesData?.resumen?.total_contribucion_a2,
+          total_sueldo_base_a2: prestacionesData?.resumen?.total_sueldo_base_a2
         },
         detalle: (prestacionesData?.datos || []).map(d => ({
           clave_organica_0: org0,
@@ -1096,12 +1118,19 @@ export default async function aplicacionQuincenalRoutes(app: FastifyInstance) {
           interno: d.interno || 0,
           nombre: (d.nombre && typeof d.nombre === 'string' && d.nombre.trim()) ? d.nombre.trim().substring(0, 200) : 'SIN NOMBRE',
           sueldo: d.sueldo || 0,
-          quinquenios: d.quinquenios || 0,
+          quinquenios: d.quinquenios_aplicado ?? d.quinquenios ?? 0,
           otras_prestaciones: d.otras_prestaciones ?? null,
           sueldo_base: d.sueldo_base || 0,
           afpe: d.afpe || 0,
           afpa: d.afpa || 0,
-          total: d.total || 0
+          total: d.total || 0,
+          sueldo_d6: d.sueldo_d6,
+          quinquenios_d6: d.quinquenios_aplicado_d6 ?? d.quinquenios_d6,
+          otras_prestaciones_d6: d.otras_prestaciones_d6,
+          sueldo_base_d6: d.sueldo_base_d6,
+          afpe_d6: d.afpe_d6!,
+          afpa_d6: d.afpa_d6!,
+          total_d6: d.total_d6
         }))
       };
 
@@ -1115,7 +1144,9 @@ export default async function aplicacionQuincenalRoutes(app: FastifyInstance) {
           usuario_id: userId?.toString() || '',
           total_empleados: cairData?.resumen?.total_empleados || 0,
           total_contribucion: cairData?.resumen?.total_contribucion || 0,
-          total_sueldo_base: cairData?.resumen?.total_sueldo_base || 0
+          total_sueldo_base: cairData?.resumen?.total_sueldo_base || 0,
+          total_contribucion_a2: cairData?.resumen?.total_contribucion_a2,
+          total_sueldo_base_a2: cairData?.resumen?.total_sueldo_base_a2
         },
         detalle: (cairData?.datos || []).map(d => ({
           clave_organica_0: org0,
@@ -1129,7 +1160,13 @@ export default async function aplicacionQuincenalRoutes(app: FastifyInstance) {
           otras_prestaciones: d.otras_prestaciones ?? null,
           sueldo_base: d.sueldo_base || 0,
           afe: d.afe || 0,
-          total: d.total || 0
+          total: d.total || 0,
+          sueldo_d6: d.sueldo_d6,
+          quinquenios_d6: d.quinquenios_d6,
+          otras_prestaciones_d6: d.otras_prestaciones_d6,
+          sueldo_base_d6: d.sueldo_base_d6,
+          afe_d6: d.afe_d6!,
+          total_d6: d.total_d6
         }))
       };
 
@@ -1331,9 +1368,9 @@ export default async function aplicacionQuincenalRoutes(app: FastifyInstance) {
         });
       }
 
-      // Llamar al repository para guardar
+      // El flujo desde BD congela obligatoriamente el Snapshot usado al aplicar la QNA.
       const repository = request.diScope.resolve<AplicacionQuincenalRepository>('aplicacionQuincenalRepo');
-      const result = await repository.guardarHistoricoAportaciones(request, parsed.data);
+      const result = await repository.guardarHistoricoAportaciones(request, parsed.data, true);
 
       return reply.code(200).send({
         ok: true,
@@ -1354,7 +1391,13 @@ export default async function aplicacionQuincenalRoutes(app: FastifyInstance) {
       security: [{ bearerAuth: [] }],
       querystring: {
         type: 'object',
+        required: ['liquidacion_snapshot_id'],
         properties: {
+          liquidacion_snapshot_id: {
+            type: 'integer',
+            minimum: 1,
+            description: 'Snapshot quincenal V3 al que se anexan las retenciones'
+          },
           clave_organica_0: {
             type: 'string',
             description: 'Clave orgánica 0 (requerido para usuarios no entidad, ignorado para usuarios entidad)',
@@ -1391,6 +1434,7 @@ export default async function aplicacionQuincenalRoutes(app: FastifyInstance) {
     }
   }, async (request, reply) => {
     try {
+      const liquidacionSnapshotId = Number((request.query as any).liquidacion_snapshot_id);
       const user = (request as any).user;
       const userId = user?.sub;
       const entidades = (user as any).entidades || [false];
@@ -1468,24 +1512,9 @@ export default async function aplicacionQuincenalRoutes(app: FastifyInstance) {
         prestamosMedianoPlazoData,
         prestamosHipotecariosData
       ] = await Promise.all([
-        getPrestamosQuery
-          .execute(userClave0, userClave1, isEntidad, org0, org1, userId?.toString())
-          .catch((e: any) => {
-            request.log?.error?.({ err: e }, 'Error ejecutando GetPrestamosQuery (corto plazo)');
-            return null;
-          }),
-        getPrestamosMedianoPlazoQuery
-          .execute(userClave0, userClave1, isEntidad, org0, org1, userId?.toString())
-          .catch((e: any) => {
-            request.log?.error?.({ err: e }, 'Error ejecutando GetPrestamosMedianoPlazoQuery (mediano plazo)');
-            return null;
-          }),
-        getPrestamosHipotecariosQuery
-          .execute(userClave0, userClave1, isEntidad, false, org0, org1, userId?.toString())
-          .catch((e: any) => {
-            request.log?.error?.({ err: e }, 'Error ejecutando GetPrestamosHipotecariosQuery (hipotecarios)');
-            return null;
-          })
+        getPrestamosQuery.execute(userClave0, userClave1, isEntidad, org0, org1, userId?.toString()),
+        getPrestamosMedianoPlazoQuery.execute(userClave0, userClave1, isEntidad, org0, org1, userId?.toString()),
+        getPrestamosHipotecariosQuery.execute(userClave0, userClave1, isEntidad, false, org0, org1, userId?.toString())
       ]);
 
       // Transformar datos al formato esperado
@@ -1495,6 +1524,7 @@ export default async function aplicacionQuincenalRoutes(app: FastifyInstance) {
       // Transformar PrestamosCortoPlazo (siempre, incluso con 0 registros)
       historicoData.prestamosCortoPlazo = {
         header: {
+          liquidacion_snapshot_id: liquidacionSnapshotId,
           clave_organica_0: org0,
           clave_organica_1: org1,
           quincena,
@@ -1502,7 +1532,10 @@ export default async function aplicacionQuincenalRoutes(app: FastifyInstance) {
           usuario_id: userId?.toString() || 'system',
           total_empleados: prestamosCortoPlazoData?.prestamos?.length || 0,
           total_contribucion: prestamosCortoPlazoData?.prestamos?.reduce((sum: number, p: any) => sum + (typeof p.total === 'number' && !isNaN(p.total) ? p.total : 0), 0) || 0,
-          total_sueldo_base: 0 // No aplica directamente para préstamos
+          total_sueldo_base: 0,
+          total_contribucion_a2: sumD6ToA2(prestamosCortoPlazoData.prestamos.map(p => p.total_d6)),
+          source_scale: PRESTAMOS_SOURCE_SCALE,
+          precision_policy: PRESTAMOS_PRECISION_POLICY
         },
         detalle: (prestamosCortoPlazoData?.prestamos || []).map((d: any) => ({
           clave_organica_0: org0,
@@ -1522,6 +1555,11 @@ export default async function aplicacionQuincenalRoutes(app: FastifyInstance) {
           monto: typeof d.monto === 'number' && !isNaN(d.monto) ? d.monto : 0,
           moratorios: typeof d.moratorios === 'number' && !isNaN(d.moratorios) ? d.moratorios : 0,
           total: typeof d.total === 'number' && !isNaN(d.total) ? d.total : 0,
+          capital_d6: d.capital_d6,
+          interes_d6: d.interes_d6,
+          monto_d6: d.monto_d6,
+          moratorios_d6: d.moratorios_d6,
+          total_d6: d.total_d6,
           resultado: (d.resultado && typeof d.resultado === 'string' && d.resultado.trim()) || 'N/A',
           td: (d.td && typeof d.td === 'string' && d.td.trim()) || 'N/A',
           org0: ((d.org0 && typeof d.org0 === 'string' && d.org0.trim()) || org0).padStart(2, '0').substring(0, 2),
@@ -1538,6 +1576,7 @@ export default async function aplicacionQuincenalRoutes(app: FastifyInstance) {
       // Transformar PrestamosMedianoPlazo (siempre, incluso con 0 registros)
       historicoData.prestamosMedianoPlazo = {
         header: {
+          liquidacion_snapshot_id: liquidacionSnapshotId,
           clave_organica_0: org0,
           clave_organica_1: org1,
           quincena,
@@ -1545,7 +1584,10 @@ export default async function aplicacionQuincenalRoutes(app: FastifyInstance) {
           usuario_id: userId?.toString() || 'system',
           total_empleados: prestamosMedianoPlazoData?.prestamos?.length || 0,
           total_contribucion: prestamosMedianoPlazoData?.prestamos?.reduce((sum: number, p: any) => sum + (typeof p.total === 'number' && !isNaN(p.total) ? p.total : 0), 0) || 0,
-          total_sueldo_base: 0 // No aplica directamente para préstamos
+          total_sueldo_base: 0,
+          total_contribucion_a2: sumD6ToA2(prestamosMedianoPlazoData.prestamos.map(p => p.total_d6)),
+          source_scale: PRESTAMOS_SOURCE_SCALE,
+          precision_policy: PRESTAMOS_PRECISION_POLICY
         },
         detalle: (prestamosMedianoPlazoData?.prestamos || []).map((d: any) => ({
           clave_organica_0: org0,
@@ -1565,6 +1607,11 @@ export default async function aplicacionQuincenalRoutes(app: FastifyInstance) {
           interes: typeof d.interes === 'number' && !isNaN(d.interes) ? d.interes : 0,
           seguro: typeof d.seguro === 'number' && !isNaN(d.seguro) ? d.seguro : 0,
           total: typeof d.total === 'number' && !isNaN(d.total) ? d.total : 0,
+          capital_d6: d.capital_d6,
+          moratorios_d6: d.moratorios_d6,
+          interes_d6: d.interes_d6,
+          seguro_d6: d.seguro_d6,
+          total_d6: d.total_d6,
           resultado: (d.resultado && typeof d.resultado === 'string' && d.resultado.trim()) || 'N/A',
           clase: (d.clase && typeof d.clase === 'string' && d.clase.trim()) || 'N/A',
           desc_clase: (d.desc_clase && typeof d.desc_clase === 'string' && d.desc_clase.trim()) || 'N/A',
@@ -1590,6 +1637,7 @@ export default async function aplicacionQuincenalRoutes(app: FastifyInstance) {
       const computadoraAntiguaInt = prestamosHipotecariosData?.computadora_antigua ? 1 : 0;
       historicoData.prestamosHipotecarios = {
         header: {
+          liquidacion_snapshot_id: liquidacionSnapshotId,
           clave_organica_0: org0,
           clave_organica_1: org1,
           quincena,
@@ -1597,7 +1645,10 @@ export default async function aplicacionQuincenalRoutes(app: FastifyInstance) {
           usuario_id: userId?.toString() || 'system',
           total_empleados: prestamosHipotecariosData?.prestamos?.length || 0,
           total_contribucion: prestamosHipotecariosData?.prestamos?.reduce((sum: number, p: any) => sum + (typeof p.cantidad === 'number' && !isNaN(p.cantidad) ? p.cantidad : 0), 0) || 0,
-          total_sueldo_base: 0 // No aplica directamente para préstamos
+          total_sueldo_base: 0,
+          total_contribucion_a2: sumD6ToA2(prestamosHipotecariosData.prestamos.map(p => p.cantidad_d6)),
+          source_scale: PRESTAMOS_SOURCE_SCALE,
+          precision_policy: PRESTAMOS_PRECISION_POLICY
         },
         detalle: (prestamosHipotecariosData?.prestamos || []).map((d: any) => ({
           clave_organica_0: org0,
@@ -1610,6 +1661,7 @@ export default async function aplicacionQuincenalRoutes(app: FastifyInstance) {
           noempleado: (d.noempleado && typeof d.noempleado === 'string' && d.noempleado.trim()) || 'N/A',
           rfc: (d.rfc && typeof d.rfc === 'string' && d.rfc.trim()) || 'N/A',
           cantidad: typeof d.cantidad === 'number' && !isNaN(d.cantidad) ? d.cantidad : 0,
+          cantidad_d6: d.cantidad_d6,
           status: (d.status && typeof d.status === 'string' && d.status.trim()) || 'N/A',
           referencia_1: (d.referencia_1 && typeof d.referencia_1 === 'string' && d.referencia_1.trim()) || 'N/A',
           referencia_2: (d.referencia_2 && typeof d.referencia_2 === 'string' && d.referencia_2.trim()) || 'N/A',
@@ -1622,6 +1674,7 @@ export default async function aplicacionQuincenalRoutes(app: FastifyInstance) {
           tipo: (d.tipo && typeof d.tipo === 'string' && d.tipo.trim()) || 'N/A',
           periodo_c: (d.periodo_c && typeof d.periodo_c === 'string' && d.periodo_c.trim()) || 'N/A',
           descto: typeof d.descto === 'number' && !isNaN(d.descto) ? d.descto : 0,
+          descto_d6: d.descto_d6,
           fecha_c: d.fecha_c ? new Date(d.fecha_c).toISOString().split('T')[0] : '1900-01-01',
           resultado: (d.resultado && typeof d.resultado === 'string' && d.resultado.trim()) || 'N/A',
           po: (d.po && typeof d.po === 'string' && d.po.trim()) || 'N/A',
@@ -1632,6 +1685,11 @@ export default async function aplicacionQuincenalRoutes(app: FastifyInstance) {
           interes_diferido_pagar: typeof d.interes_diferido_pagar === 'number' && !isNaN(d.interes_diferido_pagar) ? d.interes_diferido_pagar : 0,
           seguro_pagar: typeof d.seguro_pagar === 'number' && !isNaN(d.seguro_pagar) ? d.seguro_pagar : 0,
           moratorio_pagar: typeof d.moratorio_pagar === 'number' && !isNaN(d.moratorio_pagar) ? d.moratorio_pagar : 0,
+          capital_pagar_d6: d.capital_pagar_d6,
+          interes_pagar_d6: d.interes_pagar_d6,
+          interes_diferido_pagar_d6: d.interes_diferido_pagar_d6,
+          seguro_pagar_d6: d.seguro_pagar_d6,
+          moratorio_pagar_d6: d.moratorio_pagar_d6,
           org0: ((d.org0 && typeof d.org0 === 'string' && d.org0.trim()) || org0).padStart(2, '0').substring(0, 2),
           org1: ((d.org1 && typeof d.org1 === 'string' && d.org1.trim()) || org1).padStart(2, '0').substring(0, 2),
           org2: ((d.org2 && typeof d.org2 === 'string' && d.org2.trim()) || '00').padStart(2, '0').substring(0, 2),

@@ -9,10 +9,15 @@ export interface Prestamo {
   periodo_c: string | null;
   fecha_c: Date | null;
   capital: number | null;
+  capital_d6: string | null;
   interes: number | null;
+  interes_d6: string | null;
   monto: number | null;
+  monto_d6: string | null;
   moratorios: number | null;
+  moratorios_d6: string | null;
   total: number | null;
+  total_d6: string | null;
   resultado: string | null;
   td: string | null;
   org0: string | null;
@@ -33,4 +38,3 @@ export interface PrestamosResponse {
   accion: string;
   prestamos: Prestamo[];
 }
-

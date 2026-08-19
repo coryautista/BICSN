@@ -10,6 +10,8 @@ export interface LineaCapturaPeriodoRecord {
   quincena: number;
   anio: number;
   importe: number;
+  importeA2: string;
+  liquidacionSnapshotId: string | null;
   lineaCaptura: string;
   referencia4: string;
   fechaInicioPeriodo: string;
@@ -34,7 +36,8 @@ export interface CreateLineaCapturaPeriodoData {
   periodo: string;
   quincena: number;
   anio: number;
-  importe: number;
+  importeA2: string;
+  liquidacionSnapshotId: string | null;
   lineaCaptura: string;
   referencia4: string;
   fechaInicioPeriodo: string;
@@ -75,6 +78,10 @@ export class LineaCapturaPeriodoRepository {
       quincena: Number(row.Quincena ?? row.quincena),
       anio: Number(row.Anio ?? row.anio),
       importe: Number(row.Importe ?? row.importe),
+      importeA2: this.formatA2(row.ImporteA2 ?? row.importeA2 ?? row.Importe ?? row.importe),
+      liquidacionSnapshotId: row.LiquidacionSnapshotId === null || row.LiquidacionSnapshotId === undefined
+        ? (row.liquidacionSnapshotId === null || row.liquidacionSnapshotId === undefined ? null : String(row.liquidacionSnapshotId))
+        : String(row.LiquidacionSnapshotId),
       lineaCaptura: String(row.LineaCaptura ?? row.lineaCaptura),
       referencia4: String(row.Referencia4 ?? row.referencia4),
       fechaInicioPeriodo: this.formatDate(row.FechaInicioPeriodo ?? row.fechaInicioPeriodo),
@@ -107,7 +114,7 @@ export class LineaCapturaPeriodoRepository {
     }
 
     const result = await request.query(`
-      SELECT TOP 1 *
+      SELECT TOP 1 *, CONVERT(varchar(40), Importe) AS ImporteA2
       FROM pagos.LineaCapturaPeriodo
       WHERE Org0 = @org0
         AND Org1 = @org1
@@ -120,13 +127,26 @@ export class LineaCapturaPeriodoRepository {
     return result.recordset[0] ? this.mapRow(result.recordset[0]) : null;
   }
 
+  async findVigenteBySnapshotId(liquidacionSnapshotId: string): Promise<LineaCapturaPeriodoRecord | null> {
+    const result = await this.mssqlPool.request()
+      .input('liquidacionSnapshotId', sql.BigInt, liquidacionSnapshotId)
+      .query(`
+        SELECT TOP 1 *, CONVERT(varchar(40), Importe) AS ImporteA2
+        FROM pagos.LineaCapturaPeriodo
+        WHERE LiquidacionSnapshotId = @liquidacionSnapshotId
+        ORDER BY CreatedAt DESC
+      `);
+
+    return result.recordset[0] ? this.mapRow(result.recordset[0]) : null;
+  }
+
   async findVigenteActiva(org0: string, org1: string, fechaMexicoHoy: string): Promise<LineaCapturaPeriodoRecord | null> {
     const result = await this.mssqlPool.request()
       .input('org0', sql.Char(2), org0)
       .input('org1', sql.Char(2), org1)
       .input('fechaMexicoHoy', sql.Date, fechaMexicoHoy)
       .query(`
-        SELECT TOP 1 *
+        SELECT TOP 1 *, CONVERT(varchar(40), Importe) AS ImporteA2
         FROM pagos.LineaCapturaPeriodo
         WHERE Org0 = @org0
           AND Org1 = @org1
@@ -324,7 +344,8 @@ export class LineaCapturaPeriodoRepository {
       .input('periodo', sql.Char(4), data.periodo)
       .input('quincena', sql.TinyInt, data.quincena)
       .input('anio', sql.SmallInt, data.anio)
-      .input('importe', sql.Decimal(18, 2), data.importe)
+      .input('importe', sql.Decimal(18, 2), Number(data.importeA2))
+      .input('liquidacionSnapshotId', sql.BigInt, data.liquidacionSnapshotId)
       .input('lineaCaptura', sql.VarChar(15), data.lineaCaptura)
       .input('referencia4', sql.VarChar(4), data.referencia4)
       .input('fechaInicioPeriodo', sql.Date, data.fechaInicioPeriodo)
@@ -343,14 +364,14 @@ export class LineaCapturaPeriodoRepository {
           Org0, Org1, Periodo, Quincena, Anio, Importe, LineaCaptura, Referencia4,
           FechaInicioPeriodo, FechaFinalPeriodo, FechaInicioVigencia, FechaFinVigencia,
           FechaReferenciaValidacion, TipoReferenciaValidacion, FechaLimite, FechaCondensada,
-          MontoCondensado, DigitoVerificador, UsuarioId
+          MontoCondensado, DigitoVerificador, UsuarioId, LiquidacionSnapshotId
         )
         OUTPUT INSERTED.*
         VALUES (
           @org0, @org1, @periodo, @quincena, @anio, @importe, @lineaCaptura, @referencia4,
           @fechaInicioPeriodo, @fechaFinalPeriodo, @fechaInicioVigencia, @fechaFinVigencia,
           @fechaReferenciaValidacion, @tipoReferenciaValidacion, @fechaLimite, @fechaCondensada,
-          @montoCondensado, @digitoVerificador, @usuarioId
+          @montoCondensado, @digitoVerificador, @usuarioId, @liquidacionSnapshotId
         )
       `);
 
@@ -363,5 +384,12 @@ export class LineaCapturaPeriodoRepository {
 
   private formatDateTime(value: unknown): string | null {
     return formatSqlDateTimeMx(value);
+  }
+
+  private formatA2(value: unknown): string {
+    const text = String(value ?? '').trim();
+    if (/^\d+\.\d{2}$/.test(text)) return text;
+    const numeric = Number(text);
+    return Number.isFinite(numeric) ? numeric.toFixed(2) : text;
   }
 }

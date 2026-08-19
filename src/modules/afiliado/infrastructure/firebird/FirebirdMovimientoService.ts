@@ -7,6 +7,7 @@ import type { Movimiento } from '../../../movimiento/movimiento.repo.js';
 import type { Afiliado } from '../../domain/entities/Afiliado.js';
 import pino from 'pino';
 import { resolverFechaEfectivaMovimiento } from '../../domain/services/MovimientoFechaPolicy.js';
+import { resolverSueldoFirebirdCategoriaPuesto } from '../../domain/services/SueldoCategoriaPuestoPolicy.js';
 
 const logger = pino({
   name: 'firebirdMovimientoService',
@@ -977,16 +978,22 @@ export async function obtenerDatosMovimiento(
       }
       
       const afiliadoOrg = afiliadosOrg[0]; // Tomar el primero
+      const ingresoBrutoMensual = afiliadoOrg.sueldo || 0;
+      const porcentaje = afiliadoOrg.porcentaje || 0;
       
       return {
-        sueldo: afiliadoOrg.sueldo || 0,
+        sueldo: resolverSueldoFirebirdCategoriaPuesto(
+          codigoMovimiento,
+          ingresoBrutoMensual,
+          porcentaje,
+        ),
         q: afiliadoOrg.quinquenios || 0,
         org0: afiliadoOrg.claveOrganica0 || '',
         org1: afiliadoOrg.claveOrganica1 || '',
         org2: afiliadoOrg.claveOrganica2 || null,
         org3: afiliadoOrg.claveOrganica3 || null,
         bc: afiliadoOrg.bc || 'C',
-        porc: afiliadoOrg.porcentaje || 0
+        porc: porcentaje
       };
     } else {
       // BA, LI, LT, LB: datos de Movimiento

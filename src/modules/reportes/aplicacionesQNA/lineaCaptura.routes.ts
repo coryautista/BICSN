@@ -2,6 +2,7 @@ import { FastifyInstance } from 'fastify';
 import { requireAuth } from '../../auth/auth.middleware.js';
 import { handleAplicacionesQNAError } from './infrastructure/errorHandler.js';
 import { LineaCapturaParamsSchema, LineaCapturaPeriodoBodySchema, LineaCapturaPeriodoQuerySchema } from './aplicacionesQNA.schemas.js';
+import type { ILiquidacionQnaRepository } from '../../liquidacionQna/domain/repositories/ILiquidacionQnaRepository.js';
 import { GenerateLineaCapturaPeriodoCommand } from './application/commands/GenerateLineaCapturaPeriodoCommand.js';
 import { GenerateLineaCapturaQuery } from './application/queries/GenerateLineaCapturaQuery.js';
 import { GetLineaCapturaPeriodoQuery } from './application/queries/GetLineaCapturaPeriodoQuery.js';
@@ -34,6 +35,8 @@ function lineaCapturaPeriodoResponseSchema() {
       quincena: { type: 'number' },
       anio: { type: 'number' },
       importe: { type: 'number' },
+      importeA2: { type: 'string' },
+      liquidacionSnapshotId: { type: 'string', nullable: true },
       lineaCaptura: { type: 'string' },
       referencia4: { type: 'string' },
       fechaInicioPeriodo: { type: 'string' },
@@ -59,7 +62,7 @@ export async function lineaCapturaRoutes(fastify: FastifyInstance) {
   fastify.post('/linea-captura-periodo', {
     preHandler: [requireAuth],
     schema: {
-      description: 'Recupera una Línea de Pago que no pudo generarse después del COMMIT Firebird. Calcula el importe desde históricos y finaliza la bitácora pendiente sin reaplicar la QNA.',
+      description: 'Genera o recupera una Línea de Pago. Con liquidacionSnapshotId exige el snapshot oficial COMPLETO y usa exactamente TotalGeneralA2; sin ID conserva el cálculo histórico legacy.',
       summary: 'Recuperar Línea de Pago pendiente',
       tags: ['reportes', 'aplicaciones-qna'],
       security: [{ bearerAuth: [] }],
@@ -68,6 +71,7 @@ export async function lineaCapturaRoutes(fastify: FastifyInstance) {
         required: ['periodo'],
         properties: {
           periodo: { type: 'string', pattern: '^\\d{4}$', description: 'Periodo QQAA, ejemplo 1026' },
+          liquidacionSnapshotId: { type: 'string', pattern: '^[1-9]\\d*$', description: 'Snapshot oficial COMPLETO de liquidación QNA' },
           idOrg0: { type: 'string', pattern: '^[A-Za-z0-9]{1,2}$' },
           idOrg1: { type: 'string', pattern: '^[A-Za-z0-9]{1,2}$' }
         }
@@ -127,13 +131,18 @@ export async function lineaCapturaRoutes(fastify: FastifyInstance) {
       }
 
       const command = request.diScope.resolve<GenerateLineaCapturaPeriodoCommand>('generateLineaCapturaPeriodoCommand');
-      const result = await command.execute({
+      const commandParams = {
         org0: org.org0,
         org1: org.org1,
         periodo: parsed.data.periodo,
         usuarioId: user?.sub?.toString() ?? user?.id?.toString(),
         finalizarPendiente: true
-      });
+      };
+      const result = await command.executeFromSnapshot({ ...commandParams, liquidacionSnapshotId: parsed.data.liquidacionSnapshotId });
+      const liquidacionQnaRepo = request.diScope.resolve<ILiquidacionQnaRepository>('liquidacionQnaRepo');
+      await liquidacionQnaRepo.appendProcessTransition(parsed.data.liquidacionSnapshotId, 'LINEA_CONFIRMADA', 'Línea de pago recuperada', commandParams.usuarioId!);
+      await liquidacionQnaRepo.appendProcessTransition(parsed.data.liquidacionSnapshotId, 'REVISA_PROGRAMADA', 'Tarea REVISA recuperada', commandParams.usuarioId!);
+      await liquidacionQnaRepo.appendProcessTransition(parsed.data.liquidacionSnapshotId, 'TERMINADO', 'Aplicación QNA recuperada', commandParams.usuarioId!);
       try {
         await registrarSiguienteQnaSiDisponible(
           org.org0,
@@ -173,16 +182,28 @@ export async function lineaCapturaRoutes(fastify: FastifyInstance) {
         });
       }
       if (error?.message === 'LINEA_CAPTURA_IMPORTE_MISMATCH') {
-        const importeLinea = Number(error.details?.importeLinea ?? 0).toLocaleString('es-MX', { style: 'currency', currency: 'MXN' });
-        const importeHistorico = Number(error.details?.importeHistorico ?? 0).toLocaleString('es-MX', { style: 'currency', currency: 'MXN' });
+        const importeLinea = error.details?.importeLineaA2 ?? error.details?.importeLinea ?? '0.00';
+        const importeOrigen = error.details?.importeSnapshotA2 ?? error.details?.importeHistorico ?? '0.00';
         return reply.code(409).send({
           success: false,
           error: {
             code: 'LINEA_CAPTURA_IMPORTE_MISMATCH',
-            message: `Ya existe una Línea de Pago vigente para este periodo con importe ${importeLinea}. El histórico aplicado suma ${importeHistorico}. Requiere revisión administrativa.`,
+            message: `Ya existe una Línea de Pago vigente con importe A2 ${importeLinea}; el origen solicitado indica ${importeOrigen}. Requiere revisión administrativa.`,
             timestamp: new Date().toISOString()
           }
         });
+      }
+      if (error?.message === 'QNA_SNAPSHOT_NOT_OFFICIAL_COMPLETE') {
+        return reply.code(409).send({ success: false, error: { code: error.message, message: 'El snapshot no existe o no es el snapshot oficial COMPLETO y aprobado.', timestamp: new Date().toISOString() } });
+      }
+      if (error?.message === 'QNA_SNAPSHOT_SCOPE_MISMATCH') {
+        return reply.code(409).send({ success: false, error: { code: error.message, message: 'El snapshot oficial no corresponde al periodo u orgánicas solicitados.', timestamp: new Date().toISOString() } });
+      }
+      if (error?.message === 'QNA_SNAPSHOT_TOTAL_INVALID') {
+        return reply.code(409).send({ success: false, error: { code: error.message, message: 'El TotalGeneralA2 del snapshot no es un importe A2 positivo válido.', timestamp: new Date().toISOString() } });
+      }
+      if (error?.message === 'LINEA_CAPTURA_SNAPSHOT_CONFLICT') {
+        return reply.code(409).send({ success: false, error: { code: error.message, message: 'Ya existe una Línea de Pago vigente para el periodo asociada a otro snapshot.', details: error.details, timestamp: new Date().toISOString() } });
       }
       const errorMessage = String(error?.message || '');
       if (errorMessage.includes('Invalid object name') || errorMessage.includes('Invalid column name')) {

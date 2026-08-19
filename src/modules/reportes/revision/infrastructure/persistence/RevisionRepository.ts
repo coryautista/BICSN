@@ -5,6 +5,7 @@ import {
   FONDOS_REVISION,
   CatalogoRevisionActivo,
   ImportesRevision,
+  ImportesRevisionPersistencia,
   GuardarAjusteRevisionData,
   GuardarAjusteRevisionResultado,
   ParametrosReporteRevision,
@@ -13,11 +14,15 @@ import {
   TipoFondoLiberacionPcp,
   crearImportesRevision
 } from '../../domain/Revision.types.js';
+import {
+  resolverConcepto2Snapshot,
+  RevisionQnaSnapshotRecord
+} from '../../domain/RevisionConcepto2Snapshot.js';
 
 export interface GuardarRevisionParams {
   tarea: RevisionTarea;
   numeroConcepto: number;
-  importes: ImportesRevision;
+  importes: ImportesRevisionPersistencia;
 }
 
 export interface GuardarRevisionResultado {
@@ -55,6 +60,7 @@ export class RevisionRepository {
       .input('org3', sql.Char(2), params.org3)
       .input('periodo', sql.Char(4), params.periodo)
       .input('usuarioId', sql.UniqueIdentifier, params.usuarioId)
+      .input('liquidacionSnapshotId', sql.BigInt, params.liquidacionSnapshotId)
       .query(`
         SET XACT_ABORT ON;
         BEGIN TRANSACTION;
@@ -70,18 +76,19 @@ export class RevisionRepository {
         IF @IdRevisionTarea IS NULL
         BEGIN
           INSERT INTO conciliacion.RevisionTarea (
-            Organica0, Organica1, Organica2, Organica3, Periodo, UsuarioId
-          ) VALUES (@org0, @org1, @org2, @org3, @periodo, @usuarioId);
+            Organica0, Organica1, Organica2, Organica3, Periodo, UsuarioId, LiquidacionSnapshotId
+          ) VALUES (@org0, @org1, @org2, @org3, @periodo, @usuarioId, @liquidacionSnapshotId);
           SET @IdRevisionTarea = SCOPE_IDENTITY();
         END;
         ELSE
         BEGIN
           UPDATE conciliacion.RevisionTarea
-          SET Estatus = CASE WHEN Estatus = 'ERROR' THEN 'PENDIENTE' ELSE Estatus END,
-              Intentos = CASE WHEN Estatus = 'ERROR' THEN 0 ELSE Intentos END,
-              ProximoIntento = CASE WHEN Estatus = 'ERROR' THEN NULL ELSE ProximoIntento END,
-              Error = CASE WHEN Estatus = 'ERROR' THEN NULL ELSE Error END,
-              UsuarioId = @usuarioId
+          SET Estatus = CASE WHEN Estatus = 'ERROR' OR ISNULL(LiquidacionSnapshotId, -1) <> @liquidacionSnapshotId THEN 'PENDIENTE' ELSE Estatus END,
+              Intentos = CASE WHEN Estatus = 'ERROR' OR ISNULL(LiquidacionSnapshotId, -1) <> @liquidacionSnapshotId THEN 0 ELSE Intentos END,
+              ProximoIntento = CASE WHEN Estatus = 'ERROR' OR ISNULL(LiquidacionSnapshotId, -1) <> @liquidacionSnapshotId THEN NULL ELSE ProximoIntento END,
+              Error = CASE WHEN Estatus = 'ERROR' OR ISNULL(LiquidacionSnapshotId, -1) <> @liquidacionSnapshotId THEN NULL ELSE Error END,
+              UsuarioId = @usuarioId,
+              LiquidacionSnapshotId = @liquidacionSnapshotId
           WHERE IdRevisionTarea = @IdRevisionTarea;
         END;
 
@@ -90,6 +97,48 @@ export class RevisionRepository {
       `);
 
     return Number(resultado.recordset[0].IdRevisionTarea);
+  }
+
+  async resolverSnapshotOficialParaTarea(params: ParametrosReporteRevision): Promise<string> {
+    const quincena = params.periodo.slice(0, 2);
+    const anio = `20${params.periodo.slice(2, 4)}`;
+    const resultado = await this.mssqlPool.request()
+      .input('org0', sql.Char(2), params.org0)
+      .input('org1', sql.Char(2), params.org1)
+      .input('org2', sql.Char(2), params.org2)
+      .input('org3', sql.Char(2), params.org3)
+      .input('quincena', sql.VarChar(2), quincena)
+      .input('anio', sql.VarChar(4), anio)
+      .query(`
+        SELECT CONVERT(VARCHAR(30), s.LiquidacionSnapshotId) AS LiquidacionSnapshotId
+        FROM liquidacion.QnaSnapshotOficialActual o
+        INNER JOIN liquidacion.QnaSnapshot s ON s.LiquidacionSnapshotId = o.LiquidacionSnapshotId
+        INNER JOIN liquidacion.QnaSnapshotSeleccionEvento e
+          ON e.QnaSnapshotSeleccionEventoId = o.QnaSnapshotSeleccionEventoId
+          AND e.QnaProcesoId = o.QnaProcesoId
+          AND e.LiquidacionSnapshotId = o.LiquidacionSnapshotId
+        WHERE s.Estado = 'COMPLETO'
+          AND s.Anio = @anio AND s.Quincena = @quincena
+          AND s.Organica0 = @org0 AND s.Organica1 = @org1
+          AND s.Organica2 = @org2 AND s.Organica3 = @org3
+          AND (SELECT COUNT(*) FROM liquidacion.QnaSnapshotFuente f
+            WHERE f.LiquidacionSnapshotId = s.LiquidacionSnapshotId) = 10
+          AND (SELECT COUNT(*) FROM liquidacion.QnaSnapshotFuente f
+            WHERE f.LiquidacionSnapshotId = s.LiquidacionSnapshotId AND f.Requerida = 1
+              AND ((f.Estado = 'COMPLETE' AND f.Registros > 0 AND f.HashFuente IS NOT NULL)
+                OR (f.Estado = 'NOT_APPLICABLE' AND f.Registros = 0 AND f.NotApplicableAprobado = 1
+                  AND f.AprobadoPor IS NOT NULL AND f.Evidencia IS NOT NULL))) = 10
+          AND (SELECT TOP (1) d.Decision FROM liquidacion.QnaSnapshotDecision d
+            WHERE d.LiquidacionSnapshotId = s.LiquidacionSnapshotId
+            ORDER BY d.FechaCreacion DESC, d.QnaSnapshotDecisionId DESC) = 'APROBADO';
+      `);
+    if (resultado.recordset.length === 0) {
+      throw new Error(`REVISION_QNA_SNAPSHOT_OFICIAL_NO_ENCONTRADO: ${params.periodo}`);
+    }
+    if (resultado.recordset.length !== 1) {
+      throw new Error(`REVISION_QNA_SNAPSHOT_SCOPE_AMBIGUO: ${params.periodo}`);
+    }
+    return String(resultado.recordset[0].LiquidacionSnapshotId);
   }
 
   async recuperarInterrumpidas(): Promise<void> {
@@ -107,7 +156,7 @@ export class RevisionRepository {
     const resultado = await this.mssqlPool.request().query(`
       ;WITH siguiente AS (
         SELECT TOP (1) *
-        FROM conciliacion.RevisionTarea WITH (UPDLOCK, READPAST, ROWLOCK)
+        FROM conciliacion.RevisionTarea WITH (UPDLOCK, READPAST, READCOMMITTEDLOCK, ROWLOCK)
         WHERE Intentos < 3
           AND (
             (Estatus = 'PENDIENTE' AND (ProximoIntento IS NULL OR ProximoIntento <= SYSDATETIME()))
@@ -126,7 +175,8 @@ export class RevisionRepository {
       OUTPUT INSERTED.IdRevisionTarea, INSERTED.Organica0, INSERTED.Organica1,
         INSERTED.Organica2, INSERTED.Organica3, INSERTED.Periodo,
         CONVERT(NVARCHAR(36), INSERTED.UsuarioId) AS UsuarioId, INSERTED.Intentos,
-        CONVERT(NVARCHAR(36), INSERTED.ClaimToken) AS ClaimToken;
+        CONVERT(NVARCHAR(36), INSERTED.ClaimToken) AS ClaimToken,
+        CONVERT(VARCHAR(30), INSERTED.LiquidacionSnapshotId) AS LiquidacionSnapshotId;
     `);
 
     const row = resultado.recordset[0];
@@ -140,7 +190,8 @@ export class RevisionRepository {
       periodo: String(row.Periodo).trim(),
       usuarioId: String(row.UsuarioId),
       intentos: Number(row.Intentos),
-      claimToken: String(row.ClaimToken)
+      claimToken: String(row.ClaimToken),
+      liquidacionSnapshotId: row.LiquidacionSnapshotId === null ? null : String(row.LiquidacionSnapshotId)
     };
   }
 
@@ -191,6 +242,83 @@ export class RevisionRepository {
       throw new Error(`APLICACION_QUINCENAL_HISTORICO_NO_ENCONTRADO: ${tarea.periodo}`);
     }
     return { importes: this.mapearImportes(row), registros: Number(row.RegistrosOrigen || 0) };
+  }
+
+  async calcularAplicacionQuincenalSnapshot(tarea: RevisionTarea) {
+    if (!tarea.liquidacionSnapshotId) {
+      throw new Error('REVISION_QNA_SNAPSHOT_ID_REQUERIDO');
+    }
+    const resultado = await this.mssqlPool.request()
+      .input('id', sql.BigInt, tarea.liquidacionSnapshotId)
+      .query(`
+        SELECT CONVERT(VARCHAR(30), s.LiquidacionSnapshotId) AS LiquidacionSnapshotId,
+          s.Estado, s.Anio, s.Quincena, s.Organica0, s.Organica1, s.Organica2, s.Organica3,
+          s.Revision, s.HashContenido, s.PrecisionPolicy,
+          CASE WHEN e.QnaSnapshotSeleccionEventoId IS NULL THEN CAST(0 AS BIT) ELSE CAST(1 AS BIT) END AS EsOficial,
+          d.Decision AS UltimaDecision,
+          (SELECT COUNT(*) FROM liquidacion.QnaSnapshotFuente f
+            WHERE f.LiquidacionSnapshotId = s.LiquidacionSnapshotId) AS Fuentes,
+          (SELECT COUNT(*) FROM liquidacion.QnaSnapshotFuente f
+            WHERE f.LiquidacionSnapshotId = s.LiquidacionSnapshotId AND f.Requerida = 1
+              AND ((f.Estado = 'COMPLETE' AND f.Registros > 0 AND f.HashFuente IS NOT NULL)
+                OR (f.Estado = 'NOT_APPLICABLE' AND f.Registros = 0 AND f.NotApplicableAprobado = 1
+                  AND f.AprobadoPor IS NOT NULL AND f.Evidencia IS NOT NULL))) AS FuentesCompletas,
+          t.Registros,
+          CONVERT(VARCHAR(40), t.CairA2) AS CairA2,
+          CONVERT(VARCHAR(40), t.FraA2) AS FraA2,
+          CONVERT(VARCHAR(40), t.FreA2) AS FreA2,
+          CONVERT(VARCHAR(40), t.PrestacionesA2) AS PrestacionesA2,
+          CONVERT(VARCHAR(40), t.FhA2) AS FhA2,
+          CONVERT(VARCHAR(40), t.FvA2) AS FvA2,
+          CONVERT(VARCHAR(40), t.ViviendaA2) AS ViviendaA2,
+          CONVERT(VARCHAR(40), t.FaaA2) AS FaaA2,
+          CONVERT(VARCHAR(40), t.FaeA2) AS FaeA2,
+          CONVERT(VARCHAR(40), t.FatA2) AS FatA2,
+          CONVERT(VARCHAR(40), t.FaiA2) AS FaiA2
+        FROM liquidacion.QnaSnapshot s
+        LEFT JOIN liquidacion.QnaSnapshotTotal t ON t.LiquidacionSnapshotId = s.LiquidacionSnapshotId
+        LEFT JOIN liquidacion.QnaSnapshotOficialActual o
+          ON o.LiquidacionSnapshotId = s.LiquidacionSnapshotId
+        LEFT JOIN liquidacion.QnaSnapshotSeleccionEvento e
+          ON e.QnaSnapshotSeleccionEventoId = o.QnaSnapshotSeleccionEventoId
+          AND e.QnaProcesoId = o.QnaProcesoId
+          AND e.LiquidacionSnapshotId = o.LiquidacionSnapshotId
+        OUTER APPLY (SELECT TOP (1) d.Decision FROM liquidacion.QnaSnapshotDecision d
+          WHERE d.LiquidacionSnapshotId = s.LiquidacionSnapshotId
+          ORDER BY d.FechaCreacion DESC, d.QnaSnapshotDecisionId DESC) d
+        WHERE s.LiquidacionSnapshotId = @id;
+      `);
+    const row = resultado.recordset[0];
+    const snapshot: RevisionQnaSnapshotRecord | null = row ? {
+      liquidacionSnapshotId: String(row.LiquidacionSnapshotId),
+      estado: String(row.Estado),
+      esOficial: row.EsOficial === true || row.EsOficial === 1,
+      ultimaDecision: row.UltimaDecision === null ? null : String(row.UltimaDecision),
+      fuentes: row.Fuentes,
+      fuentesCompletas: row.FuentesCompletas,
+      anio: row.Anio,
+      quincena: row.Quincena,
+      organica0: String(row.Organica0).trim(),
+      organica1: String(row.Organica1).trim(),
+      organica2: String(row.Organica2).trim(),
+      organica3: String(row.Organica3).trim(),
+      registros: row.Registros,
+      revision: row.Revision,
+      hashContenido: String(row.HashContenido),
+      precisionPolicy: String(row.PrecisionPolicy),
+      cairA2: row.CairA2,
+      fraA2: row.FraA2,
+      freA2: row.FreA2,
+      prestacionesA2: row.PrestacionesA2,
+      fhA2: row.FhA2,
+      fvA2: row.FvA2,
+      viviendaA2: row.ViviendaA2,
+      faaA2: row.FaaA2,
+      faeA2: row.FaeA2,
+      fatA2: row.FatA2,
+      faiA2: row.FaiA2
+    } : null;
+    return resolverConcepto2Snapshot(tarea, snapshot);
   }
 
   async calcularAltasBajas(
@@ -367,7 +495,7 @@ export class RevisionRepository {
       `),
       crearRequest().query(`
         SELECT r.IdRevision, c.numeroConcepto, c.Concepto,
-          r.CAIR, r.FRA, r.FRE, r.FH, r.FV, r.FAA, r.FAE, r.FAT, r.FAI,
+          r.CAIR, r.FRA, r.FRE, r.PRESTACIONES, r.FH, r.FV, r.VIVIENDA, r.FAA, r.FAE, r.FAT, r.FAI,
           r.Estatus, r.FechaAlta, r.FechaActualizacion
         FROM conciliacion.Revision r
         INNER JOIN reportes.catalogoRevision c
@@ -394,8 +522,10 @@ export class RevisionRepository {
           cair: this.redondear(row.CAIR),
           fra: this.redondear(row.FRA),
           fre: this.redondear(row.FRE),
+          prestaciones: this.redondear(row.PRESTACIONES),
           fh: this.redondear(row.FH),
           fv: this.redondear(row.FV),
+          vivienda: this.redondear(row.VIVIENDA),
           faa: this.redondear(row.FAA),
           fae: this.redondear(row.FAE),
           fat: this.redondear(row.FAT),
@@ -485,7 +615,8 @@ export class RevisionRepository {
           periodo: params.periodo,
           usuarioId: params.usuarioId,
           intentos: 0,
-          claimToken: ''
+          claimToken: '',
+          liquidacionSnapshotId: null
         },
         numeroConcepto: 14,
         importes: params.importes
@@ -529,7 +660,19 @@ export class RevisionRepository {
         .input('periodo', sql.Char(4), params.tarea.periodo)
         .input('idCatalogo', sql.Int, idCatalogo);
       const existente = await request.query(`
-        SELECT * FROM conciliacion.Revision WITH (UPDLOCK, HOLDLOCK)
+        SELECT *,
+          CONVERT(VARCHAR(40), CAIR) AS CAIR_A2,
+          CONVERT(VARCHAR(40), FRA) AS FRA_A2,
+          CONVERT(VARCHAR(40), FRE) AS FRE_A2,
+          CONVERT(VARCHAR(40), PRESTACIONES) AS PRESTACIONES_A2,
+          CONVERT(VARCHAR(40), FH) AS FH_A2,
+          CONVERT(VARCHAR(40), FV) AS FV_A2,
+          CONVERT(VARCHAR(40), VIVIENDA) AS VIVIENDA_A2,
+          CONVERT(VARCHAR(40), FAA) AS FAA_A2,
+          CONVERT(VARCHAR(40), FAE) AS FAE_A2,
+          CONVERT(VARCHAR(40), FAT) AS FAT_A2,
+          CONVERT(VARCHAR(40), FAI) AS FAI_A2
+        FROM conciliacion.Revision WITH (UPDLOCK, HOLDLOCK)
         WHERE Organica0 = @org0 AND Organica1 = @org1
           AND Organica2 = @org2 AND Organica3 = @org3
           AND Periodo = @periodo AND IdCatalogoRevision = @idCatalogo;
@@ -540,21 +683,25 @@ export class RevisionRepository {
         const resultado = await insert.query(`
           INSERT INTO conciliacion.Revision (
             Organica0, Organica1, Organica2, Organica3, Periodo, IdCatalogoRevision,
-            CAIR, FRA, FRE, FH, FV, FAA, FAE, FAT, FAI, Estatus, Usuario
+             CAIR, FRA, FRE, PRESTACIONES, FH, FV, VIVIENDA, FAA, FAE, FAT, FAI, Estatus, Usuario, LiquidacionSnapshotId
           ) OUTPUT INSERTED.IdRevision VALUES (
             @org0, @org1, @org2, @org3, @periodo, @idCatalogo,
-            @CAIR, @FRA, @FRE, @FH, @FV, @FAA, @FAE, @FAT, @FAI, 'A', @usuarioId
+             @CAIR, @FRA, @FRE, @PRESTACIONES, @FH, @FV, @VIVIENDA, @FAA, @FAE, @FAT, @FAI, 'A', @usuarioId, @liquidacionSnapshotId
           );
         `);
         return { operacion: 'INSERT', idRevision: Number(resultado.recordset[0].IdRevision) };
       }
 
       const actual = existente.recordset[0];
-      const mismosImportes = FONDOS_REVISION.every((fondo) =>
-        this.redondear(actual[fondo]) === this.redondear(params.importes[fondo]));
+      const mismosImportes = params.numeroConcepto === 2 && params.tarea.liquidacionSnapshotId
+        ? FONDOS_REVISION.every((fondo) => actual[`${fondo}_A2`] === params.importes[fondo])
+        : FONDOS_REVISION.every((fondo) =>
+            this.redondear(actual[fondo]) === this.redondear(params.importes[fondo]));
       const mismoEstatus = String(actual.Estatus) === 'A';
       const mismoUsuario = String(actual.Usuario || '').toUpperCase() === params.tarea.usuarioId.toUpperCase();
-      if (mismosImportes && mismoEstatus && mismoUsuario) {
+      const mismoSnapshot = params.tarea.liquidacionSnapshotId === null
+        || String(actual.LiquidacionSnapshotId || '') === params.tarea.liquidacionSnapshotId;
+      if (mismosImportes && mismoEstatus && mismoUsuario && mismoSnapshot) {
         return { operacion: 'SIN_CAMBIOS', idRevision: Number(actual.IdRevision) };
       }
 
@@ -564,12 +711,14 @@ export class RevisionRepository {
         .query(`
           INSERT INTO conciliacion.RevisionHistorico (
             IdRevision, Organica0, Organica1, Organica2, Organica3, Periodo,
-            IdCatalogoRevision, CAIR, FRA, FRE, FH, FV, FAA, FAE, FAT, FAI,
-            Estatus, Usuario, FechaAlta, FechaActualizacion, TipoOperacion, UsuarioOperacion
+            IdCatalogoRevision, CAIR, FRA, FRE, PRESTACIONES, FH, FV, VIVIENDA, FAA, FAE, FAT, FAI,
+            Estatus, Usuario, FechaAlta, FechaActualizacion, LiquidacionSnapshotId,
+            TipoOperacion, UsuarioOperacion
           ) OUTPUT INSERTED.IdRevisionHistorico
           SELECT IdRevision, Organica0, Organica1, Organica2, Organica3, Periodo,
-            IdCatalogoRevision, CAIR, FRA, FRE, FH, FV, FAA, FAE, FAT, FAI,
-            Estatus, Usuario, FechaAlta, FechaActualizacion, 'ACTUALIZACION', @usuarioOperacion
+            IdCatalogoRevision, CAIR, FRA, FRE, PRESTACIONES, FH, FV, VIVIENDA, FAA, FAE, FAT, FAI,
+             Estatus, Usuario, FechaAlta, FechaActualizacion, LiquidacionSnapshotId,
+             'ACTUALIZACION', @usuarioOperacion
           FROM conciliacion.Revision WHERE IdRevision = @idRevision;
         `);
 
@@ -577,9 +726,11 @@ export class RevisionRepository {
         .input('idRevision', sql.BigInt, actual.IdRevision);
       await update.query(`
         UPDATE conciliacion.Revision
-        SET CAIR = @CAIR, FRA = @FRA, FRE = @FRE, FH = @FH, FV = @FV,
-            FAA = @FAA, FAE = @FAE, FAT = @FAT, FAI = @FAI,
-            Estatus = 'A', Usuario = @usuarioId, FechaActualizacion = SYSDATETIME()
+        SET CAIR = @CAIR, FRA = @FRA, FRE = @FRE, PRESTACIONES = @PRESTACIONES, FH = @FH, FV = @FV,
+            VIVIENDA = @VIVIENDA, FAA = @FAA, FAE = @FAE, FAT = @FAT, FAI = @FAI,
+             Estatus = 'A', Usuario = @usuarioId,
+             LiquidacionSnapshotId = COALESCE(@liquidacionSnapshotId, LiquidacionSnapshotId),
+             FechaActualizacion = SYSDATETIME()
         WHERE IdRevision = @idRevision;
       `);
 
@@ -587,7 +738,9 @@ export class RevisionRepository {
         operacion: 'UPDATE',
         idRevision: Number(actual.IdRevision),
         idRevisionHistorico: Number(historico.recordset[0].IdRevisionHistorico),
-        importesAnteriores: this.mapearImportes(actual)
+        importesAnteriores: params.numeroConcepto === 2 && params.tarea.liquidacionSnapshotId
+          ? undefined
+          : this.mapearImportes(actual)
       };
   }
 
@@ -639,9 +792,13 @@ export class RevisionRepository {
       .input('org3', sql.Char(2), params.tarea.org3)
       .input('periodo', sql.Char(4), params.tarea.periodo)
       .input('idCatalogo', sql.Int, idCatalogo)
-      .input('usuarioId', sql.NVarChar(100), params.tarea.usuarioId);
+      .input('usuarioId', sql.NVarChar(100), params.tarea.usuarioId)
+      .input('liquidacionSnapshotId', sql.BigInt, params.tarea.liquidacionSnapshotId);
     for (const fondo of FONDOS_REVISION) {
-      request.input(fondo, sql.Decimal(19, 2), this.redondear(params.importes[fondo]));
+      const importe = params.numeroConcepto === 2 && params.tarea.liquidacionSnapshotId
+        ? params.importes[fondo]
+        : this.redondear(params.importes[fondo]);
+      request.input(fondo, sql.Decimal(19, 2), importe);
     }
     return request;
   }

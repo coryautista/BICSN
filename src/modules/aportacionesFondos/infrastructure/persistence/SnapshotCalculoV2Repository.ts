@@ -25,9 +25,12 @@ import type {
   SnapshotHistoricoAgregado,
   SnapshotLecturaOficialFiltro
 } from '../../domain/entities/SnapshotCalculoV2Official.js';
+import { FORMULA_PRECISION_POLICY, FORMULA_PRECISION_POLICY_LEGACY } from '../../domain/entities/FormulaCalculo.js';
 
 const HASH_PATTERN = /^[0-9A-F]{64}$/;
-const DECIMAL_PATTERN = /^-?\d+(?:\.\d{1,6})?$/;
+const MONEY_D6_PATTERN = /^-?(0|[1-9]\d*)\.\d{6}$/;
+const MONEY_A2_PATTERN = /^-?(0|[1-9]\d*)\.\d{2}$/;
+const DAYS_D2_PATTERN = /^(?:0|[1-9]\d*)\.\d{2}$/;
 
 export class SnapshotCalculoV2Repository implements ISnapshotCalculoV2Repository {
   private readonly kernel = new AportacionesMonetaryKernel();
@@ -101,14 +104,14 @@ export class SnapshotCalculoV2Repository implements ISnapshotCalculoV2Repository
       INSERT INTO aportaciones.SnapshotCalculoV2 (
         EntidadId,Anio,Quincena,Periodo,Organica0,Organica1,Organica2,Organica3,
         Ambiente,Fuente,Estado,FormulaCalculoVersionId,NominaCargaId,PrecisionPolicy,
-        VersionEsquema,Revision,HashContenido,Registros,CAIR,FRA,FRE,FH,FV,FAA,FAE,FAT,FAI,
+        VersionEsquema,Revision,HashContenido,Registros,CAIR,CAIR_FONDO,FRA,FRE,PRESTACIONES,FH,FV,VIVIENDA,FAA,FAE,FAT,FAI,
         EsCerrado,UsuarioId
       )
       OUTPUT INSERTED.SnapshotId
       VALUES (
         @EntidadId,@Anio,@Quincena,@Periodo,@Organica0,@Organica1,@Organica2,@Organica3,
         @Ambiente,@Fuente,@Estado,@FormulaCalculoVersionId,@NominaCargaId,@PrecisionPolicy,
-        @VersionEsquema,@Revision,@HashContenido,@Registros,@CAIR,@FRA,@FRE,@FH,@FV,@FAA,@FAE,@FAT,@FAI,
+        @VersionEsquema,@Revision,@HashContenido,@Registros,@CAIR,@CAIR_FONDO,@FRA,@FRE,@PRESTACIONES,@FH,@FV,@VIVIENDA,@FAA,@FAE,@FAT,@FAI,
         1,@UsuarioId
       )
     `);
@@ -215,10 +218,13 @@ export class SnapshotCalculoV2Repository implements ISnapshotCalculoV2Repository
     const historicoRow = sets[1][0];
     const historico = {
       CAIR: this.a2(historicoRow.CAIR),
+      CAIR_FONDO: this.a2(historicoRow.CAIR),
       FRA: this.a2(historicoRow.FRA),
       FRE: this.a2(historicoRow.FRE),
+      PRESTACIONES: this.kernel.sumarA2([this.a2(historicoRow.FRA), this.a2(historicoRow.FRE)]),
       FH: this.a2(historicoRow.FH),
       FV: this.a2(historicoRow.FV),
+      VIVIENDA: this.kernel.sumarA2([this.a2(historicoRow.FH), this.a2(historicoRow.FV)]),
       FAA: this.a2(historicoRow.FAA),
       FAE: this.a2(historicoRow.FAE),
       FAT: this.a2(historicoRow.FAT),
@@ -425,10 +431,13 @@ export class SnapshotCalculoV2Repository implements ISnapshotCalculoV2Repository
       registros,
       totalesA2: {
         CAIR: this.a2(row.CAIR),
+        CAIR_FONDO: this.a2(row.CAIR),
         FRA: this.a2(row.FRA),
         FRE: this.a2(row.FRE),
+        PRESTACIONES: this.kernel.sumarA2([this.a2(row.FRA), this.a2(row.FRE)]),
         FH: this.a2(row.FH),
         FV: this.a2(row.FV),
+        VIVIENDA: this.kernel.sumarA2([this.a2(row.FH), this.a2(row.FV)]),
         FAA: this.a2(row.FAA),
         FAE: this.a2(row.FAE),
         FAT: this.a2(row.FAT),
@@ -453,9 +462,12 @@ export class SnapshotCalculoV2Repository implements ISnapshotCalculoV2Repository
       .input('SnapshotId', sql.BigInt, snapshotId)
       .query(`
         SELECT Orden,EmpleadoClaveHash,CONVERT(VARCHAR(40),DiasLaborados) AS DiasLaborados,DiasOrigen,
-          CONVERT(VARCHAR(40),CAIRD6) AS CAIRD6,CONVERT(VARCHAR(40),FRAD6) AS FRAD6,
+          CONVERT(VARCHAR(40),CAIRD6) AS CAIRD6,CONVERT(VARCHAR(40),CAIRFONDOD6) AS CAIRFONDOD6,
+          CONVERT(VARCHAR(40),FRAD6) AS FRAD6,
           CONVERT(VARCHAR(40),FRED6) AS FRED6,CONVERT(VARCHAR(40),FHD6) AS FHD6,
+          CONVERT(VARCHAR(40),PRESTACIONESD6) AS PRESTACIONESD6,
           CONVERT(VARCHAR(40),FVD6) AS FVD6,CONVERT(VARCHAR(40),FAAD6) AS FAAD6,
+          CONVERT(VARCHAR(40),VIVIENDAD6) AS VIVIENDAD6,
           CONVERT(VARCHAR(40),FAED6) AS FAED6,CONVERT(VARCHAR(40),FATD6) AS FATD6,
           CONVERT(VARCHAR(40),FAID6) AS FAID6
         FROM aportaciones.SnapshotCalculoV2Detalle
@@ -468,10 +480,13 @@ export class SnapshotCalculoV2Repository implements ISnapshotCalculoV2Repository
       diasLaborados: row.DiasLaborados === null ? null : String(row.DiasLaborados),
       diasOrigen: String(row.DiasOrigen),
       cairD6: this.nullableString(row.CAIRD6),
+      cairFondoD6: this.nullableString(row.CAIRFONDOD6 ?? row.CAIRD6),
       fraD6: this.nullableString(row.FRAD6),
       freD6: this.nullableString(row.FRED6),
+      prestacionesD6: this.nullableString(row.PRESTACIONESD6),
       fhD6: this.nullableString(row.FHD6),
       fvD6: this.nullableString(row.FVD6),
+      viviendaD6: this.nullableString(row.VIVIENDAD6),
       faaD6: this.nullableString(row.FAAD6),
       faeD6: this.nullableString(row.FAED6),
       fatD6: this.nullableString(row.FATD6),
@@ -482,10 +497,13 @@ export class SnapshotCalculoV2Repository implements ISnapshotCalculoV2Repository
   private mapTotales(row: Record<string, unknown>): SnapshotTotalesA2 {
     return {
       CAIR: this.a2(row.CAIR),
+      CAIR_FONDO: this.a2(row.CAIR_FONDO ?? row.CAIR),
       FRA: this.a2(row.FRA),
       FRE: this.a2(row.FRE),
+      PRESTACIONES: this.a2(row.PRESTACIONES ?? this.kernel.sumarA2([this.a2(row.FRA), this.a2(row.FRE)])),
       FH: this.a2(row.FH),
       FV: this.a2(row.FV),
+      VIVIENDA: this.a2(row.VIVIENDA ?? this.kernel.sumarA2([this.a2(row.FH), this.a2(row.FV)])),
       FAA: this.a2(row.FAA),
       FAE: this.a2(row.FAE),
       FAT: this.a2(row.FAT),
@@ -494,7 +512,7 @@ export class SnapshotCalculoV2Repository implements ISnapshotCalculoV2Repository
   }
 
   private a2(value: unknown): string {
-    return this.kernel.truncarA2(String(value ?? '0'));
+    return this.kernel.redondearA2(String(value ?? '0'));
   }
 
   private nullableString(value: unknown): string | null {
@@ -526,10 +544,13 @@ export class SnapshotCalculoV2Repository implements ISnapshotCalculoV2Repository
       ['QuinqueniosMensualD6', detalle.quinqueniosMensualD6],
       ['BaseCotizacionQuinqueniosD6', detalle.baseCotizacionQuinqueniosD6],
       ['CAIRD6', detalle.cairD6],
+      ['CAIRFONDOD6', detalle.cairFondoD6],
       ['FRAD6', detalle.fraD6],
       ['FRED6', detalle.freD6],
+      ['PRESTACIONESD6', detalle.prestacionesD6],
       ['FHD6', detalle.fhD6],
       ['FVD6', detalle.fvD6],
+      ['VIVIENDAD6', detalle.viviendaD6],
       ['FAAD6', detalle.faaD6],
       ['FAED6', detalle.faeD6],
       ['FATD6', detalle.fatD6],
@@ -540,17 +561,23 @@ export class SnapshotCalculoV2Repository implements ISnapshotCalculoV2Repository
       INSERT INTO aportaciones.SnapshotCalculoV2Detalle (
         SnapshotId,Orden,EmpleadoClaveHash,DiasLaborados,DiasOrigen,
         SueldoMensualD6,OtrasPrestacionesMensualesD6,QuinqueniosMensualD6,BaseCotizacionQuinqueniosD6,
-        CAIRD6,FRAD6,FRED6,FHD6,FVD6,FAAD6,FAED6,FATD6,FAID6
+        CAIRD6,CAIRFONDOD6,FRAD6,FRED6,PRESTACIONESD6,FHD6,FVD6,VIVIENDAD6,FAAD6,FAED6,FATD6,FAID6
       ) VALUES (
         @SnapshotId,@Orden,@EmpleadoClaveHash,@DiasLaborados,@DiasOrigen,
         @SueldoMensualD6,@OtrasPrestacionesMensualesD6,@QuinqueniosMensualD6,@BaseCotizacionQuinqueniosD6,
-        @CAIRD6,@FRAD6,@FRED6,@FHD6,@FVD6,@FAAD6,@FAED6,@FATD6,@FAID6
+        @CAIRD6,@CAIRFONDOD6,@FRAD6,@FRED6,@PRESTACIONESD6,@FHD6,@FVD6,@VIVIENDAD6,@FAAD6,@FAED6,@FATD6,@FAID6
       )
     `);
   }
 
   private validate(input: SnapshotCalculoV2Input): void {
     if (input.detalles.length === 0) throw new Error('SNAPSHOT_V2_SIN_DETALLE');
+    const validPolicy = input.versionEsquema === 1
+      ? input.precisionPolicy === FORMULA_PRECISION_POLICY_LEGACY
+      : input.precisionPolicy === FORMULA_PRECISION_POLICY;
+    if (!validPolicy) {
+      throw new Error(`SNAPSHOT_V2_POLITICA_INVALIDA:${input.precisionPolicy}`);
+    }
     const orders = new Set<number>();
     const employees = new Set<string>();
     for (const detalle of input.detalles) {
@@ -560,11 +587,77 @@ export class SnapshotCalculoV2Repository implements ISnapshotCalculoV2Repository
       if (!HASH_PATTERN.test(detalle.empleadoClaveHash) || employees.has(detalle.empleadoClaveHash)) {
         throw new Error('SNAPSHOT_V2_EMPLEADO_INVALIDO');
       }
+      if (detalle.diasLaborados !== null && !DAYS_D2_PATTERN.test(detalle.diasLaborados)) {
+        throw new Error(`SNAPSHOT_V2_DIAS_INVALIDOS:${detalle.diasLaborados}`);
+      }
+      const moneyValues = [
+        detalle.sueldoMensualD6,
+        detalle.otrasPrestacionesMensualesD6,
+        detalle.quinqueniosMensualD6,
+        detalle.baseCotizacionQuinqueniosD6,
+        detalle.cairD6,
+        detalle.cairFondoD6,
+        detalle.fraD6,
+        detalle.freD6,
+        detalle.prestacionesD6,
+        detalle.fhD6,
+        detalle.fvD6,
+        detalle.viviendaD6,
+        detalle.faaD6,
+        detalle.faeD6,
+        detalle.fatD6,
+        detalle.faiD6
+      ];
+      for (const value of moneyValues) {
+        if (value !== null && (!MONEY_D6_PATTERN.test(value) || value === '-0.000000')) {
+          throw new Error(`SNAPSHOT_V2_DETALLE_INVALIDO:${value}`);
+        }
+      }
+      if (detalle.faaD6 !== null && detalle.faeD6 !== null && detalle.fatD6 !== null
+          && this.kernel.sumarD6([detalle.faaD6, detalle.faeD6]) !== detalle.fatD6) {
+        throw new Error('SNAPSHOT_V2_FAT_INCONSISTENTE');
+      }
       orders.add(detalle.orden);
       employees.add(detalle.empleadoClaveHash);
     }
     for (const value of Object.values(input.totalesA2)) {
-      if (!DECIMAL_PATTERN.test(value)) throw new Error(`SNAPSHOT_V2_TOTAL_INVALIDO:${value}`);
+      if (!MONEY_A2_PATTERN.test(value) || value === '-0.00') throw new Error(`SNAPSHOT_V2_TOTAL_INVALIDO:${value}`);
+    }
+    if (input.versionEsquema === 1) {
+      if (this.kernel.sumarA2([input.totalesA2.FAA, input.totalesA2.FAE]) !== input.totalesA2.FAT) {
+        throw new Error('SNAPSHOT_V2_TOTAL_FAT_INCONSISTENTE');
+      }
+      return;
+    }
+    const componentChecks: Array<[keyof SnapshotTotalesA2, keyof SnapshotCalculoV2Detalle]> = [
+      ['CAIR', 'cairD6'], ['FRA', 'fraD6'], ['FRE', 'freD6'], ['FH', 'fhD6'], ['FV', 'fvD6'],
+      ['FAA', 'faaD6'], ['FAE', 'faeD6'], ['FAI', 'faiD6']
+    ];
+    for (const [total, detail] of componentChecks) {
+      const calculated = this.kernel.agregarComponenteA2(input.detalles.map((row) => String(row[detail] ?? '0')));
+      if (calculated !== input.totalesA2[total]) throw new Error(`SNAPSHOT_V2_TOTAL_${total}_INCONSISTENTE`);
+    }
+    const fundChecks: Array<[keyof SnapshotTotalesA2, keyof SnapshotCalculoV2Detalle]> = [
+      ['CAIR_FONDO', 'cairFondoD6'], ['PRESTACIONES', 'prestacionesD6'],
+      ['VIVIENDA', 'viviendaD6'], ['FAT', 'fatD6']
+    ];
+    for (const [total, detail] of fundChecks) {
+      const calculated = this.kernel.agregarA2(input.detalles.map((row) => String(row[detail] ?? '0')));
+      if (calculated !== input.totalesA2[total]) throw new Error(`SNAPSHOT_V2_TOTAL_${total}_INCONSISTENTE`);
+    }
+    if (input.versionEsquema >= 3) {
+      const parentChecks: Array<[keyof SnapshotTotalesA2, Array<keyof SnapshotTotalesA2>]> = [
+        ['CAIR_FONDO', ['CAIR']],
+        ['PRESTACIONES', ['FRA', 'FRE']],
+        ['VIVIENDA', ['FH', 'FV']],
+        ['FAT', ['FAA', 'FAE']]
+      ];
+      for (const [parent, children] of parentChecks) {
+        const calculated = this.kernel.sumarA2(children.map((child) => input.totalesA2[child]));
+        if (calculated !== input.totalesA2[parent]) {
+          throw new Error(`SNAPSHOT_V2_TOTAL_${parent}_HOJAS_INCONSISTENTE`);
+        }
+      }
     }
   }
 }

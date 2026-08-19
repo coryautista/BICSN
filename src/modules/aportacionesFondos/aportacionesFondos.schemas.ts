@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { FORMULA_PRECISION_POLICY } from './domain/entities/FormulaCalculo.js';
 
 // Esquemas para validación de parámetros de consulta
 export const AportacionesIndividualesSchema = z.object({
@@ -71,12 +72,16 @@ export const SnapshotCalculoV2OfficialSchema = SnapshotCalculoV2ConsultaSchema.p
 });
 
 // Esquemas para respuestas de la API
+const moneyD6Schema = z.string().regex(/^-?(0|[1-9]\d*)\.\d{6}$/);
+const moneyA2Schema = z.string().regex(/^-?(0|[1-9]\d*)\.\d{2}$/);
+
 export const AportacionFondoResponseSchema = z.object({
   interno: z.number(),
   nombre: z.string().nullable().default(null),
   sueldo: z.number().nullable(),
   quinquenios: z.number().nullable(),
   otras_prestaciones: z.number().nullable(),
+  sueldo_proporcional: z.number(),
   sueldo_base: z.number(),
   afae: z.number().optional(),
   afaa: z.number().optional(),
@@ -86,7 +91,22 @@ export const AportacionFondoResponseSchema = z.object({
   total: z.number(),
   tipo: z.string(),
   base_cotizacion_quinquenios: z.number().nullable().optional(),
-  quinquenios_aplicado: z.number().nullable().optional()
+  quinquenios_aplicado: z.number().nullable().optional(),
+  base_cotizacion_quinquenios_d6: moneyD6Schema.nullable(),
+  quinquenios_aplicado_d6: moneyD6Schema.nullable(),
+  sueldo_d6: moneyD6Schema,
+  quinquenios_d6: moneyD6Schema,
+  otras_prestaciones_d6: moneyD6Schema,
+  sueldo_proporcional_d6: moneyD6Schema,
+  sueldo_base_d6: moneyD6Schema,
+  afae_d6: moneyD6Schema.optional(),
+  afaa_d6: moneyD6Schema.optional(),
+  afe_d6: moneyD6Schema.optional(),
+  fh_d6: moneyD6Schema.optional(),
+  fv_d6: moneyD6Schema.optional(),
+  afpe_d6: moneyD6Schema.optional(),
+  afpa_d6: moneyD6Schema.optional(),
+  total_d6: moneyD6Schema
 });
 
 export const AportacionIndividualResponseSchema = z.object({
@@ -97,8 +117,20 @@ export const AportacionIndividualResponseSchema = z.object({
   resumen: z.object({
     total_empleados: z.number(),
     total_contribucion: z.number(),
-    total_sueldo_base: z.number()
-  })
+    total_sueldo_base: z.number(),
+    total_contribucion_a2: moneyA2Schema,
+    total_sueldo_base_a2: moneyA2Schema,
+    componentes_a2: z.object({
+      afae: moneyA2Schema.optional(),
+      afaa: moneyA2Schema.optional(),
+      afe: moneyA2Schema.optional(),
+      afpe: moneyA2Schema.optional(),
+      afpa: moneyA2Schema.optional()
+    })
+  }),
+  precision_policy: z.string().min(1),
+  formula_version_id: z.string().regex(/^\d+$/),
+  fuente_datos: z.enum(['CALCULO_VIVO', 'HISTORICO_SQL'])
 });
 
 export const AportacionCompletaResponseSchema = z.object({
@@ -112,8 +144,13 @@ export const AportacionCompletaResponseSchema = z.object({
     total_empleados: z.number(),
     total_contribucion_general: z.number(),
     total_sueldo_base_general: z.number(),
+    total_contribucion_general_a2: moneyA2Schema,
+    total_sueldo_base_general_a2: moneyA2Schema,
     fondos_incluidos: z.array(z.string())
-  })
+  }),
+  precision_policy: z.literal(FORMULA_PRECISION_POLICY),
+  formula_version_id: z.string().regex(/^\d+$/),
+  fuente_datos: z.literal('CALCULO_VIVO')
 });
 
 export type AportacionesIndividualesInput = z.infer<typeof AportacionesIndividualesSchema>;

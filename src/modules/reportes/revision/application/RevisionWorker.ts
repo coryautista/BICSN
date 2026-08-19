@@ -1,5 +1,11 @@
 import pino from 'pino';
-import { crearImportesRevision, ImportesRevision, ResultadoConceptoRevision, RevisionTarea } from '../domain/Revision.types.js';
+import {
+  crearImportesRevision,
+  ImportesRevisionPersistencia,
+  ResultadoConceptoRevision,
+  RevisionSnapshotMetadata,
+  RevisionTarea
+} from '../domain/Revision.types.js';
 import { RevisionRepository } from '../infrastructure/persistence/RevisionRepository.js';
 import { guardarRevisionLogFtp, guardarRevisionLogFtpOpcional } from '../infrastructure/services/RevisionLogFtpService.js';
 
@@ -8,7 +14,11 @@ const logger = pino({ name: 'revisionWorker', level: process.env.LOG_LEVEL || 'i
 interface DefinicionConcepto {
   numeroConcepto: number;
   fuente: string;
-  calcular: () => Promise<{ importes: ImportesRevision; registros: number }>;
+  calcular: () => Promise<{
+    importes: ImportesRevisionPersistencia;
+    registros: number;
+    liquidacionSnapshot?: RevisionSnapshotMetadata;
+  }>;
   aplica?: () => boolean;
 }
 
@@ -73,8 +83,12 @@ export class RevisionWorker {
         },
         {
           numeroConcepto: 2,
-          fuente: 'conciliacion.RevisionAplicacionHistorico (AP_S_FONDOS ajustado por DiasLaborados; default 15)',
-          calcular: () => this.revisionRepo.calcularAplicacionQuincenal(tarea)
+          fuente: tarea.liquidacionSnapshotId
+            ? 'liquidacion.QnaSnapshotTotal (snapshot oficial COMPLETE; importes A2)'
+            : 'LEGACY_PRE_MIGRACION: conciliacion.RevisionAplicacionHistorico',
+          calcular: () => tarea.liquidacionSnapshotId
+            ? this.revisionRepo.calcularAplicacionQuincenalSnapshot(tarea)
+            : this.revisionRepo.calcularAplicacionQuincenal(tarea)
         },
         {
           numeroConcepto: 3,
@@ -189,7 +203,8 @@ export class RevisionWorker {
           operacion: guardado.operacion,
           idRevision: guardado.idRevision,
           idRevisionHistorico: guardado.idRevisionHistorico,
-          duracionMs: calculo.duracionMs
+          duracionMs: calculo.duracionMs,
+          liquidacionSnapshot: calculo.liquidacionSnapshot
         });
       }
 
@@ -206,7 +221,11 @@ export class RevisionWorker {
           advertencia: entrega.advertencia
         }, 'Tarea REVISA completada sin entrega FTP opcional');
       } else {
-        logger.info({ idRevisionTarea: tarea.idRevisionTarea, ruta: entrega.ruta }, 'Tarea REVISA completada');
+        logger.info({
+          idRevisionTarea: tarea.idRevisionTarea,
+          ruta: entrega.ruta,
+          liquidacionSnapshot: conceptos.find((concepto) => concepto.numeroConcepto === 2)?.liquidacionSnapshot
+        }, 'Tarea REVISA completada');
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
@@ -224,7 +243,12 @@ export class RevisionWorker {
         logger.error({ ftpError, idRevisionTarea: tarea.idRevisionTarea }, 'No se pudo guardar el reporte de error REVISA en SFTP');
       }
       await this.revisionRepo.fallarTarea(tarea, message, rutaError);
-      logger.error({ idRevisionTarea: tarea.idRevisionTarea, intento: tarea.intentos, error: message }, 'Tarea REVISA fallida');
+      logger.error({
+        idRevisionTarea: tarea.idRevisionTarea,
+        intento: tarea.intentos,
+        liquidacionSnapshotId: tarea.liquidacionSnapshotId,
+        error: message
+      }, 'Tarea REVISA fallida');
     }
   }
 }

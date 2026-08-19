@@ -207,6 +207,14 @@ import { ListSnapshotCalculoV2Query } from '../modules/aportacionesFondos/applic
 import { CreateSnapshotCalculoV2DecisionCommand } from '../modules/aportacionesFondos/application/commands/CreateSnapshotCalculoV2DecisionCommand.js';
 import { GetSnapshotCalculoV2OfficialQuery } from '../modules/aportacionesFondos/application/queries/GetSnapshotCalculoV2OfficialQuery.js';
 import { ListSnapshotCalculoV2DecisionsQuery } from '../modules/aportacionesFondos/application/queries/ListSnapshotCalculoV2DecisionsQuery.js';
+import { LiquidacionQnaRepository } from '../modules/liquidacionQna/infrastructure/persistence/LiquidacionQnaRepository.js';
+import { CreateQnaCandidateCommand } from '../modules/liquidacionQna/application/commands/CreateQnaCandidateCommand.js';
+import { AppendQnaDecisionCommand } from '../modules/liquidacionQna/application/commands/AppendQnaDecisionCommand.js';
+import { PromoteQnaSnapshotCommand } from '../modules/liquidacionQna/application/commands/PromoteQnaSnapshotCommand.js';
+import { GetQnaSnapshotQuery } from '../modules/liquidacionQna/application/queries/GetQnaSnapshotQuery.js';
+import { ListQnaSnapshotsQuery } from '../modules/liquidacionQna/application/queries/ListQnaSnapshotsQuery.js';
+import { ResolveOfficialQnaSnapshotQuery } from '../modules/liquidacionQna/application/queries/ResolveOfficialQnaSnapshotQuery.js';
+import { CreateAndPromoteQnaCandidateCommand } from '../modules/liquidacionQna/application/commands/CreateAndPromoteQnaCandidateCommand.js';
 import { CatalogoPorcentajeFondoRepository } from '../modules/catalogoPorcentajeFondo/infrastructure/persistence/CatalogoPorcentajeFondoRepository.js';
 import { GetAllCatalogoPorcentajeFondoQuery } from '../modules/catalogoPorcentajeFondo/application/queries/GetAllCatalogoPorcentajeFondoQuery.js';
 import { GetCatalogoPorcentajeFondoByIdQuery } from '../modules/catalogoPorcentajeFondo/application/queries/GetCatalogoPorcentajeFondoByIdQuery.js';
@@ -1326,6 +1334,16 @@ container.register({
   createSnapshotCalculoV2DecisionCommand: asClass(CreateSnapshotCalculoV2DecisionCommand).scoped(),
   getSnapshotCalculoV2OfficialQuery: asClass(GetSnapshotCalculoV2OfficialQuery).scoped(),
   listSnapshotCalculoV2DecisionsQuery: asClass(ListSnapshotCalculoV2DecisionsQuery).scoped(),
+
+  // Liquidacion QNA
+  liquidacionQnaRepo: asClass(LiquidacionQnaRepository).scoped(),
+  createQnaCandidateCommand: asClass(CreateQnaCandidateCommand).scoped(),
+  appendQnaDecisionCommand: asClass(AppendQnaDecisionCommand).scoped(),
+  promoteQnaSnapshotCommand: asClass(PromoteQnaSnapshotCommand).scoped(),
+  getQnaSnapshotQuery: asClass(GetQnaSnapshotQuery).scoped(),
+  listQnaSnapshotsQuery: asClass(ListQnaSnapshotsQuery).scoped(),
+  resolveOfficialQnaSnapshotQuery: asClass(ResolveOfficialQnaSnapshotQuery).scoped(),
+  createAndPromoteQnaCandidateCommand: asClass(CreateAndPromoteQnaCandidateCommand).scoped(),
 
   // ============================================================================
   // CATALOGO PORCENTAJE FONDO MODULE

@@ -154,7 +154,9 @@ export class HistoricosQuincenalesRepository implements IHistoricosQuincenalesRe
     const recordsets = result.recordsets as sql.IRecordSet<any>[];
     const total = Number(recordsets[0][0]?.Total ?? 0);
 
-    const data = await this.enriquecerAportacionesHistoricas(recordsets[1] as Record<string, unknown>[], filters);
+    // Los periodos cerrados son evidencia financiera. Nunca se recalculan al leerlos
+    // con población, días o porcentajes vigentes actuales.
+    const data = recordsets[1] as Record<string, unknown>[];
 
     return {
       data,

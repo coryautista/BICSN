@@ -9,13 +9,16 @@ const filtro = {
   organica0: '01', organica1: '01', organica2: '00', organica3: '00',
   fuente: 'LIQUIDACION_V2' as const, revision: 1
 };
-const totales = { CAIR: '1.00', FRA: '2.00', FRE: '3.00', FH: '4.00', FV: '5.00', FAA: '6.00', FAE: '7.00', FAT: '13.00', FAI: '8.00' };
+const totales = {
+  CAIR: '1.00', CAIR_FONDO: '1.01', FRA: '2.00', FRE: '3.00', PRESTACIONES: '5.01',
+  FH: '4.00', FV: '5.00', VIVIENDA: '9.01', FAA: '6.00', FAE: '7.00', FAT: '13.01', FAI: '8.00'
+};
 const historico = { ...totales, FAI: null };
 const snapshot = {
   snapshotId: '1', entidadId: 1, anio: 2026, quincena: 14, periodo: '1426',
   organica0: '01', organica1: '01', organica2: '00', organica3: '00', ambiente: 'CALIDAD',
   fuente: 'LIQUIDACION_V2' as const, estado: 'COMPLETO' as const, formulaCalculoVersionId: '1',
-  nominaCargaId: '20', precisionPolicy: 'MXN-DETAIL6-AGG2-TRUNC-v1', versionEsquema: 1,
+  nominaCargaId: '20', precisionPolicy: 'MXN-BASE2-LEAF2-FUND2-APSFONDOS-v3', versionEsquema: 2,
   revision: 1, hashContenido: 'A'.repeat(64), registros: 169, esCerrado: true,
   fechaCreacion: new Date(0).toISOString(), totalesA2: totales
 };
@@ -28,8 +31,9 @@ const aprobada = {
 assert.deepEqual(SnapshotCalculoV2OfficialSchema.parse({ ...filtro, entidadId: '1', anio: '2026', quincena: '14', revision: '1' }), filtro);
 assert.equal(SnapshotCalculoV2OfficialSchema.safeParse({ ...filtro, revision: undefined }).success, false);
 assert.equal(obtenerMotivoFallback(null, null), 'SNAPSHOT_NO_ENCONTRADO');
-assert.equal(obtenerMotivoFallback({ estado: 'INCOMPLETO', esCerrado: true }, aprobada), 'SNAPSHOT_NO_COMPLETO');
-assert.equal(obtenerMotivoFallback({ estado: 'COMPLETO', esCerrado: false }, aprobada), 'SNAPSHOT_NO_CERRADO');
+assert.equal(obtenerMotivoFallback({ estado: 'INCOMPLETO', esCerrado: true, precisionPolicy: 'otra' }, aprobada), 'SNAPSHOT_NO_COMPLETO');
+assert.equal(obtenerMotivoFallback({ estado: 'COMPLETO', esCerrado: false, precisionPolicy: 'otra' }, aprobada), 'SNAPSHOT_NO_CERRADO');
+assert.equal(obtenerMotivoFallback({ estado: 'COMPLETO', esCerrado: true, precisionPolicy: 'otra' }, aprobada), 'SNAPSHOT_POLITICA_PRECISION_NO_VIGENTE');
 assert.equal(obtenerMotivoFallback(snapshot, null), 'SNAPSHOT_SIN_DECISION');
 assert.equal(obtenerMotivoFallback(snapshot, { ...aprobada, politicaVersion: 'politica-anterior' }), 'SNAPSHOT_DECISION_POLITICA_NO_VIGENTE');
 assert.equal(obtenerMotivoFallback(snapshot, { ...aprobada, decision: 'OBSERVADO' }), 'SNAPSHOT_OBSERVADO');

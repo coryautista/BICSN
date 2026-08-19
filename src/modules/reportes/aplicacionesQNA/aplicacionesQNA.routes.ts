@@ -1132,6 +1132,8 @@ export async function aplicacionesQNARoutes(fastify: FastifyInstance) {
             quincena: lineaVigente.quincena,
             anio: lineaVigente.anio,
             importe: lineaVigente.importe,
+            importeA2: lineaVigente.importeA2,
+            liquidacionSnapshotId: lineaVigente.liquidacionSnapshotId,
             lineaCaptura: lineaVigente.lineaCaptura,
             referencia4: lineaVigente.referencia4,
             fechaLimite: lineaVigente.fechaLimite,

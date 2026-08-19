@@ -63,9 +63,22 @@ export class LineaCapturaService {
    * @returns Dígito 0–9
    */
   calcularMontoCondensado(importe: number | string): number {
-    // Convertimos a número y validamos
-    const numero = Number(importe);
-    if (!Number.isFinite(numero) || numero < 0) {
+    let centavosTexto: string;
+    if (typeof importe === 'string' && /^\d+\.\d{2}$/.test(importe)) {
+      centavosTexto = importe.replace('.', '').replace(/^0+(?=\d)/, '');
+    } else {
+      const numero = Number(importe);
+      if (!Number.isFinite(numero) || numero < 0) {
+        throw new AplicacionesQNAError(
+          'Importe inválido para monto condensado. Debe ser un número positivo',
+          AplicacionesQNAErrorCode.INVALID_PARAMETERS,
+          400
+        );
+      }
+      // Compatibilidad para consumidores legacy que todavía entregan number.
+      centavosTexto = Math.round(numero * 100).toString();
+    }
+    if (!centavosTexto) {
       throw new AplicacionesQNAError(
         'Importe inválido para monto condensado. Debe ser un número positivo',
         AplicacionesQNAErrorCode.INVALID_PARAMETERS,
@@ -73,11 +86,8 @@ export class LineaCapturaService {
       );
     }
 
-    // Trabajamos en centavos para evitar problemas de flotante
-    const centavos = Math.round(numero * 100);
-
     // Separamos cada dígito del número de centavos
-    const digitos = centavos.toString().split('').map(d => Number(d));
+    const digitos = centavosTexto.split('').map(d => Number(d));
 
     // Factores cíclicos 7, 3, 1
     const pesos = [7, 3, 1];

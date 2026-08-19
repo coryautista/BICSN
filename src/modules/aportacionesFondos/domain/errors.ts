@@ -14,6 +14,8 @@ export enum AportacionFondoError {
   FORMULA_CALCULO_TRASLAPADA = 'FORMULA_CALCULO_TRASLAPADA',
   FORMULA_CALCULO_PARAMETROS_INVALIDOS = 'FORMULA_CALCULO_PARAMETROS_INVALIDOS',
   ERROR_SQL_FORMULA_CALCULO = 'ERROR_SQL_FORMULA_CALCULO',
+  NOMINA_RFC_SIN_COINCIDENCIA = 'NOMINA_RFC_SIN_COINCIDENCIA',
+  NOMINA_BASE_COTIZACION_INVALIDA = 'NOMINA_BASE_COTIZACION_INVALIDA',
   SNAPSHOT_V2_NO_ENCONTRADO = 'SNAPSHOT_V2_NO_ENCONTRADO',
   SNAPSHOT_V2_NO_DECIDIBLE = 'SNAPSHOT_V2_NO_DECIDIBLE'
 }
@@ -45,6 +47,8 @@ export const AportacionFondoErrorMessages = {
   [AportacionFondoError.FORMULA_CALCULO_TRASLAPADA]: 'Existen fórmulas activas traslapadas para el periodo',
   [AportacionFondoError.FORMULA_CALCULO_PARAMETROS_INVALIDOS]: 'La fórmula de cálculo contiene parámetros inválidos',
   [AportacionFondoError.ERROR_SQL_FORMULA_CALCULO]: 'Error al consultar la fórmula de cálculo',
+  [AportacionFondoError.NOMINA_RFC_SIN_COINCIDENCIA]: 'El RFC no existe en la nómina vigente del período',
+  [AportacionFondoError.NOMINA_BASE_COTIZACION_INVALIDA]: 'La nómina vigente no contiene bases de cotización válidas',
   [AportacionFondoError.SNAPSHOT_V2_NO_ENCONTRADO]: 'Snapshot V2 no encontrado',
   [AportacionFondoError.SNAPSHOT_V2_NO_DECIDIBLE]: 'Solo se pueden decidir snapshots completos y cerrados'
 };

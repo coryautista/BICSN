@@ -312,6 +312,7 @@ export async function getMovimientosQuincenalesService(userOrg0: string, userOrg
           ao.aplicar,
           ao.bc,
           ao.porcentaje,
+          TRY_CONVERT(int, JSON_VALUE((SELECT ao.* FOR JSON PATH, WITHOUT_ARRAY_WRAPPER), '$.numQuinquenios')) as numQuinquenios,
 
           -- Movimiento fields
           m.id as movimiento_id,
@@ -413,7 +414,8 @@ export async function getMovimientosQuincenalesService(userOrg0: string, userOrg
         dQuinquenios: row.dQuinquenios,
         aplicar: row.aplicar === 1 || row.aplicar === true ? true : row.aplicar === 0 || row.aplicar === false ? false : null,
         bc: row.bc,
-        porcentaje: row.porcentaje ? parseFloat(row.porcentaje) : null
+        porcentaje: row.porcentaje ? parseFloat(row.porcentaje) : null,
+        numQuinquenios: row.numQuinquenios != null ? parseInt(row.numQuinquenios) : null
       },
       movimiento: {
         id: parseInt(row.movimiento_id) || 0,

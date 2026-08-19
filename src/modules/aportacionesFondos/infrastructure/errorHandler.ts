@@ -39,6 +39,9 @@ function getStatusCode(errorCode: string): number {
       return 400;
     case 'PARAMETRO_INVALIDO':
       return 400;
+    case 'NOMINA_RFC_SIN_COINCIDENCIA':
+    case 'NOMINA_BASE_COTIZACION_INVALIDA':
+      return 422;
     case 'USUARIO_NO_AUTORIZADO':
       return 403;
     case 'DATOS_NO_ENCONTRADOS':

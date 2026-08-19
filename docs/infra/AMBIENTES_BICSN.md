@@ -7,8 +7,8 @@ Esta guia alinea la configuracion de API, SQL Server, Firebird y SFTP por ambien
 | Ambiente | API | SQL Server | Firebird | SFTP base |
 |---|---:|---|---|---|
 | Local / Desarrollo | 4000 | SII-ISSSSPEA-DES | /db/db/dbRestaura.fdb | /Autodeterminacion/Desarrollo |
-| Calidad | 8080 | SII-ISSSSPEA | /db/db/dbQna0926.fdb | /Autodeterminacion/Calidad |
-| Produccion | 9090 | SII-ISSSSPEA-PROD | /db/db/dbQna1026.fdb | /Autodeterminacion/Produccion |
+| Calidad | 8080 | SII-ISSSSPEA | /db/db/dbQna1426.fdb | /Autodeterminacion/Calidad |
+| Produccion | 9090 | SII-ISSSSPEA-PROD | /db/db/dbQna1326.fdb | /Autodeterminacion/Produccion |
 
 ## SFTP expedientes
 
@@ -49,7 +49,7 @@ El deploy remoto genera la configuracion de Calidad en `/home/administrador/back
 ```env
 PORT=8080
 SQLSERVER_DB=SII-ISSSSPEA
-FIREBIRD_DATABASE=/db/db/dbQna0926.fdb
+FIREBIRD_DATABASE=/db/db/dbQna1426.fdb
 FTP_HOST=10.20.1.17
 FTP_PORT=22
 FTP_USER=Des
@@ -64,7 +64,7 @@ El deploy remoto genera la configuracion de Produccion en `/home/administrador/b
 ```env
 PORT=8080
 SQLSERVER_DB=SII-ISSSSPEA-PROD
-FIREBIRD_DATABASE=/db/db/dbQna1026.fdb
+FIREBIRD_DATABASE=/db/db/dbQna1326.fdb
 FTP_HOST=10.20.1.17
 FTP_PORT=22
 FTP_USER=Des

@@ -10,6 +10,12 @@ export interface RevisionLogPayload {
   timestamps: { inicioUtc: string; finUtc: string };
   tiempoTotalMs: number;
   ambiente: { nodeEnv: string; sqlServerDb: string; firebirdDatabase: string };
+  liquidacionSnapshot?: {
+    liquidacionSnapshotId: string;
+    hashContenido: string;
+    revision: number;
+    precisionPolicy: string;
+  };
   error?: string;
 }
 
@@ -43,6 +49,7 @@ export async function guardarRevisionLogFtp(
       sqlServerDb: env.sql.database,
       firebirdDatabase: env.firebird.database
     },
+    liquidacionSnapshot: conceptos.find((concepto) => concepto.numeroConcepto === 2)?.liquidacionSnapshot,
     error
   };
   await ftpService.uploadText(`${JSON.stringify(payload, null, 2)}\n`, remotePath);

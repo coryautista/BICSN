@@ -5,8 +5,8 @@
 | Ambiente | API | SQL Server | Firebird | SFTP base |
 |---|---:|---|---|---|
 | Local / Desarrollo | `http://localhost:4000` | `SII-ISSSSPEA-DES` | `/db/db/dbRestaura.fdb` | `/Autodeterminacion/Desarrollo` |
-| Calidad | `http://10.20.1.92:8080` | `SII-ISSSSPEA` | `/db/db/dbQna0926.fdb` | `/Autodeterminacion/Calidad` |
-| Produccion | `http://10.20.1.92:9090` | `SII-ISSSSPEA-PROD` | `/db/db/dbQna1026.fdb` | `/Autodeterminacion/Produccion` |
+| Calidad | `http://10.20.1.92:8080` | `SII-ISSSSPEA` | `/db/db/dbQna1426.fdb` | `/Autodeterminacion/Calidad` |
+| Produccion | `http://10.20.1.92:9090` | `SII-ISSSSPEA-PROD` | `/db/db/dbQna1326.fdb` | `/Autodeterminacion/Produccion` |
 
 ## Local / Desarrollo
 
@@ -28,7 +28,7 @@ El deploy remoto levanta el contenedor de Calidad con Docker Compose.
 PORT=8080
 NODE_ENV=production
 SQLSERVER_DB=SII-ISSSSPEA
-FIREBIRD_DATABASE=/db/db/dbQna0926.fdb
+FIREBIRD_DATABASE=/db/db/dbQna1426.fdb
 FTP_BASE_PATH=/Autodeterminacion/Calidad
 ```
 
@@ -58,7 +58,7 @@ El deploy remoto levanta el contenedor de Produccion con Docker Compose.
 PORT=8080
 NODE_ENV=production
 SQLSERVER_DB=SII-ISSSSPEA-PROD
-FIREBIRD_DATABASE=/db/db/dbQna1026.fdb
+FIREBIRD_DATABASE=/db/db/dbQna1326.fdb
 FTP_BASE_PATH=/Autodeterminacion/Produccion
 ```
 

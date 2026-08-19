@@ -15,6 +15,7 @@ const base = {
   organica3: '01',
   ambiente: 'CALIDAD' as const,
   formulaCalculoVersionId: '1',
+  diasPolicy: { default: 15, min: 0, max: 15 },
   nominaCargaId: '20',
   usuarioId: 'phase4-test',
   ahorro: [
@@ -51,7 +52,7 @@ assert.equal(snapshot.fuente, 'LIQUIDACION_V2');
 assert.equal(snapshot.detalles.length, 2);
 assert.equal(snapshot.detalles[0].diasLaborados, '13.00');
 assert.equal(snapshot.detalles[0].diasOrigen, 'nomina');
-assert.equal(snapshot.detalles[0].fhD6, '3.511111');
+assert.equal(snapshot.detalles[0].fhD6, '3.511112');
 assert.equal(snapshot.detalles[0].fvD6, '14.044447');
 assert.equal(snapshot.detalles[1].diasLaborados, '0.00');
 assert.equal(snapshot.detalles[1].diasOrigen, 'nomina_sin_coincidencia');
@@ -59,6 +60,49 @@ assert.equal(snapshot.totalesA2.FAT, '225.24');
 assert.equal(snapshot.totalesA2.FAI, '30.12');
 assert.match(snapshot.detalles[0].empleadoClaveHash, /^[0-9A-F]{64}$/);
 assert.notEqual(snapshot.detalles[0].empleadoClaveHash, snapshot.detalles[1].empleadoClaveHash);
+
+const snapshotExacto = factory.crear({
+  ...base,
+  ahorro: base.ahorro.map((row, index) => index === 0 ? {
+    ...row,
+    sueldo_d6: '1000.000001',
+    afae_d6: '25.123455',
+    afaa_d6: '50.123455',
+    total_d6: '75.246910'
+  } : row),
+  vivienda: base.vivienda.map((row, index) => index === 0 ? {
+    ...row,
+    afe_d6: '17.555558',
+    fh_d6: '3.511110',
+    fv_d6: '14.044448'
+  } : row),
+  prestaciones: base.prestaciones.map((row, index) => index === 0 ? {
+    ...row,
+    afpe_d6: '222.123455',
+    afpa_d6: '45.123455'
+  } : row),
+  cair: base.cair.map((row, index) => index === 0 ? { ...row, afe_d6: '20.123455' } : row)
+});
+assert.equal(snapshotExacto.detalles[0].sueldoMensualD6, '1000.000001');
+assert.equal(snapshotExacto.detalles[0].fhD6, '3.511110');
+assert.equal(snapshotExacto.detalles[0].fvD6, '14.044448');
+assert.equal(snapshotExacto.detalles[0].freD6, '222.123455');
+assert.equal(snapshotExacto.detalles[0].fraD6, '45.123455');
+assert.equal(snapshotExacto.detalles[0].cairD6, '20.123455');
+assert.equal(snapshotExacto.detalles[0].fatD6, '75.246910');
+
+const snapshotFatPadre = factory.crear({
+  ...base,
+  ahorro: base.ahorro.map((row, index) => ({
+    ...row,
+    afaa_d6: index === 0 ? '0.009999' : '0.009999',
+    afae_d6: index === 0 ? '0.009999' : '0.009999',
+    total_d6: index === 0 ? '0.019998' : '0.019998'
+  }))
+});
+assert.equal(snapshotFatPadre.totalesA2.FAA, '0.02');
+assert.equal(snapshotFatPadre.totalesA2.FAE, '0.02');
+assert.equal(snapshotFatPadre.totalesA2.FAT, '0.04');
 
 const snapshotMovimiento = factory.crear({
   ...base,
@@ -74,6 +118,14 @@ assert.equal(snapshotMovimiento.detalles[0].diasLaborados, '7.00');
 assert.equal(snapshotMovimiento.detalles[0].diasOrigen, 'movimiento');
 assert.equal(snapshotMovimiento.detalles[1].diasLaborados, '15.00');
 assert.equal(snapshotMovimiento.detalles[1].diasOrigen, 'default');
+
+const snapshotDiasFormula = factory.crear({
+  ...base,
+  diasPolicy: { default: 14, min: 0, max: 15 },
+  nominaCargaId: null,
+  nomina: { tieneArchivo: false, fuente: 'default', registros: new Map() }
+});
+assert.ok(snapshotDiasFormula.detalles.every((row) => row.diasLaborados === '14.00'));
 
 assert.throws(
   () => factory.crear({ ...base, vivienda: base.vivienda.slice(0, 1) }),

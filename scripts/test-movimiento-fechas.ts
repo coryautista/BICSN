@@ -72,7 +72,7 @@ assert.equal(resolver.resolve('RFC1', { tieneArchivo: true, fuente: 'txt', regis
 assert.equal(resolver.resolve('RFC2', { tieneArchivo: true, fuente: 'txt', registros: detalle13 }, true).dias, 0);
 assert.deepEqual(
   resolver.resolve('RFC1', { tieneArchivo: false, fuente: 'movimiento', registros: detalle13 }, true),
-  { dias: 13, origen: 'movimiento', baseCotizacionQuinquenios: null }
+  { dias: 13, origen: 'movimiento', baseCotizacionSueldo: null, baseCotizacionQuinquenios: null }
 );
 assert.equal(resolver.resolve('RFC2', { tieneArchivo: false, fuente: 'movimiento', registros: detalle13 }, true).dias, 15);
 assert.equal(resolver.resolve('RFC1', { tieneArchivo: false, fuente: 'default', registros: new Map() }, true).dias, 15);

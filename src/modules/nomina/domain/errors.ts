@@ -4,3 +4,10 @@ export class NominaCargaInconsistenteError extends Error {
     this.name = 'NominaCargaInconsistenteError';
   }
 }
+
+export class NominaCargaBloqueadaError extends Error {
+  constructor() {
+    super('NOMINA_TXT_BLOQUEADA_POR_LIQUIDACION_OFICIAL');
+    this.name = 'NominaCargaBloqueadaError';
+  }
+}

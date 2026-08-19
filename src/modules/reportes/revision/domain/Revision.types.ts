@@ -1,7 +1,11 @@
-export const FONDOS_REVISION = ['CAIR', 'FRA', 'FRE', 'FH', 'FV', 'FAA', 'FAE', 'FAT', 'FAI'] as const;
+export const FONDOS_REVISION = [
+  'CAIR', 'FRA', 'FRE', 'PRESTACIONES', 'FH', 'FV', 'VIVIENDA', 'FAA', 'FAE', 'FAT', 'FAI'
+] as const;
 
 export type FondoRevision = (typeof FONDOS_REVISION)[number];
 export type ImportesRevision = Record<FondoRevision, number>;
+export type ImportesRevisionSnapshot = Record<FondoRevision, string>;
+export type ImportesRevisionPersistencia = ImportesRevision | ImportesRevisionSnapshot;
 export type EstatusProcesoRevision = 'PENDIENTE' | 'PROCESANDO' | 'COMPLETADA' | 'ERROR';
 export type TipoFondoLiberacionPcp = 'LFA' | 'LFM' | 'LFP';
 
@@ -36,8 +40,10 @@ export interface ConceptoReporteRevision {
   cair: number;
   fra: number;
   fre: number;
+  prestaciones: number;
   fh: number;
   fv: number;
+  vivienda: number;
   faa: number;
   fae: number;
   fat: number;
@@ -72,6 +78,14 @@ export interface RevisionTarea {
   usuarioId: string;
   intentos: number;
   claimToken: string;
+  liquidacionSnapshotId: string | null;
+}
+
+export interface RevisionSnapshotMetadata {
+  liquidacionSnapshotId: string;
+  hashContenido: string;
+  revision: number;
+  precisionPolicy: string;
 }
 
 export interface ResultadoConceptoRevision {
@@ -79,12 +93,13 @@ export interface ResultadoConceptoRevision {
   concepto: string;
   fuente: string;
   registrosOrigen: number;
-  importes: ImportesRevision;
+  importes: ImportesRevisionPersistencia;
   importesAnteriores?: ImportesRevision;
   operacion: 'INSERT' | 'UPDATE' | 'SIN_CAMBIOS';
   idRevision: number;
   idRevisionHistorico?: number;
   duracionMs: number;
+  liquidacionSnapshot?: RevisionSnapshotMetadata;
 }
 
 export function crearImportesRevision(): ImportesRevision {
@@ -92,8 +107,10 @@ export function crearImportesRevision(): ImportesRevision {
     CAIR: 0,
     FRA: 0,
     FRE: 0,
+    PRESTACIONES: 0,
     FH: 0,
     FV: 0,
+    VIVIENDA: 0,
     FAA: 0,
     FAE: 0,
     FAT: 0,

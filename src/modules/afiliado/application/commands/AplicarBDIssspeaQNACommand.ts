@@ -5,6 +5,7 @@ import { getQuincenaAplicacion } from '../../infrastructure/services/AfiliadoQui
 import { crearAplicacionQnaLogPayload, guardarAplicacionQnaLogFtp } from '../../infrastructure/services/AplicacionQnaLogFtpService.js';
 import { executeInTransaction } from '../../../../db/firebird.js';
 import { GenerateLineaCapturaPeriodoCommand, GenerateLineaCapturaPeriodoResult } from '../../../reportes/aplicacionesQNA/application/commands/GenerateLineaCapturaPeriodoCommand.js';
+import type { ILiquidacionQnaRepository } from '../../../liquidacionQna/domain/repositories/ILiquidacionQnaRepository.js';
 
 const logger = pino({
   name: 'aplicarBDIssspeaQNACommand',
@@ -15,6 +16,7 @@ export interface AplicarBDIssspeaQNAData {
   org0: string;
   org1: string;
   usuarioId: string;
+  liquidacionSnapshotId: string;
 }
 
 export interface AplicarBDIssspeaQNAResult {
@@ -41,11 +43,13 @@ export interface AplicarBDIssspeaQNAResult {
   lineaPago?: GenerateLineaCapturaPeriodoResult | null;
   mensaje: string;
   tiempoTotalMs: number;
+  liquidacionSnapshotId: string;
 }
 
 export class AplicarBDIssspeaQNACommand {
   constructor(
-    private generateLineaCapturaPeriodoCommand: GenerateLineaCapturaPeriodoCommand
+    private generateLineaCapturaPeriodoCommand: GenerateLineaCapturaPeriodoCommand,
+    private liquidacionQnaRepo: ILiquidacionQnaRepository
   ) {}
 
   async execute(data: AplicarBDIssspeaQNAData): Promise<AplicarBDIssspeaQNAResult> {
@@ -54,7 +58,8 @@ export class AplicarBDIssspeaQNACommand {
       operation: 'aplicarBDIssspeaQNA',
       org0: data.org0,
       org1: data.org1,
-      usuarioId: data.usuarioId
+      usuarioId: data.usuarioId,
+      liquidacionSnapshotId: data.liquidacionSnapshotId
     };
 
     logger.info(logContext, '🚀 [INICIO] Aplicando BDIssspea QNA');
@@ -87,6 +92,8 @@ export class AplicarBDIssspeaQNACommand {
     let firebirdTransaction: AplicarBDIssspeaQNAResult['firebirdTransaction'] = 'NO_INICIADA';
     let pasoFallido: string | null = null;
     let lineaPago: GenerateLineaCapturaPeriodoResult | null = null;
+    let qnaApplicationStarted = false;
+    let firebirdConfirmed = false;
     const inicioUtc = new Date().toISOString();
 
     const guardarLogFtp = async (resultado: 'OK' | 'ERROR' | 'PARCIAL', mensaje: string): Promise<string | null> => {
@@ -155,6 +162,14 @@ export class AplicarBDIssspeaQNACommand {
         // Formato QQAA (ej: "2125" = quincena 21 del año 2025)
         quincena = `${String(quincenaNumero).padStart(2, '0')}${String(anio).slice(-2)}`;
 
+        const officialSnapshot = await this.liquidacionQnaRepo.resolveOfficialById(data.liquidacionSnapshotId);
+        if (!officialSnapshot) throw new Error('QNA_SNAPSHOT_NOT_OFFICIAL_COMPLETE');
+        if (officialSnapshot.periodo !== quincena
+          || officialSnapshot.organica0.trim() !== data.org0.trim()
+          || officialSnapshot.organica1.trim() !== data.org1.trim()) {
+          throw new Error('QNA_SNAPSHOT_SCOPE_MISMATCH');
+        }
+
         const estadoMovimientos = await verificarAplicacionMovimientosFinalizada(
           data.org0,
           data.org1,
@@ -169,6 +184,14 @@ export class AplicarBDIssspeaQNACommand {
           throw new Error('LINEA_PAGO_PENDIENTE_RECUPERACION');
         }
         afectacionId = estadoMovimientos.afectacionId;
+        await this.liquidacionQnaRepo.appendProcessTransition(
+          data.liquidacionSnapshotId,
+          'APLICANDO_FIREBIRD',
+          'Inicio de aplicacion QNA en Firebird',
+          data.usuarioId,
+          false
+        );
+        qnaApplicationStarted = true;
 
         const paso1Time = Date.now() - paso1Start;
         ejecuciones.obtenerQuincena = { exito: true, duracionMs: paso1Time, error: undefined };
@@ -389,17 +412,27 @@ export class AplicarBDIssspeaQNACommand {
       });
       firebirdTransaction = 'COMMIT';
       pasoFallido = null;
+      await this.liquidacionQnaRepo.appendProcessTransition(
+        data.liquidacionSnapshotId,
+        'FIREBIRD_CONFIRMADO',
+        'Transaccion Firebird confirmada',
+        data.usuarioId
+      );
+      firebirdConfirmed = true;
 
       const lineaPagoStart = Date.now();
       try {
         pasoFallido = 'LINEA_PAGO';
-        lineaPago = await this.generateLineaCapturaPeriodoCommand.execute({
+        lineaPago = await this.generateLineaCapturaPeriodoCommand.executeFromSnapshot({
           org0: data.org0,
           org1: data.org1,
           periodo: quincena,
           usuarioId: data.usuarioId,
-          omitirValidacionEstado: true
+          omitirValidacionEstado: true,
+          liquidacionSnapshotId: data.liquidacionSnapshotId
         });
+        await this.liquidacionQnaRepo.appendProcessTransition(data.liquidacionSnapshotId, 'LINEA_CONFIRMADA', 'Linea de pago confirmada', data.usuarioId);
+        await this.liquidacionQnaRepo.appendProcessTransition(data.liquidacionSnapshotId, 'REVISA_PROGRAMADA', 'Tarea REVISA programada', data.usuarioId);
         ejecuciones.lineaPago = { exito: true, duracionMs: Date.now() - lineaPagoStart, error: undefined };
         pasoFallido = null;
       } catch (error: any) {
@@ -494,6 +527,7 @@ export class AplicarBDIssspeaQNACommand {
       }
 
       if (bitacoraActualizada) {
+        await this.liquidacionQnaRepo.appendProcessTransition(data.liquidacionSnapshotId, 'TERMINADO', 'Aplicacion QNA terminada', data.usuarioId);
         try {
           await registrarSiguienteQnaSiDisponible(data.org0, data.org1, quincena, data.usuarioId);
         } catch (error: any) {
@@ -555,7 +589,8 @@ export class AplicarBDIssspeaQNACommand {
         pasoFallido,
         lineaPago,
         mensaje,
-        tiempoTotalMs: tiempoTotal
+        tiempoTotalMs: tiempoTotal,
+        liquidacionSnapshotId: data.liquidacionSnapshotId
       };
 
     } catch (error: any) {
@@ -564,6 +599,11 @@ export class AplicarBDIssspeaQNACommand {
       }
       const tiempoTotal = Date.now() - startTime;
       const errorMsg = error.message || String(error);
+      if (qnaApplicationStarted && firebirdTransaction === 'ROLLBACK') {
+        await this.liquidacionQnaRepo.appendProcessTransition(data.liquidacionSnapshotId, 'FIREBIRD_REVERTIDO', errorMsg, data.usuarioId).catch(() => undefined);
+      } else if (qnaApplicationStarted && firebirdTransaction === 'COMMIT' && !firebirdConfirmed) {
+        await this.liquidacionQnaRepo.appendProcessTransition(data.liquidacionSnapshotId, 'APLICACION_INCIERTA', errorMsg, data.usuarioId).catch(() => undefined);
+      }
       const resultadoFtp = firebirdTransaction === 'COMMIT' && pasoFallido === 'LINEA_PAGO' ? 'PARCIAL' : 'ERROR';
       logFtpPath = await guardarLogFtp(resultadoFtp, `Error durante el proceso: ${errorMsg}`);
       
@@ -600,7 +640,8 @@ export class AplicarBDIssspeaQNACommand {
         pasoFallido,
         lineaPago,
         mensaje: `Error durante el proceso: ${errorMsg}`,
-        tiempoTotalMs: tiempoTotal
+        tiempoTotalMs: tiempoTotal,
+        liquidacionSnapshotId: data.liquidacionSnapshotId
       };
     }
   }

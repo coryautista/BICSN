@@ -41,6 +41,16 @@ AFPA = sueldo_proporcional * porcentaje_afiliado
 total = AFPE + AFPA
 ```
 
+### Presentacion del sueldo en Prestaciones
+
+La columna `Sueldo base de cotizacion` del modal y sus exportaciones CSV/TXT muestra exclusivamente `sueldo_proporcional`, calculado con los dias laborados resueltos:
+
+```text
+sueldo_proporcional = sueldo_mensual / 30 * dias_laborados
+```
+
+No debe mostrar `sueldo`, porque es mensual, ni `sueldo_base`, porque esa base completa tambien incluye otras prestaciones proporcionales y quinquenios aplicados para AFPE.
+
 ## Justificacion
 
 Cuando hay dias laborados reales por nomina, el valor proporcional ya debe venir calculado y guardado en:

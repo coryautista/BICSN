@@ -5,18 +5,30 @@ import type {
 } from '../entities/SnapshotCalculoV2.js';
 import { AportacionesMonetaryKernel } from './AportacionesMonetaryKernel.js';
 import { NominaDiasLaboradosResolver, type NominaDiasContext } from './NominaDiasLaboradosResolver.js';
+import { FORMULA_PRECISION_POLICY } from '../entities/FormulaCalculo.js';
 
 type FondoBaseDetalle = {
   interno: number;
   sueldo: number;
   quinquenios: number;
   otras_prestaciones?: number | null;
+  sueldo_d6?: string;
+  quinquenios_d6?: string;
+  otras_prestaciones_d6?: string;
 };
 
-type AhorroDetalle = FondoBaseDetalle & { afae: number; afaa: number; total: number };
-type ViviendaDetalle = FondoBaseDetalle & { afe: number };
-type PrestacionesDetalle = FondoBaseDetalle & { afpe: number; afpa: number };
-type CairDetalle = FondoBaseDetalle & { afe: number };
+type AhorroDetalle = FondoBaseDetalle & { afae: number; afaa: number; total: number; afae_d6?: string; afaa_d6?: string; total_d6?: string };
+type ViviendaDetalle = FondoBaseDetalle & { afe: number; afe_d6?: string; fh_d6?: string; fv_d6?: string; total_d6?: string };
+type PrestacionesDetalle = FondoBaseDetalle & {
+  afpe: number;
+  afpa: number;
+  afpe_d6?: string;
+  afpa_d6?: string;
+  quinquenios_aplicado_d6?: string | null;
+  total?: number;
+  total_d6?: string;
+};
+type CairDetalle = FondoBaseDetalle & { afe: number; afe_d6?: string; total_d6?: string };
 
 export type SnapshotIdentidadFai = {
   interno: number;
@@ -34,6 +46,7 @@ export type SnapshotCalculoV2FactoryInput = {
   organica3: string;
   ambiente: 'DESARROLLO' | 'CALIDAD' | 'PRODUCCION';
   formulaCalculoVersionId: string;
+  diasPolicy: { default: number; min: number; max: number };
   nominaCargaId: string | null;
   usuarioId: string | null;
   ahorro: AhorroDetalle[];
@@ -60,12 +73,14 @@ export function seleccionarCargaTxtSnapshotV2(rows: SnapshotCargaTxtVigente[]):
 }
 
 export class SnapshotCalculoV2Factory {
-  constructor(
-    private readonly kernel = new AportacionesMonetaryKernel(),
-    private readonly diasResolver = new NominaDiasLaboradosResolver()
-  ) {}
+  constructor(private readonly kernel = new AportacionesMonetaryKernel()) {}
 
   crear(input: SnapshotCalculoV2FactoryInput): SnapshotCalculoV2Input {
+    const diasResolver = new NominaDiasLaboradosResolver(
+      input.diasPolicy.default,
+      input.diasPolicy.min,
+      input.diasPolicy.max
+    );
     const ahorro = this.indexar(input.ahorro, 'AHORRO');
     const vivienda = this.indexar(input.vivienda, 'VIVIENDA');
     const prestaciones = this.indexar(input.prestaciones, 'PRESTACIONES');
@@ -84,30 +99,43 @@ export class SnapshotCalculoV2Factory {
       const rowPrestaciones = prestaciones.get(interno)!;
       const rowCair = cair.get(interno)!;
       const identidad = identidades.get(interno)!;
-      const dias = this.diasResolver.resolve(identidad.rfc, input.nomina, true);
+      const dias = diasResolver.resolve(identidad.rfc, input.nomina, true);
       return {
         orden: index + 1,
         empleadoClaveHash: this.hashEmpleado(input, interno),
-        diasLaborados: dias.dias.toFixed(2),
+        diasLaborados: this.diasD2(dias.dias, input.diasPolicy.max),
         diasOrigen: dias.origen,
-        sueldoMensualD6: this.d6(rowAhorro.sueldo),
-        otrasPrestacionesMensualesD6: this.nullableD6(rowAhorro.otras_prestaciones),
-        quinqueniosMensualD6: this.d6(rowAhorro.quinquenios),
-        baseCotizacionQuinqueniosD6: this.nullableD6(dias.baseCotizacionQuinquenios),
-        cairD6: this.d6(rowCair.afe),
-        fraD6: this.d6(rowPrestaciones.afpa),
-        freD6: this.d6(rowPrestaciones.afpe),
-        fhD6: this.kernel.multiplicarD6(String(rowVivienda.afe), '0.2'),
-        fvD6: this.kernel.multiplicarD6(String(rowVivienda.afe), '0.8'),
-        faaD6: this.d6(rowAhorro.afaa),
-        faeD6: this.d6(rowAhorro.afae),
-        fatD6: this.d6(rowAhorro.total),
+        sueldoMensualD6: this.d6(rowAhorro.sueldo_d6 ?? rowAhorro.sueldo),
+        otrasPrestacionesMensualesD6: this.nullableD6(rowAhorro.otras_prestaciones_d6 ?? rowAhorro.otras_prestaciones),
+        quinqueniosMensualD6: this.d6(rowAhorro.quinquenios_d6 ?? rowAhorro.quinquenios),
+        baseCotizacionQuinqueniosD6: this.nullableD6(rowPrestaciones.quinquenios_aplicado_d6),
+        cairD6: this.d6(rowCair.afe_d6 ?? rowCair.afe),
+        cairFondoD6: this.d6(rowCair.total_d6 ?? rowCair.afe_d6 ?? rowCair.afe),
+        fraD6: this.d6(rowPrestaciones.afpa_d6 ?? rowPrestaciones.afpa),
+        freD6: this.d6(rowPrestaciones.afpe_d6 ?? rowPrestaciones.afpe),
+        prestacionesD6: this.d6(rowPrestaciones.total_d6 ?? rowPrestaciones.total ?? this.kernel.sumarD6([
+          String(rowPrestaciones.afpa_d6 ?? rowPrestaciones.afpa),
+          String(rowPrestaciones.afpe_d6 ?? rowPrestaciones.afpe)
+        ])),
+        fhD6: this.d6(rowVivienda.fh_d6 ?? this.kernel.multiplicarD6(String(rowVivienda.afe_d6 ?? rowVivienda.afe), '0.2')),
+        fvD6: this.d6(rowVivienda.fv_d6 ?? this.kernel.multiplicarD6(String(rowVivienda.afe_d6 ?? rowVivienda.afe), '0.8')),
+        viviendaD6: this.d6(rowVivienda.total_d6 ?? rowVivienda.afe_d6 ?? rowVivienda.afe),
+        faaD6: this.d6(rowAhorro.afaa_d6 ?? rowAhorro.afaa),
+        faeD6: this.d6(rowAhorro.afae_d6 ?? rowAhorro.afae),
+        fatD6: this.d6(rowAhorro.total_d6 ?? rowAhorro.total),
         faiD6: this.d6(identidad.faiD6)
       };
     });
-    const agregar = (field: keyof SnapshotCalculoV2Detalle): string =>
-      this.kernel.agregarA2(detalles.map((row) => String(row[field] ?? '0')));
+    const agregarComponente = (field: keyof SnapshotCalculoV2Detalle): string =>
+      this.kernel.agregarComponenteA2(detalles.map((row) => String(row[field] ?? '0')));
 
+    const faaA2 = agregarComponente('faaD6');
+    const faeA2 = agregarComponente('faeD6');
+    const cairA2 = agregarComponente('cairD6');
+    const fraA2 = agregarComponente('fraD6');
+    const freA2 = agregarComponente('freD6');
+    const fhA2 = agregarComponente('fhD6');
+    const fvA2 = agregarComponente('fvD6');
     return {
       entidadId: input.entidadId,
       anio: input.anio,
@@ -121,19 +149,22 @@ export class SnapshotCalculoV2Factory {
       estado: 'COMPLETO',
       formulaCalculoVersionId: input.formulaCalculoVersionId,
       nominaCargaId: input.nominaCargaId,
-      precisionPolicy: 'MXN-DETAIL6-AGG2-TRUNC-v1',
-      versionEsquema: 1,
+      precisionPolicy: FORMULA_PRECISION_POLICY,
+      versionEsquema: 3,
       usuarioId: input.usuarioId,
       totalesA2: {
-        CAIR: agregar('cairD6'),
-        FRA: agregar('fraD6'),
-        FRE: agregar('freD6'),
-        FH: agregar('fhD6'),
-        FV: agregar('fvD6'),
-        FAA: agregar('faaD6'),
-        FAE: agregar('faeD6'),
-        FAT: agregar('fatD6'),
-        FAI: agregar('faiD6')
+        CAIR: cairA2,
+        CAIR_FONDO: cairA2,
+        FRA: fraA2,
+        FRE: freA2,
+        PRESTACIONES: this.kernel.sumarA2([fraA2, freA2]),
+        FH: fhA2,
+        FV: fvA2,
+        VIVIENDA: this.kernel.sumarA2([fhA2, fvA2]),
+        FAA: faaA2,
+        FAE: faeA2,
+        FAT: this.kernel.sumarA2([faaA2, faeA2]),
+        FAI: agregarComponente('faiD6')
       },
       detalles
     };
@@ -165,10 +196,18 @@ export class SnapshotCalculoV2Factory {
   }
 
   private d6(value: number | string): string {
-    return this.kernel.truncarD6(String(value));
+    return this.kernel.redondearD6(String(value));
   }
 
-  private nullableD6(value: number | null | undefined): string | null {
+  private nullableD6(value: number | string | null | undefined): string | null {
     return value === null || value === undefined ? null : this.d6(value);
+  }
+
+  private diasD2(value: number, maximum: number): string {
+    if (!Number.isFinite(value) || value < 0 || value > maximum) throw new Error('DIAS_LABORADOS_FUERA_RANGO');
+    const text = String(value);
+    const [integer, fraction = ''] = text.split('.');
+    if (fraction.length > 2) throw new Error('DIAS_LABORADOS_ESCALA_INVALIDA');
+    return `${integer}.${fraction.padEnd(2, '0')}`;
   }
 }

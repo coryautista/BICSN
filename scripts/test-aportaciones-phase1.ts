@@ -3,6 +3,7 @@ import { readFile } from 'node:fs/promises';
 import {
   FORMULA_PARAMETRO_CLAVES,
   FORMULA_PRECISION_POLICY,
+  FORMULA_PRECISION_POLICY_LEGACY,
   type FormulaCalculoParametros
 } from '../src/modules/aportacionesFondos/domain/entities/FormulaCalculo.js';
 import { AportacionesMonetaryKernel } from '../src/modules/aportacionesFondos/domain/services/AportacionesMonetaryKernel.js';
@@ -31,7 +32,8 @@ async function main(): Promise<void> {
   const fixture = JSON.parse(await readFile(fixtureUrl, 'utf8')) as GoldenFixture;
   assert.equal(fixture.schemaVersion, 1);
   assert.deepEqual([fixture.source.anio, fixture.source.quincena, fixture.source.readOnly], [2026, 11, true]);
-  assert.equal(fixture.formula.precisionPolicy, FORMULA_PRECISION_POLICY);
+  assert.equal(fixture.formula.precisionPolicy, FORMULA_PRECISION_POLICY_LEGACY);
+  assert.notEqual(FORMULA_PRECISION_POLICY, FORMULA_PRECISION_POLICY_LEGACY);
   assert.equal(Object.keys(fixture.formula.parameters).length, 15);
 
   const parameters = Object.fromEntries(FORMULA_PARAMETRO_CLAVES.map((key) => {
@@ -39,14 +41,20 @@ async function main(): Promise<void> {
     assert.ok(parameter, `Falta parámetro ${key}`);
     return [key, parameter.value];
   })) as FormulaCalculoParametros;
+  parameters.FRE_OTRAS = '0.267500000';
+  parameters.FH_SUELDO = '0.003500000';
+  parameters.FV_SUELDO = '0.014000000';
 
   const kernel = new AportacionesMonetaryKernel();
   assert.equal(kernel.truncarA2('123.459999'), '123.45');
   assert.equal(kernel.truncarA2('-123.459999'), '-123.45');
   assert.equal(kernel.truncarA2('-0.009999'), '0.00');
   assert.equal(kernel.truncarD6('1.123456789'), '1.123456');
-  assert.equal(kernel.agregarA2(['1.239999', '1.239999']), '2.47');
-  assert.equal(kernel.agregarA2(['-1.239999', '-1.239999']), '-2.47');
+  assert.equal(kernel.agregarA2(['1.239999', '1.239999']), '2.48');
+  assert.equal(kernel.agregarA2(['-1.239999', '-1.239999']), '-2.48');
+  assert.equal(kernel.agregarComponenteA2(['1.234999', '1.234999']), '2.46');
+  assert.equal(kernel.proporcionarBaseA2D6('18757.85', '15', '30'), '9378.920000');
+  assert.equal(kernel.proporcionarBaseA2D6('16016.59', '15', '30'), '8008.300000');
 
   const partial = fixture.cases.find((item) => item.caseId === 'PARTIAL_001');
   assert.ok(partial?.sueldoMensualFirebird);
@@ -58,17 +66,17 @@ async function main(): Promise<void> {
     parametros: parameters
   });
   assert.deepEqual(partialResult, {
-    sueldoProporcionalD6: '4688.044000',
+    sueldoProporcionalD6: '4688.040000',
     otrasPrestacionesProporcionalD6: '0.000000',
     baseCotizacionQuinqueniosD6: '0.000000',
-    cairD6: '93.760880',
-    fraD6: '210.961980',
-    freD6: '1043.089790',
-    fhD6: '16.408154',
-    fvD6: '65.632616',
-    faaD6: '234.402200',
-    faeD6: '117.201100',
-    fatD6: '351.603300'
+    cairD6: '93.760000',
+    fraD6: '210.960000',
+    freD6: '1043.090000',
+    fhD6: '16.410000',
+    fvD6: '65.630000',
+    faaD6: '234.400000',
+    faeD6: '117.200000',
+    fatD6: '351.600000'
   });
 
   const missingPayroll = fixture.cases.find((item) => item.origin === 'NOMINA_SIN_COINCIDENCIA');

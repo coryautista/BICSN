@@ -47,6 +47,7 @@ export interface PensionNominaTransitorio {
   tpercep: number | null;
   tdeduc: number | null;
   total: number | null;
+  total_d6: string;
   fin: Date | null;
   inicio: Date | null;
   anio: number | null;

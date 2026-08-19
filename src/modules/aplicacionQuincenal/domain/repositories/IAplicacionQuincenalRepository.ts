@@ -71,7 +71,8 @@ export interface IAplicacionQuincenalRepository {
   ): Promise<ValidarAplicacionQnaAportacionesResult>;
   guardarHistoricoAportaciones(
     req: FastifyRequest,
-    data: GuardarHistoricoAportaciones
+    data: GuardarHistoricoAportaciones,
+    snapshotV2Required?: boolean
   ): Promise<GuardarHistoricoAportacionesResult>;
   guardarHistoricoRetenciones(
     req: FastifyRequest,

@@ -3,7 +3,7 @@ import { requireAuth } from '../auth/auth.middleware.js';
 import { CargarNominaAplicacionQnalTxtCommand } from './application/commands/CargarNominaAplicacionQnalTxtCommand.js';
 import { GetNominaAplicacionQnalTxtRegistrosQuery } from './application/queries/GetNominaAplicacionQnalTxtRegistrosQuery.js';
 import { GetNominaAplicacionQnalCargaVigenteQuery } from './application/queries/GetNominaAplicacionQnalCargaVigenteQuery.js';
-import { NominaCargaInconsistenteError } from './domain/errors.js';
+import { NominaCargaBloqueadaError, NominaCargaInconsistenteError } from './domain/errors.js';
 import { CargarNominaAplicacionQnalTxtFieldsSchema, GetNominaAplicacionQnalCargaVigenteSchema, GetNominaAplicacionQnalTxtRegistrosSchema } from './nomina.schemas.js';
 
 export default async function nominaRoutes(app: FastifyInstance) {
@@ -41,13 +41,27 @@ export default async function nominaRoutes(app: FastifyInstance) {
     }
 
     const command = request.diScope.resolve<CargarNominaAplicacionQnalTxtCommand>('cargarNominaAplicacionQnalTxtCommand');
-    const result = await command.execute({
-      ...parsed.data,
-      ...organicas.data,
-      archivoNombre: data.filename,
-      archivoContenido: await data.toBuffer(),
-      usuarioId: request.user?.sub
-    });
+    let result;
+    try {
+      result = await command.execute({
+        ...parsed.data,
+        ...organicas.data,
+        archivoNombre: data.filename,
+        archivoContenido: await data.toBuffer(),
+        usuarioId: request.user?.sub
+      });
+    } catch (error) {
+      if (error instanceof NominaCargaBloqueadaError) {
+        return reply.code(409).send({
+          ok: false,
+          error: {
+            code: 'NOMINA_TXT_BLOQUEADA_POR_LIQUIDACION_OFICIAL',
+            message: 'La nómina TXT no puede reemplazarse después de promover la liquidación oficial.'
+          }
+        });
+      }
+      throw error;
+    }
 
     return reply.code(result.estado === 'ACEPTADA' ? 201 : 422).send({ ok: result.estado === 'ACEPTADA', data: result });
   });

@@ -28,6 +28,7 @@ import { ListSnapshotCalculoV2Query } from './application/queries/ListSnapshotCa
 import { CreateSnapshotCalculoV2DecisionCommand } from './application/commands/CreateSnapshotCalculoV2DecisionCommand.js';
 import { GetSnapshotCalculoV2OfficialQuery } from './application/queries/GetSnapshotCalculoV2OfficialQuery.js';
 import { ListSnapshotCalculoV2DecisionsQuery } from './application/queries/ListSnapshotCalculoV2DecisionsQuery.js';
+import { PRESTAMOS_PRECISION_POLICY, PRESTAMOS_SOURCE_SCALE, sumD6ToA2 } from './domain/entities/PrestamoMoney.js';
 
 // Routes for fund contributions operations
 export default async function aportacionesFondosRoutes(app: FastifyInstance) {
@@ -277,6 +278,7 @@ export default async function aportacionesFondosRoutes(app: FastifyInstance) {
                       sueldo: { type: 'number', nullable: true },
                       quinquenios: { type: 'number', nullable: true },
                       otras_prestaciones: { type: 'number', nullable: true },
+                      sueldo_proporcional: { type: 'number' },
                       sueldo_base: { type: 'number' },
                       afae: { type: 'number' },
                       afaa: { type: 'number' },
@@ -286,9 +288,24 @@ export default async function aportacionesFondosRoutes(app: FastifyInstance) {
                       total: { type: 'number' },
                       tipo: { type: 'string' },
                       dias_laborados: { type: 'number' },
-                      dias_laborados_origen: { type: 'string', enum: ['nomina', 'default', 'nomina_sin_coincidencia'] },
+                      dias_laborados_origen: { type: 'string', enum: ['nomina', 'movimiento', 'default', 'nomina_sin_coincidencia', 'historico_snapshot', 'historico_sin_dias'] },
                       base_cotizacion_quinquenios: { type: 'number', nullable: true },
-                      quinquenios_aplicado: { type: 'number', nullable: true }
+                      quinquenios_aplicado: { type: 'number', nullable: true },
+                      base_cotizacion_quinquenios_d6: { type: 'string', nullable: true },
+                      quinquenios_aplicado_d6: { type: 'string', nullable: true },
+                      sueldo_d6: { type: 'string', pattern: '^-?(0|[1-9]\\d*)\\.\\d{6}$' },
+                      quinquenios_d6: { type: 'string', pattern: '^-?(0|[1-9]\\d*)\\.\\d{6}$' },
+                      otras_prestaciones_d6: { type: 'string', pattern: '^-?(0|[1-9]\\d*)\\.\\d{6}$' },
+                      sueldo_proporcional_d6: { type: 'string', pattern: '^-?(0|[1-9]\\d*)\\.\\d{6}$' },
+                      sueldo_base_d6: { type: 'string', pattern: '^-?(0|[1-9]\\d*)\\.\\d{6}$' },
+                      afae_d6: { type: 'string' },
+                      afaa_d6: { type: 'string' },
+                      afe_d6: { type: 'string' },
+                      fh_d6: { type: 'string' },
+                      fv_d6: { type: 'string' },
+                      afpe_d6: { type: 'string' },
+                      afpa_d6: { type: 'string' },
+                      total_d6: { type: 'string', pattern: '^-?(0|[1-9]\\d*)\\.\\d{6}$' }
                     }
                   }
                 },
@@ -297,9 +314,25 @@ export default async function aportacionesFondosRoutes(app: FastifyInstance) {
                   properties: {
                     total_empleados: { type: 'number' },
                     total_contribucion: { type: 'number' },
-                    total_sueldo_base: { type: 'number' }
+                    total_sueldo_base: { type: 'number' },
+                    total_contribucion_a2: { type: 'string', pattern: '^-?(0|[1-9]\\d*)\\.\\d{2}$' },
+                    total_sueldo_base_a2: { type: 'string', pattern: '^-?(0|[1-9]\\d*)\\.\\d{2}$' },
+                    componentes_a2: {
+                      type: 'object',
+                      additionalProperties: false,
+                      properties: {
+                        afae: { type: 'string', pattern: '^-?(0|[1-9]\\d*)\\.\\d{2}$' },
+                        afaa: { type: 'string', pattern: '^-?(0|[1-9]\\d*)\\.\\d{2}$' },
+                        afe: { type: 'string', pattern: '^-?(0|[1-9]\\d*)\\.\\d{2}$' },
+                        afpe: { type: 'string', pattern: '^-?(0|[1-9]\\d*)\\.\\d{2}$' },
+                        afpa: { type: 'string', pattern: '^-?(0|[1-9]\\d*)\\.\\d{2}$' }
+                      }
+                    }
                   }
-                }
+                },
+                precision_policy: { type: 'string' },
+                formula_version_id: { type: 'string' },
+                fuente_datos: { type: 'string', enum: ['CALCULO_VIVO', 'HISTORICO_SQL'] }
               }
             }
           }
@@ -413,12 +446,17 @@ export default async function aportacionesFondosRoutes(app: FastifyInstance) {
                     total_empleados: { type: 'number' },
                     total_contribucion_general: { type: 'number' },
                     total_sueldo_base_general: { type: 'number' },
+                    total_contribucion_general_a2: { type: 'string' },
+                    total_sueldo_base_general_a2: { type: 'string' },
                     fondos_incluidos: {
                       type: 'array',
                       items: { type: 'string' }
                     }
                   }
-                }
+                },
+                precision_policy: { type: 'string' },
+                formula_version_id: { type: 'string' },
+                fuente_datos: { type: 'string', enum: ['CALCULO_VIVO'] }
               }
             }
           }
@@ -529,10 +567,15 @@ export default async function aportacionesFondosRoutes(app: FastifyInstance) {
                       periodo_c: { type: 'string', nullable: true },
                       fecha_c: { type: 'string', nullable: true },
                       capital: { type: 'number', nullable: true },
+                      capital_d6: { type: 'string', nullable: true },
                       interes: { type: 'number', nullable: true },
+                      interes_d6: { type: 'string', nullable: true },
                       monto: { type: 'number', nullable: true },
+                      monto_d6: { type: 'string', nullable: true },
                       moratorios: { type: 'number', nullable: true },
+                      moratorios_d6: { type: 'string', nullable: true },
                       total: { type: 'number', nullable: true },
+                      total_d6: { type: 'string', nullable: true },
                       resultado: { type: 'string', nullable: true },
                       td: { type: 'string', nullable: true },
                       org0: { type: 'string', nullable: true },
@@ -545,7 +588,10 @@ export default async function aportacionesFondosRoutes(app: FastifyInstance) {
                       norg3: { type: 'string', nullable: true }
                     }
                   }
-                }
+                },
+                total_pcp_a2: { type: 'string' },
+                source_scale: { type: 'integer', enum: [2] },
+                precision_policy: { type: 'string' }
               }
             }
           }
@@ -628,7 +674,12 @@ export default async function aportacionesFondosRoutes(app: FastifyInstance) {
         duracionMs: duration
       });
 
-      return reply.send(ok(result));
+      return reply.send(ok({
+        ...result,
+        total_pcp_a2: sumD6ToA2(result.prestamos.map(p => p.total_d6)),
+        source_scale: PRESTAMOS_SOURCE_SCALE,
+        precision_policy: PRESTAMOS_PRECISION_POLICY
+      }));
     } catch (error: any) {
       const duration = Date.now() - startTime;
       console.error(`[APORTACIONES_FONDOS] [ROUTE] [${requestId}] Error en solicitud`, {
@@ -680,10 +731,15 @@ export default async function aportacionesFondosRoutes(app: FastifyInstance) {
                       periodo_c: { type: 'string', nullable: true },
                       fecha_c: { type: 'string', nullable: true },
                       capital: { type: 'number', nullable: true },
+                      capital_d6: { type: 'string', nullable: true },
                       moratorios: { type: 'number', nullable: true },
+                      moratorios_d6: { type: 'string', nullable: true },
                       interes: { type: 'number', nullable: true },
+                      interes_d6: { type: 'string', nullable: true },
                       seguro: { type: 'number', nullable: true },
+                      seguro_d6: { type: 'string', nullable: true },
                       total: { type: 'number', nullable: true },
+                      total_d6: { type: 'string', nullable: true },
                       resultado: { type: 'string', nullable: true },
                       clase: { type: 'string', nullable: true },
                       org0: { type: 'string', nullable: true },
@@ -704,7 +760,10 @@ export default async function aportacionesFondosRoutes(app: FastifyInstance) {
                       fecha_origen: { type: 'string', nullable: true }
                     }
                   }
-                }
+                },
+                total_pmp_a2: { type: 'string' },
+                source_scale: { type: 'integer', enum: [2] },
+                precision_policy: { type: 'string' }
               }
             }
           }
@@ -787,7 +846,12 @@ export default async function aportacionesFondosRoutes(app: FastifyInstance) {
         duracionMs: duration
       });
 
-      return reply.send(ok(result));
+      return reply.send(ok({
+        ...result,
+        total_pmp_a2: sumD6ToA2(result.prestamos.map(p => p.total_d6)),
+        source_scale: PRESTAMOS_SOURCE_SCALE,
+        precision_policy: PRESTAMOS_PRECISION_POLICY
+      }));
     } catch (error: any) {
       const duration = Date.now() - startTime;
       console.error(`[APORTACIONES_FONDOS] [ROUTE] [${requestId}] Error en solicitud`, {
@@ -836,14 +900,20 @@ export default async function aportacionesFondosRoutes(app: FastifyInstance) {
                       nombre: { type: 'string', nullable: true },
                       noempleado: { type: 'string', nullable: true },
                       cantidad: { type: 'number', nullable: true },
+                      cantidad_d6: { type: 'string', nullable: true },
                       status: { type: 'string', nullable: true },
                       referencia_1: { type: 'string', nullable: true },
                       referencia_2: { type: 'string', nullable: true },
                       capital_pagar: { type: 'number', nullable: true },
+                      capital_pagar_d6: { type: 'string', nullable: true },
                       interes_pagar: { type: 'number', nullable: true },
+                      interes_pagar_d6: { type: 'string', nullable: true },
                       interes_diferido_pagar: { type: 'number', nullable: true },
+                      interes_diferido_pagar_d6: { type: 'string', nullable: true },
                       seguro_pagar: { type: 'number', nullable: true },
+                      seguro_pagar_d6: { type: 'string', nullable: true },
                       moratorio_pagar: { type: 'number', nullable: true },
+                      moratorio_pagar_d6: { type: 'string', nullable: true },
                       pno_solicitud: { type: 'number', nullable: true },
                       pano: { type: 'number', nullable: true },
                       pclave_clase_prestamo: { type: 'string', nullable: true },
@@ -862,6 +932,7 @@ export default async function aportacionesFondosRoutes(app: FastifyInstance) {
                       tipo: { type: 'string', nullable: true },
                       periodo_c: { type: 'string', nullable: true },
                       descto: { type: 'number', nullable: true },
+                      descto_d6: { type: 'string', nullable: true },
                       fecha_c: { type: 'string', nullable: true },
                       resultado: { type: 'string', nullable: true },
                       po: { type: 'string', nullable: true },
@@ -869,7 +940,10 @@ export default async function aportacionesFondosRoutes(app: FastifyInstance) {
                       plazo: { type: 'number', nullable: true }
                     }
                   }
-                }
+                },
+                total_hipotecario_a2: { type: 'string' },
+                source_scale: { type: 'integer', enum: [2] },
+                precision_policy: { type: 'string' }
               }
             }
           }
@@ -973,7 +1047,12 @@ export default async function aportacionesFondosRoutes(app: FastifyInstance) {
         duracionMs: duration
       });
 
-      return reply.send(ok(result));
+      return reply.send(ok({
+        ...result,
+        total_hipotecario_a2: sumD6ToA2(result.prestamos.map(p => p.cantidad_d6)),
+        source_scale: PRESTAMOS_SOURCE_SCALE,
+        precision_policy: PRESTAMOS_PRECISION_POLICY
+      }));
     } catch (error: any) {
       const duration = Date.now() - startTime;
       console.error(`[APORTACIONES_FONDOS] [ROUTE] [${requestId}] Error en solicitud`, {

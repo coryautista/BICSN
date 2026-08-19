@@ -4,10 +4,13 @@ export type SnapshotDiasOrigen = 'nomina' | 'movimiento' | 'nomina_sin_coinciden
 
 export type SnapshotTotalesA2 = {
   CAIR: string;
+  CAIR_FONDO: string;
   FRA: string;
   FRE: string;
+  PRESTACIONES: string;
   FH: string;
   FV: string;
+  VIVIENDA: string;
   FAA: string;
   FAE: string;
   FAT: string;
@@ -24,10 +27,13 @@ export type SnapshotCalculoV2Detalle = {
   quinqueniosMensualD6: string | null;
   baseCotizacionQuinqueniosD6: string | null;
   cairD6: string | null;
+  cairFondoD6: string | null;
   fraD6: string | null;
   freD6: string | null;
+  prestacionesD6: string | null;
   fhD6: string | null;
   fvD6: string | null;
+  viviendaD6: string | null;
   faaD6: string | null;
   faeD6: string | null;
   fatD6: string | null;

@@ -8,6 +8,7 @@ import type { SnapshotCalculoV2Input } from '../../../aportacionesFondos/domain/
 import { SnapshotCalculoV2Factory, seleccionarCargaTxtSnapshotV2 } from '../../../aportacionesFondos/domain/services/SnapshotCalculoV2Factory.js';
 import { SnapshotCalculoV2Repository } from '../../../aportacionesFondos/infrastructure/persistence/SnapshotCalculoV2Repository.js';
 import type { NominaDiasContext } from '../../../aportacionesFondos/domain/services/NominaDiasLaboradosResolver.js';
+import type { IFormulaCalculoRepository } from '../../../aportacionesFondos/domain/repositories/IFormulaCalculoRepository.js';
 import { IAplicacionQuincenalRepository, GuardarHistoricoAportacionesResult, GuardarHistoricoRetencionesResult, ValidarAplicacionQnaAportacionesResult } from '../../domain/repositories/IAplicacionQuincenalRepository.js';
 import { RevisionAplicacionDiasFactory } from '../../domain/services/RevisionAplicacionDiasFactory.js';
 import { AportacionQuincenalResumen } from '../../domain/entities/AportacionQuincenalResumen.js';
@@ -65,7 +66,10 @@ export class AplicacionQuincenalRepository implements IAplicacionQuincenalReposi
   private readonly snapshotCalculoV2Factory = new SnapshotCalculoV2Factory();
   private readonly revisionAplicacionDiasFactory = new RevisionAplicacionDiasFactory();
 
-  constructor(private readonly snapshotCalculoV2Repo: SnapshotCalculoV2Repository) {}
+  constructor(
+    private readonly snapshotCalculoV2Repo: SnapshotCalculoV2Repository,
+    private readonly formulaCalculoRepo: IFormulaCalculoRepository
+  ) {}
 
   async validarAplicacionQnaAportaciones(organica0: string, organica1: string, periodo: string): Promise<ValidarAplicacionQnaAportacionesResult> {
     const org0 = String(organica0).trim().toUpperCase().padStart(2, '0');
@@ -766,7 +770,8 @@ export class AplicacionQuincenalRepository implements IAplicacionQuincenalReposi
 
   async guardarHistoricoAportaciones(
     req: FastifyRequest,
-    data: GuardarHistoricoAportaciones
+    data: GuardarHistoricoAportaciones,
+    snapshotV2Required = false
   ): Promise<GuardarHistoricoAportacionesResult> {
     const startTime = Date.now();
     const logContext = {
@@ -797,9 +802,16 @@ export class AplicacionQuincenalRepository implements IAplicacionQuincenalReposi
         periodo,
         String((req as any).user?.sub || referencia.usuario_id)
       );
-      const snapshotV2 = env.features.snapshotCalculoV2ShadowEnabled
-        ? await this.prepararSnapshotCalculoV2(data, referencia, String((req as any).user?.sub || referencia.usuario_id))
+      const snapshotV2 = snapshotV2Required || env.features.snapshotCalculoV2ShadowEnabled
+        ? await this.prepararSnapshotCalculoV2(
+          data,
+          referencia,
+          String((req as any).user?.sub || referencia.usuario_id)
+        )
         : null;
+      if (snapshotV2Required && !snapshotV2) {
+        throw new Error('SNAPSHOT_V2_NO_GENERADO');
+      }
 
       await withDbContext(req, async (tx) => {
         // Procesar Ahorro (siempre, incluso con 0 registros)
@@ -893,8 +905,9 @@ export class AplicacionQuincenalRepository implements IAplicacionQuincenalReposi
             ...logContext,
             snapshotId: result.snapshotId,
             snapshotRevision: result.revision,
-            snapshotIdempotente: result.idempotente
-          }, 'Snapshot de calculo V2 guardado en sombra');
+            snapshotIdempotente: result.idempotente,
+            snapshotObligatorio: snapshotV2Required
+          }, 'Snapshot de calculo V2 guardado');
         }
       });
 
@@ -1020,10 +1033,6 @@ export class AplicacionQuincenalRepository implements IAplicacionQuincenalReposi
           AND ((TipoCarga='TXT' AND EsVigente=1) OR TipoCarga='MOVIMIENTO')
         ORDER BY Id;
 
-        SELECT FormulaCalculoVersionId
-        FROM aportaciones.FormulaCalculoVersion
-        WHERE AnioVigencia=@Anio AND Estado='ACTIVA'
-        ORDER BY NumeroVersion DESC,FormulaCalculoVersionId DESC;
       `);
     const sets = metadata.recordsets as Array<Array<Record<string, unknown>>>;
     const cargasTxt = sets[0].filter((row) => row.TipoCarga === 'TXT').map((row) => ({
@@ -1036,7 +1045,7 @@ export class AplicacionQuincenalRepository implements IAplicacionQuincenalReposi
     if (!cargaSeleccionada.carga && cargaSeleccionada.reason === 'TXT_VIGENTE_AMBIGUO') {
       return omit(cargaSeleccionada.reason, { cargas: cargasTxt.length });
     }
-    if (sets[1].length === 0) return omit('SIN_FORMULA_ACTIVA');
+    const formula = await this.formulaCalculoRepo.obtenerPorPeriodo(scope.anio, scope.quincena);
     const cargasMovimiento = sets[0].filter((row) => row.TipoCarga === 'MOVIMIENTO');
     const ambitosMovimiento = new Map<string, Record<string, unknown>>();
     for (const row of cargasMovimiento) {
@@ -1047,7 +1056,6 @@ export class AplicacionQuincenalRepository implements IAplicacionQuincenalReposi
       return omit('MOVIMIENTO_AMBITO_AMBIGUO', { ambitos: ambitosMovimiento.size });
     }
     const carga = cargaSeleccionada.carga ?? [...ambitosMovimiento.values()][0];
-    const formula = sets[1][0];
     const cargaId = cargaSeleccionada.carga ? String(carga.CargaId) : null;
     const fuenteNomina = cargaSeleccionada.carga ? 'txt' : 'movimiento';
 
@@ -1061,7 +1069,8 @@ export class AplicacionQuincenalRepository implements IAplicacionQuincenalReposi
       .input('Organica3', sql.Char(2), String(carga.Organica3));
     const nominaResult = await nominaRequest
       .query(`
-        SELECT d.RFC,d.DiasLaborados,d.BaseCotizacionQuinquenios,d.Id
+        SELECT d.RFC,d.DiasLaborados,
+          CONVERT(VARCHAR(40), d.BaseCotizacionQuinquenios) AS BaseCotizacionQuinquenios,d.Id
         FROM dbo.NominaAplicacionQnalDetalle d
         INNER JOIN dbo.NominaAplicacionQnalCarga c ON c.Id=d.CargaId
         WHERE (@CargaId IS NOT NULL AND d.CargaId=@CargaId)
@@ -1072,7 +1081,7 @@ export class AplicacionQuincenalRepository implements IAplicacionQuincenalReposi
         ORDER BY d.Id DESC;
       `);
     if (nominaResult.recordset.length === 0) return omit(`${fuenteNomina.toUpperCase()}_SIN_DETALLE`, { cargaId });
-    const nomina = new Map<string, { dias: number | null; baseCotizacionQuinquenios: number | null }>();
+    const nomina = new Map<string, { dias: number | null; baseCotizacionQuinquenios: string | null }>();
     for (const row of nominaResult.recordset) {
       const rfc = String(row.RFC ?? '').trim().toUpperCase();
       if (!rfc) continue;
@@ -1080,7 +1089,7 @@ export class AplicacionQuincenalRepository implements IAplicacionQuincenalReposi
       if (nomina.has(rfc)) continue;
       nomina.set(rfc, {
         dias: row.DiasLaborados === null ? null : Number(row.DiasLaborados),
-        baseCotizacionQuinquenios: row.BaseCotizacionQuinquenios === null ? null : Number(row.BaseCotizacionQuinquenios)
+        baseCotizacionQuinquenios: row.BaseCotizacionQuinquenios === null ? null : String(row.BaseCotizacionQuinquenios)
       });
     }
 
@@ -1101,7 +1110,12 @@ export class AplicacionQuincenalRepository implements IAplicacionQuincenalReposi
         organica2: String(carga.Organica2),
         organica3: String(carga.Organica3),
         ambiente,
-        formulaCalculoVersionId: String(formula.FormulaCalculoVersionId),
+        formulaCalculoVersionId: formula.formulaCalculoVersionId,
+        diasPolicy: {
+          default: Number(formula.parametros.DIAS_DEFAULT_SIN_TXT),
+          min: Number(formula.parametros.DIAS_MIN),
+          max: Number(formula.parametros.DIAS_MAX)
+        },
         nominaCargaId: cargaId,
         usuarioId,
         ahorro: data.ahorro.detalle,
@@ -1300,8 +1314,8 @@ export class AplicacionQuincenalRepository implements IAplicacionQuincenalReposi
       header.anio,
       header.usuario_id,
       header.total_empleados,
-      header.total_contribucion,
-      header.total_sueldo_base
+      header.total_contribucion_a2,
+      header.total_sueldo_base_a2
     );
 
     // Crear TVP Detalle
@@ -1328,13 +1342,13 @@ export class AplicacionQuincenalRepository implements IAplicacionQuincenalReposi
         row.anio,
         row.interno,
         row.nombre,
-        row.sueldo,
-        row.quinquenios,
-        row.otras_prestaciones ?? null,
-        row.sueldo_base,
-        row.afae,
-        row.afaa,
-        row.total
+        row.sueldo_d6,
+        row.quinquenios_d6,
+        row.otras_prestaciones_d6,
+        row.sueldo_base_d6,
+        row.afae_d6,
+        row.afaa_d6,
+        row.total_d6
       );
     });
 
@@ -1367,8 +1381,8 @@ export class AplicacionQuincenalRepository implements IAplicacionQuincenalReposi
       header.anio,
       header.usuario_id,
       header.total_empleados ?? 0,
-      header.total_contribucion ?? 0,
-      header.total_sueldo_base ?? 0
+      header.total_contribucion_a2,
+      header.total_sueldo_base_a2
     );
 
     const detalleTable = new sql.Table('aportaciones.TVP_ViviendaLoteDetalle_V2');
@@ -1393,12 +1407,12 @@ export class AplicacionQuincenalRepository implements IAplicacionQuincenalReposi
         row.anio,
         row.interno,
         row.nombre,
-        row.sueldo,
-        row.quinquenios,
-        row.otras_prestaciones ?? null,
-        row.sueldo_base,
-        row.afe,
-        row.total
+        row.sueldo_d6,
+        row.quinquenios_d6,
+        row.otras_prestaciones_d6,
+        row.sueldo_base_d6,
+        row.afe_d6,
+        row.total_d6
       );
     });
 
@@ -1430,8 +1444,8 @@ export class AplicacionQuincenalRepository implements IAplicacionQuincenalReposi
       header.anio,
       header.usuario_id,
       header.total_empleados ?? 0,
-      header.total_contribucion ?? 0,
-      header.total_sueldo_base ?? 0
+      header.total_contribucion_a2,
+      header.total_sueldo_base_a2
     );
 
     const detalleTable = new sql.Table('aportaciones.TVP_PrestacionesLoteDetalle_V2');
@@ -1457,13 +1471,13 @@ export class AplicacionQuincenalRepository implements IAplicacionQuincenalReposi
         row.anio,
         row.interno,
         row.nombre,
-        row.sueldo,
-        row.quinquenios,
-        row.otras_prestaciones ?? null,
-        row.sueldo_base,
-        row.afpe,
-        row.afpa,
-        row.total
+        row.sueldo_d6,
+        row.quinquenios_d6,
+        row.otras_prestaciones_d6,
+        row.sueldo_base_d6,
+        row.afpe_d6,
+        row.afpa_d6,
+        row.total_d6
       );
     });
 
@@ -1495,8 +1509,8 @@ export class AplicacionQuincenalRepository implements IAplicacionQuincenalReposi
       header.anio,
       header.usuario_id,
       header.total_empleados ?? 0,
-      header.total_contribucion ?? 0,
-      header.total_sueldo_base ?? 0
+      header.total_contribucion_a2,
+      header.total_sueldo_base_a2
     );
 
     const detalleTable = new sql.Table('aportaciones.TVP_CairLoteDetalle_V2');
@@ -1521,12 +1535,12 @@ export class AplicacionQuincenalRepository implements IAplicacionQuincenalReposi
         row.anio,
         row.interno,
         row.nombre,
-        row.sueldo,
-        row.quinquenios,
-        row.otras_prestaciones ?? null,
-        row.sueldo_base,
-        row.afe,
-        row.total
+        row.sueldo_d6,
+        row.quinquenios_d6,
+        row.otras_prestaciones_d6,
+        row.sueldo_base_d6,
+        row.afe_d6,
+        row.total_d6
       );
     });
 
@@ -2039,92 +2053,54 @@ export class AplicacionQuincenalRepository implements IAplicacionQuincenalReposi
     header: PrestamosCortoPlazoHeader,
     detalle: PrestamosCortoPlazoDetalle[]
   ): Promise<void> {
-    const headerTable = new sql.Table('retenciones.TVP_PrestamosCortoPlazoLoteHeader');
-    headerTable.columns.add('clave_organica_0', sql.Char(2));
-    headerTable.columns.add('clave_organica_1', sql.Char(2));
-    headerTable.columns.add('quincena', sql.Int);
-    headerTable.columns.add('anio', sql.Int);
-    headerTable.columns.add('usuario_id', sql.NVarChar(100));
-    headerTable.columns.add('total_empleados', sql.Int);
-    headerTable.columns.add('total_contribucion', sql.Decimal(18, 2));
-    headerTable.columns.add('total_sueldo_base', sql.Decimal(18, 2));
+    await this.assertRetencionSnapshotScope(tx, header);
+    const headerTable = new sql.Table('retenciones.TVP_RetencionPCPHeader_V3');
+    headerTable.columns.add('LiquidacionSnapshotId', sql.BigInt);
+    headerTable.columns.add('SourceScale', sql.TinyInt);
+    headerTable.columns.add('Registros', sql.Int);
+    headerTable.columns.add('TotalA2', sql.Decimal(19, 2));
+    headerTable.columns.add('UsuarioId', sql.NVarChar(100));
     headerTable.rows.add(
-      header.clave_organica_0,
-      header.clave_organica_1,
-      header.quincena,
-      header.anio,
-      header.usuario_id,
-      (header as any).total_empleados ?? 0,
-      (header as any).total_contribucion ?? 0,
-      (header as any).total_sueldo_base ?? 0
+      header.liquidacion_snapshot_id,
+      header.source_scale,
+      detalle.length,
+      header.total_contribucion_a2,
+      header.usuario_id
     );
 
-    const detalleTable = new sql.Table('retenciones.TVP_PrestamosCortoPlazoLoteDetalle');
-    detalleTable.columns.add('clave_organica_0', sql.Char(2));
-    detalleTable.columns.add('clave_organica_1', sql.Char(2));
-    detalleTable.columns.add('quincena', sql.Int);
-    detalleTable.columns.add('anio', sql.Int);
-    detalleTable.columns.add('interno', sql.Int);
-    detalleTable.columns.add('rfc', sql.NVarChar(20));
-    detalleTable.columns.add('nombre', sql.NVarChar(200));
-    detalleTable.columns.add('prestamo', sql.Int);
-    detalleTable.columns.add('letra', sql.Int);
-    detalleTable.columns.add('plazo', sql.Int);
-    detalleTable.columns.add('periodo_c', sql.NVarChar(50));
-    detalleTable.columns.add('fecha_c', sql.Date);
-    detalleTable.columns.add('capital', sql.Decimal(18, 2));
-    detalleTable.columns.add('interes', sql.Decimal(18, 2));
-    detalleTable.columns.add('monto', sql.Decimal(18, 2));
-    detalleTable.columns.add('moratorios', sql.Decimal(18, 2));
-    detalleTable.columns.add('total', sql.Decimal(18, 2));
-    detalleTable.columns.add('resultado', sql.NVarChar(50));
-    detalleTable.columns.add('td', sql.NVarChar(10));
-    detalleTable.columns.add('org0', sql.Char(2));
-    detalleTable.columns.add('org1', sql.Char(2));
-    detalleTable.columns.add('org2', sql.Char(2));
-    detalleTable.columns.add('org3', sql.Char(2));
-    detalleTable.columns.add('norg0', sql.NVarChar(100));
-    detalleTable.columns.add('norg1', sql.NVarChar(100));
-    detalleTable.columns.add('norg2', sql.NVarChar(100));
-    detalleTable.columns.add('norg3', sql.NVarChar(100));
+    const detalleTable = new sql.Table('retenciones.TVP_RetencionPCPDetalle_V3');
+    detalleTable.columns.add('Orden', sql.Int);
+    detalleTable.columns.add('EmpleadoClave', sql.NVarChar(50));
+    detalleTable.columns.add('Rfc', sql.NVarChar(20));
+    detalleTable.columns.add('Prestamo', sql.Int);
+    detalleTable.columns.add('Letra', sql.Int);
+    detalleTable.columns.add('Plazo', sql.Int);
+    detalleTable.columns.add('CapitalD6', sql.Decimal(19, 6));
+    detalleTable.columns.add('InteresD6', sql.Decimal(19, 6));
+    detalleTable.columns.add('MontoD6', sql.Decimal(19, 6));
+    detalleTable.columns.add('MoratoriosD6', sql.Decimal(19, 6));
+    detalleTable.columns.add('TotalD6', sql.Decimal(19, 6));
 
-    detalle.forEach(row => {
+    detalle.forEach((row, index) => {
       detalleTable.rows.add(
-        row.clave_organica_0,
-        row.clave_organica_1,
-        row.quincena,
-        row.anio,
-        row.interno,
+        index + 1,
+        String(row.interno),
         row.rfc,
-        row.nombre,
         row.prestamo,
         row.letra,
         row.plazo,
-        row.periodo_c,
-        new Date(row.fecha_c),
-        row.capital,
-        row.interes,
-        row.monto,
-        row.moratorios,
-        row.total,
-        row.resultado,
-        row.td,
-        row.org0,
-        row.org1,
-        row.org2,
-        row.org3,
-        row.norg0,
-        row.norg1,
-        row.norg2,
-        row.norg3
+        row.capital_d6,
+        row.interes_d6,
+        row.monto_d6,
+        row.moratorios_d6,
+        row.total_d6
       );
     });
 
     const request = new sql.Request(tx);
-    request.input('Lotes', sql.TVP, headerTable);
+    request.input('Header', sql.TVP, headerTable);
     request.input('Detalle', sql.TVP, detalleTable);
-    request.input('Modo', sql.NVarChar(50), 'REPLACE');
-    await request.execute('retenciones.spGuardarPrestamosCortoPlazoHistorico_Lote');
+    await request.execute('retenciones.spGuardarRetencionPCPHistorico_V3');
   }
 
   private async crearYEjecutarPrestamosMedianoPlazo(
@@ -2132,108 +2108,54 @@ export class AplicacionQuincenalRepository implements IAplicacionQuincenalReposi
     header: PrestamosMedianoPlazoHeader,
     detalle: PrestamosMedianoPlazoDetalle[]
   ): Promise<void> {
-    const headerTable = new sql.Table('retenciones.TVP_PrestamosMedianoPlazoLoteHeader');
-    headerTable.columns.add('clave_organica_0', sql.Char(2));
-    headerTable.columns.add('clave_organica_1', sql.Char(2));
-    headerTable.columns.add('quincena', sql.Int);
-    headerTable.columns.add('anio', sql.Int);
-    headerTable.columns.add('usuario_id', sql.NVarChar(100));
-    headerTable.columns.add('total_empleados', sql.Int);
-    headerTable.columns.add('total_contribucion', sql.Decimal(18, 2));
-    headerTable.columns.add('total_sueldo_base', sql.Decimal(18, 2));
+    await this.assertRetencionSnapshotScope(tx, header);
+    const headerTable = new sql.Table('retenciones.TVP_RetencionPMPHeader_V3');
+    headerTable.columns.add('LiquidacionSnapshotId', sql.BigInt);
+    headerTable.columns.add('SourceScale', sql.TinyInt);
+    headerTable.columns.add('Registros', sql.Int);
+    headerTable.columns.add('TotalA2', sql.Decimal(19, 2));
+    headerTable.columns.add('UsuarioId', sql.NVarChar(100));
     headerTable.rows.add(
-      header.clave_organica_0,
-      header.clave_organica_1,
-      header.quincena,
-      header.anio,
-      header.usuario_id,
-      (header as any).total_empleados ?? 0,
-      (header as any).total_contribucion ?? 0,
-      (header as any).total_sueldo_base ?? 0
+      header.liquidacion_snapshot_id,
+      header.source_scale,
+      detalle.length,
+      header.total_contribucion_a2,
+      header.usuario_id
     );
 
-    const detalleTable = new sql.Table('retenciones.TVP_PrestamosMedianoPlazoLoteDetalle');
-    detalleTable.columns.add('clave_organica_0', sql.Char(2));
-    detalleTable.columns.add('clave_organica_1', sql.Char(2));
-    detalleTable.columns.add('quincena', sql.Int);
-    detalleTable.columns.add('anio', sql.Int);
-    detalleTable.columns.add('interno', sql.Int);
-    detalleTable.columns.add('rfc', sql.NVarChar(20));
-    detalleTable.columns.add('nombre', sql.NVarChar(200));
-    detalleTable.columns.add('prestamo', sql.Int);
-    detalleTable.columns.add('letra', sql.Int);
-    detalleTable.columns.add('plazo', sql.Int);
-    detalleTable.columns.add('periodo_c', sql.NVarChar(50));
-    detalleTable.columns.add('fecha_c', sql.Date);
-    detalleTable.columns.add('capital', sql.Decimal(18, 2));
-    detalleTable.columns.add('moratorios', sql.Decimal(18, 2));
-    detalleTable.columns.add('interes', sql.Decimal(18, 2));
-    detalleTable.columns.add('seguro', sql.Decimal(18, 2));
-    detalleTable.columns.add('total', sql.Decimal(18, 2));
-    detalleTable.columns.add('resultado', sql.NVarChar(50));
-    detalleTable.columns.add('clase', sql.NVarChar(10));
-    detalleTable.columns.add('desc_clase', sql.NVarChar(100));
-    detalleTable.columns.add('desc_prestamo', sql.NVarChar(200));
-    detalleTable.columns.add('clave_p', sql.NVarChar(50));
-    detalleTable.columns.add('noemple', sql.NVarChar(50));
-    detalleTable.columns.add('folio', sql.Int);
-    detalleTable.columns.add('anio_prestamo', sql.Int);
-    detalleTable.columns.add('po', sql.NVarChar(50));
-    detalleTable.columns.add('fecha_origen', sql.Date);
-    detalleTable.columns.add('org0', sql.Char(2));
-    detalleTable.columns.add('org1', sql.Char(2));
-    detalleTable.columns.add('org2', sql.Char(2));
-    detalleTable.columns.add('org3', sql.Char(2));
-    detalleTable.columns.add('norg0', sql.NVarChar(100));
-    detalleTable.columns.add('norg1', sql.NVarChar(100));
-    detalleTable.columns.add('norg2', sql.NVarChar(100));
-    detalleTable.columns.add('norg3', sql.NVarChar(100));
+    const detalleTable = new sql.Table('retenciones.TVP_RetencionPMPDetalle_V3');
+    detalleTable.columns.add('Orden', sql.Int);
+    detalleTable.columns.add('EmpleadoClave', sql.NVarChar(50));
+    detalleTable.columns.add('Rfc', sql.NVarChar(20));
+    detalleTable.columns.add('Prestamo', sql.Int);
+    detalleTable.columns.add('Letra', sql.Int);
+    detalleTable.columns.add('Plazo', sql.Int);
+    detalleTable.columns.add('CapitalD6', sql.Decimal(19, 6));
+    detalleTable.columns.add('InteresD6', sql.Decimal(19, 6));
+    detalleTable.columns.add('MoratoriosD6', sql.Decimal(19, 6));
+    detalleTable.columns.add('SeguroD6', sql.Decimal(19, 6));
+    detalleTable.columns.add('TotalD6', sql.Decimal(19, 6));
 
-    detalle.forEach(row => {
+    detalle.forEach((row, index) => {
       detalleTable.rows.add(
-        row.clave_organica_0,
-        row.clave_organica_1,
-        row.quincena,
-        row.anio,
-        row.interno,
+        index + 1,
+        row.noemple,
         row.rfc,
-        row.nombre,
         row.prestamo,
         row.letra,
         row.plazo,
-        row.periodo_c,
-        new Date(row.fecha_c),
-        row.capital,
-        row.moratorios,
-        row.interes,
-        row.seguro,
-        row.total,
-        row.resultado,
-        row.clase,
-        row.desc_clase,
-        row.desc_prestamo,
-        row.clave_p,
-        row.noemple,
-        row.folio,
-        row.anio_prestamo,
-        row.po,
-        new Date(row.fecha_origen),
-        row.org0,
-        row.org1,
-        row.org2,
-        row.org3,
-        row.norg0,
-        row.norg1,
-        row.norg2,
-        row.norg3
+        row.capital_d6,
+        row.interes_d6,
+        row.moratorios_d6,
+        row.seguro_d6,
+        row.total_d6
       );
     });
 
     const request = new sql.Request(tx);
-    request.input('Lotes', sql.TVP, headerTable);
+    request.input('Header', sql.TVP, headerTable);
     request.input('Detalle', sql.TVP, detalleTable);
-    request.input('Modo', sql.NVarChar(50), 'REPLACE');
-    await request.execute('retenciones.spGuardarPrestamosMedianoPlazoHistorico_Lote');
+    await request.execute('retenciones.spGuardarRetencionPMPHistorico_V3');
   }
 
   private async crearYEjecutarPrestamosHipotecarios(
@@ -2241,118 +2163,60 @@ export class AplicacionQuincenalRepository implements IAplicacionQuincenalReposi
     header: PrestamosHipotecariosHeader,
     detalle: PrestamosHipotecariosDetalle[]
   ): Promise<void> {
-    const headerTable = new sql.Table('retenciones.TVP_PrestamosHipotecariosLoteHeader');
-    headerTable.columns.add('clave_organica_0', sql.Char(2));
-    headerTable.columns.add('clave_organica_1', sql.Char(2));
-    headerTable.columns.add('quincena', sql.Int);
-    headerTable.columns.add('anio', sql.Int);
-    headerTable.columns.add('usuario_id', sql.NVarChar(100));
-    headerTable.columns.add('total_empleados', sql.Int);
-    headerTable.columns.add('total_contribucion', sql.Decimal(18, 2));
-    headerTable.columns.add('total_sueldo_base', sql.Decimal(18, 2));
+    await this.assertRetencionSnapshotScope(tx, header);
+    const headerTable = new sql.Table('retenciones.TVP_RetencionHIPHeader_V3');
+    headerTable.columns.add('LiquidacionSnapshotId', sql.BigInt);
+    headerTable.columns.add('SourceScale', sql.TinyInt);
+    headerTable.columns.add('Registros', sql.Int);
+    headerTable.columns.add('TotalA2', sql.Decimal(19, 2));
+    headerTable.columns.add('UsuarioId', sql.NVarChar(100));
     headerTable.rows.add(
-      header.clave_organica_0,
-      header.clave_organica_1,
-      header.quincena,
-      header.anio,
-      header.usuario_id,
-      (header as any).total_empleados ?? 0,
-      (header as any).total_contribucion ?? 0,
-      (header as any).total_sueldo_base ?? 0
+      header.liquidacion_snapshot_id,
+      header.source_scale,
+      detalle.length,
+      header.total_contribucion_a2,
+      header.usuario_id
     );
 
-    const detalleTable = new sql.Table('retenciones.TVP_PrestamosHipotecariosLoteDetalle');
-    detalleTable.columns.add('clave_organica_0', sql.Char(2));
-    detalleTable.columns.add('clave_organica_1', sql.Char(2));
-    detalleTable.columns.add('quincena', sql.Int);
-    detalleTable.columns.add('anio', sql.Int);
-    detalleTable.columns.add('computadora_antigua', sql.Int);
-    detalleTable.columns.add('interno', sql.Int);
-    detalleTable.columns.add('nombre', sql.NVarChar(200));
-    detalleTable.columns.add('noempleado', sql.NVarChar(50));
-    detalleTable.columns.add('rfc', sql.NVarChar(20));
-    detalleTable.columns.add('cantidad', sql.Decimal(18, 2));
-    detalleTable.columns.add('status', sql.NVarChar(50));
-    detalleTable.columns.add('referencia_1', sql.NVarChar(100));
-    detalleTable.columns.add('referencia_2', sql.NVarChar(100));
-    detalleTable.columns.add('pno_solicitud', sql.Int);
-    detalleTable.columns.add('pano', sql.Int);
-    detalleTable.columns.add('pclave_clase_prestamo', sql.NVarChar(20));
-    detalleTable.columns.add('pdescripcion', sql.NVarChar(200));
-    detalleTable.columns.add('pclave_prestamo', sql.NVarChar(50));
-    detalleTable.columns.add('prestamo_desc', sql.NVarChar(200));
-    detalleTable.columns.add('tipo', sql.NVarChar(50));
-    detalleTable.columns.add('periodo_c', sql.NVarChar(50));
-    detalleTable.columns.add('descto', sql.Decimal(18, 2));
-    detalleTable.columns.add('fecha_c', sql.Date);
-    detalleTable.columns.add('resultado', sql.NVarChar(50));
-    detalleTable.columns.add('po', sql.NVarChar(50));
-    detalleTable.columns.add('fecha_origen', sql.Date);
-    detalleTable.columns.add('plazo', sql.Int);
-    detalleTable.columns.add('capital_pagar', sql.Decimal(18, 2));
-    detalleTable.columns.add('interes_pagar', sql.Decimal(18, 2));
-    detalleTable.columns.add('interes_diferido_pagar', sql.Decimal(18, 2));
-    detalleTable.columns.add('seguro_pagar', sql.Decimal(18, 2));
-    detalleTable.columns.add('moratorio_pagar', sql.Decimal(18, 2));
-    detalleTable.columns.add('org0', sql.Char(2));
-    detalleTable.columns.add('org1', sql.Char(2));
-    detalleTable.columns.add('org2', sql.Char(2));
-    detalleTable.columns.add('org3', sql.Char(2));
-    detalleTable.columns.add('norg0', sql.NVarChar(100));
-    detalleTable.columns.add('norg1', sql.NVarChar(100));
-    detalleTable.columns.add('norg2', sql.NVarChar(100));
-    detalleTable.columns.add('norg3', sql.NVarChar(100));
+    const detalleTable = new sql.Table('retenciones.TVP_RetencionHIPDetalle_V3');
+    detalleTable.columns.add('Orden', sql.Int);
+    detalleTable.columns.add('EmpleadoClave', sql.NVarChar(50));
+    detalleTable.columns.add('Rfc', sql.NVarChar(20));
+    detalleTable.columns.add('Solicitud', sql.Int);
+    detalleTable.columns.add('AnioPrestamo', sql.SmallInt);
+    detalleTable.columns.add('Plazo', sql.Int);
+    detalleTable.columns.add('CantidadD6', sql.Decimal(19, 6));
+    detalleTable.columns.add('DescuentoD6', sql.Decimal(19, 6));
+    detalleTable.columns.add('CapitalD6', sql.Decimal(19, 6));
+    detalleTable.columns.add('InteresD6', sql.Decimal(19, 6));
+    detalleTable.columns.add('InteresDiferidoD6', sql.Decimal(19, 6));
+    detalleTable.columns.add('SeguroD6', sql.Decimal(19, 6));
+    detalleTable.columns.add('MoratorioD6', sql.Decimal(19, 6));
+    detalleTable.columns.add('TotalD6', sql.Decimal(19, 6));
 
-    detalle.forEach(row => {
+    detalle.forEach((row, index) => {
       detalleTable.rows.add(
-        row.clave_organica_0,
-        row.clave_organica_1,
-        row.quincena,
-        row.anio,
-        row.computadora_antigua,
-        row.interno,
-        row.nombre,
+        index + 1,
         row.noempleado,
         row.rfc,
-        row.cantidad,
-        row.status,
-        row.referencia_1,
-        row.referencia_2,
         row.pno_solicitud,
         row.pano,
-        row.pclave_clase_prestamo,
-        row.pdescripcion,
-        row.pclave_prestamo,
-        row.prestamo_desc,
-        row.tipo,
-        row.periodo_c,
-        row.descto,
-        new Date(row.fecha_c),
-        row.resultado,
-        row.po,
-        new Date(row.fecha_origen),
         row.plazo,
-        row.capital_pagar,
-        row.interes_pagar,
-        row.interes_diferido_pagar,
-        row.seguro_pagar,
-        row.moratorio_pagar,
-        row.org0,
-        row.org1,
-        row.org2,
-        row.org3,
-        row.norg0,
-        row.norg1,
-        row.norg2,
-        row.norg3
+        row.cantidad_d6,
+        row.descto_d6,
+        row.capital_pagar_d6,
+        row.interes_pagar_d6,
+        row.interes_diferido_pagar_d6,
+        row.seguro_pagar_d6,
+        row.moratorio_pagar_d6,
+        row.cantidad_d6
       );
     });
 
     const request = new sql.Request(tx);
-    request.input('Lotes', sql.TVP, headerTable);
+    request.input('Header', sql.TVP, headerTable);
     request.input('Detalle', sql.TVP, detalleTable);
-    request.input('Modo', sql.NVarChar(50), 'REPLACE');
-    await request.execute('retenciones.spGuardarPrestamosHipotecariosHistorico_Lote');
+    await request.execute('retenciones.spGuardarRetencionHIPHistorico_V3');
   }
 
   // ============================================================================
@@ -2609,6 +2473,35 @@ export class AplicacionQuincenalRepository implements IAplicacionQuincenalReposi
       throw new AplicacionQuincenalError(
         `Error al consultar histórico de retenciones: ${error.message || String(error)}`,
         AplicacionQuincenalErrorCode.SQL_SERVER_ERROR
+      );
+    }
+  }
+
+  private async assertRetencionSnapshotScope(tx: sql.Transaction, header: {
+    liquidacion_snapshot_id: number;
+    clave_organica_0: string;
+    clave_organica_1: string;
+    quincena: number;
+    anio: number;
+  }): Promise<void> {
+    const result = await new sql.Request(tx)
+      .input('LiquidacionSnapshotId', sql.BigInt, header.liquidacion_snapshot_id)
+      .input('Organica0', sql.Char(2), header.clave_organica_0.padStart(2, '0'))
+      .input('Organica1', sql.Char(2), header.clave_organica_1.padStart(2, '0'))
+      .input('Quincena', sql.TinyInt, header.quincena)
+      .input('Anio', sql.SmallInt, header.anio)
+      .query(`
+        SELECT TOP (1) 1 AS Existe
+        FROM liquidacion.QnaSnapshot WITH (UPDLOCK, HOLDLOCK)
+        WHERE LiquidacionSnapshotId=@LiquidacionSnapshotId
+          AND Organica0=@Organica0 AND Organica1=@Organica1
+          AND Quincena=@Quincena AND Anio=@Anio
+          AND Estado='COMPLETO'
+      `);
+    if (result.recordset.length === 0) {
+      throw new AplicacionQuincenalError(
+        'El snapshot no corresponde al ámbito de las retenciones',
+        AplicacionQuincenalErrorCode.VALIDATION_ERROR
       );
     }
   }

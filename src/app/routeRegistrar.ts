@@ -52,6 +52,7 @@ import catalogoMotivoBajaRoutes from '../modules/catalogoMotivoBaja/catalogoMoti
 import nominaRoutes from '../modules/nomina/nomina.routes.js';
 import historicosQuincenalesRoutes from '../modules/historicosQuincenales/historicosQuincenales.routes.js';
 import seguimientoAplicacionRoutes from '../modules/seguimientoAplicacion/seguimientoAplicacion.routes.js';
+import liquidacionQnaRoutes from '../modules/liquidacionQna/liquidacionQna.routes.js';
 
 /**
  * Interface for route registration configuration
@@ -239,6 +240,11 @@ const ROUTE_CONFIGS: RouteConfig[] = [
   },
   {
     plugin: historicosQuincenalesRoutes,
+    prefix: '/v1',
+    options: { group: ROUTE_GROUPS.MODULES }
+  },
+  {
+    plugin: liquidacionQnaRoutes,
     prefix: '/v1',
     options: { group: ROUTE_GROUPS.MODULES }
   },

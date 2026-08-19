@@ -44,6 +44,8 @@ const quincenaSchema = z.number().int().min(1).max(24);
 const anioSchema = z.number().int().min(2000).max(3000);
 const usuarioIdSchema = z.string().min(1).max(100);
 const decimalSchema = z.number().nullable().optional();
+const moneyD6Schema = z.string().regex(/^-?(0|[1-9]\d*)\.\d{6}$/);
+const moneyA2Schema = z.string().regex(/^-?(0|[1-9]\d*)\.\d{2}$/);
 const stringSchema = z.string().nullable().optional();
 const intSchema = z.number().int().nullable().optional();
 
@@ -56,7 +58,9 @@ export const AhorroHeaderSchema = z.object({
   usuario_id: usuarioIdSchema,
   total_empleados: z.number().int().min(0),
   total_contribucion: z.number(),
-  total_sueldo_base: z.number()
+  total_sueldo_base: z.number(),
+  total_contribucion_a2: moneyA2Schema,
+  total_sueldo_base_a2: moneyA2Schema
 });
 
 export const AhorroDetalleSchema = z.object({
@@ -72,7 +76,14 @@ export const AhorroDetalleSchema = z.object({
   sueldo_base: z.number(),
   afae: z.number(),
   afaa: z.number(),
-  total: z.number()
+  total: z.number(),
+  sueldo_d6: moneyD6Schema,
+  quinquenios_d6: moneyD6Schema,
+  otras_prestaciones_d6: moneyD6Schema,
+  sueldo_base_d6: moneyD6Schema,
+  afae_d6: moneyD6Schema,
+  afaa_d6: moneyD6Schema,
+  total_d6: moneyD6Schema
 });
 
 // Vivienda
@@ -84,7 +95,9 @@ export const ViviendaHeaderSchema = z.object({
   usuario_id: usuarioIdSchema,
   total_empleados: z.number().int().min(0).optional(),
   total_contribucion: z.number().optional(),
-  total_sueldo_base: z.number().optional()
+  total_sueldo_base: z.number().optional(),
+  total_contribucion_a2: moneyA2Schema,
+  total_sueldo_base_a2: moneyA2Schema
 });
 
 export const ViviendaDetalleSchema = z.object({
@@ -99,7 +112,15 @@ export const ViviendaDetalleSchema = z.object({
   otras_prestaciones: decimalSchema,
   sueldo_base: z.number(),
   afe: z.number(),
-  total: z.number()
+  total: z.number(),
+  sueldo_d6: moneyD6Schema,
+  quinquenios_d6: moneyD6Schema,
+  otras_prestaciones_d6: moneyD6Schema,
+  sueldo_base_d6: moneyD6Schema,
+  afe_d6: moneyD6Schema,
+  fh_d6: moneyD6Schema,
+  fv_d6: moneyD6Schema,
+  total_d6: moneyD6Schema
 });
 
 // Prestaciones
@@ -111,7 +132,9 @@ export const PrestacionesHeaderSchema = z.object({
   usuario_id: usuarioIdSchema,
   total_empleados: z.number().int().min(0).optional(),
   total_contribucion: z.number().optional(),
-  total_sueldo_base: z.number().optional()
+  total_sueldo_base: z.number().optional(),
+  total_contribucion_a2: moneyA2Schema,
+  total_sueldo_base_a2: moneyA2Schema
 });
 
 export const PrestacionesDetalleSchema = z.object({
@@ -127,7 +150,14 @@ export const PrestacionesDetalleSchema = z.object({
   sueldo_base: z.number(),
   afpe: z.number(),
   afpa: z.number(),
-  total: z.number()
+  total: z.number(),
+  sueldo_d6: moneyD6Schema,
+  quinquenios_d6: moneyD6Schema,
+  otras_prestaciones_d6: moneyD6Schema,
+  sueldo_base_d6: moneyD6Schema,
+  afpe_d6: moneyD6Schema,
+  afpa_d6: moneyD6Schema,
+  total_d6: moneyD6Schema
 });
 
 // Cair
@@ -139,7 +169,9 @@ export const CairHeaderSchema = z.object({
   usuario_id: usuarioIdSchema,
   total_empleados: z.number().int().min(0).optional(),
   total_contribucion: z.number().optional(),
-  total_sueldo_base: z.number().optional()
+  total_sueldo_base: z.number().optional(),
+  total_contribucion_a2: moneyA2Schema,
+  total_sueldo_base_a2: moneyA2Schema
 });
 
 export const CairDetalleSchema = z.object({
@@ -154,7 +186,13 @@ export const CairDetalleSchema = z.object({
   otras_prestaciones: decimalSchema,
   sueldo_base: z.number(),
   afe: z.number(),
-  total: z.number()
+  total: z.number(),
+  sueldo_d6: moneyD6Schema,
+  quinquenios_d6: moneyD6Schema,
+  otras_prestaciones_d6: moneyD6Schema,
+  sueldo_base_d6: moneyD6Schema,
+  afe_d6: moneyD6Schema,
+  total_d6: moneyD6Schema
 });
 
 // Transitorio
@@ -409,6 +447,7 @@ export type GuardarHistoricoAportaciones = z.infer<typeof GuardarHistoricoAporta
 
 // PrestamosCortoPlazo
 export const PrestamosCortoPlazoHeaderSchema = z.object({
+  liquidacion_snapshot_id: z.number().int().positive(),
   clave_organica_0: claveOrganicaSchema,
   clave_organica_1: claveOrganicaSchema,
   quincena: quincenaSchema,
@@ -416,7 +455,10 @@ export const PrestamosCortoPlazoHeaderSchema = z.object({
   usuario_id: usuarioIdSchema,
   total_empleados: z.number().int().min(0).optional(),
   total_contribucion: z.number().optional(),
-  total_sueldo_base: z.number().optional()
+  total_sueldo_base: z.number().optional(),
+  total_contribucion_a2: moneyA2Schema,
+  source_scale: z.literal(2),
+  precision_policy: z.literal('MXN-DETAIL6-AGG2-TRUNC-v1')
 });
 
 export const PrestamosCortoPlazoDetalleSchema = z.object({
@@ -437,6 +479,11 @@ export const PrestamosCortoPlazoDetalleSchema = z.object({
   monto: z.number(),
   moratorios: z.number(),
   total: z.number(),
+  capital_d6: moneyD6Schema,
+  interes_d6: moneyD6Schema,
+  monto_d6: moneyD6Schema,
+  moratorios_d6: moneyD6Schema,
+  total_d6: moneyD6Schema,
   resultado: z.string().min(1),
   td: z.string().min(1),
   org0: claveOrganicaSchema,
@@ -451,6 +498,7 @@ export const PrestamosCortoPlazoDetalleSchema = z.object({
 
 // PrestamosMedianoPlazo
 export const PrestamosMedianoPlazoHeaderSchema = z.object({
+  liquidacion_snapshot_id: z.number().int().positive(),
   clave_organica_0: claveOrganicaSchema,
   clave_organica_1: claveOrganicaSchema,
   quincena: quincenaSchema,
@@ -458,7 +506,10 @@ export const PrestamosMedianoPlazoHeaderSchema = z.object({
   usuario_id: usuarioIdSchema,
   total_empleados: z.number().int().min(0).optional(),
   total_contribucion: z.number().optional(),
-  total_sueldo_base: z.number().optional()
+  total_sueldo_base: z.number().optional(),
+  total_contribucion_a2: moneyA2Schema,
+  source_scale: z.literal(2),
+  precision_policy: z.literal('MXN-DETAIL6-AGG2-TRUNC-v1')
 });
 
 export const PrestamosMedianoPlazoDetalleSchema = z.object({
@@ -479,6 +530,11 @@ export const PrestamosMedianoPlazoDetalleSchema = z.object({
   interes: z.number(),
   seguro: z.number(),
   total: z.number(),
+  capital_d6: moneyD6Schema,
+  moratorios_d6: moneyD6Schema,
+  interes_d6: moneyD6Schema,
+  seguro_d6: moneyD6Schema,
+  total_d6: moneyD6Schema,
   resultado: z.string().min(1),
   clase: z.string().min(1),
   desc_clase: z.string().min(1),
@@ -501,6 +557,7 @@ export const PrestamosMedianoPlazoDetalleSchema = z.object({
 
 // PrestamosHipotecarios
 export const PrestamosHipotecariosHeaderSchema = z.object({
+  liquidacion_snapshot_id: z.number().int().positive(),
   clave_organica_0: claveOrganicaSchema,
   clave_organica_1: claveOrganicaSchema,
   quincena: quincenaSchema,
@@ -508,7 +565,10 @@ export const PrestamosHipotecariosHeaderSchema = z.object({
   usuario_id: usuarioIdSchema,
   total_empleados: z.number().int().min(0).optional(),
   total_contribucion: z.number().optional(),
-  total_sueldo_base: z.number().optional()
+  total_sueldo_base: z.number().optional(),
+  total_contribucion_a2: moneyA2Schema,
+  source_scale: z.literal(2),
+  precision_policy: z.literal('MXN-DETAIL6-AGG2-TRUNC-v1')
 });
 
 export const PrestamosHipotecariosDetalleSchema = z.object({
@@ -522,6 +582,7 @@ export const PrestamosHipotecariosDetalleSchema = z.object({
   noempleado: z.string().min(1),
   rfc: z.string().min(1),
   cantidad: z.number(),
+  cantidad_d6: moneyD6Schema,
   status: z.string().min(1),
   referencia_1: z.string().min(1),
   referencia_2: z.string().min(1),
@@ -534,6 +595,7 @@ export const PrestamosHipotecariosDetalleSchema = z.object({
   tipo: z.string().min(1),
   periodo_c: z.string().min(1),
   descto: z.number(),
+  descto_d6: moneyD6Schema,
   fecha_c: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Formato de fecha debe ser YYYY-MM-DD'),
   resultado: z.string().min(1),
   po: z.string().min(1),
@@ -544,6 +606,11 @@ export const PrestamosHipotecariosDetalleSchema = z.object({
   interes_diferido_pagar: z.number(),
   seguro_pagar: z.number(),
   moratorio_pagar: z.number(),
+  capital_pagar_d6: moneyD6Schema,
+  interes_pagar_d6: moneyD6Schema,
+  interes_diferido_pagar_d6: moneyD6Schema,
+  seguro_pagar_d6: moneyD6Schema,
+  moratorio_pagar_d6: moneyD6Schema,
   org0: claveOrganicaSchema,
   org1: claveOrganicaSchema,
   org2: claveOrganicaSchema,
@@ -558,15 +625,15 @@ export const PrestamosHipotecariosDetalleSchema = z.object({
 export const GuardarHistoricoRetencionesSchema = z.object({
   prestamosCortoPlazo: z.object({
     header: PrestamosCortoPlazoHeaderSchema,
-    detalle: z.array(PrestamosCortoPlazoDetalleSchema).min(0) // Permitir arrays vacíos
+    detalle: z.array(PrestamosCortoPlazoDetalleSchema)
   }).optional(),
   prestamosMedianoPlazo: z.object({
     header: PrestamosMedianoPlazoHeaderSchema,
-    detalle: z.array(PrestamosMedianoPlazoDetalleSchema).min(0) // Permitir arrays vacíos
+    detalle: z.array(PrestamosMedianoPlazoDetalleSchema)
   }).optional(),
   prestamosHipotecarios: z.object({
     header: PrestamosHipotecariosHeaderSchema,
-    detalle: z.array(PrestamosHipotecariosDetalleSchema).min(0) // Permitir arrays vacíos
+    detalle: z.array(PrestamosHipotecariosDetalleSchema)
   }).optional()
 }).refine(
   (data) => {

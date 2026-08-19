@@ -4,14 +4,20 @@ export interface PrestamoHipotecario {
   nombre: string | null;
   noempleado: string | null;
   cantidad: number | null;
+  cantidad_d6: string | null;
   status: string | null;
   referencia_1: string | null;
   referencia_2: string | null;
   capital_pagar: number | null;
+  capital_pagar_d6: string | null;
   interes_pagar: number | null;
+  interes_pagar_d6: string | null;
   interes_diferido_pagar: number | null;
+  interes_diferido_pagar_d6: string | null;
   seguro_pagar: number | null;
+  seguro_pagar_d6: string | null;
   moratorio_pagar: number | null;
+  moratorio_pagar_d6: string | null;
   pno_solicitud: number | null;
   pano: number | null;
   pclave_clase_prestamo: string | null;
@@ -30,6 +36,7 @@ export interface PrestamoHipotecario {
   tipo: string | null;
   periodo_c: string | null;
   descto: number | null;
+  descto_d6: string | null;
   fecha_c: Date | null;
   resultado: string | null;
   po: string | null;
@@ -46,4 +53,3 @@ export interface PrestamosHipotecariosResponse {
   computadora_antigua: boolean;
   prestamos: PrestamoHipotecario[];
 }
-

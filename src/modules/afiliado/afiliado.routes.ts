@@ -6386,6 +6386,14 @@ export default async function afiliadoRoutes(app: FastifyInstance) {
           "Aplica la QNA en una transacción única de Firebird: AP_P_APLICAR(C), AP_P_APLICAR(F) y EBI2_RECIBOS_AP cuando corresponda. Ante cualquier fallo revierte Firebird, conserva la bitácora en APLICAR y guarda trazabilidad SFTP. Solo después del COMMIT actualiza SQL Server a TERMINADO.",
         tags: ["afiliado", "firebird"],
         security: [{ bearerAuth: [] }],
+        body: {
+          type: "object",
+          required: ["liquidacionSnapshotId"],
+          additionalProperties: false,
+          properties: {
+            liquidacionSnapshotId: { type: "string", pattern: "^[0-9]+$" },
+          },
+        },
         querystring: {
           type: "object",
           properties: {
@@ -6500,6 +6508,7 @@ export default async function afiliadoRoutes(app: FastifyInstance) {
                   idPeriodoFirebird: { type: "number", nullable: true },
                   mensaje: { type: "string" },
                   tiempoTotalMs: { type: "number" },
+                  liquidacionSnapshotId: { type: "string" },
                 },
               },
             },
@@ -6513,6 +6522,7 @@ export default async function afiliadoRoutes(app: FastifyInstance) {
       try {
         // Obtener orgánica del usuario autenticado o de query params
         const query = req.query as { org0?: string; org1?: string };
+        const body = req.body as { liquidacionSnapshotId: string };
         let userOrg0 = query.org0 || req.user?.idOrganica0 || "";
         let userOrg1 = query.org1 || req.user?.idOrganica1 || "";
 
@@ -6545,6 +6555,7 @@ export default async function afiliadoRoutes(app: FastifyInstance) {
           org0: userOrg0,
           org1: userOrg1,
           usuarioId: req.user?.sub || "unknown",
+          liquidacionSnapshotId: body.liquidacionSnapshotId,
         });
 
         // Retornar resultado completo (incluye campo 'exito' para indicar si fue exitoso)

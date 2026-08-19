@@ -9,10 +9,15 @@ export interface PrestamoMedianoPlazo {
   periodo_c: string | null;
   fecha_c: Date | null;
   capital: number | null;
+  capital_d6: string | null;
   moratorios: number | null;
+  moratorios_d6: string | null;
   interes: number | null;
+  interes_d6: string | null;
   seguro: number | null;
+  seguro_d6: string | null;
   total: number | null;
+  total_d6: string | null;
   resultado: string | null;
   clase: string | null;
   org0: string | null;
@@ -41,4 +46,3 @@ export interface PrestamosMedianoPlazoResponse {
   accion: string;
   prestamos: PrestamoMedianoPlazo[];
 }
-

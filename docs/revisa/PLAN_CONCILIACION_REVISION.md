@@ -578,14 +578,14 @@ Cada flag se activa después de aprobar el gate de su fase. El rollback consiste
 | Fase | Nombre | Estado | Gate principal |
 |---:|---|---|---|
 | 0 | Línea base y contratos reales | `COMPLETADA` | Fuentes, contratos, fórmula y fixture verificados |
-| 1 | Kernel monetario decimal | `VALIDACION` | Kernel y lector listos; falta comparación sombra completa |
+| 1 | Kernel monetario decimal | `COMPLETADA` | Kernel D6/A2, fórmula anual y pruebas de precisión verificados |
 | 2 | Selección determinista de nómina | `COMPLETADA` | Selección e integridad verificadas en tres BD |
-| 3 | Resolución de días V2 | `PENDIENTE` | Pantalla y backend usan los mismos días |
-| 4 | Snapshot detallado y doble escritura | `PENDIENTE` | Detalle suma exactamente encabezado |
-| 5 | Protección contra reemplazos incompletos | `PENDIENTE` | Fallas no modifican históricos |
-| 6 | Históricos y Línea de Pago | `PENDIENTE` | Línea coincide con snapshot |
-| 7 | REVISA concepto 2 | `PENDIENTE` | Concepto 2 coincide con snapshot |
-| 8 | Frontend e históricos congelados | `PENDIENTE` | Pantalla y exportación coinciden |
+| 3 | Resolución de días V2 | `IMPLEMENTADA_PENDIENTE_E2E` | Precedencia TXT, movimiento y default implementada; falta validación con una QNA completa de Calidad |
+| 4 | Snapshot detallado y doble escritura | `IMPLEMENTADA_EN_SOMBRA` | Snapshot V2, detalle, hash, revisiones y decisiones oficiales disponibles; falta promoverlo como fuente operativa |
+| 5 | Protección contra reemplazos incompletos | `VALIDACION` | Guardado transaccional y pruebas unitarias disponibles; faltan pruebas de falla reales por fuente |
+| 6 | Históricos y Línea de Pago | `PARCIAL` | Históricos participan en la transacción; Línea de Pago todavía no está vinculada mediante `SnapshotId` |
+| 7 | REVISA concepto 2 | `PARCIAL` | Días y montos ajustados disponibles; el worker aún consume `RevisionAplicacionHistorico` y no el Snapshot V2 oficial |
+| 8 | Frontend e históricos congelados | `BACKEND_IMPLEMENTADO` | Consulta y decisiones disponibles; falta cerrar frontend y definir la exportación oficial |
 | 9 | Rollout productivo | `PENDIENTE` | Primera QNA productiva conciliada |
 | 10 | Auditoría de periodos cerrados | `PENDIENTE` | Informe sin sobreescrituras automáticas |
 
@@ -1481,7 +1481,25 @@ NO_RECONSTRUIBLE
 | 2026-08-16 | 2 | Revalidación de carga vigente | Desarrollo `2`, Calidad `4`, Producción `3` ámbitos | `PASS` |
 | 2026-08-16 | 3 | E2E estricta fijada a Calidad | `1526` sin TXT; gate detuvo el cálculo con `FASE3_TXT_VIGENTE_REQUERIDO_1526` | `BLOQUEO_ESPERADO_SIN_TXT` |
 | 2026-08-16 | 4 | Sombra histórica `1426` | Línea vigente, REVISA=Firebird congelado y candidato SQL calculado | `VALIDACION_REDONDEO` |
+| 2026-08-17 | 1 | Política monetaria definitiva | `MXN-DETAIL6-AGG2-TRUNC-v1`, detalle D6 y agregados A2 | `COMPLETADO` |
+| 2026-08-17 | 4 | Snapshot V2 aditivo | Encabezado, detalle, hash, revisiones, consulta y persistencia transaccional | `IMPLEMENTADO_EN_SOMBRA` |
+| 2026-08-17 | 4-8 | Decisiones oficiales de Snapshot V2 | Bandeja, aceptación, rechazo, historial y selección oficial | `IMPLEMENTADO_CALIDAD` |
+| 2026-08-17 | 3 | Resolución de días por movimientos | Origen `movimiento`, reglas AL/BA/LB y precedencia `TXT -> movimiento -> default` | `IMPLEMENTADO_PENDIENTE_E2E` |
+| 2026-08-17 | 3 | Separación de cargas TXT y MOVIMIENTO | TXT no elimina ni modifica movimientos; movimientos no alteran detalles TXT | `IMPLEMENTADO` |
+| 2026-08-17 | 7 | Concepto 2 REVISA `1426` | Nueve fondos corregidos, versión previa preservada en `RevisionHistorico` | `COMPLETADO_CALIDAD` |
+| 2026-08-17 | 7 | FTP REVISA opcional | Cálculo persistido se considera completado aunque falle la trazabilidad FTP | `COMPLETADO` |
+| 2026-08-18 | 3-8 | Regresión local | Build y pruebas de movimientos, concepto 2, FTP y fases Snapshot 1, 3-8 | `PASS` |
 
 ## Próxima acción autorizada
 
-Resolver la política A2 de `FAT` para `1426`: el histórico D6 truncado produce `103261.12`, mientras `FAA A2 + FAE A2` produce `103261.11`. Después, cargar por el flujo normal un TXT de la QNA vigente y repetir `npm run verify:aportaciones:phase3:e2e` para validar días parciales y cero. No usar una QNA histórica contra Firebird actual.
+Cerrar la integración operativa sin publicar todavía:
+
+1. Ejecutar en Calidad una prueba E2E de una QNA vigente que cubra movimiento sin TXT, carga TXT posterior, días parciales, ausencia y cero.
+2. Confirmar la precedencia `TXT -> movimiento -> default` en aportaciones, históricos, Snapshot V2 y concepto 2.
+3. Promover una revisión de Snapshot V2 como fuente oficial después de aprobar la conciliación entre detalle D6 y encabezado A2.
+4. Vincular Línea de Pago con `SnapshotId` y exigir diferencia cero contra el snapshot oficial.
+5. Cambiar REVISA concepto 2 para consumir el Snapshot V2 oficial, guardar su `SnapshotId` e incluir versión y origen en la trazabilidad.
+6. Definir si la exportación oficial REVISA se genera en frontend o backend.
+7. Mantener Producción sin cambios hasta completar una QNA de Calidad conciliada entre detalle, históricos, Línea de Pago y REVISA.
+
+La política `FAT = FAA + FAE` y `MXN-DETAIL6-AGG2-TRUNC-v1` se consideran resueltas. El origen `movimiento` es válido cuando no existe TXT; un TXT vigente válido siempre tiene precedencia. No se reconstruyen periodos históricos con fuentes actuales de Firebird.

@@ -1528,28 +1528,15 @@ export class AplicacionesQNARepository implements IAplicacionesQNARepository {
    * @returns Registro con los campos calculados agregados
    */
   private calcularAportacionesDesdeHistorico(registro: AplicacionAportaciones): AplicacionAportaciones {
-    const sueldom = registro.sueldom || 0;
-    const otrasPrestaciones = registro.otrasPrestaciones || 0;
-    const quinquenios = registro.quinquenios || 0;
-
-    // Calcular sueldo base (común para todos los tipos)
-    const sueldoBase = ((sueldom + otrasPrestaciones + quinquenios) / 30) * 15;
-
-    // Calcular aportación Ahorro
-    const aportacionAhorroPatron = ((sueldom / 30) * 15) * 0.0250; // AFAE - Patrón 2.5%
-    const aportacionAhorroEmpleado = ((sueldom / 30) * 15) * 0.050; // AFAA - Empleado 5.0%
-    const aportacionAhorro = aportacionAhorroPatron + aportacionAhorroEmpleado;
-
-    // Calcular aportación Vivienda
-    const aportacionVivienda = ((sueldom / 30) * 15) * 0.0175; // AFE - Patrón 1.75%
-
-    // Calcular aportación Prestaciones (usa sueldoBase)
-    const aportacionPrestacionesPatron = sueldoBase * 0.2225; // AFPE - Patrón 22.25%
-    const aportacionPrestacionesEmpleado = sueldoBase * 0.0450; // AFPA - Empleado 4.5%
+    const sueldoBase = (registro.sueldoq || 0) + (registro.opq || 0) + (registro.qq || 0);
+    const aportacionAhorroPatron = registro.fae || 0;
+    const aportacionAhorroEmpleado = registro.faa || 0;
+    const aportacionAhorro = registro.fat || aportacionAhorroPatron + aportacionAhorroEmpleado;
+    const aportacionVivienda = (registro.fhe || 0) + (registro.fve || 0);
+    const aportacionPrestacionesPatron = registro.fre || 0;
+    const aportacionPrestacionesEmpleado = registro.fra || 0;
     const aportacionPrestaciones = aportacionPrestacionesPatron + aportacionPrestacionesEmpleado;
-
-    // Calcular aportación CAIR
-    const aportacionCair = ((sueldom / 30) * 15) * 0.020; // AFE - Patrón 2.0%
+    const aportacionCair = registro.sare || 0;
 
     // Calcular total de todas las aportaciones
     const totalAportaciones = aportacionAhorro + aportacionVivienda + aportacionPrestaciones + aportacionCair;

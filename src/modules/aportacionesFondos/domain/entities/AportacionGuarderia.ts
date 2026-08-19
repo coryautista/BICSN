@@ -16,6 +16,7 @@ export interface AportacionGuarderia {
   entidad_monto: number | null;
   recibo_ajuste: number | null;
   recibo_total: number | null;
+  recibo_total_d6: string;
   recibo_mes_ano: string | null;
   recibo_fecha_venc: Date | null;
   recibo_folio: string | null;

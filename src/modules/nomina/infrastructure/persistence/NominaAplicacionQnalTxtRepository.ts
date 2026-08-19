@@ -9,7 +9,7 @@ import {
   NominaAplicacionQnalUploadInput,
   NominaAplicacionQnalUploadResult
 } from '../../domain/entities/NominaAplicacionQnalTxt.js';
-import { NominaCargaInconsistenteError } from '../../domain/errors.js';
+import { NominaCargaBloqueadaError, NominaCargaInconsistenteError } from '../../domain/errors.js';
 import { INominaAplicacionQnalTxtRepository } from '../../domain/repositories/INominaAplicacionQnalTxtRepository.js';
 
 export class NominaAplicacionQnalTxtRepository implements INominaAplicacionQnalTxtRepository {
@@ -21,9 +21,10 @@ export class NominaAplicacionQnalTxtRepository implements INominaAplicacionQnalT
     totalRegistros: number
   ): Promise<NominaAplicacionQnalUploadResult> {
     const transaction = new sql.Transaction(this.mssqlPool);
-    await transaction.begin();
+    await transaction.begin(sql.ISOLATION_LEVEL.SERIALIZABLE);
 
     try {
+      await this.assertCargaMutable(transaction, input);
       const cargaId = await this.insertCarga(transaction, input, 'RECHAZADA', totalRegistros, errores.length);
       for (const error of errores) {
         await new sql.Request(transaction)
@@ -47,9 +48,10 @@ export class NominaAplicacionQnalTxtRepository implements INominaAplicacionQnalT
 
   async reemplazarVigentes(input: NominaAplicacionQnalUploadInput, registros: NominaAplicacionQnalRegistroParsed[]): Promise<NominaAplicacionQnalUploadResult> {
     const transaction = new sql.Transaction(this.mssqlPool);
-    await transaction.begin();
+    await transaction.begin(sql.ISOLATION_LEVEL.SERIALIZABLE);
 
     try {
+      await this.assertCargaMutable(transaction, input);
       await this.applyScopeInputs(new sql.Request(transaction), input).query(`
         UPDATE dbo.NominaAplicacionQnalCarga
         SET EsVigente = 0
@@ -91,7 +93,7 @@ export class NominaAplicacionQnalTxtRepository implements INominaAplicacionQnalT
       `);
 
       for (const registro of registros) {
-        await this.insertDetalle(transaction, cargaId, input, registro);
+        await this.upsertDetalleTxt(transaction, cargaId, input, registro);
       }
 
       await transaction.commit();
@@ -100,6 +102,19 @@ export class NominaAplicacionQnalTxtRepository implements INominaAplicacionQnalT
       await transaction.rollback();
       throw error;
     }
+  }
+
+  private async assertCargaMutable(transaction: Transaction, input: NominaAplicacionQnalUploadInput): Promise<void> {
+    const result = await this.applyScopeInputs(new sql.Request(transaction), input).query(`
+      SELECT TOP (1) a.LiquidacionSnapshotId
+      FROM liquidacion.QnaSnapshotOficialActual a WITH (UPDLOCK, HOLDLOCK)
+      INNER JOIN liquidacion.QnaSnapshot s WITH (UPDLOCK, HOLDLOCK)
+        ON s.LiquidacionSnapshotId = a.LiquidacionSnapshotId
+      WHERE s.EntidadId = @EntidadId AND s.Anio = @Anio AND s.Quincena = @Quincena
+        AND s.Organica0 = @Organica0 AND s.Organica1 = @Organica1
+        AND s.Organica2 = @Organica2 AND s.Organica3 = @Organica3
+    `);
+    if (result.recordset.length > 0) throw new NominaCargaBloqueadaError();
   }
 
   async consultarRegistros(filters: NominaAplicacionQnalQueryFilters): Promise<NominaAplicacionQnalQueryResult> {
@@ -289,7 +304,7 @@ export class NominaAplicacionQnalTxtRepository implements INominaAplicacionQnalT
     return result.recordset[0].Id;
   }
 
-  private async insertDetalle(transaction: Transaction, cargaId: number, input: NominaAplicacionQnalUploadInput, registro: NominaAplicacionQnalRegistroParsed): Promise<void> {
+  private async upsertDetalleTxt(transaction: Transaction, cargaId: number, input: NominaAplicacionQnalUploadInput, registro: NominaAplicacionQnalRegistroParsed): Promise<void> {
     await this.applyScopeInputs(new sql.Request(transaction), input)
       .input('CargaId', sql.BigInt, cargaId)
       .input('LineaNumero', sql.Int, registro.numeroLinea)
@@ -316,16 +331,65 @@ export class NominaAplicacionQnalTxtRepository implements INominaAplicacionQnalT
       .input('DiasLaborados', sql.Decimal(5, 2), registro.diasLaborados)
       .input('LineaOriginal', sql.NVarChar(sql.MAX), registro.lineaOriginal)
       .query(`
-        INSERT INTO dbo.NominaAplicacionQnalDetalle
-          (CargaId, EntidadId, Anio, Quincena, Organica0, Organica1, Organica2, Organica3, LineaNumero, LineaOriginal, Lote, TipoRegistro, ClavePersonal, RFC, NombreAfiliado,
-           AportacionAfiliadoFondoAhorro, AportacionEntidadFondoAhorro, AportacionAfiliadoEBI, AportacionEntidadEBI, BaseCotizacionSueldo, BaseCotizacionQuinquenios,
-           SueldoMensual, DescuentoPrestamoCortoPlazo, DescuentoPrestamoHipotecario, FechaMovimiento, DescuentoPrestamoMedianoPlazo, DescuentosOtros, CAIR,
-           CAIRVoluntario, FechaRegistro, DiasLaborados)
-        VALUES
-          (@CargaId, @EntidadId, @Anio, @Quincena, @Organica0, @Organica1, @Organica2, @Organica3, @LineaNumero, @LineaOriginal, @Lote, @TipoRegistro, @ClavePersonal, @RFC, @NombreAfiliado,
-           @AportacionAfiliadoFondoAhorro, @AportacionEntidadFondoAhorro, @AportacionAfiliadoEBI, @AportacionEntidadEBI, @BaseCotizacionSueldo, @BaseCotizacionQuinquenios,
-           @SueldoMensual, @DescuentoPrestamoCortoPlazo, @DescuentoPrestamoHipotecario, @FechaMovimiento, @DescuentoPrestamoMedianoPlazo, @DescuentosOtros, @CAIR,
-           @CAIRVoluntario, @FechaRegistro, @DiasLaborados)
+        DECLARE @DetalleMovimientoId BIGINT;
+        SELECT TOP (1) @DetalleMovimientoId=d.Id
+        FROM dbo.NominaAplicacionQnalDetalle d WITH (UPDLOCK,HOLDLOCK)
+        INNER JOIN dbo.NominaAplicacionQnalCarga c WITH (UPDLOCK,HOLDLOCK) ON c.Id=d.CargaId
+        WHERE d.EntidadId=@EntidadId AND d.Anio=@Anio AND d.Quincena=@Quincena
+          AND d.Organica0=@Organica0 AND d.Organica1=@Organica1 AND d.Organica2=@Organica2 AND d.Organica3=@Organica3
+          AND d.RfcNormalizado=NULLIF(UPPER(LTRIM(RTRIM(@RFC))), '')
+          AND c.TipoCarga='MOVIMIENTO';
+
+        IF @DetalleMovimientoId IS NOT NULL
+        BEGIN
+          INSERT INTO dbo.NominaAplicacionQnalDetalleHistorial
+            (DetalleIdOriginal, CargaId, CargaReemplazoId, EntidadId, Anio, Quincena, Organica0, Organica1, Organica2, Organica3, LineaNumero, LineaOriginal,
+             Lote, TipoRegistro, OrganicaI, OrganicaII, OrganicaIII, RFC, ClavePersonal, NombreAfiliado, Movimiento, FechaMovimiento, SueldoMensual,
+             AyudasMensuales, QuinqueniosMensual, BaseCotizacionSueldo, BaseCotizacionQuinquenios, DiasLaborados, AportacionAfiliadoFondoAhorro,
+             AportacionEntidadFondoAhorro, AportacionAfiliadoEBI, AportacionEntidadEBI, DescuentoPrestamoCortoPlazo, DescuentoPrestamoHipotecario,
+             DescuentoPrestamoMedianoPlazo, DescuentosOtros, Calle, Colonia, Ciudad, Estado, Municipio, CodigoPostal, Telefono, FechaNacimiento,
+             Sexo, EstadoCivil, CAIR, CAIRVoluntario, FechaRegistroOriginal)
+          SELECT Id, CargaId, @CargaId, EntidadId, Anio, Quincena, Organica0, Organica1, Organica2, Organica3, LineaNumero, LineaOriginal,
+             Lote, TipoRegistro, OrganicaI, OrganicaII, OrganicaIII, RFC, ClavePersonal, NombreAfiliado, Movimiento, FechaMovimiento, SueldoMensual,
+             AyudasMensuales, QuinqueniosMensual, BaseCotizacionSueldo, BaseCotizacionQuinquenios, DiasLaborados, AportacionAfiliadoFondoAhorro,
+             AportacionEntidadFondoAhorro, AportacionAfiliadoEBI, AportacionEntidadEBI, DescuentoPrestamoCortoPlazo, DescuentoPrestamoHipotecario,
+             DescuentoPrestamoMedianoPlazo, DescuentosOtros, Calle, Colonia, Ciudad, Estado, Municipio, CodigoPostal, Telefono, FechaNacimiento,
+             Sexo, EstadoCivil, CAIR, CAIRVoluntario, FechaRegistro
+          FROM dbo.NominaAplicacionQnalDetalle WHERE Id=@DetalleMovimientoId;
+
+          UPDATE dbo.NominaAplicacionQnalDetalle
+          SET CargaId=@CargaId, EntidadId=@EntidadId, Anio=@Anio, Quincena=@Quincena,
+              Organica0=@Organica0, Organica1=@Organica1, Organica2=@Organica2, Organica3=@Organica3,
+              LineaNumero=@LineaNumero, LineaOriginal=@LineaOriginal, Lote=@Lote, TipoRegistro=@TipoRegistro,
+              ClavePersonal=@ClavePersonal, RFC=@RFC, NombreAfiliado=@NombreAfiliado,
+              OrganicaI=NULL, OrganicaII=NULL, OrganicaIII=NULL, Movimiento=NULL,
+              AportacionAfiliadoFondoAhorro=@AportacionAfiliadoFondoAhorro,
+              AportacionEntidadFondoAhorro=@AportacionEntidadFondoAhorro,
+              AportacionAfiliadoEBI=@AportacionAfiliadoEBI, AportacionEntidadEBI=@AportacionEntidadEBI,
+              BaseCotizacionSueldo=@BaseCotizacionSueldo, BaseCotizacionQuinquenios=@BaseCotizacionQuinquenios,
+              SueldoMensual=@SueldoMensual, AyudasMensuales=NULL, QuinqueniosMensual=NULL,
+              DescuentoPrestamoCortoPlazo=@DescuentoPrestamoCortoPlazo,
+              DescuentoPrestamoHipotecario=@DescuentoPrestamoHipotecario,
+              FechaMovimiento=@FechaMovimiento, DescuentoPrestamoMedianoPlazo=@DescuentoPrestamoMedianoPlazo,
+              DescuentosOtros=@DescuentosOtros, CAIR=@CAIR, CAIRVoluntario=@CAIRVoluntario,
+              FechaRegistro=@FechaRegistro, DiasLaborados=@DiasLaborados,
+              Calle=NULL, Colonia=NULL, Ciudad=NULL, Estado=NULL, Municipio=NULL, CodigoPostal=NULL,
+              Telefono=NULL, FechaNacimiento=NULL, Sexo=NULL, EstadoCivil=NULL
+          WHERE Id=@DetalleMovimientoId;
+        END
+        ELSE
+        BEGIN
+          INSERT INTO dbo.NominaAplicacionQnalDetalle
+            (CargaId, EntidadId, Anio, Quincena, Organica0, Organica1, Organica2, Organica3, LineaNumero, LineaOriginal, Lote, TipoRegistro, ClavePersonal, RFC, NombreAfiliado,
+             AportacionAfiliadoFondoAhorro, AportacionEntidadFondoAhorro, AportacionAfiliadoEBI, AportacionEntidadEBI, BaseCotizacionSueldo, BaseCotizacionQuinquenios,
+             SueldoMensual, DescuentoPrestamoCortoPlazo, DescuentoPrestamoHipotecario, FechaMovimiento, DescuentoPrestamoMedianoPlazo, DescuentosOtros, CAIR,
+             CAIRVoluntario, FechaRegistro, DiasLaborados)
+          VALUES
+            (@CargaId, @EntidadId, @Anio, @Quincena, @Organica0, @Organica1, @Organica2, @Organica3, @LineaNumero, @LineaOriginal, @Lote, @TipoRegistro, @ClavePersonal, @RFC, @NombreAfiliado,
+             @AportacionAfiliadoFondoAhorro, @AportacionEntidadFondoAhorro, @AportacionAfiliadoEBI, @AportacionEntidadEBI, @BaseCotizacionSueldo, @BaseCotizacionQuinquenios,
+             @SueldoMensual, @DescuentoPrestamoCortoPlazo, @DescuentoPrestamoHipotecario, @FechaMovimiento, @DescuentoPrestamoMedianoPlazo, @DescuentosOtros, @CAIR,
+             @CAIRVoluntario, @FechaRegistro, @DiasLaborados);
+        END
       `);
   }
 

@@ -343,6 +343,37 @@ Por eso debe tratarse como modulo sensible en cualquier migracion.
 
 Alto
 
+## Regla 17: `SUELDO` de Firebird usa la base de cotizacion solo para `AL` y `CS`
+
+### Descripcion
+
+Cuando Alta (`AL`) o Cambio de sueldo (`CS`) seleccionan una `CategoriaPuesto`, SQL Server conserva en `afi.AfiliadoOrg.sueldo` el ingreso bruto mensual del catalogo y en `afi.AfiliadoOrg.porcentaje` su porcentaje aplicable.
+
+Al ejecutar `DP_EDITA_ENTIDAD`, el parametro `SUELDO` debe ser la base de cotizacion:
+
+```text
+SUELDO = round2(AfiliadoOrg.sueldo * AfiliadoOrg.porcentaje / 100)
+PORC   = AfiliadoOrg.porcentaje
+```
+
+Ejemplo: ingreso bruto `20000.00` y porcentaje `80` envian `SUELDO = 16000.00` y `PORC = 80`.
+
+Los movimientos `BA`, `LI`, `LT` y `LB` no aplican esta conversion y conservan el sueldo almacenado.
+
+### Restricciones
+
+- no reemplazar `afi.AfiliadoOrg.sueldo` por la base de cotizacion; debe conservar el ingreso bruto mensual
+- no enviar el ingreso bruto como `SUELDO` de `DP_EDITA_ENTIDAD` para `AL` o `CS`
+- no aplicar la conversion nuevamente a movimientos distintos de `AL` y `CS`
+- no omitir `PORC`; Firebird recibe la base calculada y el porcentaje por separado
+- redondear `SUELDO` a dos decimales antes de llamar el stored procedure
+
+### Evidencia en codigo
+
+- `src/modules/afiliado/domain/services/SueldoCategoriaPuestoPolicy.ts`
+- `src/modules/afiliado/infrastructure/firebird/FirebirdMovimientoService.ts`
+- `scripts/test-sueldo-categoria-puesto-firebird.ts`
+
 ## Notas
 
 - durante la migracion, cualquier regla nueva detectada debe agregarse aqui antes de cambiar comportamiento
