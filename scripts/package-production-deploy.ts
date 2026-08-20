@@ -28,6 +28,7 @@ const files = [
   'database/migrations/20260818_05_verify_liquidacion_v3.sql',
   'database/migrations/20260818_06_add_official_fund_totals.sql',
   'database/migrations/20260818_07_allow_qna_v3_decision_policy.sql',
+  'database/migrations/20260819_08_add_snapshot_base_cotizacion_sueldo.sql',
   'Dockerfile',
   'package.json',
   'package-lock.json',

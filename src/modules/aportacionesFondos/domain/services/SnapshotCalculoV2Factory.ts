@@ -100,6 +100,10 @@ export class SnapshotCalculoV2Factory {
       const rowCair = cair.get(interno)!;
       const identidad = identidades.get(interno)!;
       const dias = diasResolver.resolve(identidad.rfc, input.nomina, true);
+      const baseCotizacionSueldo = dias.origen === 'nomina' ? dias.baseCotizacionSueldo : null;
+      if (dias.origen === 'nomina' && baseCotizacionSueldo == null) {
+        throw new Error(`SNAPSHOT_V2_BASE_COTIZACION_SUELDO_REQUERIDA:${identidad.rfc ?? interno}`);
+      }
       return {
         orden: index + 1,
         empleadoClaveHash: this.hashEmpleado(input, interno),
@@ -108,6 +112,7 @@ export class SnapshotCalculoV2Factory {
         sueldoMensualD6: this.d6(rowAhorro.sueldo_d6 ?? rowAhorro.sueldo),
         otrasPrestacionesMensualesD6: this.nullableD6(rowAhorro.otras_prestaciones_d6 ?? rowAhorro.otras_prestaciones),
         quinqueniosMensualD6: this.d6(rowAhorro.quinquenios_d6 ?? rowAhorro.quinquenios),
+        baseCotizacionSueldoD6: baseCotizacionSueldo == null ? null : this.d6(baseCotizacionSueldo),
         baseCotizacionQuinqueniosD6: this.nullableD6(rowPrestaciones.quinquenios_aplicado_d6),
         cairD6: this.d6(rowCair.afe_d6 ?? rowCair.afe),
         cairFondoD6: this.d6(rowCair.total_d6 ?? rowCair.afe_d6 ?? rowCair.afe),
@@ -150,7 +155,7 @@ export class SnapshotCalculoV2Factory {
       formulaCalculoVersionId: input.formulaCalculoVersionId,
       nominaCargaId: input.nominaCargaId,
       precisionPolicy: FORMULA_PRECISION_POLICY,
-      versionEsquema: 3,
+      versionEsquema: 4,
       usuarioId: input.usuarioId,
       totalesA2: {
         CAIR: cairA2,

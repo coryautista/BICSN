@@ -149,6 +149,8 @@ Q = redondearBase2(QM / 2)
 
 Los valores nulos de `BaseCotizacionSueldo` o `BaseCotizacionQuinquenios` en un RFC perteneciente al TXT vigente detienen el calculo. El valor monetario `0.00` es valido.
 
+Los snapshots nuevos de esquema 4 persisten `BaseCotizacionSueldoD6` por empleado y la incluyen en `HashContenido`. Los snapshots anteriores conservan `NULL` en esa columna y no se recalculan. Liquidacion referencia el Snapshot V2 oficial y su hash, por lo que hereda esta trazabilidad sin duplicar el detalle.
+
 La base informativa mostrada como `sueldo_base_d6` es:
 
 ```text

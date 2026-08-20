@@ -3,6 +3,7 @@ import {
   SnapshotCalculoV2Factory,
   seleccionarCargaTxtSnapshotV2
 } from '../src/modules/aportacionesFondos/domain/services/SnapshotCalculoV2Factory.js';
+import { calcularSnapshotCalculoV2Hash } from '../src/modules/aportacionesFondos/domain/services/SnapshotCalculoV2Hasher.js';
 
 const factory = new SnapshotCalculoV2Factory();
 const base = {
@@ -41,7 +42,7 @@ const base = {
   nomina: {
     tieneArchivo: true,
     registros: new Map([
-      ['RFCUNO010101', { dias: 13, baseCotizacionQuinquenios: 8.25 }]
+      ['RFCUNO010101', { dias: 13, baseCotizacionSueldo: 433.33, baseCotizacionQuinquenios: 8.25 }]
     ])
   }
 };
@@ -52,6 +53,18 @@ assert.equal(snapshot.fuente, 'LIQUIDACION_V2');
 assert.equal(snapshot.detalles.length, 2);
 assert.equal(snapshot.detalles[0].diasLaborados, '13.00');
 assert.equal(snapshot.detalles[0].diasOrigen, 'nomina');
+assert.equal(snapshot.detalles[0].baseCotizacionSueldoD6, '433.330000');
+assert.equal(snapshot.detalles[1].baseCotizacionSueldoD6, null);
+assert.equal(snapshot.versionEsquema, 4);
+assert.notEqual(
+  calcularSnapshotCalculoV2Hash(snapshot),
+  calcularSnapshotCalculoV2Hash({
+    ...snapshot,
+    detalles: snapshot.detalles.map((row, index) => index === 0
+      ? { ...row, baseCotizacionSueldoD6: '433.340000' }
+      : row)
+  })
+);
 assert.equal(snapshot.detalles[0].fhD6, '3.511112');
 assert.equal(snapshot.detalles[0].fvD6, '14.044447');
 assert.equal(snapshot.detalles[1].diasLaborados, '0.00');
@@ -140,7 +153,7 @@ assert.throws(
     ...base,
     nomina: {
       tieneArchivo: true,
-      registros: new Map([['RFCUNO010101', { dias: 15.01, baseCotizacionQuinquenios: null }]])
+      registros: new Map([['RFCUNO010101', { dias: 15.01, baseCotizacionSueldo: 500, baseCotizacionQuinquenios: null }]])
     }
   }),
   /DiasLaborados fuera de rango/

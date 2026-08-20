@@ -25,6 +25,7 @@ export function calcularSnapshotCalculoV2Hash(input: SnapshotCalculoV2Input): st
         sueldoMensualD6: detalle.sueldoMensualD6,
         otrasPrestacionesMensualesD6: detalle.otrasPrestacionesMensualesD6,
         quinqueniosMensualD6: detalle.quinqueniosMensualD6,
+        baseCotizacionSueldoD6: detalle.baseCotizacionSueldoD6,
         baseCotizacionQuinqueniosD6: detalle.baseCotizacionQuinqueniosD6,
         cairD6: detalle.cairD6,
         cairFondoD6: detalle.cairFondoD6,

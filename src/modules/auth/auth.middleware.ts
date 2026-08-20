@@ -19,6 +19,15 @@ export async function requireAuth(req: FastifyRequest, reply: FastifyReply) {
 
     // Obtener información adicional del usuario desde la base de datos
     const userInfo = await findUserById(payload.sub);
+    if (!userInfo) {
+      return reply.code(401).send({
+        ok: false,
+        error: {
+          code: 'TOKEN_USER_NOT_FOUND',
+          message: 'La sesión no corresponde a un usuario del ambiente actual. Inicie sesión nuevamente.'
+        }
+      });
+    }
     
     // Usar valores del token si están disponibles, sino usar los de la BD
     req.user = {

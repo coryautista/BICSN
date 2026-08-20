@@ -462,6 +462,11 @@ export class SnapshotCalculoV2Repository implements ISnapshotCalculoV2Repository
       .input('SnapshotId', sql.BigInt, snapshotId)
       .query(`
         SELECT Orden,EmpleadoClaveHash,CONVERT(VARCHAR(40),DiasLaborados) AS DiasLaborados,DiasOrigen,
+          CONVERT(VARCHAR(40),SueldoMensualD6) AS SueldoMensualD6,
+          CONVERT(VARCHAR(40),OtrasPrestacionesMensualesD6) AS OtrasPrestacionesMensualesD6,
+          CONVERT(VARCHAR(40),QuinqueniosMensualD6) AS QuinqueniosMensualD6,
+          CONVERT(VARCHAR(40),BaseCotizacionSueldoD6) AS BaseCotizacionSueldoD6,
+          CONVERT(VARCHAR(40),BaseCotizacionQuinqueniosD6) AS BaseCotizacionQuinqueniosD6,
           CONVERT(VARCHAR(40),CAIRD6) AS CAIRD6,CONVERT(VARCHAR(40),CAIRFONDOD6) AS CAIRFONDOD6,
           CONVERT(VARCHAR(40),FRAD6) AS FRAD6,
           CONVERT(VARCHAR(40),FRED6) AS FRED6,CONVERT(VARCHAR(40),FHD6) AS FHD6,
@@ -479,6 +484,11 @@ export class SnapshotCalculoV2Repository implements ISnapshotCalculoV2Repository
       empleadoClaveHash: String(row.EmpleadoClaveHash),
       diasLaborados: row.DiasLaborados === null ? null : String(row.DiasLaborados),
       diasOrigen: String(row.DiasOrigen),
+      sueldoMensualD6: this.nullableString(row.SueldoMensualD6),
+      otrasPrestacionesMensualesD6: this.nullableString(row.OtrasPrestacionesMensualesD6),
+      quinqueniosMensualD6: this.nullableString(row.QuinqueniosMensualD6),
+      baseCotizacionSueldoD6: this.nullableString(row.BaseCotizacionSueldoD6),
+      baseCotizacionQuinqueniosD6: this.nullableString(row.BaseCotizacionQuinqueniosD6),
       cairD6: this.nullableString(row.CAIRD6),
       cairFondoD6: this.nullableString(row.CAIRFONDOD6 ?? row.CAIRD6),
       fraD6: this.nullableString(row.FRAD6),
@@ -542,6 +552,7 @@ export class SnapshotCalculoV2Repository implements ISnapshotCalculoV2Repository
       ['SueldoMensualD6', detalle.sueldoMensualD6],
       ['OtrasPrestacionesMensualesD6', detalle.otrasPrestacionesMensualesD6],
       ['QuinqueniosMensualD6', detalle.quinqueniosMensualD6],
+      ['BaseCotizacionSueldoD6', detalle.baseCotizacionSueldoD6],
       ['BaseCotizacionQuinqueniosD6', detalle.baseCotizacionQuinqueniosD6],
       ['CAIRD6', detalle.cairD6],
       ['CAIRFONDOD6', detalle.cairFondoD6],
@@ -560,11 +571,11 @@ export class SnapshotCalculoV2Repository implements ISnapshotCalculoV2Repository
     await request.query(`
       INSERT INTO aportaciones.SnapshotCalculoV2Detalle (
         SnapshotId,Orden,EmpleadoClaveHash,DiasLaborados,DiasOrigen,
-        SueldoMensualD6,OtrasPrestacionesMensualesD6,QuinqueniosMensualD6,BaseCotizacionQuinqueniosD6,
+        SueldoMensualD6,OtrasPrestacionesMensualesD6,QuinqueniosMensualD6,BaseCotizacionSueldoD6,BaseCotizacionQuinqueniosD6,
         CAIRD6,CAIRFONDOD6,FRAD6,FRED6,PRESTACIONESD6,FHD6,FVD6,VIVIENDAD6,FAAD6,FAED6,FATD6,FAID6
       ) VALUES (
         @SnapshotId,@Orden,@EmpleadoClaveHash,@DiasLaborados,@DiasOrigen,
-        @SueldoMensualD6,@OtrasPrestacionesMensualesD6,@QuinqueniosMensualD6,@BaseCotizacionQuinqueniosD6,
+        @SueldoMensualD6,@OtrasPrestacionesMensualesD6,@QuinqueniosMensualD6,@BaseCotizacionSueldoD6,@BaseCotizacionQuinqueniosD6,
         @CAIRD6,@CAIRFONDOD6,@FRAD6,@FRED6,@PRESTACIONESD6,@FHD6,@FVD6,@VIVIENDAD6,@FAAD6,@FAED6,@FATD6,@FAID6
       )
     `);
@@ -594,6 +605,7 @@ export class SnapshotCalculoV2Repository implements ISnapshotCalculoV2Repository
         detalle.sueldoMensualD6,
         detalle.otrasPrestacionesMensualesD6,
         detalle.quinqueniosMensualD6,
+        detalle.baseCotizacionSueldoD6,
         detalle.baseCotizacionQuinqueniosD6,
         detalle.cairD6,
         detalle.cairFondoD6,

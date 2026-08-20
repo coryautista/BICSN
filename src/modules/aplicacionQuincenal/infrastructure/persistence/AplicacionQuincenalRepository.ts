@@ -1070,6 +1070,7 @@ export class AplicacionQuincenalRepository implements IAplicacionQuincenalReposi
     const nominaResult = await nominaRequest
       .query(`
         SELECT d.RFC,d.DiasLaborados,
+          CONVERT(VARCHAR(40), d.BaseCotizacionSueldo) AS BaseCotizacionSueldo,
           CONVERT(VARCHAR(40), d.BaseCotizacionQuinquenios) AS BaseCotizacionQuinquenios,d.Id
         FROM dbo.NominaAplicacionQnalDetalle d
         INNER JOIN dbo.NominaAplicacionQnalCarga c ON c.Id=d.CargaId
@@ -1081,7 +1082,11 @@ export class AplicacionQuincenalRepository implements IAplicacionQuincenalReposi
         ORDER BY d.Id DESC;
       `);
     if (nominaResult.recordset.length === 0) return omit(`${fuenteNomina.toUpperCase()}_SIN_DETALLE`, { cargaId });
-    const nomina = new Map<string, { dias: number | null; baseCotizacionQuinquenios: string | null }>();
+    const nomina = new Map<string, {
+      dias: number | null;
+      baseCotizacionSueldo: string | null;
+      baseCotizacionQuinquenios: string | null;
+    }>();
     for (const row of nominaResult.recordset) {
       const rfc = String(row.RFC ?? '').trim().toUpperCase();
       if (!rfc) continue;
@@ -1089,6 +1094,7 @@ export class AplicacionQuincenalRepository implements IAplicacionQuincenalReposi
       if (nomina.has(rfc)) continue;
       nomina.set(rfc, {
         dias: row.DiasLaborados === null ? null : Number(row.DiasLaborados),
+        baseCotizacionSueldo: row.BaseCotizacionSueldo === null ? null : String(row.BaseCotizacionSueldo),
         baseCotizacionQuinquenios: row.BaseCotizacionQuinquenios === null ? null : String(row.BaseCotizacionQuinquenios)
       });
     }

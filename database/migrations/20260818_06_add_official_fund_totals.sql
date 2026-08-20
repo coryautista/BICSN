@@ -4,19 +4,25 @@ SET XACT_ABORT ON;
 BEGIN TRY
   BEGIN TRANSACTION;
 
-  IF COL_LENGTH(N'aportaciones.SnapshotCalculoV2', N'CAIR_FONDO') IS NULL
-    ALTER TABLE aportaciones.SnapshotCalculoV2 ADD CAIR_FONDO DECIMAL(19,2) NULL;
-  IF COL_LENGTH(N'aportaciones.SnapshotCalculoV2', N'PRESTACIONES') IS NULL
-    ALTER TABLE aportaciones.SnapshotCalculoV2 ADD PRESTACIONES DECIMAL(19,2) NULL;
-  IF COL_LENGTH(N'aportaciones.SnapshotCalculoV2', N'VIVIENDA') IS NULL
-    ALTER TABLE aportaciones.SnapshotCalculoV2 ADD VIVIENDA DECIMAL(19,2) NULL;
+  IF OBJECT_ID(N'aportaciones.SnapshotCalculoV2', N'U') IS NOT NULL
+  BEGIN
+    IF COL_LENGTH(N'aportaciones.SnapshotCalculoV2', N'CAIR_FONDO') IS NULL
+      ALTER TABLE aportaciones.SnapshotCalculoV2 ADD CAIR_FONDO DECIMAL(19,2) NULL;
+    IF COL_LENGTH(N'aportaciones.SnapshotCalculoV2', N'PRESTACIONES') IS NULL
+      ALTER TABLE aportaciones.SnapshotCalculoV2 ADD PRESTACIONES DECIMAL(19,2) NULL;
+    IF COL_LENGTH(N'aportaciones.SnapshotCalculoV2', N'VIVIENDA') IS NULL
+      ALTER TABLE aportaciones.SnapshotCalculoV2 ADD VIVIENDA DECIMAL(19,2) NULL;
+  END;
 
-  IF COL_LENGTH(N'aportaciones.SnapshotCalculoV2Detalle', N'CAIRFONDOD6') IS NULL
-    ALTER TABLE aportaciones.SnapshotCalculoV2Detalle ADD CAIRFONDOD6 DECIMAL(19,6) NULL;
-  IF COL_LENGTH(N'aportaciones.SnapshotCalculoV2Detalle', N'PRESTACIONESD6') IS NULL
-    ALTER TABLE aportaciones.SnapshotCalculoV2Detalle ADD PRESTACIONESD6 DECIMAL(19,6) NULL;
-  IF COL_LENGTH(N'aportaciones.SnapshotCalculoV2Detalle', N'VIVIENDAD6') IS NULL
-    ALTER TABLE aportaciones.SnapshotCalculoV2Detalle ADD VIVIENDAD6 DECIMAL(19,6) NULL;
+  IF OBJECT_ID(N'aportaciones.SnapshotCalculoV2Detalle', N'U') IS NOT NULL
+  BEGIN
+    IF COL_LENGTH(N'aportaciones.SnapshotCalculoV2Detalle', N'CAIRFONDOD6') IS NULL
+      ALTER TABLE aportaciones.SnapshotCalculoV2Detalle ADD CAIRFONDOD6 DECIMAL(19,6) NULL;
+    IF COL_LENGTH(N'aportaciones.SnapshotCalculoV2Detalle', N'PRESTACIONESD6') IS NULL
+      ALTER TABLE aportaciones.SnapshotCalculoV2Detalle ADD PRESTACIONESD6 DECIMAL(19,6) NULL;
+    IF COL_LENGTH(N'aportaciones.SnapshotCalculoV2Detalle', N'VIVIENDAD6') IS NULL
+      ALTER TABLE aportaciones.SnapshotCalculoV2Detalle ADD VIVIENDAD6 DECIMAL(19,6) NULL;
+  END;
 
   IF OBJECT_ID(N'liquidacion.CK_QnaSnapshotTotal_FAT', N'C') IS NOT NULL
     ALTER TABLE liquidacion.QnaSnapshotTotal DROP CONSTRAINT CK_QnaSnapshotTotal_FAT;

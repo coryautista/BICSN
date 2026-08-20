@@ -2,7 +2,12 @@ import { readFile } from 'node:fs/promises';
 import { DATABASE_ENVIRONMENTS, assertDatabaseEnvironment } from '../src/config/databaseEnvironments.js';
 
 const EXECUTE = process.argv.includes('--execute');
+const CONFIRMED = process.argv.includes('--confirm-quality=SII-ISSSSPEA');
 const QUALITY = DATABASE_ENVIRONMENTS.CALIDAD;
+
+if (EXECUTE && !CONFIRMED) {
+  throw new Error('CONFIRMACION_REQUERIDA:--confirm-quality=SII-ISSSSPEA');
+}
 
 process.env.SQLSERVER_DB = QUALITY.sqlDatabase;
 process.env.FIREBIRD_DATABASE = QUALITY.firebirdDatabase;
@@ -25,7 +30,9 @@ async function main(): Promise<void> {
       '../database/migrations/20260816_create_aportaciones_snapshot_v2.sql',
       '../database/migrations/20260816_verify_aportaciones_snapshot_v2.sql',
       '../database/migrations/20260817_create_snapshot_v2_decision.sql',
-      '../database/migrations/20260817_verify_snapshot_v2_decision.sql'
+      '../database/migrations/20260817_verify_snapshot_v2_decision.sql',
+      '../database/migrations/20260818_06_add_official_fund_totals.sql',
+      '../database/migrations/20260819_08_add_snapshot_base_cotizacion_sueldo.sql'
     ]) {
       const source = await readFile(new URL(file, import.meta.url), 'utf8');
       const batches = source.split(/^\s*GO\s*$/gim).map((batch) => batch.trim()).filter(Boolean);

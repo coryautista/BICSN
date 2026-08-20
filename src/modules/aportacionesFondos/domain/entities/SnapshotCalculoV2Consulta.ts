@@ -18,6 +18,11 @@ export type SnapshotCalculoV2ConsultaDetalle = {
   empleadoClaveHash: string;
   diasLaborados: string | null;
   diasOrigen: string;
+  sueldoMensualD6: string | null;
+  otrasPrestacionesMensualesD6: string | null;
+  quinqueniosMensualD6: string | null;
+  baseCotizacionSueldoD6: string | null;
+  baseCotizacionQuinqueniosD6: string | null;
   cairD6: string | null;
   fraD6: string | null;
   freD6: string | null;

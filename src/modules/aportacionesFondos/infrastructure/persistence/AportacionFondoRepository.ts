@@ -1151,7 +1151,7 @@ export class AportacionFondoRepository implements IAportacionFondoRepository {
     }[tipo];
 
     const pool = await getPool();
-    const result = await pool.request()
+    const cierreResult = await pool.request()
       .input('org0', sql.Char(2), claveOrganica0)
       .input('org1', sql.Char(2), claveOrganica1)
       .input('quincena', sql.Int, quincena)
@@ -1167,7 +1167,15 @@ export class AportacionFondoRepository implements IAportacionFondoRepository {
             AND Anio = @anio
             AND Accion = 'TERMINADO'
         ) THEN 1 ELSE 0 END AS Cerrado;
+      `);
+    if (Number(cierreResult.recordset[0]?.Cerrado ?? 0) !== 1) return null;
 
+    const result = await pool.request()
+      .input('org0', sql.Char(2), claveOrganica0)
+      .input('org1', sql.Char(2), claveOrganica1)
+      .input('quincena', sql.Int, quincena)
+      .input('anio', sql.Int, anio)
+      .query(`
         SELECT interno, nombre, sueldo, quinquenios, otras_prestaciones,
           sueldo_base, ${config.contributions}, total
         FROM aportaciones.${config.table}
@@ -1189,9 +1197,7 @@ export class AportacionFondoRepository implements IAportacionFondoRepository {
           AND s.EsCerrado = 1;
       `);
     const recordsets = result.recordsets as any[];
-    if (Number(recordsets[0]?.[0]?.Cerrado ?? 0) !== 1) return null;
-
-    const rows = recordsets[1] ?? [];
+    const rows = recordsets[0] ?? [];
     if (rows.length === 0) {
       throw new AportacionFondoDomainError(
         `El periodo cerrado ${periodo} no tiene histórico persistido para ${tipo}`,
@@ -1205,7 +1211,7 @@ export class AportacionFondoRepository implements IAportacionFondoRepository {
       );
     }
 
-    const snapshotRows = recordsets[2] ?? [];
+    const snapshotRows = recordsets[1] ?? [];
     const diasSnapshot = new Map<string, { dias: number; origen: string }>();
     for (const row of snapshotRows) {
       const hash = String(row.EmpleadoClaveHash ?? '').trim().toUpperCase();
