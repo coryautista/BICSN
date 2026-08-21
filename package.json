@@ -40,6 +40,8 @@
     "preflight:produccion:readonly": "tsx scripts/preflight-produccion-readonly.ts",
     "verify:produccion:v3:postmigration": "tsx scripts/verify-produccion-v3-postmigration-readonly.ts",
     "migrate:liquidacion-qna-v3:produccion": "tsx scripts/migrate-liquidacion-qna-v3-produccion.ts",
+    "migrate:snapshot-base-sueldo:calidad": "tsx scripts/migrate-snapshot-base-cotizacion-sueldo.ts --environment=calidad --execute --confirm-quality=SII-ISSSSPEA",
+    "migrate:snapshot-base-sueldo:produccion": "tsx scripts/migrate-snapshot-base-cotizacion-sueldo.ts --environment=produccion --execute --confirm-production=SII-ISSSSPEA-PROD",
     "test:aportaciones:phase5": "tsx scripts/test-aportaciones-phase5.ts",
     "verify:aportaciones:snapshot-v2:read:1426": "tsx scripts/verify-aportaciones-snapshot-v2-read-1426.ts",
     "test:aportaciones:phase6": "tsx scripts/test-aportaciones-phase6.ts",
