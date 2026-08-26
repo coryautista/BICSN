@@ -15,11 +15,11 @@ Este tablero no sustituye el plan tecnico ni autoriza migraciones, reprocesos, c
 ## Estado General
 
 ```text
-FASE_1_COMPLETADA
-FASE_2_COMPLETADA
+FASES_0_A_8_COMPLETADAS
+FASE_9_PENDIENTE
 ```
 
-Ultima actualizacion: 2026-08-25.
+Ultima actualizacion: 2026-08-26.
 
 ## Resultado Esperado
 
@@ -46,7 +46,7 @@ Para cada QNA nueva aplicada, reproducir sin fuentes vivas los diez dominios con
 | 5 | Captura unica en memoria de diez dominios | COMPLETADA | Fase 4 |
 | 6 | Detalles, payloads, hashes y totales persistidos | COMPLETADA | Fase 5 |
 | 7 | Retenciones V3 completas por identidad y hash | COMPLETADA | Fase 6 |
-| 8 | Dual-write y conciliacion automatizada | PENDIENTE | Fase 7 |
+| 8 | Dual-write y conciliacion automatizada | COMPLETADA | Fase 7 |
 | 9 | Endpoints oficiales de periodos, resumen y detalle | PENDIENTE | Fase 8 |
 | 10 | Fuentes discriminadas y fallback legacy | PENDIENTE | Fase 9 |
 | 11 | Saga, recuperacion e idempotencia verificadas | PENDIENTE | Fase 10 |
@@ -54,9 +54,27 @@ Para cada QNA nueva aplicada, reproducir sin fuentes vivas los diez dominios con
 | 13 | Retiro autorizado de escritura legacy para QNA nuevas | PENDIENTE | Fase 12 y aprobacion operativa |
 | 14 | Migracion y liberacion controlada en Produccion | PENDIENTE | Fase 13 |
 
-## Fase Actual: 8
+## Fase Actual: 9
 
-Objetivo: activar dual-write y conciliacion automatizada sin releer fuentes vivas.
+Objetivo: implementar endpoints oficiales de periodos, resumen y detalle aplicado.
+
+## Evidencia de la Fase 8
+
+- [x] Inventariar las firmas reales de los 12 almacenes legacy en Desarrollo.
+- [x] Proyectar siete aportaciones, tres retenciones, resumen y REVISA desde evidencia V5.
+- [x] Construir oracle esperado independiente y hashes completos con orden V5.
+- [x] Aplicar normalizacion versionada `LEGACY-PROJECTION-v1` para columnas D2.
+- [x] Registrar conciliacion exacta por dominio, conteos, totales, hashes y diferencias.
+- [x] Propagar `COMPLETE`, `WARNING` o `ERROR` en la respuesta de promocion.
+- [x] Conservar la primera proyeccion ante colision de scope reducido y devolver `WARNING`.
+- [x] Marcar `SUPERSEDED` y transferir ownership en reemplazos permitidos.
+- [x] Preservar cero filas para dominios no aplicables, sin registros sinteticos.
+- [x] Proteger proyeccion y reparacion mediante roles y modulos firmados.
+- [x] Verificar reparacion auditada, alteracion externa, retries y rollback explicito.
+- [x] Aplicar y reaplicar la migracion exclusivamente en Desarrollo sin modificar filas.
+- [x] Registrar el commit funcional `2d70bdc`.
+
+Riesgo aceptado: el principal runtime actual `usrISSSSPEA` pertenece a `db_owner`; el verificador reporta `DB_OWNER_EXCEPTION_SQL_ISOLATION_NOT_ENFORCEABLE`. Los controles firmados protegen principales de privilegio minimo, pero no pueden restringir a un propietario de base.
 
 ## Evidencia de la Fase 7
 
@@ -236,7 +254,8 @@ No deben incluirse, revertirse ni ajustarse como parte de esta fase. Requieren u
 | SQL Server y Firebird no comparten transaccion | Saga recuperable e idempotente | ABIERTO |
 | Acceso cruzado entre dependencias | Politica central de ambito | CONTROLADO |
 | Campos historicos no verificables | `null`, advertencias y fuente discriminada | ABIERTO |
-| Diferencias entre snapshot oficial y legacy | Dual-write y conciliacion | ABIERTO |
+| Diferencias entre snapshot oficial y legacy | Dual-write y conciliacion con WARNING | CONTROLADO |
+| Principal runtime con `db_owner` puede eludir aislamiento SQL | Migrar a principal de privilegio minimo | ACEPTADO |
 | Cambios locales ajenos mezclados con la fase | Commit selectivo y revision de diff | CONTROLADO |
 
 ## Registro de Avance
@@ -258,6 +277,7 @@ No deben incluirse, revertirse ni ajustarse como parte de esta fase. Requieren u
 | 2026-08-26 | 5 | COMPLETADA | Commits `3970da8` y `6327e70`; `QNA_TEN_DOMAIN_CAPTURE_DESARROLLO_READONLY_OK`; politica HIP `1526,1626`; Snapshot antes/despues en cero | Iniciar fase 6 |
 | 2026-08-26 | 6 | COMPLETADA | Commit `1b484ed`; `QNA_V5_WRITER_INTEGRATION_DESARROLLO_ROLLBACK_OK`; 169 proyecciones, reintento idempotente y rollback completo; revision sin bloqueos altos | Iniciar fase 7 |
 | 2026-08-26 | 7 | COMPLETADA | Commit `2e61284`; migracion idempotente, verificador fuerte e integracion rollback de retenciones V3 aprobados; cero filas modificadas o retenidas | Iniciar fase 8 |
+| 2026-08-26 | 8 | COMPLETADA | Commit `2d70bdc`; dual-write y conciliacion exacta aplicados y reaplicados en Desarrollo; colision, reemplazo, HIP legacy, normalizacion y seguridad verificados | Iniciar fase 9 |
 
 ## Regla de Actualizacion
 

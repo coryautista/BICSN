@@ -213,6 +213,18 @@ Las claves y componentes nullable permanecen `null`. Los valores no nulos se val
 
 Los procedimientos legacy basados en TVP/body rechazan snapshots V5. Permanecen disponibles solo para `VersionEsquema < 5`.
 
+## Dual-write y Conciliacion Legacy
+
+La promocion V5 proyecta desde evidencia persistida hacia siete historicos de aportaciones, tres historicos de prestamos, `aportaciones.ResumenHistorico` y `conciliacion.RevisionAplicacionHistorico`. No consulta fuentes vivas. El oracle esperado se calcula directamente desde V5 y se compara contra filas legacy mediante conteos, totales normalizados, identidad, multiplicidad y hashes completos.
+
+La politica `QNA-LEGACY-DUAL-WRITE-V1` usa normalizacion `LEGACY-PROJECTION-v1`. Cuando una tabla legacy conserva D2, cada fila V5 se normaliza antes de sumar; la diferencia frente al total A2 original se registra sin ocultarla.
+
+V5 permanece autoritativo. Una divergencia de contenido produce `WARNING` no bloqueante y se devuelve en la respuesta de promocion. Una falla de infraestructura que deja la transaccion SQL no confirmable bloquea la promocion. Las alteraciones externas no se sobrescriben automaticamente: requieren reparacion auditada mediante el rol SQL dedicado.
+
+Los historicos legacy usan una clave reducida. Si otro scope V5 comparte `(Org0, Org1, anio, quincena)`, conserva la primera proyeccion y registra `LEGACY_SCOPE_COLLISION`. Un reemplazo permitido del mismo scope marca la evidencia anterior `SUPERSEDED` y transfiere ownership.
+
+Los modulos firmados y roles dedicados restringen proyeccion y reparacion para principales de privilegio minimo. En Desarrollo, `usrISSSSPEA` es `db_owner`; se acepta y reporta `DB_OWNER_EXCEPTION_SQL_ISOLATION_NOT_ENFORCEABLE`, por lo que esa cuenta puede eludir controles de objeto.
+
 ## Inmutabilidad
 
 Los triggers siguientes bloquean `UPDATE` y `DELETE`:
@@ -233,6 +245,8 @@ database/migrations/20260825_09_add_qna_official_snapshot_projections.sql
 database/migrations/20260825_10_verify_qna_official_snapshot_projections.sql
 database/migrations/20260826_11_strengthen_retenciones_v3_projection.sql
 database/migrations/20260826_12_verify_retenciones_v3_projection.sql
+database/migrations/20260826_13_add_qna_phase8_legacy_dual_write.sql
+database/migrations/20260826_14_verify_qna_phase8_legacy_dual_write.sql
 scripts/migrate-qna-official-projections-desarrollo.ts
 scripts/verify-qna-official-projections-desarrollo.ts
 ```

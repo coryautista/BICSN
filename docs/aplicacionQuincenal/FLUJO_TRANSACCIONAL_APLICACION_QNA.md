@@ -6,19 +6,20 @@ Evitar aplicaciones parciales en Firebird cuando falla alguno de los procedimien
 
 ## Orden del proceso
 
-1. La carga validada se guarda en los historicos de SQL Server.
-2. Una carga posterior de la misma organica y QNA reemplaza esos datos mediante el flujo existente.
-3. `POST /v1/afiliado/aplicar-bdisssspea-qna` resuelve la QNA y valida que la aplicacion de movimientos este finalizada.
-4. El backend inicia una unica transaccion Firebird.
-5. Dentro de esa transaccion ejecuta, en orden:
+1. `POST /v1/liquidaciones-qna/orquestar` captura una vez los diez dominios y persiste Snapshot V2 y Snapshot QNA V5.
+2. La promocion selecciona el Snapshot oficial, proyecta Retenciones V3 y ejecuta dual-write legacy dentro de la transaccion SQL Server.
+3. La conciliacion exacta devuelve `COMPLETE`, `WARNING` o `ERROR`; un `WARNING` legacy no bloquea que V5 sea oficial.
+4. `POST /v1/afiliado/aplicar-bdisssspea-qna` resuelve el Snapshot oficial y valida que la aplicacion de movimientos este finalizada.
+5. El backend inicia una unica transaccion Firebird.
+6. Dentro de esa transaccion ejecuta, en orden:
    - `AP_P_APLICAR(..., 'C')`.
    - `AP_P_APLICAR(..., 'F')`.
    - `EBI2_RECIBOS_AP(..., 'APLICAR')` cuando la QNA es par.
-6. Firebird confirma la transaccion solo cuando todos los procedimientos aplicables terminan correctamente.
-7. Despues del `COMMIT` Firebird, el backend genera o reutiliza la Linea de Pago con el importe calculado desde los historicos SQL.
-8. Solo cuando existe la Linea de Pago actualiza exactamente el `AfectacionId` validado a `TERMINADO`.
-9. Consulta la QNA vigente de Firebird y registra la siguiente QNA de forma idempotente.
-10. El resultado se guarda en SFTP.
+7. Firebird confirma la transaccion solo cuando todos los procedimientos aplicables terminan correctamente.
+8. Despues del `COMMIT` Firebird, el backend genera o reutiliza la Linea de Pago con el importe oficial de `QnaSnapshotTotal`.
+9. Solo cuando existe la Linea de Pago actualiza exactamente el `AfectacionId` validado a `TERMINADO`.
+10. Consulta la QNA vigente de Firebird y registra la siguiente QNA de forma idempotente.
+11. El resultado se guarda en SFTP.
 
 Los eventos `BA_MOVIMIENTO` no forman parte de este proceso. Aplicar QNA no los crea, recupera ni modifica.
 
@@ -64,6 +65,7 @@ Los archivos se almacenan en:
 - La atomicidad cubre los tres procedimientos ejecutados en la misma base Firebird.
 - SQL Server y SFTP no participan en la transaccion Firebird.
 - Los historicos SQL se conservan deliberadamente cuando Firebird falla.
+- El dual-write y su conciliacion se conservan cuando Firebird falla; la aplicacion no se expone como terminada.
 - La bitacora se actualiza solo despues del `COMMIT` Firebird y de generar o reutilizar la Linea de Pago.
 - `BA_MOVIMIENTO` queda fuera de la transaccion y no depende del resultado de Aplicar QNA.
 - Si falla la Linea de Pago o la actualizacion de bitacora despues del `COMMIT`, no se reejecutan C, F ni EBI; se usa la recuperacion manual de Linea de Pago correspondiente.
