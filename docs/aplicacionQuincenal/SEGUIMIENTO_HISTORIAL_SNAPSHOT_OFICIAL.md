@@ -44,7 +44,7 @@ Para cada QNA nueva aplicada, reproducir sin fuentes vivas los diez dominios con
 | 3 | Precedencia correcta de quinquenio | COMPLETADA | Fase 2 |
 | 4 | Migracion idempotente de proyecciones y restricciones | COMPLETADA | Fase 3 |
 | 5 | Captura unica en memoria de diez dominios | COMPLETADA | Fase 4 |
-| 6 | Detalles, payloads, hashes y totales persistidos | PENDIENTE | Fase 5 |
+| 6 | Detalles, payloads, hashes y totales persistidos | COMPLETADA | Fase 5 |
 | 7 | Retenciones V3 completas por identidad y hash | PENDIENTE | Fase 6 |
 | 8 | Dual-write y conciliacion automatizada | PENDIENTE | Fase 7 |
 | 9 | Endpoints oficiales de periodos, resumen y detalle | PENDIENTE | Fase 8 |
@@ -54,9 +54,23 @@ Para cada QNA nueva aplicada, reproducir sin fuentes vivas los diez dominios con
 | 13 | Retiro autorizado de escritura legacy para QNA nuevas | PENDIENTE | Fase 12 y aprobacion operativa |
 | 14 | Migracion y liberacion controlada en Produccion | PENDIENTE | Fase 13 |
 
-## Fase Actual: 6
+## Fase Actual: 7
 
-Objetivo: persistir desde el mismo agregado los detalles, payloads, hashes y totales del Snapshot oficial V5 y su Snapshot V2 asociado.
+Objetivo: fortalecer las retenciones V3 por identidad y hash sin perder multiplicidad ni trazabilidad.
+
+## Evidencia de la Fase 6
+
+- [x] Capturar FAI una vez mediante `AP_S_FONDOS` y exigir igualdad exacta de `Interno`.
+- [x] Construir Snapshot V2 y Snapshot QNA V5 desde el mismo agregado congelado.
+- [x] Persistir ambos snapshots, detalles, payloads, hashes y totales en una transaccion serializable.
+- [x] Vincular cada `QnaSnapshotDetalle` con su `SnapshotCalculoV2Detalle`.
+- [x] Calcular hashes independientes para Ahorro, Vivienda, Prestaciones y CAIR.
+- [x] Excluir UUID, fecha de captura e IDs SQL de los hashes semanticos.
+- [x] Reagrupar evidencia auxiliar por `EmpleadoClave` y validarla contra cada proyeccion.
+- [x] Exigir aprobacion administrativa explicita para convertir `EMPTY` en `NOT_APPLICABLE`.
+- [x] Aprobar Snapshot V2 una sola vez y bloquear reemplazo automatico de `OBSERVADO`.
+- [x] Verificar reintentos idempotentes y rollback total en Desarrollo.
+- [x] Registrar el commit funcional `1b484ed`.
 
 ## Evidencia de la Fase 5
 
@@ -226,6 +240,7 @@ No deben incluirse, revertirse ni ajustarse como parte de esta fase. Requieren u
 | 2026-08-25 | 4 | COMPLETADA | Commit `612d791`; esquema V5 verificado e idempotente en Desarrollo; revision sin bloqueos | Iniciar fase 5 |
 | 2026-08-25 | 5 | EN_PROGRESO | Captura unica, payload V1, identidad por interno e inmutabilidad probados; revision sin bloqueos | Confirmar politica HIP y validar captura read-only en Desarrollo |
 | 2026-08-26 | 5 | COMPLETADA | Commits `3970da8` y `6327e70`; `QNA_TEN_DOMAIN_CAPTURE_DESARROLLO_READONLY_OK`; politica HIP `1526,1626`; Snapshot antes/despues en cero | Iniciar fase 6 |
+| 2026-08-26 | 6 | COMPLETADA | Commit `1b484ed`; `QNA_V5_WRITER_INTEGRATION_DESARROLLO_ROLLBACK_OK`; 169 proyecciones, reintento idempotente y rollback completo; revision sin bloqueos altos | Iniciar fase 7 |
 
 ## Regla de Actualizacion
 

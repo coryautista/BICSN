@@ -177,7 +177,9 @@ La canonicalizacion vigente:
 
 Para filas auxiliares, `HashFila` es el hash de `PayloadCanonico`. Para una fuente, el hash incluye cada par `ClaveFilaHash` y `HashFila`; los duplicados no se eliminan.
 
-La lista canonica exacta de campos de `QnaSnapshotDetalle.HashFila` se versiona junto con el escritor V5 en fase 6.
+`QnaSnapshotDetalle.HashFila` usa todos los campos de negocio de `QnaEmployeeDetail`, excepto el propio `hashFila`. Incluye orden, identidad congelada, escala, dias, origen, bases, componentes, fondos, aportaciones auxiliares y retenciones. Excluye `QnaSnapshotDetalleId`, `SnapshotCalculoV2DetalleId`, UUID y fecha de captura. La lista tipada se mantiene en `LiquidacionQna.ts` y el calculo canonico en `LiquidacionQnaContracts.ts`.
+
+Los cuatro fondos usan hashes independientes construidos con su proyeccion canonica por empleado. `captureId` y `capturedAt` no intervienen en hashes semanticos, por lo que una recaptura con los mismos datos reutiliza los mismos snapshots y revision.
 
 ## Captura Unica En Memoria
 
@@ -193,7 +195,13 @@ La lista canonica exacta de campos de `QnaSnapshotDetalle.HashFila` se versiona 
 
 `QnaTenDomainCaptureFactory` copia y congela recursivamente el agregado. Despues de retornar no se permite releer ninguna fuente para construir el candidato.
 
-Durante la transicion de fase 5, el candidato V4 compara carga, formula, conteo y totales de los cuatro fondos capturados contra el Snapshot V2 aprobado. La fase 6 creara el nuevo Snapshot V2 y el Snapshot QNA V5 desde este mismo agregado.
+El escritor V5 adquiere el lock de ambito antes de capturar y persiste Snapshot V2, su decision inicial, Snapshot QNA V5, fuentes, totales, proyecciones y payloads dentro de una transaccion SQL Server serializable. Una falla revierte el conjunto completo. Los reintentos con contenido equivalente reutilizan V2, candidato, revision y decisiones.
+
+FAI se consulta una vez mediante `AP_S_FONDOS` durante la captura y se integra por `Interno`. Faltantes, duplicados o identidades adicionales bloquean la captura.
+
+Una fuente `EMPTY` solo puede convertirse a `NOT_APPLICABLE` mediante aprobacion administrativa explicita por dominio, con motivo, evidencia y usuario autenticado. No existe aprobacion automatica por ausencia de filas.
+
+La aprobacion automatica inicial del Snapshot V2 se registra una sola vez. Una aprobacion vigente bajo la politica actual se reutiliza; una decision `OBSERVADO` o una aprobacion bajo una politica desactualizada exige una nueva aprobacion explicita.
 
 ## Inmutabilidad
 
@@ -218,3 +226,5 @@ scripts/verify-qna-official-projections-desarrollo.ts
 ```
 
 La migracion es aditiva, idempotente y no modifica filas. Su primera aplicacion se limita a Desarrollo conforme a la matriz obligatoria de bases.
+
+La migracion V5 es requisito previo estricto para desplegar el escritor en cada ambiente. No desplegar esta version de aplicacion en Calidad o Produccion antes de aplicar y verificar `20260825_09_add_qna_official_snapshot_projections.sql` en la base correspondiente.
