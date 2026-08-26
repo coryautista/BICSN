@@ -26,6 +26,9 @@ export interface CreateAndPromoteQnaCandidateResult {
   hashContenido: string;
   idempotente: boolean;
   promovido: boolean;
+  promoted: true;
+  legacyProjectionStatus?: 'COMPLETE' | 'WARNING' | 'ERROR';
+  legacyProjectionDetails?: string[];
 }
 
 export class CreateAndPromoteQnaCandidateCommand {
@@ -67,11 +70,15 @@ export class CreateAndPromoteQnaCandidateCommand {
         await this.appendQnaDecisionCommand.execute(candidate.liquidacionSnapshotId, 'APROBADO',
           'Aprobacion automatica: diez fuentes e invariantes V5 validos', input.usuarioId);
       }
-      await this.promoteQnaSnapshotCommand.execute(candidate.liquidacionSnapshotId, 'Promocion automatica V5 validada', input.usuarioId);
     }
+    const promotion = await this.promoteQnaSnapshotCommand.execute(
+      candidate.liquidacionSnapshotId, 'Promocion automatica V5 validada', input.usuarioId
+    );
     const verified = await this.liquidacionQnaRepo.resolveOfficialById(candidate.liquidacionSnapshotId);
     if (!verified) throw new Error('QNA_PROMOCION_AUTOMATICA_NO_CONFIRMADA');
-    return { ...candidate, promovido: true };
+    return { ...candidate, promovido: true, promoted: true,
+      legacyProjectionStatus: promotion.legacyProjectionStatus,
+      legacyProjectionDetails: promotion.legacyProjectionDetails };
   }
 }
 

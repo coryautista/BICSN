@@ -33,7 +33,12 @@
     "test:liquidacion-qna:retention-semantics": "tsx scripts/test-qna-retention-semantics.ts",
     "migrate:retenciones:v3-projection:desarrollo": "tsx scripts/migrate-retenciones-v3-projection-desarrollo.ts",
     "verify:retenciones:v3-projection:desarrollo": "tsx scripts/verify-retenciones-v3-projection-desarrollo.ts",
-    "test:retenciones:v3-projection:desarrollo": "tsx scripts/test-retenciones-v3-projection-integration-desarrollo.ts"
+    "test:retenciones:v3-projection:desarrollo": "tsx scripts/test-retenciones-v3-projection-integration-desarrollo.ts",
+    "inventory:qna:phase8:legacy:desarrollo": "tsx scripts/inventory-qna-phase8-legacy-desarrollo.ts",
+    "migrate:qna:phase8:legacy:desarrollo": "tsx scripts/migrate-qna-phase8-legacy-desarrollo.ts",
+    "verify:qna:phase8:legacy:desarrollo": "tsx scripts/verify-qna-phase8-legacy-desarrollo.ts",
+    "test:qna:phase8:legacy": "tsx scripts/test-qna-phase8-legacy-contracts.ts",
+    "test:qna:phase8:legacy:desarrollo": "tsx scripts/test-qna-phase8-legacy-integration-desarrollo.ts"
   },
   "engines": {
     "node": ">=20.0.0"

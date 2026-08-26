@@ -178,9 +178,10 @@ export class LiquidacionQnaRepository implements ILiquidacionQnaRepository {
     return this.mapDecision(result.recordset[0]);
   }
 
-  async promote(id: string, motivo: string | null, usuarioId: string): Promise<PromoteQnaResult> {
-    const transaction = new sql.Transaction(this.mssqlPool);
-    await transaction.begin(sql.ISOLATION_LEVEL.SERIALIZABLE);
+  async promote(id: string, motivo: string | null, usuarioId: string, ambientTransaction?: Transaction): Promise<PromoteQnaResult> {
+    const transaction = ambientTransaction ?? new sql.Transaction(this.mssqlPool);
+    const ownsTransaction = ambientTransaction === undefined;
+    if (ownsTransaction) await transaction.begin(sql.ISOLATION_LEVEL.SERIALIZABLE);
     try {
       const lockScopeResult = await new sql.Request(transaction).input('Id', sql.BigInt, id).query(`
         SELECT EntidadId,Anio,Quincena,Organica0,Organica1,Organica2,Organica3
@@ -321,9 +322,11 @@ export class LiquidacionQnaRepository implements ILiquidacionQnaRepository {
       const priorState = sets[1][0]?.EstadoDestino as string | undefined;
       if (current && String(current.LiquidacionSnapshotId) === id) {
         await this.projectV5Retentions(transaction, id, Number(snapshot.VersionEsquema), usuarioId);
-        await transaction.commit();
-        return { liquidacionSnapshotId: id, qnaProcesoId: processId,
-          qnaSnapshotSeleccionEventoId: String(current.QnaSnapshotSeleccionEventoId), tipoEvento: current.TipoEvento, idempotente: true };
+        const legacyProjection = await this.projectV5Legacy(transaction, id, Number(snapshot.VersionEsquema), usuarioId);
+        if (ownsTransaction) await transaction.commit();
+        return { liquidacionSnapshotId: id, promoted: true, qnaProcesoId: processId,
+          qnaSnapshotSeleccionEventoId: String(current.QnaSnapshotSeleccionEventoId), tipoEvento: current.TipoEvento, idempotente: true,
+          legacyProjectionStatus: legacyProjection.status, legacyProjectionDetails: legacyProjection.details };
       }
       if (current && priorState !== 'OFICIAL') {
         qnaFail('No se puede reemplazar una liquidacion cuyo procesamiento ya inicio', 'QNA_OFICIAL_PROCESAMIENTO_INICIADO', 409);
@@ -345,10 +348,12 @@ export class LiquidacionQnaRepository implements ILiquidacionQnaRepository {
         await this.insertTransition(transaction, processId, id, priorState ?? null, 'OFICIAL', motivo, usuarioId);
       }
       await this.projectV5Retentions(transaction, id, Number(snapshot.VersionEsquema), usuarioId);
-      await transaction.commit();
-      return { liquidacionSnapshotId: id, qnaProcesoId: processId, qnaSnapshotSeleccionEventoId: eventId, tipoEvento: type, idempotente: false };
+      const legacyProjection = await this.projectV5Legacy(transaction, id, Number(snapshot.VersionEsquema), usuarioId);
+      if (ownsTransaction) await transaction.commit();
+      return { liquidacionSnapshotId: id, promoted: true, qnaProcesoId: processId, qnaSnapshotSeleccionEventoId: eventId, tipoEvento: type, idempotente: false,
+        legacyProjectionStatus: legacyProjection.status, legacyProjectionDetails: legacyProjection.details };
     } catch (error) {
-      await transaction.rollback().catch(() => undefined);
+      if (ownsTransaction) await transaction.rollback().catch(() => undefined);
       throw error;
     }
   }
@@ -649,6 +654,23 @@ export class LiquidacionQnaRepository implements ILiquidacionQnaRepository {
       .input('LiquidacionSnapshotId', sql.BigInt, snapshotId)
       .input('UsuarioId', sql.NVarChar(100), usuarioId)
       .execute('retenciones.spProyectarRetencionesV3DesdeSnapshotV5');
+  }
+
+  private async projectV5Legacy(transaction: Transaction, snapshotId: string, version: number, usuarioId: string): Promise<{
+    status: 'COMPLETE' | 'WARNING' | 'ERROR' | undefined;
+    details: string[];
+  }> {
+    if (version < 5) return { status: undefined, details: [] };
+    const result = await new sql.Request(transaction)
+      .input('LiquidacionSnapshotId', sql.BigInt, snapshotId)
+      .input('UsuarioId', sql.NVarChar(100), usuarioId)
+      .execute('liquidacion.spProyectarLegacyDesdeSnapshotV5');
+    const status = String(result.recordset?.[0]?.Estado ?? 'ERROR');
+    if (!['COMPLETE', 'WARNING', 'ERROR'].includes(status)) qnaFail('Resultado de proyeccion legacy invalido', 'QNA_LEGACY_RESULTADO_INVALIDO', 500);
+    const details = (result.recordset ?? [])
+      .map((row: Record<string, unknown>) => [row.Codigo, row.Detalle].filter(Boolean).join(': '))
+      .filter((detail: string) => detail.length > 0);
+    return { status: status as 'COMPLETE' | 'WARNING' | 'ERROR', details };
   }
 
   private mapSnapshot(row: Record<string, any>, sourceRows: Array<Record<string, any>>, detailRows: Array<Record<string, any>>, decision: Record<string, any> | null): QnaSnapshot {

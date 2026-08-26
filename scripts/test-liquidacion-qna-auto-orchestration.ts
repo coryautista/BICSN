@@ -11,7 +11,7 @@ let written: any;
 const command = new CreateAndPromoteQnaCandidateCommand(
   { execute: async () => { calls.push('capturar'); return capture; } } as any,
   { execute: async () => { calls.push('aprobar'); } } as any,
-  { execute: async () => { calls.push('promover'); } } as any,
+  { execute: async () => { calls.push('promover'); return { legacyProjectionStatus: 'WARNING', legacyProjectionDetails: ['LEGACY_SCOPE_COLLISION: ownerSnapshot=90'] }; } } as any,
   {
     createOfficialV5FromCapture: async (_scope: any, captureWriter: () => Promise<any>) => {
       const input = await captureWriter();
@@ -41,6 +41,9 @@ assert.equal(written.snapshotV2.versionEsquema, 5);
 assert.equal(written.candidate.versionEsquema, 5);
 assert.equal(result.liquidacionSnapshotId, '100');
 assert.equal(result.promovido, true);
+assert.equal(result.promoted, true);
+assert.equal(result.legacyProjectionStatus, 'WARNING');
+assert.deepEqual(result.legacyProjectionDetails, ['LEGACY_SCOPE_COLLISION: ownerSnapshot=90']);
 
 let writerAttempts = 0;
 let decisionAttempts = 0;
@@ -51,7 +54,7 @@ const recoveryCommand = new CreateAndPromoteQnaCandidateCommand(
     decisionAttempts += 1;
     if (decisionAttempts === 1) throw new Error('SIMULATED_FAILURE_AFTER_PERSISTENCE');
   } } as any,
-  { execute: async (id: string) => { assert.equal(id, '200'); promoted = true; } } as any,
+  { execute: async (id: string) => { assert.equal(id, '200'); promoted = true; return { legacyProjectionStatus: 'COMPLETE', legacyProjectionDetails: [] }; } } as any,
   {
     createOfficialV5FromCapture: async (_scope: any, captureWriter: () => Promise<any>) => {
       await captureWriter();
@@ -71,5 +74,7 @@ assert.equal(recovered.liquidacionSnapshotId, '200');
 assert.equal(recovered.revision, 3);
 assert.equal(recovered.idempotente, true);
 assert.equal(recovered.promovido, true);
+assert.equal(recovered.promoted, true);
+assert.equal(recovered.legacyProjectionStatus, 'COMPLETE');
 
 console.log('Liquidacion QNA automatic orchestration: OK');

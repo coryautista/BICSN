@@ -193,8 +193,11 @@ export interface CreateQnaCandidateResult {
 
 export interface PromoteQnaResult {
   liquidacionSnapshotId: string;
+  promoted: true;
   qnaProcesoId: string;
   qnaSnapshotSeleccionEventoId: string;
   tipoEvento: 'SELECCIONADO' | 'REEMPLAZADO';
   idempotente: boolean;
+  legacyProjectionStatus?: 'COMPLETE' | 'WARNING' | 'ERROR';
+  legacyProjectionDetails?: string[];
 }

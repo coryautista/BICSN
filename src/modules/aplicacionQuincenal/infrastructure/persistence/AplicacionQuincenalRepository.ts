@@ -795,6 +795,12 @@ export class AplicacionQuincenalRepository implements IAplicacionQuincenalReposi
       if (!referencia) {
         throw new Error('APLICACION_QUINCENAL_SIN_REFERENCIA');
       }
+      await this.assertNoOfficialV5LegacyScope(
+        referencia.clave_organica_0,
+        referencia.clave_organica_1,
+        referencia.anio,
+        referencia.quincena
+      );
       const periodo = `${String(referencia.quincena).padStart(2, '0')}${String(referencia.anio).slice(-2)}`;
       const snapshotRevision = await this.calcularSnapshotAplicacionRevision(
         referencia.clave_organica_0,
@@ -992,6 +998,22 @@ export class AplicacionQuincenalRepository implements IAplicacionQuincenalReposi
   }
 
   // Funciones helper privadas para cada tipo de aportación
+
+  private async assertNoOfficialV5LegacyScope(org0: string, org1: string, anio: number, quincena: number): Promise<void> {
+    const pool = await getPool();
+    const result = await pool.request()
+      .input('Org0', sql.Char(2), org0)
+      .input('Org1', sql.Char(2), org1)
+      .input('Anio', sql.Int, anio)
+      .input('Quincena', sql.Int, quincena)
+      .query(`SELECT TOP(1) s.LiquidacionSnapshotId
+        FROM liquidacion.QnaProceso p
+        JOIN liquidacion.QnaSnapshotOficialActual o ON o.QnaProcesoId=p.QnaProcesoId
+        JOIN liquidacion.QnaSnapshot s ON s.LiquidacionSnapshotId=o.LiquidacionSnapshotId
+        WHERE p.Organica0=@Org0 AND p.Organica1=@Org1 AND p.Anio=@Anio AND p.Quincena=@Quincena
+          AND s.VersionEsquema>=5;`);
+    if (result.recordset.length > 0) throw new Error('QNA_V5_LEGACY_WRITE_REQUIERE_PROYECTOR');
+  }
 
   private async prepararSnapshotCalculoV2(
     data: GuardarHistoricoAportaciones,
