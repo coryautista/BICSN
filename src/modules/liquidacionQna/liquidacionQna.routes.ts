@@ -86,7 +86,7 @@ export async function registerLiquidacionQnaRoutes(app: FastifyInstance, applied
   app.get('/liquidaciones-qna/aplicadas', {
     onRequest: [rejectLegacySearch],
     preHandler: [appliedReadAuth],
-    schema: { description: '[SQL SERVER] Lista paginada de liquidaciones QNA V5 cuya evidencia aplicada es la ultima transicion TERMINADO. El administrador obtiene una lista global si omite el ambito.',
+    schema: { description: '[SQL SERVER] Lista paginada de evidencia aplicada persistida con precedencia V5, snapshot V3/V4 reconstruido y legado historico. El administrador obtiene una lista global si omite el ambito.',
       tags: ['liquidacionQna', 'sql-server'], security, querystring: { type: 'object', additionalProperties: false,
         properties: { ...appliedPeriodProperties, ...appliedScopeProperties, ...appliedPaginationProperties } }, response: qnaAppliedListResponses },
   }, async (request, reply) => {
@@ -96,14 +96,16 @@ export async function registerLiquidacionQnaRoutes(app: FastifyInstance, applied
       const esAdmin = request.user!.roles.some(role => role.toLowerCase() === 'admin');
       const scope = resolveAppliedReadScope(request.user!, parsed.data, esAdmin);
       const query = request.diScope.resolve<ListAppliedQnaQuery>('listAppliedQnaQuery');
-      return reply.send(ok(await query.execute({ ...parsed.data, ...scope, esAdmin })));
-    } catch (error) { return handleLiquidacionQnaError(error, request, reply); }
+      const result=await query.execute({ ...parsed.data, ...scope, esAdmin });
+      auditAppliedAdminRead(request,'LIST',{...parsed.data,...scope},'SUCCESS',result.total);
+      return reply.send(ok(result));
+    } catch (error) { auditAppliedAdminRead(request,'LIST',request.query,'FAILURE'); return handleLiquidacionQnaError(error, request, reply); }
   });
 
   app.get('/liquidaciones-qna/aplicada/resumen', {
     onRequest: [rejectLegacySearch],
     preHandler: [appliedReadAuth],
-    schema: { description: '[SQL SERVER] Resumen y totales persistidos del Snapshot oficial V5 aplicado. Un administrador debe indicar ambito si el periodo es ambiguo.',
+    schema: { description: '[SQL SERVER] Resumen de evidencia aplicada persistida; no consulta nomina, formulas, catalogos ni Firebird actuales. Un administrador debe indicar ambito si el periodo es ambiguo.',
       tags: ['liquidacionQna', 'sql-server'], security, querystring: { type: 'object', additionalProperties: false, required: ['anio', 'quincena'],
         properties: { ...appliedPeriodProperties, ...appliedScopeProperties } }, response: qnaAppliedSummaryResponses },
   }, async (request, reply) => {
@@ -114,15 +116,16 @@ export async function registerLiquidacionQnaRoutes(app: FastifyInstance, applied
       const scope = resolveAppliedReadScope(request.user!, parsed.data, esAdmin);
       const query = request.diScope.resolve<GetAppliedQnaSummaryQuery>('getAppliedQnaSummaryQuery');
       const result = await query.execute({ ...parsed.data, ...scope, esAdmin });
-      if (!result) return reply.code(404).send(fail('Liquidacion QNA oficial aplicada no encontrada', 'QNA_APLICADA_OFICIAL_NO_ENCONTRADA'));
+      if (!result) { auditAppliedAdminRead(request,'SUMMARY',{...parsed.data,...scope},'NOT_FOUND',0); return reply.code(404).send(fail('Liquidacion QNA aplicada no encontrada en ningun nivel de evidencia', 'QNA_APLICADA_OFICIAL_NO_ENCONTRADA')); }
+      auditAppliedAdminRead(request,'SUMMARY',{...parsed.data,...scope},'SUCCESS',1);
       return reply.send(ok(result));
-    } catch (error) { return handleLiquidacionQnaError(error, request, reply); }
+    } catch (error) { auditAppliedAdminRead(request,'SUMMARY',request.query,'FAILURE'); return handleLiquidacionQnaError(error, request, reply); }
   });
 
   app.get('/liquidaciones-qna/aplicada/detalles/:dominio', {
     onRequest: [rejectLegacySearch],
     preHandler: [appliedReadAuth],
-    schema: { description: '[SQL SERVER] Detalle canonico paginado de uno de los diez dominios del Snapshot oficial V5 aplicado. No recalcula importes.',
+    schema: { description: '[SQL SERVER] Detalle paginado persistido de uno de los diez dominios, discriminado como V5, snapshot reconstruido o historico legacy.',
       tags: ['liquidacionQna', 'sql-server'], security,
       params: { type: 'object', additionalProperties: false, required: ['dominio'], properties: { dominio: { type: 'string', pattern: '^[A-Za-z]+$' } } },
       querystring: { type: 'object', additionalProperties: false, required: ['anio', 'quincena'],
@@ -136,9 +139,10 @@ export async function registerLiquidacionQnaRoutes(app: FastifyInstance, applied
       const scope = resolveAppliedReadScope(request.user!, parsed.data, esAdmin);
       const query = request.diScope.resolve<GetAppliedQnaDetailsQuery>('getAppliedQnaDetailsQuery');
       const result = await query.execute({ ...parsed.data, ...scope, dominio: params.data.dominio, esAdmin });
-      if (!result) return reply.code(404).send(fail('Liquidacion QNA oficial aplicada no encontrada', 'QNA_APLICADA_OFICIAL_NO_ENCONTRADA'));
+      if (!result) { auditAppliedAdminRead(request,'DETAIL',{...parsed.data,...scope,dominio:params.data.dominio},'NOT_FOUND',0); return reply.code(404).send(fail('Liquidacion QNA aplicada no encontrada en ningun nivel de evidencia', 'QNA_APLICADA_OFICIAL_NO_ENCONTRADA')); }
+      auditAppliedAdminRead(request,'DETAIL',{...parsed.data,...scope,dominio:params.data.dominio},'SUCCESS',result.total);
       return reply.send(ok(result));
-    } catch (error) { return handleLiquidacionQnaError(error, request, reply); }
+    } catch (error) { auditAppliedAdminRead(request,'DETAIL',{query:request.query,params:request.params},'FAILURE'); return handleLiquidacionQnaError(error, request, reply); }
   });
 
   app.post('/liquidaciones-qna/orquestar', {
@@ -287,4 +291,14 @@ function resolveAppliedReadScope(
 ) {
   if (isAdmin && requested.entidadId === undefined) return {};
   return resolveOrganicaScope(user, requested);
+}
+
+function auditAppliedAdminRead(request:any,endpoint:'LIST'|'SUMMARY'|'DETAIL',rawFilters:any,outcome:'SUCCESS'|'NOT_FOUND'|'FAILURE',count?:number):void{
+  if(!request.user?.roles?.some((role:string)=>role.toLowerCase()==='admin'))return;
+  const filters=rawFilters?.query??rawFilters??{};
+  request.log.info({auditEvent:'QNA_APPLIED_FINANCIAL_READ',actor:String(request.user.sub),endpoint,requestId:String(request.id),outcome,
+    mode:filters.entidadId==null?'GLOBAL':'EXACT',filters:{entidadId:filters.entidadId??null,anio:filters.anio??null,quincena:filters.quincena??null,
+      organica0:filters.organica0??null,organica1:filters.organica1??null,organica2:filters.organica2??null,organica3:filters.organica3??null,
+      dominio:rawFilters?.dominio??rawFilters?.params?.dominio??null,page:filters.page??null,pageSize:filters.pageSize??null,hasSearch:Boolean(filters.buscar)},count:count??null},
+  'Lectura financiera QNA aplicada');
 }

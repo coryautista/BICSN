@@ -20,7 +20,7 @@ import {
 } from '../../domain/entities/LiquidacionQna.js';
 import type {
   QnaAppliedDetailFilter, QnaAppliedDetailResult, QnaAppliedDetailRow, QnaAppliedListFilter,
-  QnaAppliedListItem, QnaAppliedListResult, QnaAppliedMetadata, QnaAppliedSelection,
+  QnaAppliedListItem, QnaAppliedListResult, QnaAppliedMetadata, QnaAppliedPeriod, QnaAppliedScope, QnaAppliedSelection,
   QnaAppliedSource, QnaAppliedSummary, QnaAppliedWarning,
 } from '../../domain/entities/QnaAppliedRead.js';
 import { qnaFail } from '../../domain/errors.js';
@@ -31,6 +31,8 @@ import { acquireQnaScopeLock } from '../../../../db/qnaScopeLock.js';
 import { SnapshotCalculoV2Repository } from '../../../aportacionesFondos/infrastructure/persistence/SnapshotCalculoV2Repository.js';
 import { QNA_AUXILIARY_PAYLOAD_V1_FIELDS } from '../../domain/services/QnaAuxiliaryPayloadV1.js';
 import { validateAppliedQnaCandidate } from '../../domain/services/QnaAppliedIntegrity.js';
+import { calcularSnapshotCalculoV2Hash } from '../../../aportacionesFondos/domain/services/SnapshotCalculoV2Hasher.js';
+import type { SnapshotCalculoV2Input } from '../../../aportacionesFondos/domain/entities/SnapshotCalculoV2.js';
 
 const TOTAL_COLUMNS: Record<Exclude<keyof QnaTotals, 'registros'>, string> = {
   cairA2: 'CAIRA2', fraA2: 'FRAA2', freA2: 'FREA2', fhA2: 'FHA2', fvA2: 'FVA2',
@@ -87,7 +89,25 @@ const APPLIED_HEADER_SELECT = `CONVERT(VARCHAR(30),s.LiquidacionSnapshotId) Liqu
   s.Organica0,s.Organica1,s.Organica2,s.Organica3,s.Ambiente,s.Estado,s.Revision,s.PrecisionPolicy,s.VersionEsquema,s.HashContenido,
   CONVERT(VARCHAR(30),s.SnapshotCalculoV2Id) SnapshotCalculoV2Id,CONVERT(VARCHAR(30),s.NominaCargaId) NominaCargaId,
   CONVERT(VARCHAR(30),s.FormulaCalculoVersionId) FormulaCalculoVersionId,s.FuentesEsperadas,s.FuentesCompletas,s.UsuarioId,s.FechaCreacion`;
+const V2_HEADER_SELECT=`CONVERT(VARCHAR(30),v.SnapshotId) SnapshotId,v.EntidadId,v.Anio,v.Quincena,v.Organica0,v.Organica1,v.Organica2,v.Organica3,v.Ambiente,v.Fuente,v.Estado,
+  CONVERT(VARCHAR(30),v.FormulaCalculoVersionId) FormulaCalculoVersionId,CONVERT(VARCHAR(30),v.NominaCargaId) NominaCargaId,v.PrecisionPolicy,v.VersionEsquema,v.HashContenido,v.Registros,
+  CONVERT(VARCHAR(40),CAST(v.CAIR AS DECIMAL(19,2))) CAIR,CONVERT(VARCHAR(40),CAST(v.CAIR_FONDO AS DECIMAL(19,2))) CAIR_FONDO,
+  CONVERT(VARCHAR(40),CAST(v.FRA AS DECIMAL(19,2))) FRA,CONVERT(VARCHAR(40),CAST(v.FRE AS DECIMAL(19,2))) FRE,CONVERT(VARCHAR(40),CAST(v.PRESTACIONES AS DECIMAL(19,2))) PRESTACIONES,
+  CONVERT(VARCHAR(40),CAST(v.FH AS DECIMAL(19,2))) FH,CONVERT(VARCHAR(40),CAST(v.FV AS DECIMAL(19,2))) FV,CONVERT(VARCHAR(40),CAST(v.VIVIENDA AS DECIMAL(19,2))) VIVIENDA,
+  CONVERT(VARCHAR(40),CAST(v.FAA AS DECIMAL(19,2))) FAA,CONVERT(VARCHAR(40),CAST(v.FAE AS DECIMAL(19,2))) FAE,CONVERT(VARCHAR(40),CAST(v.FAT AS DECIMAL(19,2))) FAT,CONVERT(VARCHAR(40),CAST(v.FAI AS DECIMAL(19,2))) FAI`;
+const V2_DETAIL_SELECT=`vd.Orden,vd.EmpleadoClaveHash,CONVERT(VARCHAR(20),CAST(vd.DiasLaborados AS DECIMAL(5,2))) DiasLaborados,vd.DiasOrigen,
+  CONVERT(VARCHAR(40),CAST(vd.SueldoMensualD6 AS DECIMAL(19,6))) SueldoMensualD6,CONVERT(VARCHAR(40),CAST(vd.OtrasPrestacionesMensualesD6 AS DECIMAL(19,6))) OtrasPrestacionesMensualesD6,
+  CONVERT(VARCHAR(40),CAST(vd.QuinqueniosMensualD6 AS DECIMAL(19,6))) QuinqueniosMensualD6,CONVERT(VARCHAR(40),CAST(vd.BaseCotizacionSueldoD6 AS DECIMAL(19,6))) BaseCotizacionSueldoD6,
+  CONVERT(VARCHAR(40),CAST(vd.BaseCotizacionQuinqueniosD6 AS DECIMAL(19,6))) BaseCotizacionQuinqueniosD6,CONVERT(VARCHAR(40),CAST(vd.CAIRD6 AS DECIMAL(19,6))) CairD6,
+  CONVERT(VARCHAR(40),CAST(vd.CAIRFondoD6 AS DECIMAL(19,6))) CairFondoD6,CONVERT(VARCHAR(40),CAST(vd.FRAD6 AS DECIMAL(19,6))) FraD6,
+  CONVERT(VARCHAR(40),CAST(vd.FRED6 AS DECIMAL(19,6))) FreD6,CONVERT(VARCHAR(40),CAST(vd.PrestacionesD6 AS DECIMAL(19,6))) PrestacionesD6,
+  CONVERT(VARCHAR(40),CAST(vd.FHD6 AS DECIMAL(19,6))) FhD6,CONVERT(VARCHAR(40),CAST(vd.FVD6 AS DECIMAL(19,6))) FvD6,
+  CONVERT(VARCHAR(40),CAST(vd.ViviendaD6 AS DECIMAL(19,6))) ViviendaD6,CONVERT(VARCHAR(40),CAST(vd.FAAD6 AS DECIMAL(19,6))) FaaD6,
+  CONVERT(VARCHAR(40),CAST(vd.FAED6 AS DECIMAL(19,6))) FaeD6,CONVERT(VARCHAR(40),CAST(vd.FATD6 AS DECIMAL(19,6))) FatD6,CONVERT(VARCHAR(40),CAST(vd.FAID6 AS DECIMAL(19,6))) FaiD6`;
 type DeferredRead<T> = { resolveAfterCommit: () => T };
+type AppliedSelectionRecord = { id: string; processId: string; appliedAt: Date; version: 3 | 4 | 5 } | {
+  id: null; processId: null; appliedAt: Date; version: 0; scope: QnaAppliedScope & QnaAppliedPeriod;
+};
 
 function isDeferredRead<T>(value: T | DeferredRead<T>): value is DeferredRead<T> {
   return typeof value === 'object' && value !== null && 'resolveAfterCommit' in value;
@@ -200,30 +220,38 @@ export class LiquidacionQnaRepository implements ILiquidacionQnaRepository {
     transaction: Transaction,
     deferMapping: boolean
   ): Promise<QnaAppliedListResult | DeferredRead<QnaAppliedListResult>> {
-    const request = this.appliedRequest(filter, transaction)
-      .input('Anio', sql.SmallInt, filter.anio ?? null).input('Quincena', sql.TinyInt, filter.quincena ?? null)
-      .input('Busqueda', sql.NVarChar(206), searchPattern(filter.buscar))
-      .input('Offset', sql.Int, (filter.page - 1) * filter.pageSize).input('Tamanio', sql.Int, filter.pageSize);
-    const where = `${this.appliedScopeWhere()} AND (@Anio IS NULL OR a.Anio=@Anio) AND (@Quincena IS NULL OR a.Quincena=@Quincena)
-      AND (@Busqueda IS NULL OR EXISTS(SELECT 1 FROM liquidacion.QnaSnapshotDetalle d WHERE d.LiquidacionSnapshotId=a.LiquidacionSnapshotId
-        AND (d.EmpleadoClave COLLATE Latin1_General_100_CI_AI LIKE @Busqueda ESCAPE '~' OR d.Rfc COLLATE Latin1_General_100_CI_AI LIKE @Busqueda ESCAPE '~'
-          OR d.Nombre COLLATE Latin1_General_100_CI_AI LIKE @Busqueda ESCAPE '~' OR ${FUND_BUSINESS_SEARCH}))
-      OR EXISTS(SELECT 1 FROM liquidacion.QnaSnapshotFuenteDetalle d WHERE d.LiquidacionSnapshotId=a.LiquidacionSnapshotId
-        AND (d.EmpleadoClave COLLATE Latin1_General_100_CI_AI LIKE @Busqueda ESCAPE '~' OR d.Rfc COLLATE Latin1_General_100_CI_AI LIKE @Busqueda ESCAPE '~'
-          OR d.Nombre COLLATE Latin1_General_100_CI_AI LIKE @Busqueda ESCAPE '~' OR d.PayloadCanonico COLLATE Latin1_General_100_CI_AI LIKE @Busqueda ESCAPE '~'))) `;
-    const result = await request.query(`${APPLIED_CTE}
-      SELECT COUNT(*) AS Total FROM Aplicadas a JOIN liquidacion.QnaSnapshot s ON s.LiquidacionSnapshotId=a.LiquidacionSnapshotId WHERE ${where};
-      ${APPLIED_CTE}
-      SELECT CONVERT(VARCHAR(30),a.QnaProcesoId) QnaProcesoId,CONVERT(VARCHAR(30),a.LiquidacionSnapshotId) LiquidacionSnapshotId,a.FechaAplicacion FROM Aplicadas a JOIN liquidacion.QnaSnapshot s ON s.LiquidacionSnapshotId=a.LiquidacionSnapshotId
-      WHERE ${where} ORDER BY a.Anio DESC,a.Quincena DESC,a.EntidadId,a.Organica0,a.Organica1,a.Organica2,a.Organica3,a.FechaAplicacion DESC,a.QnaProcesoTransicionId DESC
+    const request = this.appliedRequest(filter, transaction).input('Anio',sql.SmallInt,filter.anio??null).input('Quincena',sql.TinyInt,filter.quincena??null)
+      .input('Busqueda',sql.NVarChar(206),searchPattern(filter.buscar)).input('Offset',sql.Int,(filter.page-1)*filter.pageSize).input('Tamanio',sql.Int,filter.pageSize);
+    const result = await request.query(`${appliedAllSourcesCte()}
+      SELECT TOP(1) COALESCE(a.IntegrityCode,CASE WHEN a.Fuente='HISTORICO_LEGACY' THEN 'QNA_APLICADA_LEGACY_OWNERSHIP_CONFLICT' ELSE 'QNA_APLICADA_INTEGRIDAD_INVALIDA' END) IntegrityCode
+      FROM Elegibles a WHERE ${this.appliedScopeWhere()} AND (@Anio IS NULL OR a.Anio=@Anio) AND (@Quincena IS NULL OR a.Quincena=@Quincena)
+        AND ${appliedAllSourcesSearch()} AND (a.IntegrityCode IS NOT NULL OR (a.Fuente='HISTORICO_LEGACY' AND ${legacyOwnershipConflictSql('a')})
+          OR (a.Fuente<>'HISTORICO_LEGACY' AND ${appliedStructuralConflictSql('a')})) ORDER BY a.Anio DESC,a.Quincena DESC,a.OrdenTie DESC;
+      ${appliedAllSourcesCte()}
+      SELECT COUNT(*) Total FROM Elegibles a WHERE ${this.appliedScopeWhere()} AND (@Anio IS NULL OR a.Anio=@Anio) AND (@Quincena IS NULL OR a.Quincena=@Quincena) AND ${appliedAllSourcesSearch()};
+      ${appliedAllSourcesCte()}
+      SELECT * FROM Elegibles a WHERE ${this.appliedScopeWhere()} AND (@Anio IS NULL OR a.Anio=@Anio) AND (@Quincena IS NULL OR a.Quincena=@Quincena) AND ${appliedAllSourcesSearch()}
+      ORDER BY a.Anio DESC,a.Quincena DESC,a.EntidadId,a.Organica0,a.Organica1,a.Organica2,a.Organica3,a.FechaAplicacion DESC,a.OrdenTie DESC
       OFFSET @Offset ROWS FETCH NEXT @Tamanio ROWS ONLY;`);
-    const sets = result.recordsets as Array<Array<Record<string, any>>>;
-    const items = await this.getAppliedBundles(sets[1].map(row => ({ id: String(row.LiquidacionSnapshotId), processId: String(row.QnaProcesoId),
-      appliedAt: new Date(row.FechaAplicacion) })), filter.esAdmin, transaction, false, deferMapping);
-    const resultMetadata = { page: filter.page, pageSize: filter.pageSize, total: Number(sets[0][0].Total) };
-    return isDeferredRead(items)
-      ? { resolveAfterCommit: () => ({ items: items.resolveAfterCommit(), ...resultMetadata }) }
-      : { items, ...resultMetadata };
+    const sets=result.recordsets as Array<Array<Record<string,any>>>;
+    if(sets[0].length>0){const code=String(sets[0][0].IntegrityCode??'QNA_APLICADA_LEGACY_OWNERSHIP_CONFLICT');
+      qnaFail(code==='QNA_APLICADA_LEGACY_AMBIGUA'?'La evidencia historica aplicada es ambigua':'La evidencia aplicada no cumple integridad',code,code.includes('AMBIGUA')||code.includes('CONFLICT')?409:500);}
+    const mapSelection=(row:Record<string,any>):AppliedSelectionRecord=>row.Fuente==='HISTORICO_LEGACY'
+      ? {id:null,processId:null,appliedAt:new Date(row.FechaAplicacion),version:0 as const,scope:{entidadId:Number(row.EntidadId),anio:Number(row.Anio),quincena:Number(row.Quincena),organica0:String(row.Organica0),organica1:String(row.Organica1),organica2:String(row.Organica2),organica3:String(row.Organica3)}}
+      : {id:String(row.LiquidacionSnapshotId),processId:String(row.QnaProcesoId),appliedAt:new Date(row.FechaAplicacion),version:Number(row.VersionEsquema) as 3|4|5};
+    const selections=sets[2].map(mapSelection);
+    const v5=selections.filter(item=>item.version===5) as Array<{id:string;processId:string;appliedAt:Date;version:5}>;
+    const reconstructed=selections.filter(item=>item.version===3||item.version===4) as Array<{id:string;processId:string;appliedAt:Date;version:3|4}>;
+    const legacy=selections.filter((item):item is Extract<AppliedSelectionRecord,{version:0}>=>item.version===0);
+    const v5Items=await this.getAppliedBundles(v5,filter.esAdmin,transaction,true,false);
+    const reconstructedItems=await this.getReconstructedListBundles(reconstructed,filter.esAdmin,transaction);
+    const legacyItems=await this.getLegacyListBundles(legacy,filter.esAdmin,transaction);
+    const keyed=new Map<string,QnaAppliedListItem>();
+    const resolvedV5=isDeferredRead(v5Items)?v5Items.resolveAfterCommit():v5Items;
+    for(const item of [...resolvedV5,...reconstructedItems,...legacyItems]) keyed.set(appliedItemKey(item),item);
+    const items=selections.map(item=>keyed.get(selectionKey(item))!).filter(Boolean);
+    const resultMetadata = { page: filter.page, pageSize: filter.pageSize, total: Number(sets[1][0].Total) };
+    return { items, ...resultMetadata };
   }
 
   async getAppliedSummary(filter: QnaAppliedSelection, existingTransaction?: Transaction): Promise<QnaAppliedSummary | null> {
@@ -238,11 +266,13 @@ export class LiquidacionQnaRepository implements ILiquidacionQnaRepository {
   ): Promise<QnaAppliedSummary | null | DeferredRead<QnaAppliedSummary>> {
     const selected = await this.selectApplied(filter, transaction);
     if (!selected) return null;
+    if (selected.version === 0) return this.getLegacySummary(selected, filter.esAdmin, transaction);
+    if (selected.version < 5) return this.getReconstructedSummary(selected, filter.esAdmin, transaction);
     const items = await this.getAppliedBundles([selected], filter.esAdmin, transaction, true, deferMapping);
     const totals = await this.getAppliedTotals(selected.id, transaction);
     return isDeferredRead(items)
-      ? { resolveAfterCommit: () => ({ ...items.resolveAfterCommit()[0], totales: totals }) }
-      : { ...items[0], totales: totals };
+      ? { resolveAfterCommit: () => ({ ...items.resolveAfterCommit()[0], totales: totals, totalStrategies: persistedTotalStrategies() }) }
+      : { ...items[0], totales: totals, totalStrategies: persistedTotalStrategies() };
   }
 
   async getAppliedDetails(filter: QnaAppliedDetailFilter, existingTransaction?: Transaction): Promise<QnaAppliedDetailResult | null> {
@@ -257,6 +287,8 @@ export class LiquidacionQnaRepository implements ILiquidacionQnaRepository {
   ): Promise<QnaAppliedDetailResult | null | DeferredRead<QnaAppliedDetailResult>> {
     const selected = await this.selectApplied(filter, transaction);
     if (!selected) return null;
+    if (selected.version === 0) return this.getLegacyDetails(selected, filter, transaction);
+    if (selected.version < 5) return this.getReconstructedDetails(selected, filter, transaction);
     const items = await this.getAppliedBundles([selected], filter.esAdmin, transaction, true, deferMapping);
     const totals = await this.getAppliedTotals(selected.id, transaction);
     const pattern = searchPattern(filter.buscar);
@@ -290,10 +322,404 @@ export class LiquidacionQnaRepository implements ILiquidacionQnaRepository {
     const resolve = (): QnaAppliedDetailResult => {
       const item = isDeferredRead(items) ? items.resolveAfterCommit()[0] : items[0];
       const details = sets[1].map(row => this.mapAppliedDetail(filter.dominio, row, filter.esAdmin));
-      return { ...item, dominio: filter.dominio, totalDominioA2: String(totals[DOMAIN_TOTAL_KEYS[filter.dominio]]), detalles: details,
+      return { ...item, dominio: filter.dominio, totalDominioA2: String(totals[DOMAIN_TOTAL_KEYS[filter.dominio]]), totalStrategy: 'PERSISTED', detalles: details,
         page: filter.page, pageSize: filter.pageSize, total: Number(sets[0][0].Total) };
     };
     return deferMapping ? { resolveAfterCommit: resolve } : resolve();
+  }
+
+  private async getReconstructedSummary(
+    selected: { id: string; appliedAt: Date; version: number },
+    isAdmin: boolean,
+    transaction: Transaction
+  ): Promise<QnaAppliedSummary> {
+    const result = await new sql.Request(transaction).input('Id', sql.BigInt, selected.id).query(`
+      SELECT ${APPLIED_HEADER_SELECT},(SELECT COUNT(*) FROM liquidacion.QnaSnapshotTotal t WHERE t.LiquidacionSnapshotId=s.LiquidacionSnapshotId) TotalCount,
+        (SELECT COUNT(*) FROM aportaciones.SnapshotCalculoV2 v WHERE v.SnapshotId=s.SnapshotCalculoV2Id) V2Count,
+        (SELECT COUNT(*) FROM aportaciones.SnapshotCalculoV2 v WHERE v.SnapshotId=s.SnapshotCalculoV2Id AND v.EntidadId=s.EntidadId AND v.Anio=s.Anio AND v.Quincena=s.Quincena
+          AND v.Organica0=s.Organica0 AND v.Organica1=s.Organica1 AND v.Organica2=s.Organica2 AND v.Organica3=s.Organica3) V2ScopeCount,
+        (SELECT COUNT(*) FROM liquidacion.QnaSnapshotDetalle d WHERE d.LiquidacionSnapshotId=s.LiquidacionSnapshotId) LegacyFundDetailCount
+      FROM liquidacion.QnaSnapshot s WHERE s.LiquidacionSnapshotId=@Id;
+      SELECT f.*,(SELECT COUNT(*) FROM liquidacion.QnaSnapshotFuenteDetalle d WHERE d.LiquidacionSnapshotId=f.LiquidacionSnapshotId AND d.Dominio=f.Dominio) DetailCount
+      FROM liquidacion.QnaSnapshotFuente f WHERE f.LiquidacionSnapshotId=@Id ORDER BY f.Dominio;
+      SELECT Dominio,Orden,ClaveFilaHash,SourceScale,CONVERT(VARCHAR(40),CAST(ImporteOficialD6 AS DECIMAL(19,6))) ImporteOficialD6,HashFila,PayloadCanonico,
+        EmpleadoClave,Rfc,Nombre,PayloadVersion FROM liquidacion.QnaSnapshotFuenteDetalle WHERE LiquidacionSnapshotId=@Id ORDER BY Dominio,Orden;
+      SELECT t.Registros,${TOTAL_SELECT} FROM liquidacion.QnaSnapshotTotal t WHERE t.LiquidacionSnapshotId=@Id;
+      SELECT ${V2_HEADER_SELECT} FROM liquidacion.QnaSnapshot s JOIN aportaciones.SnapshotCalculoV2 v ON v.SnapshotId=s.SnapshotCalculoV2Id WHERE s.LiquidacionSnapshotId=@Id;
+      SELECT ${V2_DETAIL_SELECT} FROM liquidacion.QnaSnapshot s JOIN aportaciones.SnapshotCalculoV2Detalle vd ON vd.SnapshotId=s.SnapshotCalculoV2Id WHERE s.LiquidacionSnapshotId=@Id ORDER BY vd.Orden;`);
+    const sets = result.recordsets as Array<Array<Record<string, any>>>;
+    const header = sets[0][0];
+    if (!header || ![3, 4].includes(Number(header.VersionEsquema))) qnaFail('Snapshot reconstruido invalido', 'QNA_APLICADA_INTEGRIDAD_INVALIDA', 500);
+    const warnings = this.assertReconstructedIntegrity(header, sets[1], sets[2], sets[3], sets[4], sets[5]);
+    const totalRow = sets[3][0];
+    const totals = this.mapNullableAppliedTotals(totalRow);
+    const strategies = Object.fromEntries(Object.keys(TOTAL_COLUMNS).map(key => [key, totalRow?.[key] != null ? 'PERSISTED' : 'UNAVAILABLE'])) as QnaAppliedSummary['totalStrategies'];
+    if(totalRow&&totalRow.cairFondoA2==null&&totalRow.cairA2!=null){(totals as any).cairFondoA2=String(totalRow.cairA2);strategies.cairFondoA2='PERSISTED_CAIR_CONTROL_FALLBACK';
+      warnings.push({code:'QNA_RECONSTRUIDA_CAIR_FONDO_DESDE_CONTROL',message:'CAIR_FONDO no existia en el esquema persistido; se expone el control CAIR bajo la estrategia historica nombrada.'});}
+    if (!totalRow) warnings.push({ code: 'QNA_RECONSTRUIDA_TOTALES_NO_PERSISTIDOS', message: 'El snapshot no contiene agregados persistidos verificables.' });
+    return { ...this.mapReconstructedMetadata(header, selected.appliedAt), fuentes: this.reconstructedSources(sets[1], isAdmin),
+      totales: totals, totalStrategies: strategies, advertencias: warnings };
+  }
+
+  private async getReconstructedListBundles(
+    selections: Array<{id:string;processId:string;appliedAt:Date;version:3|4}>,isAdmin:boolean,transaction:Transaction
+  ):Promise<QnaAppliedListItem[]> {
+    if(selections.length===0)return [];
+    const request=new sql.Request(transaction).input('SelectionJson',sql.NVarChar(sql.MAX),JSON.stringify(selections.map(item=>({id:item.id}))));
+    const result=await request.query(`${snapshotSelectionJsonCte()}
+      SELECT ${APPLIED_HEADER_SELECT},(SELECT COUNT(*) FROM aportaciones.SnapshotCalculoV2 v WHERE v.SnapshotId=s.SnapshotCalculoV2Id) V2Count,
+        (SELECT COUNT(*) FROM aportaciones.SnapshotCalculoV2 v WHERE v.SnapshotId=s.SnapshotCalculoV2Id AND v.EntidadId=s.EntidadId AND v.Anio=s.Anio AND v.Quincena=s.Quincena
+          AND v.Organica0=s.Organica0 AND v.Organica1=s.Organica1 AND v.Organica2=s.Organica2 AND v.Organica3=s.Organica3) V2ScopeCount,
+        (SELECT COUNT(*) FROM liquidacion.QnaSnapshotDetalle d WHERE d.LiquidacionSnapshotId=s.LiquidacionSnapshotId) LegacyFundDetailCount
+      FROM X JOIN liquidacion.QnaSnapshot s ON s.LiquidacionSnapshotId=X.LiquidacionSnapshotId;
+       ${snapshotSelectionJsonCte()}
+      SELECT f.*,(SELECT COUNT(*) FROM liquidacion.QnaSnapshotFuenteDetalle d WHERE d.LiquidacionSnapshotId=f.LiquidacionSnapshotId AND d.Dominio=f.Dominio) DetailCount
+      FROM X JOIN liquidacion.QnaSnapshotFuente f ON f.LiquidacionSnapshotId=X.LiquidacionSnapshotId ORDER BY f.LiquidacionSnapshotId,f.Dominio;
+       ${snapshotSelectionJsonCte()}
+      SELECT d.LiquidacionSnapshotId,d.Dominio,d.Orden,d.ClaveFilaHash,d.SourceScale,CONVERT(VARCHAR(40),CAST(d.ImporteOficialD6 AS DECIMAL(19,6))) ImporteOficialD6,d.HashFila,d.PayloadCanonico,
+        d.EmpleadoClave,d.Rfc,d.Nombre,d.PayloadVersion FROM X JOIN liquidacion.QnaSnapshotFuenteDetalle d ON d.LiquidacionSnapshotId=X.LiquidacionSnapshotId ORDER BY d.LiquidacionSnapshotId,d.Dominio,d.Orden;
+       ${snapshotSelectionJsonCte()}
+      SELECT t.LiquidacionSnapshotId,t.Registros,${TOTAL_SELECT} FROM X JOIN liquidacion.QnaSnapshotTotal t ON t.LiquidacionSnapshotId=X.LiquidacionSnapshotId;
+       ${snapshotSelectionJsonCte()}
+      SELECT s.LiquidacionSnapshotId,${V2_HEADER_SELECT} FROM X JOIN liquidacion.QnaSnapshot s ON s.LiquidacionSnapshotId=X.LiquidacionSnapshotId JOIN aportaciones.SnapshotCalculoV2 v ON v.SnapshotId=s.SnapshotCalculoV2Id;
+       ${snapshotSelectionJsonCte()}
+      SELECT s.LiquidacionSnapshotId,${V2_DETAIL_SELECT} FROM X JOIN liquidacion.QnaSnapshot s ON s.LiquidacionSnapshotId=X.LiquidacionSnapshotId JOIN aportaciones.SnapshotCalculoV2Detalle vd ON vd.SnapshotId=s.SnapshotCalculoV2Id ORDER BY s.LiquidacionSnapshotId,vd.Orden;`);
+    const sets=result.recordsets as Array<Array<Record<string,any>>>;
+    const headers=new Map(sets[0].map(row=>[String(row.LiquidacionSnapshotId),row]));
+    const grouped=sets.slice(1).map(rows=>groupRows(rows,row=>String(row.LiquidacionSnapshotId)));
+    return selections.map(selection=>{
+      const header=headers.get(selection.id);
+      if(!header)qnaFail('Snapshot reconstruido sin cabecera','QNA_APLICADA_INTEGRIDAD_INVALIDA',500);
+      const sources=grouped[0].get(selection.id)??[];const details=grouped[1].get(selection.id)??[];const totals=grouped[2].get(selection.id)??[];
+      const v2Headers=grouped[3].get(selection.id)??[];const v2Details=grouped[4].get(selection.id)??[];
+      const warnings=this.assertReconstructedIntegrity(header,sources,details,totals,v2Headers,v2Details);
+      return {...this.mapReconstructedMetadata(header,selection.appliedAt),fuentes:this.reconstructedSources(sources,isAdmin),advertencias:warnings};
+    });
+  }
+
+  private async getLegacyListBundles(selections:Array<Extract<AppliedSelectionRecord,{version:0}>>,isAdmin:boolean,transaction:Transaction):Promise<QnaAppliedListItem[]> {
+    if(selections.length===0)return [];
+    const request=new sql.Request(transaction).input('SelectionJson',sql.NVarChar(sql.MAX),JSON.stringify(selections.map(item=>item.scope)));
+    const result=await request.query(`${legacySelectionJsonCte()}
+      SELECT x.*,(SELECT COUNT(*) FROM liquidacion.QnaLegacyScopeOwnership o WHERE o.Organica0=x.Organica0 AND o.Organica1=x.Organica1 AND o.Anio=x.Anio AND o.Quincena=x.Quincena) OwnershipCount,
+        (SELECT SUM(n) FROM(SELECT COUNT(*) n FROM aportaciones.IndividualesAhorroHistorico h WHERE h.clave_organica_0=x.Organica0 AND h.clave_organica_1=x.Organica1 AND h.anio=x.Anio AND h.quincena=x.Quincena AND h.QnaLiquidacionSnapshotId IS NOT NULL
+          UNION ALL SELECT COUNT(*) FROM aportaciones.IndividualesViviendaHistorico h WHERE h.clave_organica_0=x.Organica0 AND h.clave_organica_1=x.Organica1 AND h.anio=x.Anio AND h.quincena=x.Quincena AND h.QnaLiquidacionSnapshotId IS NOT NULL
+          UNION ALL SELECT COUNT(*) FROM aportaciones.IndividualesPrestacionesHistorico h WHERE h.clave_organica_0=x.Organica0 AND h.clave_organica_1=x.Organica1 AND h.anio=x.Anio AND h.quincena=x.Quincena AND h.QnaLiquidacionSnapshotId IS NOT NULL
+          UNION ALL SELECT COUNT(*) FROM aportaciones.IndividualesCairHistorico h WHERE h.clave_organica_0=x.Organica0 AND h.clave_organica_1=x.Organica1 AND h.anio=x.Anio AND h.quincena=x.Quincena AND h.QnaLiquidacionSnapshotId IS NOT NULL
+          UNION ALL SELECT COUNT(*) FROM aportaciones.GuarderiasHistorico h WHERE h.clave_organica_0=x.Organica0 AND h.clave_organica_1=x.Organica1 AND h.anio=x.Anio AND h.quincena=x.Quincena AND h.QnaLiquidacionSnapshotId IS NOT NULL
+          UNION ALL SELECT COUNT(*) FROM aportaciones.PensionNominaTransitorioHistorico h WHERE h.clave_organica_0=x.Organica0 AND h.clave_organica_1=x.Organica1 AND h.anio=x.Anio AND h.quincena=x.Quincena AND h.QnaLiquidacionSnapshotId IS NOT NULL
+          UNION ALL SELECT COUNT(*) FROM aportaciones.AguinaldoHistorico h WHERE h.clave_organica_0=x.Organica0 AND h.clave_organica_1=x.Organica1 AND h.anio=x.Anio AND h.quincena=x.Quincena AND h.QnaLiquidacionSnapshotId IS NOT NULL
+          UNION ALL SELECT COUNT(*) FROM retenciones.PrestamosCortoPlazoHistorico h WHERE h.clave_organica_0=x.Organica0 AND h.clave_organica_1=x.Organica1 AND h.anio=x.Anio AND h.quincena=x.Quincena AND h.QnaLiquidacionSnapshotId IS NOT NULL
+          UNION ALL SELECT COUNT(*) FROM retenciones.PrestamosMedianoPlazoHistorico h WHERE h.clave_organica_0=x.Organica0 AND h.clave_organica_1=x.Organica1 AND h.anio=x.Anio AND h.quincena=x.Quincena AND h.QnaLiquidacionSnapshotId IS NOT NULL
+          UNION ALL SELECT COUNT(*) FROM retenciones.PrestamosHipotecariosHistorico h WHERE h.clave_organica_0=x.Organica0 AND h.clave_organica_1=x.Organica1 AND h.anio=x.Anio AND h.quincena=x.Quincena AND h.QnaLiquidacionSnapshotId IS NOT NULL
+          UNION ALL SELECT COUNT(*) FROM aportaciones.ResumenHistorico h WHERE h.clave_organica_0=x.Organica0 AND h.clave_organica_1=x.Organica1 AND h.anio=x.Anio AND h.quincena=x.Quincena AND h.QnaLiquidacionSnapshotId IS NOT NULL
+          UNION ALL SELECT COUNT(*) FROM conciliacion.RevisionAplicacionHistorico h WHERE h.Organica0=x.Organica0 AND h.Organica1=x.Organica1 AND h.Organica2=x.Organica2 AND h.Organica3=x.Organica3
+            AND h.Periodo=RIGHT('0'+CONVERT(VARCHAR(2),x.Quincena),2)+RIGHT(CONVERT(VARCHAR(4),x.Anio),2) AND (h.QnaLiquidacionSnapshotId IS NOT NULL OR h.LiquidacionSnapshotId IS NOT NULL))z) OwnedRows
+      FROM X x;
+       ${legacySelectionJsonCte()}
+      SELECT x.*,d.* FROM X x CROSS APPLY(SELECT * FROM(VALUES
+        ('AHORRO',(SELECT COUNT(*) FROM aportaciones.IndividualesAhorroHistorico h WHERE h.clave_organica_0=x.Organica0 AND h.clave_organica_1=x.Organica1 AND h.anio=x.Anio AND h.quincena=x.Quincena AND h.QnaLiquidacionSnapshotId IS NULL),6),
+        ('VIVIENDA',(SELECT COUNT(*) FROM aportaciones.IndividualesViviendaHistorico h WHERE h.clave_organica_0=x.Organica0 AND h.clave_organica_1=x.Organica1 AND h.anio=x.Anio AND h.quincena=x.Quincena AND h.QnaLiquidacionSnapshotId IS NULL),6),
+        ('PRESTACIONES',(SELECT COUNT(*) FROM aportaciones.IndividualesPrestacionesHistorico h WHERE h.clave_organica_0=x.Organica0 AND h.clave_organica_1=x.Organica1 AND h.anio=x.Anio AND h.quincena=x.Quincena AND h.QnaLiquidacionSnapshotId IS NULL),6),
+        ('CAIR',(SELECT COUNT(*) FROM aportaciones.IndividualesCairHistorico h WHERE h.clave_organica_0=x.Organica0 AND h.clave_organica_1=x.Organica1 AND h.anio=x.Anio AND h.quincena=x.Quincena AND h.QnaLiquidacionSnapshotId IS NULL),6),
+        ('GUARDERIAS',(SELECT COUNT(*) FROM aportaciones.GuarderiasHistorico h WHERE h.clave_organica_0=x.Organica0 AND h.clave_organica_1=x.Organica1 AND h.anio=x.Anio AND h.quincena=x.Quincena AND h.QnaLiquidacionSnapshotId IS NULL),2),
+        ('TRANSITORIO',(SELECT COUNT(*) FROM aportaciones.PensionNominaTransitorioHistorico h WHERE h.clave_organica_0=x.Organica0 AND h.clave_organica_1=x.Organica1 AND h.anio=x.Anio AND h.quincena=x.Quincena AND h.QnaLiquidacionSnapshotId IS NULL),2),
+        ('AGUINALDO',(SELECT COUNT(*) FROM aportaciones.AguinaldoHistorico h WHERE h.clave_organica_0=x.Organica0 AND h.clave_organica_1=x.Organica1 AND h.anio=x.Anio AND h.quincena=x.Quincena AND h.QnaLiquidacionSnapshotId IS NULL),2),
+        ('PCP',(SELECT COUNT(*) FROM retenciones.PrestamosCortoPlazoHistorico h WHERE h.clave_organica_0=x.Organica0 AND h.clave_organica_1=x.Organica1 AND h.anio=x.Anio AND h.quincena=x.Quincena AND h.QnaLiquidacionSnapshotId IS NULL),2),
+        ('PMP',(SELECT COUNT(*) FROM retenciones.PrestamosMedianoPlazoHistorico h WHERE h.clave_organica_0=x.Organica0 AND h.clave_organica_1=x.Organica1 AND h.anio=x.Anio AND h.quincena=x.Quincena AND h.QnaLiquidacionSnapshotId IS NULL),2),
+        ('HIP',(SELECT COUNT(*) FROM retenciones.PrestamosHipotecariosHistorico h WHERE h.clave_organica_0=x.Organica0 AND h.clave_organica_1=x.Organica1 AND h.anio=x.Anio AND h.quincena=x.Quincena AND h.QnaLiquidacionSnapshotId IS NULL),2)
+      )v(Dominio,Registros,SourceScale))d ORDER BY x.Anio,x.Quincena,x.EntidadId,x.Organica0,x.Organica1,x.Organica2,x.Organica3,d.Dominio;`);
+    const sets=result.recordsets as Array<Array<Record<string,any>>>;
+    if(sets[0].some(row=>Number(row.OwnershipCount)>0||Number(row.OwnedRows)>0))qnaFail('La evidencia historica pertenece a una proyeccion V5','QNA_APLICADA_LEGACY_OWNERSHIP_CONFLICT',409);
+    const rowsByScope=groupRows(sets[1],legacyRowKey);
+    return selections.map(selection=>{const rows=rowsByScope.get(selectionKey(selection))??[];const warnings:QnaAppliedWarning[]=[
+      {code:'LEGACY_REDUCED_ROWS_UNLINKED',message:'Las filas historicas solo conservan org0/org1 y no estan enlazadas al evento TERMINADO de alcance completo.'}];
+      const fuentes=rows.map(row=>{if(Number(row.Registros)===0)warnings.push({code:'QNA_LEGACY_ABSENT_UNVERIFIED',message:`No existen filas historicas verificables para ${row.Dominio}.`,dominio:row.Dominio});
+        return {dominio:row.Dominio,tipoFuente:'SQL_HISTORICO',estado:Number(row.Registros)>0?'COMPLETE':'ABSENT_UNVERIFIED',requerida:true,sourceScale:Number(row.SourceScale),registros:Number(row.Registros),notApplicableAprobado:false,errorCode:null,
+          ...(isAdmin?{identificadorFuente:`LEGACY:${row.Dominio}:${selection.scope.anio}:${selection.scope.quincena}:${selection.scope.organica0}:${selection.scope.organica1}`,hashFuente:null,aprobadoPor:null,evidencia:null}:{})} as QnaAppliedSource;});
+      return {...this.mapLegacyMetadata(selection),fuentes,advertencias:warnings};});
+  }
+
+  private async getReconstructedDetails(
+    selected: { id: string; appliedAt: Date; version: number },
+    filter: QnaAppliedDetailFilter,
+    transaction: Transaction
+  ): Promise<QnaAppliedDetailResult> {
+    const summary = await this.getReconstructedSummary(selected, filter.esAdmin, transaction);
+    const pattern = searchPattern(filter.buscar);
+    const request = new sql.Request(transaction).input('Id', sql.BigInt, selected.id).input('Dominio', sql.VarChar(30), filter.dominio)
+      .input('Busqueda', sql.NVarChar(206), pattern).input('Offset', sql.Int, (filter.page - 1) * filter.pageSize).input('Tamanio', sql.Int, filter.pageSize);
+    let result;
+    if (FUND_DOMAINS.has(filter.dominio)) {
+      const v2Amount={AHORRO:'FATD6',VIVIENDA:'ViviendaD6',PRESTACIONES:'PrestacionesD6',CAIR:'CAIRFondoD6'}[filter.dominio as 'AHORRO'|'VIVIENDA'|'PRESTACIONES'|'CAIR'];
+      const evidence=`SELECT vd.Orden,NULL EmpleadoClave,NULL Rfc,NULL Nombre,CAST(6 AS TINYINT) SourceScale,CONVERT(VARCHAR(40),CAST(vd.${v2Amount} AS DECIMAL(19,6))) ImporteOficialD6,NULL HashFila,NULL PayloadVersion,
+          (SELECT CONVERT(VARCHAR(40),CAST(vd.DiasLaborados AS DECIMAL(5,2))) diasLaborados,vd.DiasOrigen diasOrigen,
+            CONVERT(VARCHAR(40),CAST(vd.SueldoMensualD6 AS DECIMAL(19,6))) sueldoMensualD6,CONVERT(VARCHAR(40),CAST(vd.OtrasPrestacionesMensualesD6 AS DECIMAL(19,6))) otrasPrestacionesMensualesD6,
+            CONVERT(VARCHAR(40),CAST(vd.QuinqueniosMensualD6 AS DECIMAL(19,6))) quinqueniosMensualD6,CONVERT(VARCHAR(40),CAST(vd.BaseCotizacionSueldoD6 AS DECIMAL(19,6))) baseCotizacionSueldoD6,
+            CONVERT(VARCHAR(40),CAST(vd.BaseCotizacionQuinqueniosD6 AS DECIMAL(19,6))) baseCotizacionQuinqueniosD6 FOR JSON PATH,WITHOUT_ARRAY_WRAPPER,INCLUDE_NULL_VALUES) PayloadCanonico
+        FROM liquidacion.QnaSnapshot s JOIN aportaciones.SnapshotCalculoV2Detalle vd ON vd.SnapshotId=s.SnapshotCalculoV2Id WHERE s.LiquidacionSnapshotId=@Id`;
+      result = await request.query(`WITH Evidencia AS(${evidence}) SELECT COUNT(*) Total FROM Evidencia WHERE @Busqueda IS NULL OR CONCAT_WS('|',EmpleadoClave,Rfc,Nombre,PayloadCanonico) COLLATE Latin1_General_100_CI_AI LIKE @Busqueda ESCAPE '~';
+        WITH Evidencia AS(${evidence}) SELECT * FROM Evidencia WHERE @Busqueda IS NULL OR CONCAT_WS('|',EmpleadoClave,Rfc,Nombre,PayloadCanonico) COLLATE Latin1_General_100_CI_AI LIKE @Busqueda ESCAPE '~'
+        ORDER BY Orden OFFSET @Offset ROWS FETCH NEXT @Tamanio ROWS ONLY;`);
+    } else {
+      result = await request.query(`SELECT COUNT(*) Total FROM liquidacion.QnaSnapshotFuenteDetalle d WHERE d.LiquidacionSnapshotId=@Id AND d.Dominio=@Dominio AND
+          (@Busqueda IS NULL OR d.EmpleadoClave COLLATE Latin1_General_100_CI_AI LIKE @Busqueda ESCAPE '~' OR d.Rfc COLLATE Latin1_General_100_CI_AI LIKE @Busqueda ESCAPE '~' OR d.Nombre COLLATE Latin1_General_100_CI_AI LIKE @Busqueda ESCAPE '~' OR d.PayloadCanonico COLLATE Latin1_General_100_CI_AI LIKE @Busqueda ESCAPE '~');
+        SELECT d.Orden,d.EmpleadoClave,d.Rfc,d.Nombre,d.SourceScale,CONVERT(VARCHAR(40),CAST(d.ImporteOficialD6 AS DECIMAL(19,6))) ImporteOficialD6,
+          d.PayloadVersion,d.PayloadCanonico,d.ClaveFilaHash,d.HashFila FROM liquidacion.QnaSnapshotFuenteDetalle d
+        WHERE d.LiquidacionSnapshotId=@Id AND d.Dominio=@Dominio AND (@Busqueda IS NULL OR d.EmpleadoClave COLLATE Latin1_General_100_CI_AI LIKE @Busqueda ESCAPE '~'
+          OR d.Rfc COLLATE Latin1_General_100_CI_AI LIKE @Busqueda ESCAPE '~' OR d.Nombre COLLATE Latin1_General_100_CI_AI LIKE @Busqueda ESCAPE '~'
+          OR d.PayloadCanonico COLLATE Latin1_General_100_CI_AI LIKE @Busqueda ESCAPE '~') ORDER BY d.Orden OFFSET @Offset ROWS FETCH NEXT @Tamanio ROWS ONLY;`);
+    }
+    const sets = result.recordsets as Array<Array<Record<string, any>>>;
+    const details = sets[1].map(row => ({ orden: Number(row.Orden), empleadoClave: row.EmpleadoClave == null ? null : String(row.EmpleadoClave),
+      rfc: row.Rfc == null ? null : String(row.Rfc), nombre: row.Nombre == null ? null : String(row.Nombre), sourceScale: Number(row.SourceScale) as 2 | 6,
+      importeOficialD6: row.ImporteOficialD6 == null ? null : String(row.ImporteOficialD6), payloadVersion: row.PayloadVersion === 1 ? 1 as const : null,
+      payloadCanonico: row.PayloadCanonico == null ? null : JSON.parse(String(row.PayloadCanonico)),
+      ...(filter.esAdmin && row.ClaveFilaHash != null ? { claveFilaHash: String(row.ClaveFilaHash) } : {}),
+      ...(filter.esAdmin && row.HashFila != null ? { hashFila: String(row.HashFila) } : {}) }));
+    const totalKey = DOMAIN_TOTAL_KEYS[filter.dominio] as Exclude<keyof QnaTotals, 'registros'>;
+    return { ...summary, dominio: filter.dominio, totalDominioA2: summary.totales[totalKey] as string | null,
+      totalStrategy: summary.totalStrategies[totalKey], detalles: details, page: filter.page, pageSize: filter.pageSize, total: Number(sets[0][0].Total) };
+  }
+
+  private assertReconstructedIntegrity(header:Record<string,any>,sourceRows:Array<Record<string,any>>,detailRows:Array<Record<string,any>>,
+    totalRows:Array<Record<string,any>>,v2Rows:Array<Record<string,any>>,v2DetailRows:Array<Record<string,any>>):QnaAppliedWarning[]{
+    const warnings:QnaAppliedWarning[]=[];
+    try{
+      if(![3,4].includes(Number(header.VersionEsquema))||totalRows.length!==1||sourceRows.length!==10||new Set(sourceRows.map(row=>row.Dominio)).size!==10)throw new Error('shape');
+      if(header.SnapshotCalculoV2Id!=null&&(Number(header.V2Count)!==1||Number(header.V2ScopeCount)!==1||v2Rows.length!==1))throw new Error('links');
+      const sources=sourceRows.map(row=>({dominio:row.Dominio,tipoFuente:row.TipoFuente,estado:row.Estado,requerida:Boolean(row.Requerida),identificadorFuente:String(row.IdentificadorFuente),
+        hashFuente:row.HashFuente==null?null:String(row.HashFuente),sourceScale:Number(row.SourceScale),registros:Number(row.Registros),notApplicableAprobado:Boolean(row.NotApplicableAprobado),
+        aprobadoPor:row.AprobadoPor==null?null:String(row.AprobadoPor),evidencia:row.Evidencia==null?null:String(row.Evidencia),errorCode:row.ErrorCode==null?null:String(row.ErrorCode)})) as QnaSource[];
+      const details=detailRows.map(row=>({dominio:row.Dominio,orden:Number(row.Orden),claveFilaHash:String(row.ClaveFilaHash),sourceScale:Number(row.SourceScale),
+        importeOficialD6:String(row.ImporteOficialD6),payloadCanonico:JSON.parse(String(row.PayloadCanonico)),hashFila:String(row.HashFila),
+        ...(row.PayloadVersion==null?{}:{empleadoClave:row.EmpleadoClave==null?undefined:String(row.EmpleadoClave),rfc:row.Rfc==null?null:String(row.Rfc),nombre:row.Nombre==null?undefined:String(row.Nombre),payloadVersion:1 as const})})) as QnaSourceDetail[];
+      const totalRow=totalRows[0];const totals={registros:Number(totalRow.Registros)} as QnaTotals;
+      for(const key of Object.keys(TOTAL_COLUMNS) as Array<keyof typeof TOTAL_COLUMNS>){const value=totalRow[key]??(key==='cairFondoA2'?totalRow.cairA2:null);if(value==null)throw new Error(`total:${key}`);totals[key]=String(value);}
+      const persisted:CreateQnaCandidateInput={entidadId:Number(header.EntidadId),anio:Number(header.Anio),quincena:Number(header.Quincena),organica0:String(header.Organica0),organica1:String(header.Organica1),
+        organica2:String(header.Organica2),organica3:String(header.Organica3),ambiente:header.Ambiente,snapshotCalculoV2Id:header.SnapshotCalculoV2Id==null?null:String(header.SnapshotCalculoV2Id),
+        nominaCargaId:header.NominaCargaId==null?null:String(header.NominaCargaId),formulaCalculoVersionId:header.FormulaCalculoVersionId==null?null:String(header.FormulaCalculoVersionId),
+        fuentes:sources,totales:totals,detalles:details,usuarioId:header.UsuarioId==null?null:String(header.UsuarioId),versionEsquema:Number(header.VersionEsquema) as 3|4};
+      const validated=validateQnaCandidate(persisted,{retentionProvenanceMode:'PERSISTED_HISTORICAL'});
+      if(validated.hashContenido!==String(header.HashContenido)||validated.completas!==Number(header.FuentesCompletas)||(validated.completas===10)!==(header.Estado==='COMPLETO'))throw new Error('content');
+      if(v2Rows.length===1){const v2=this.mapPersistedV2(v2Rows[0],v2DetailRows);if(calcularSnapshotCalculoV2Hash(v2)!==String(v2Rows[0].HashContenido)||v2.detalles.length!==Number(v2Rows[0].Registros))throw new Error('v2hash');
+        const expected:Record<string,string>={cairA2:v2.totalesA2.CAIR,cairFondoA2:v2.totalesA2.CAIR_FONDO,ahorroA2:v2.totalesA2.FAT,fraA2:v2.totalesA2.FRA,freA2:v2.totalesA2.FRE,
+          prestacionesA2:v2.totalesA2.PRESTACIONES,fhA2:v2.totalesA2.FH,fvA2:v2.totalesA2.FV,viviendaA2:v2.totalesA2.VIVIENDA,faaA2:v2.totalesA2.FAA,faeA2:v2.totalesA2.FAE,fatA2:v2.totalesA2.FAT,faiA2:v2.totalesA2.FAI};
+        if(Object.entries(expected).some(([key,value])=>totals[key as keyof QnaTotals]!==value))throw new Error('v2totals');
+        for(const domain of ['AHORRO','VIVIENDA','PRESTACIONES','CAIR'] as const){const source=sources.find(item=>item.dominio===domain)!;if(source.estado==='COMPLETE'&&source.registros!==v2.detalles.length)throw new Error(`fundcount:${domain}`);}
+      }else if(sources.some(source=>FUND_DOMAINS.has(source.dominio)&&source.estado==='COMPLETE'))warnings.push({code:'QNA_RECONSTRUIDA_FONDOS_SIN_V2',message:'Los fondos declarados no tienen detalle V2 congelado; no se fabrican identidades ni payload.'});
+      if(v2Rows.length===1)warnings.push({code:'QNA_RECONSTRUIDA_FONDOS_DESDE_V2_SIN_IDENTIDAD',message:'Los detalles de fondos se reconstruyen exclusivamente desde SnapshotCalculoV2Detalle; identidad, interno, RFC y nombre no estan disponibles.'});
+      if(Number(header.LegacyFundDetailCount)>0)warnings.push({code:'QNA_RECONSTRUIDA_DETALLE_PREV5_IGNORADO',message:'QnaSnapshotDetalle pre-V5 no forma parte de la evidencia validada y fue ignorado.'});
+      for(const source of sources)if(!['COMPLETE','NOT_APPLICABLE'].includes(source.estado))warnings.push({code:'QNA_RECONSTRUIDA_FUENTE_PARCIAL',message:`La fuente ${source.dominio} conserva estado ${source.estado}.`,dominio:source.dominio});
+    }catch{qnaFail('La evidencia V3/V4 aplicada no cumple integridad','QNA_APLICADA_INTEGRIDAD_INVALIDA',500);}
+    for(const [field,code] of [['SnapshotCalculoV2Id','SNAPSHOT_V2'],['NominaCargaId','NOMINA'],['FormulaCalculoVersionId','FORMULA']] as const)
+      if(header[field]==null)warnings.push({code:`QNA_RECONSTRUIDA_${code}_NO_PERSISTIDO`,message:`El metadato ${field} no esta disponible en la evidencia persistida.`});
+    return warnings;
+  }
+
+  private mapPersistedV2(row:Record<string,any>,details:Array<Record<string,any>>):SnapshotCalculoV2Input{
+    const nullable=(value:unknown)=>value==null?null:String(value);
+    return {entidadId:Number(row.EntidadId),anio:Number(row.Anio),quincena:Number(row.Quincena),organica0:String(row.Organica0),organica1:String(row.Organica1),organica2:String(row.Organica2),organica3:String(row.Organica3),
+      ambiente:row.Ambiente,fuente:row.Fuente,estado:row.Estado,formulaCalculoVersionId:nullable(row.FormulaCalculoVersionId),nominaCargaId:nullable(row.NominaCargaId),precisionPolicy:String(row.PrecisionPolicy),versionEsquema:Number(row.VersionEsquema),usuarioId:null,
+      totalesA2:{CAIR:String(row.CAIR),CAIR_FONDO:String(row.CAIR_FONDO),FRA:String(row.FRA),FRE:String(row.FRE),PRESTACIONES:String(row.PRESTACIONES),FH:String(row.FH),FV:String(row.FV),VIVIENDA:String(row.VIVIENDA),FAA:String(row.FAA),FAE:String(row.FAE),FAT:String(row.FAT),FAI:String(row.FAI)},
+      detalles:details.map(item=>({orden:Number(item.Orden),empleadoClaveHash:String(item.EmpleadoClaveHash),diasLaborados:nullable(item.DiasLaborados),diasOrigen:item.DiasOrigen,
+        sueldoMensualD6:nullable(item.SueldoMensualD6),otrasPrestacionesMensualesD6:nullable(item.OtrasPrestacionesMensualesD6),quinqueniosMensualD6:nullable(item.QuinqueniosMensualD6),
+        baseCotizacionSueldoD6:nullable(item.BaseCotizacionSueldoD6),baseCotizacionQuinqueniosD6:nullable(item.BaseCotizacionQuinqueniosD6),cairD6:nullable(item.CairD6),cairFondoD6:nullable(item.CairFondoD6),
+        fraD6:nullable(item.FraD6),freD6:nullable(item.FreD6),prestacionesD6:nullable(item.PrestacionesD6),fhD6:nullable(item.FhD6),fvD6:nullable(item.FvD6),viviendaD6:nullable(item.ViviendaD6),faaD6:nullable(item.FaaD6),faeD6:nullable(item.FaeD6),fatD6:nullable(item.FatD6),faiD6:nullable(item.FaiD6)}))};
+  }
+
+  private reconstructedSources(rows: Array<Record<string, any>>, isAdmin: boolean): QnaAppliedSource[] {
+    const byDomain = new Map(rows.map(row => [String(row.Dominio), row]));
+    return (['AHORRO','VIVIENDA','PRESTACIONES','CAIR','GUARDERIAS','TRANSITORIO','AGUINALDO','PCP','PMP','HIP'] as QnaDomain[]).map(domain => {
+      const row = byDomain.get(domain);
+      return row ? this.mapAppliedSource(row, isAdmin) : { dominio: domain, tipoFuente: 'SQL_HISTORICO', estado: 'ABSENT_UNVERIFIED', requerida: true,
+        sourceScale: FUND_DOMAINS.has(domain) ? 6 : 2, registros: 0, notApplicableAprobado: false, errorCode: null };
+    });
+  }
+
+  private mapReconstructedMetadata(row: Record<string, any>, appliedAt: Date): QnaAppliedMetadata {
+    return { liquidacionSnapshotId: String(row.LiquidacionSnapshotId), entidadId: Number(row.EntidadId), anio: Number(row.Anio), quincena: Number(row.Quincena),
+      periodo: String(row.Periodo), organica0: String(row.Organica0), organica1: String(row.Organica1), organica2: String(row.Organica2), organica3: String(row.Organica3),
+      ambiente: row.Ambiente, revision: Number(row.Revision), snapshotCalculoV2Id: row.SnapshotCalculoV2Id == null ? null : String(row.SnapshotCalculoV2Id),
+      nominaCargaId: row.NominaCargaId == null ? null : String(row.NominaCargaId), formulaCalculoVersionId: row.FormulaCalculoVersionId == null ? null : String(row.FormulaCalculoVersionId),
+      precisionPolicy: String(row.PrecisionPolicy), hashContenido: String(row.HashContenido), fechaAplicacion: appliedAt.toISOString(),
+      fechaCreacion: new Date(row.FechaCreacion).toISOString(), fuente: 'SNAPSHOT_OFICIAL_RECONSTRUIDO', estadoProceso: 'TERMINADO', reconstructionStrategy: 'SNAPSHOT_V3_V4_PERSISTED_V2_FUNDS' };
+  }
+
+  private mapNullableAppliedTotals(row?: Record<string, any>): QnaAppliedSummary['totales'] {
+    const totals: Record<string, string | number | null> = { registros: row ? Number(row.Registros) : null };
+    for (const key of Object.keys(TOTAL_COLUMNS)) totals[key] = row?.[key] == null ? null : String(row[key]);
+    return totals as QnaAppliedSummary['totales'];
+  }
+
+  private async selectLegacyApplied(filter: QnaAppliedSelection, transaction: Transaction): Promise<AppliedSelectionRecord | null> {
+    const result = await this.appliedRequest(filter, transaction).input('Anio', sql.SmallInt, filter.anio).input('Quincena', sql.TinyInt, filter.quincena).query(`
+      SELECT TRY_CONVERT(INT,b.EntidadId) EntidadId,b.Anio,b.Quincena,b.Org0 Organica0,b.Org1 Organica1,b.Org2 Organica2,b.Org3 Organica3,
+        b.CreatedAt,COUNT(*) OVER(PARTITION BY b.EntidadId,b.Anio,b.Quincena,b.Org0,b.Org1,b.Org2,b.Org3) ExactEvidenceCount,
+        (SELECT COUNT(*) FROM (SELECT DISTINCT x.EntidadId,x.Org2,x.Org3 FROM afec.BitacoraAfectacionOrg x
+          WHERE x.Entidad='AFILIADOS' AND x.OrgNivel=3 AND x.Accion='TERMINADO' AND x.Resultado='OK' AND x.Anio=b.Anio AND x.Quincena=b.Quincena AND x.Org0=b.Org0 AND x.Org1=b.Org1) scopes) ReducedScopeCount
+      FROM afec.BitacoraAfectacionOrg b
+      WHERE b.Entidad='AFILIADOS' AND b.OrgNivel=3 AND b.Accion='TERMINADO' AND b.Resultado='OK' AND b.Anio=@Anio AND b.Quincena=@Quincena
+        AND TRY_CONVERT(INT,b.EntidadId) IS NOT NULL AND (@EntidadId IS NULL OR TRY_CONVERT(INT,b.EntidadId)=@EntidadId) AND (@Organica0 IS NULL OR b.Org0=@Organica0)
+        AND (@Organica1 IS NULL OR b.Org1=@Organica1) AND (@Organica2 IS NULL OR b.Org2=@Organica2) AND (@Organica3 IS NULL OR b.Org3=@Organica3)
+      ORDER BY b.CreatedAt DESC,b.AfectacionId DESC;`);
+    if (result.recordset.length === 0) return null;
+    const scopes = new Set(result.recordset.map(row => `${row.EntidadId}|${row.Anio}|${row.Quincena}|${row.Organica0}|${row.Organica1}|${row.Organica2}|${row.Organica3}`));
+    if (scopes.size !== 1 || Number(result.recordset[0].ReducedScopeCount) !== 1 || Number(result.recordset[0].ExactEvidenceCount) !== 1)
+      qnaFail('La evidencia historica aplicada es ambigua', 'QNA_APLICADA_LEGACY_AMBIGUA', 409);
+    const row = result.recordset[0];
+    const scope = { entidadId: Number(row.EntidadId), anio: Number(row.Anio), quincena: Number(row.Quincena), organica0: String(row.Organica0),
+      organica1: String(row.Organica1), organica2: String(row.Organica2), organica3: String(row.Organica3) };
+    await this.assertLegacyNotOwned(scope, transaction);
+    return { id: null, processId: null, appliedAt: new Date(row.CreatedAt), version: 0, scope };
+  }
+
+  private async assertLegacyNotOwned(scope: QnaAppliedScope & QnaAppliedPeriod, transaction: Transaction): Promise<void> {
+    const request = this.appliedRequest(scope, transaction).input('Anio', sql.SmallInt, scope.anio).input('Quincena', sql.TinyInt, scope.quincena);
+    const result = await request.query(`SELECT
+      (SELECT COUNT(*) FROM liquidacion.QnaLegacyScopeOwnership o WHERE o.Organica0=@Organica0 AND o.Organica1=@Organica1 AND o.Anio=@Anio AND o.Quincena=@Quincena) OwnershipCount,
+      (SELECT SUM(n) FROM (
+        SELECT COUNT(*) n FROM aportaciones.IndividualesAhorroHistorico WHERE clave_organica_0=@Organica0 AND clave_organica_1=@Organica1 AND anio=@Anio AND quincena=@Quincena AND QnaLiquidacionSnapshotId IS NOT NULL
+        UNION ALL SELECT COUNT(*) FROM aportaciones.IndividualesViviendaHistorico WHERE clave_organica_0=@Organica0 AND clave_organica_1=@Organica1 AND anio=@Anio AND quincena=@Quincena AND QnaLiquidacionSnapshotId IS NOT NULL
+        UNION ALL SELECT COUNT(*) FROM aportaciones.IndividualesPrestacionesHistorico WHERE clave_organica_0=@Organica0 AND clave_organica_1=@Organica1 AND anio=@Anio AND quincena=@Quincena AND QnaLiquidacionSnapshotId IS NOT NULL
+        UNION ALL SELECT COUNT(*) FROM aportaciones.IndividualesCairHistorico WHERE clave_organica_0=@Organica0 AND clave_organica_1=@Organica1 AND anio=@Anio AND quincena=@Quincena AND QnaLiquidacionSnapshotId IS NOT NULL
+        UNION ALL SELECT COUNT(*) FROM aportaciones.GuarderiasHistorico WHERE clave_organica_0=@Organica0 AND clave_organica_1=@Organica1 AND anio=@Anio AND quincena=@Quincena AND QnaLiquidacionSnapshotId IS NOT NULL
+        UNION ALL SELECT COUNT(*) FROM aportaciones.PensionNominaTransitorioHistorico WHERE clave_organica_0=@Organica0 AND clave_organica_1=@Organica1 AND anio=@Anio AND quincena=@Quincena AND QnaLiquidacionSnapshotId IS NOT NULL
+        UNION ALL SELECT COUNT(*) FROM aportaciones.AguinaldoHistorico WHERE clave_organica_0=@Organica0 AND clave_organica_1=@Organica1 AND anio=@Anio AND quincena=@Quincena AND QnaLiquidacionSnapshotId IS NOT NULL
+        UNION ALL SELECT COUNT(*) FROM retenciones.PrestamosCortoPlazoHistorico WHERE clave_organica_0=@Organica0 AND clave_organica_1=@Organica1 AND anio=@Anio AND quincena=@Quincena AND QnaLiquidacionSnapshotId IS NOT NULL
+        UNION ALL SELECT COUNT(*) FROM retenciones.PrestamosMedianoPlazoHistorico WHERE clave_organica_0=@Organica0 AND clave_organica_1=@Organica1 AND anio=@Anio AND quincena=@Quincena AND QnaLiquidacionSnapshotId IS NOT NULL
+        UNION ALL SELECT COUNT(*) FROM retenciones.PrestamosHipotecariosHistorico WHERE clave_organica_0=@Organica0 AND clave_organica_1=@Organica1 AND anio=@Anio AND quincena=@Quincena AND QnaLiquidacionSnapshotId IS NOT NULL
+        UNION ALL SELECT COUNT(*) FROM aportaciones.ResumenHistorico WHERE clave_organica_0=@Organica0 AND clave_organica_1=@Organica1 AND anio=@Anio AND quincena=@Quincena AND QnaLiquidacionSnapshotId IS NOT NULL
+        UNION ALL SELECT COUNT(*) FROM conciliacion.RevisionAplicacionHistorico WHERE Organica0=@Organica0 AND Organica1=@Organica1 AND Organica2=@Organica2 AND Organica3=@Organica3
+          AND Periodo=RIGHT('0'+CONVERT(VARCHAR(2),@Quincena),2)+RIGHT(CONVERT(VARCHAR(4),@Anio),2) AND (QnaLiquidacionSnapshotId IS NOT NULL OR LiquidacionSnapshotId IS NOT NULL)
+      ) x) OwnedRows;`);
+    const row = result.recordset[0];
+    if (Number(row.OwnershipCount) > 0 || Number(row.OwnedRows) > 0)
+      qnaFail('La evidencia historica pertenece a una proyeccion V5', 'QNA_APLICADA_LEGACY_OWNERSHIP_CONFLICT', 409);
+  }
+
+  private async getLegacySummary(selected: Extract<AppliedSelectionRecord, { version: 0 }>, isAdmin: boolean, transaction: Transaction): Promise<QnaAppliedSummary> {
+    const s = selected.scope;
+    const result = await this.appliedRequest(s, transaction).input('Anio', sql.SmallInt, s.anio).input('Quincena', sql.TinyInt, s.quincena).query(`
+      SELECT TOP(2) IdRevisionAplicacionHistorico,RegistrosOrigen,
+        CONVERT(VARCHAR(60),CAST(CAIR AS DECIMAL(38,2))) CAIR,CONVERT(VARCHAR(60),CAST(FRA AS DECIMAL(38,2))) FRA,CONVERT(VARCHAR(60),CAST(FRE AS DECIMAL(38,2))) FRE,
+        CONVERT(VARCHAR(60),CAST(FH AS DECIMAL(38,2))) FH,CONVERT(VARCHAR(60),CAST(FV AS DECIMAL(38,2))) FV,CONVERT(VARCHAR(60),CAST(FAA AS DECIMAL(38,2))) FAA,
+        CONVERT(VARCHAR(60),CAST(FAE AS DECIMAL(38,2))) FAE,CONVERT(VARCHAR(60),CAST(FAT AS DECIMAL(38,2))) FAT,CONVERT(VARCHAR(60),CAST(FAI AS DECIMAL(38,2))) FAI,FechaAlta
+        FROM conciliacion.RevisionAplicacionHistorico WHERE Organica0=@Organica0 AND Organica1=@Organica1 AND Organica2=@Organica2 AND Organica3=@Organica3
+        AND Periodo=RIGHT('0'+CONVERT(VARCHAR(2),@Quincena),2)+RIGHT(CONVERT(VARCHAR(4),@Anio),2) ORDER BY FechaAlta DESC,IdRevisionAplicacionHistorico DESC;
+      SELECT tipo_endpoint,total_empleados,CONVERT(VARCHAR(40),CAST(total_contribucion AS DECIMAL(19,2))) total_contribucion
+        FROM aportaciones.ResumenHistorico WHERE clave_organica_0=@Organica0 AND clave_organica_1=@Organica1 AND anio=@Anio AND quincena=@Quincena
+          AND QnaLiquidacionSnapshotId IS NULL ORDER BY tipo_endpoint;
+      SELECT * FROM (VALUES
+        ('AHORRO',(SELECT COUNT(*) FROM aportaciones.IndividualesAhorroHistorico WHERE clave_organica_0=@Organica0 AND clave_organica_1=@Organica1 AND anio=@Anio AND quincena=@Quincena AND QnaLiquidacionSnapshotId IS NULL),(SELECT CONVERT(VARCHAR(60),CAST(ROUND(SUM(CAST(total AS DECIMAL(38,6))),2,1) AS DECIMAL(38,2))) FROM aportaciones.IndividualesAhorroHistorico WHERE clave_organica_0=@Organica0 AND clave_organica_1=@Organica1 AND anio=@Anio AND quincena=@Quincena AND QnaLiquidacionSnapshotId IS NULL),6),
+        ('VIVIENDA',(SELECT COUNT(*) FROM aportaciones.IndividualesViviendaHistorico WHERE clave_organica_0=@Organica0 AND clave_organica_1=@Organica1 AND anio=@Anio AND quincena=@Quincena AND QnaLiquidacionSnapshotId IS NULL),(SELECT CONVERT(VARCHAR(60),CAST(ROUND(SUM(CAST(total AS DECIMAL(38,6))),2,1) AS DECIMAL(38,2))) FROM aportaciones.IndividualesViviendaHistorico WHERE clave_organica_0=@Organica0 AND clave_organica_1=@Organica1 AND anio=@Anio AND quincena=@Quincena AND QnaLiquidacionSnapshotId IS NULL),6),
+        ('PRESTACIONES',(SELECT COUNT(*) FROM aportaciones.IndividualesPrestacionesHistorico WHERE clave_organica_0=@Organica0 AND clave_organica_1=@Organica1 AND anio=@Anio AND quincena=@Quincena AND QnaLiquidacionSnapshotId IS NULL),(SELECT CONVERT(VARCHAR(60),CAST(ROUND(SUM(CAST(total AS DECIMAL(38,6))),2,1) AS DECIMAL(38,2))) FROM aportaciones.IndividualesPrestacionesHistorico WHERE clave_organica_0=@Organica0 AND clave_organica_1=@Organica1 AND anio=@Anio AND quincena=@Quincena AND QnaLiquidacionSnapshotId IS NULL),6),
+        ('CAIR',(SELECT COUNT(*) FROM aportaciones.IndividualesCairHistorico WHERE clave_organica_0=@Organica0 AND clave_organica_1=@Organica1 AND anio=@Anio AND quincena=@Quincena AND QnaLiquidacionSnapshotId IS NULL),(SELECT CONVERT(VARCHAR(60),CAST(ROUND(SUM(CAST(total AS DECIMAL(38,6))),2,1) AS DECIMAL(38,2))) FROM aportaciones.IndividualesCairHistorico WHERE clave_organica_0=@Organica0 AND clave_organica_1=@Organica1 AND anio=@Anio AND quincena=@Quincena AND QnaLiquidacionSnapshotId IS NULL),6),
+        ('GUARDERIAS',(SELECT COUNT(*) FROM aportaciones.GuarderiasHistorico WHERE clave_organica_0=@Organica0 AND clave_organica_1=@Organica1 AND anio=@Anio AND quincena=@Quincena AND QnaLiquidacionSnapshotId IS NULL),(SELECT CONVERT(VARCHAR(60),CAST(SUM(CAST(recibo_total AS DECIMAL(38,2))) AS DECIMAL(38,2))) FROM aportaciones.GuarderiasHistorico WHERE clave_organica_0=@Organica0 AND clave_organica_1=@Organica1 AND anio=@Anio AND quincena=@Quincena AND QnaLiquidacionSnapshotId IS NULL),2),
+        ('TRANSITORIO',(SELECT COUNT(*) FROM aportaciones.PensionNominaTransitorioHistorico WHERE clave_organica_0=@Organica0 AND clave_organica_1=@Organica1 AND anio=@Anio AND quincena=@Quincena AND QnaLiquidacionSnapshotId IS NULL),(SELECT CONVERT(VARCHAR(60),CAST(SUM(CAST(transitorio AS DECIMAL(38,2))) AS DECIMAL(38,2))) FROM aportaciones.PensionNominaTransitorioHistorico WHERE clave_organica_0=@Organica0 AND clave_organica_1=@Organica1 AND anio=@Anio AND quincena=@Quincena AND QnaLiquidacionSnapshotId IS NULL),2),
+        ('AGUINALDO',(SELECT COUNT(*) FROM aportaciones.AguinaldoHistorico WHERE clave_organica_0=@Organica0 AND clave_organica_1=@Organica1 AND anio=@Anio AND quincena=@Quincena AND QnaLiquidacionSnapshotId IS NULL),(SELECT CONVERT(VARCHAR(60),CAST(SUM(CAST(general AS DECIMAL(38,2))) AS DECIMAL(38,2))) FROM aportaciones.AguinaldoHistorico WHERE clave_organica_0=@Organica0 AND clave_organica_1=@Organica1 AND anio=@Anio AND quincena=@Quincena AND QnaLiquidacionSnapshotId IS NULL),2),
+        ('PCP',(SELECT COUNT(*) FROM retenciones.PrestamosCortoPlazoHistorico WHERE clave_organica_0=@Organica0 AND clave_organica_1=@Organica1 AND anio=@Anio AND quincena=@Quincena AND QnaLiquidacionSnapshotId IS NULL),(SELECT CONVERT(VARCHAR(60),CAST(SUM(CAST(total AS DECIMAL(38,2))) AS DECIMAL(38,2))) FROM retenciones.PrestamosCortoPlazoHistorico WHERE clave_organica_0=@Organica0 AND clave_organica_1=@Organica1 AND anio=@Anio AND quincena=@Quincena AND QnaLiquidacionSnapshotId IS NULL),2),
+        ('PMP',(SELECT COUNT(*) FROM retenciones.PrestamosMedianoPlazoHistorico WHERE clave_organica_0=@Organica0 AND clave_organica_1=@Organica1 AND anio=@Anio AND quincena=@Quincena AND QnaLiquidacionSnapshotId IS NULL),(SELECT CONVERT(VARCHAR(60),CAST(SUM(CAST(total AS DECIMAL(38,2))) AS DECIMAL(38,2))) FROM retenciones.PrestamosMedianoPlazoHistorico WHERE clave_organica_0=@Organica0 AND clave_organica_1=@Organica1 AND anio=@Anio AND quincena=@Quincena AND QnaLiquidacionSnapshotId IS NULL),2),
+        ('HIP',(SELECT COUNT(*) FROM retenciones.PrestamosHipotecariosHistorico WHERE clave_organica_0=@Organica0 AND clave_organica_1=@Organica1 AND anio=@Anio AND quincena=@Quincena AND QnaLiquidacionSnapshotId IS NULL),(SELECT CONVERT(VARCHAR(60),CAST(SUM(CAST(cantidad AS DECIMAL(38,2))) AS DECIMAL(38,2))) FROM retenciones.PrestamosHipotecariosHistorico WHERE clave_organica_0=@Organica0 AND clave_organica_1=@Organica1 AND anio=@Anio AND quincena=@Quincena AND QnaLiquidacionSnapshotId IS NULL),2)
+      ) d(Dominio,Registros,DetailTotal,SourceScale) ORDER BY Dominio;`);
+    const sets = result.recordsets as Array<Array<Record<string, any>>>;
+    if (sets[0].length > 1) qnaFail('Revision historica ambigua', 'QNA_APLICADA_LEGACY_AMBIGUA', 409);
+    const revision = sets[0][0];
+    if(sets[1].length!==new Set(sets[1].map(row=>String(row.tipo_endpoint))).size)qnaFail('Resumen historico duplicado','QNA_APLICADA_LEGACY_AMBIGUA',409);
+    const summaries = new Map(sets[1].map(row => [String(row.tipo_endpoint), row]));
+    const domainRows = sets[2];
+    const warnings: QnaAppliedWarning[] = [{code:'LEGACY_REDUCED_ROWS_UNLINKED',message:'Las filas historicas solo conservan el alcance reducido org0/org1 y no estan enlazadas al evento TERMINADO de alcance completo.'}];
+    const sources = domainRows.map(row => {
+      const count = Number(row.Registros);
+      if (count === 0) warnings.push({ code: 'QNA_LEGACY_ABSENT_UNVERIFIED', message: `No existen filas historicas verificables para ${row.Dominio}.`, dominio: row.Dominio });
+      return { dominio: row.Dominio, tipoFuente: 'SQL_HISTORICO', estado: count > 0 ? 'COMPLETE' : 'ABSENT_UNVERIFIED', requerida: true,
+        sourceScale: Number(row.SourceScale), registros: count, notApplicableAprobado: false, errorCode: null,
+        ...(isAdmin ? { identificadorFuente: `LEGACY:${row.Dominio}:${s.anio}:${s.quincena}:${s.organica0}:${s.organica1}`, hashFuente: null, aprobadoPor: null, evidencia: null } : {}) } as QnaAppliedSource;
+    });
+    const endpoint: Record<QnaDomain, string | null> = { AHORRO:'individuales/ahorro',VIVIENDA:'individuales/vivienda',PRESTACIONES:'individuales/prestaciones',CAIR:'individuales/cair',
+      GUARDERIAS:'guarderias',TRANSITORIO:'pension-nomina-transitorio',AGUINALDO:'aguinaldo',PCP:null,PMP:null,HIP:null };
+    const totalKeyByDomain = Object.fromEntries(Object.entries(DOMAIN_TOTAL_KEYS).map(([domain,key]) => [domain,key])) as Record<QnaDomain, Exclude<keyof QnaTotals,'registros'>>;
+    const totals = Object.fromEntries(['registros',...Object.keys(TOTAL_COLUMNS)].map(key => [key,null])) as unknown as QnaAppliedSummary['totales'];
+    const strategies = Object.fromEntries(Object.keys(TOTAL_COLUMNS).map(key => [key,'UNAVAILABLE'])) as QnaAppliedSummary['totalStrategies'];
+    if (revision) {
+      totals.registros = Number(revision.RegistrosOrigen);
+      for (const key of ['cairA2','fraA2','freA2','fhA2','fvA2','faaA2','faeA2','fatA2','faiA2'] as const) {
+        const column = TOTAL_COLUMNS[key].replace('A2','').toUpperCase(); totals[key] = revision[column]==null?null:String(revision[column]); strategies[key] = totals[key]==null?'UNAVAILABLE':'PERSISTED';
+      }
+    }
+    for (const row of domainRows) {
+      const domain = row.Dominio as QnaDomain; const key = totalKeyByDomain[domain]; const persisted = endpoint[domain] ? summaries.get(endpoint[domain]!) : undefined;
+      if (persisted) {
+        if(persisted.total_empleados!=null&&Number(persisted.total_empleados)!==Number(row.Registros))qnaFail(`Resumen ${domain} contradictorio`,'QNA_APLICADA_LEGACY_RESUMEN_INCONSISTENTE',409);
+        totals[key] = persisted.total_contribucion==null?null:String(persisted.total_contribucion); strategies[key] = totals[key]==null?'UNAVAILABLE':'PERSISTED';
+      }
+      else if (Number(row.Registros) > 0 && row.DetailTotal != null) {
+        totals[key] = String(row.DetailTotal); strategies[key] = 'DERIVED_DETAIL';
+        warnings.push({ code: 'DERIVED_DETAIL', message: `El total de ${domain} se derivo con LEGACY_SUM_DETAIL_A2_V1.`, dominio: domain });
+      }
+    }
+    this.deriveLegacyCombinedTotals(totals, strategies);
+    const metadata = this.mapLegacyMetadata(selected);
+    return { ...metadata, fuentes: sources, totales: totals, totalStrategies: strategies, advertencias: warnings };
+  }
+
+  private deriveLegacyCombinedTotals(totals: QnaAppliedSummary['totales'], strategies: QnaAppliedSummary['totalStrategies']): void {
+    const derive = (target: Exclude<keyof QnaTotals,'registros'>, keys: Array<Exclude<keyof QnaTotals,'registros'>>) => {
+      if (keys.every(key => totals[key] != null)) { totals[target] = addA2Exact(keys.map(key=>String(totals[key]))); strategies[target] = 'DERIVED_DETAIL'; }
+    };
+    derive('totalAportacionesA2',['ahorroA2','viviendaA2','prestacionesA2','cairFondoA2','guarderiasA2','transitorioA2','aguinaldoA2']);
+    derive('totalRetencionesA2',['retencionPcpA2','retencionPmpA2','retencionHipA2']);
+    derive('totalGeneralA2',['totalAportacionesA2','totalRetencionesA2']);
+  }
+
+  private async getLegacyDetails(
+    selected: Extract<AppliedSelectionRecord, { version: 0 }>,
+    filter: QnaAppliedDetailFilter,
+    transaction: Transaction
+  ): Promise<QnaAppliedDetailResult> {
+    const summary = await this.getLegacySummary(selected, filter.esAdmin, transaction);
+    const config: Record<QnaDomain, { table: string; employee: string; rfc: string; name: string; amount: string; scale: 2 | 6; fields: string }> = {
+      AHORRO:{table:'aportaciones.IndividualesAhorroHistorico',employee:'CONVERT(NVARCHAR(50),interno)',rfc:'NULL',name:'nombre',amount:'total',scale:6,fields:'interno,sueldo,quinquenios,otras_prestaciones,sueldo_base,afae,afaa,total'},
+      VIVIENDA:{table:'aportaciones.IndividualesViviendaHistorico',employee:'CONVERT(NVARCHAR(50),interno)',rfc:'NULL',name:'nombre',amount:'total',scale:6,fields:'interno,sueldo,quinquenios,otras_prestaciones,sueldo_base,afe,total'},
+      PRESTACIONES:{table:'aportaciones.IndividualesPrestacionesHistorico',employee:'CONVERT(NVARCHAR(50),interno)',rfc:'NULL',name:'nombre',amount:'total',scale:6,fields:'interno,sueldo,quinquenios,otras_prestaciones,sueldo_base,afpe,afpa,total'},
+      CAIR:{table:'aportaciones.IndividualesCairHistorico',employee:'CONVERT(NVARCHAR(50),interno)',rfc:'NULL',name:'nombre',amount:'total',scale:6,fields:'interno,sueldo,quinquenios,otras_prestaciones,sueldo_base,afe,total'},
+      GUARDERIAS:{table:'aportaciones.GuarderiasHistorico',employee:'titular_no_empleado',rfc:'titular_rfc',name:'titular_nombre',amount:'recibo_total',scale:2,fields:'titular_monto,entidad_monto,recibo_ajuste,recibo_total,recibo_mes_ano,recibo_fecha_venc,recibo_folio,menor_nombre,menor_nivel,menor_sala,estatus'},
+      TRANSITORIO:{table:'aportaciones.PensionNominaTransitorioHistorico',employee:'CONVERT(NVARCHAR(50),interno)',rfc:'rfc',name:'nombres',amount:'transitorio',scale:2,fields:'fpension,interno,sueldo,oprestaciones,quinquenios,tpension,transitorio,cconcepto,descripcion,importe,defuncion,total'},
+      AGUINALDO:{table:'aportaciones.AguinaldoHistorico',employee:'noempleado',rfc:'rfc',name:'nombres',amount:'general',scale:2,fields:'interno,movimiento,tipomovimiento,fecha,dias_aguinaldo,cuantos,cuantos_ori,sdo,op,q,qna_a,diario,general,porcentaje,proporcion'},
+      PCP:{table:'retenciones.PrestamosCortoPlazoHistorico',employee:'CONVERT(NVARCHAR(50),interno)',rfc:'rfc',name:'nombre',amount:'total',scale:2,fields:'interno,prestamo,letra,plazo,periodo_c,fecha_c,capital,interes,monto,moratorios,total,resultado,td'},
+      PMP:{table:'retenciones.PrestamosMedianoPlazoHistorico',employee:'COALESCE(noemple,CONVERT(NVARCHAR(50),interno))',rfc:'rfc',name:'nombre',amount:'total',scale:2,fields:'interno,prestamo,letra,plazo,periodo_c,fecha_c,capital,moratorios,interes,seguro,total,resultado,clase,clave_p,folio,anio_prestamo'},
+      HIP:{table:'retenciones.PrestamosHipotecariosHistorico',employee:'COALESCE(noempleado,CONVERT(NVARCHAR(50),interno))',rfc:'rfc',name:'nombre',amount:'cantidad',scale:2,fields:'computadora_antigua,interno,cantidad,status,pno_solicitud,pano,pclave_prestamo,periodo_c,descto,fecha_c,plazo,capital_pagar,interes_pagar,interes_diferido_pagar,seguro_pagar,moratorio_pagar'},
+    };
+    const c = config[filter.dominio];
+    const pattern = searchPattern(filter.buscar);
+    const result = await this.appliedRequest(selected.scope, transaction).input('Anio', sql.SmallInt, selected.scope.anio)
+      .input('Quincena', sql.TinyInt, selected.scope.quincena).input('Busqueda', sql.NVarChar(206), pattern)
+      .input('Offset', sql.Int, (filter.page - 1) * filter.pageSize).input('Tamanio', sql.Int, filter.pageSize).query(`
+        WITH Evidencia AS (SELECT ROW_NUMBER() OVER(ORDER BY id) Orden,${c.employee} EmpleadoClave,${c.rfc} Rfc,${c.name} Nombre,
+          CONVERT(VARCHAR(40),CAST(${c.amount} AS DECIMAL(19,6))) ImporteOficialD6,${c.fields}
+          FROM ${c.table} WHERE clave_organica_0=@Organica0 AND clave_organica_1=@Organica1 AND anio=@Anio AND quincena=@Quincena AND QnaLiquidacionSnapshotId IS NULL)
+        SELECT COUNT(*) Total FROM Evidencia WHERE @Busqueda IS NULL OR CONCAT_WS('|',EmpleadoClave,Rfc,Nombre,${c.fields}) COLLATE Latin1_General_100_CI_AI LIKE @Busqueda ESCAPE '~';
+        WITH Evidencia AS (SELECT ROW_NUMBER() OVER(ORDER BY id) Orden,${c.employee} EmpleadoClave,${c.rfc} Rfc,${c.name} Nombre,
+          CONVERT(VARCHAR(40),CAST(${c.amount} AS DECIMAL(19,6))) ImporteOficialD6,${c.fields}
+          FROM ${c.table} WHERE clave_organica_0=@Organica0 AND clave_organica_1=@Organica1 AND anio=@Anio AND quincena=@Quincena AND QnaLiquidacionSnapshotId IS NULL)
+        SELECT * FROM Evidencia WHERE @Busqueda IS NULL OR CONCAT_WS('|',EmpleadoClave,Rfc,Nombre,${c.fields}) COLLATE Latin1_General_100_CI_AI LIKE @Busqueda ESCAPE '~'
+          ORDER BY Orden OFFSET @Offset ROWS FETCH NEXT @Tamanio ROWS ONLY;`);
+    const sets = result.recordsets as Array<Array<Record<string, any>>>;
+    const common = new Set(['Orden','EmpleadoClave','Rfc','Nombre','ImporteOficialD6']);
+    const details: QnaAppliedDetailRow[] = sets[1].map(row => ({ orden:Number(row.Orden), empleadoClave:row.EmpleadoClave == null ? null : String(row.EmpleadoClave),
+      rfc:row.Rfc == null ? null : String(row.Rfc), nombre:row.Nombre == null ? null : String(row.Nombre), sourceScale:c.scale,
+      importeOficialD6:row.ImporteOficialD6 == null ? null : String(row.ImporteOficialD6), payloadVersion:null,
+      payloadCanonico:Object.fromEntries(Object.entries(row).filter(([key]) => !common.has(key)).map(([key,value]) => [key,value instanceof Date ? value.toISOString() : value])) }));
+    const key = DOMAIN_TOTAL_KEYS[filter.dominio] as Exclude<keyof QnaTotals,'registros'>;
+    return { ...summary, dominio:filter.dominio,totalDominioA2:summary.totales[key] as string|null,totalStrategy:summary.totalStrategies[key],
+      detalles:details,page:filter.page,pageSize:filter.pageSize,total:Number(sets[0][0].Total) };
+  }
+
+  private mapLegacyMetadata(selected: Extract<AppliedSelectionRecord, { version: 0 }>): QnaAppliedMetadata {
+    const s = selected.scope;
+    return { ...s, periodo: `${String(s.quincena).padStart(2,'0')}${String(s.anio).slice(-2)}`, liquidacionSnapshotId: null, ambiente: null, revision: null,
+      snapshotCalculoV2Id: null, nominaCargaId: null, formulaCalculoVersionId: null, precisionPolicy: null, hashContenido: null,
+      fechaAplicacion: selected.appliedAt.toISOString(), fechaCreacion: null, fuente: 'HISTORICO_LEGACY', estadoProceso: 'TERMINADO', reconstructionStrategy: 'LEGACY_EXACT_FULL_SCOPE' };
   }
 
   private async withAppliedReadTransaction<T>(operation: (transaction: Transaction) => Promise<T | DeferredRead<T>>): Promise<T> {
@@ -320,32 +746,44 @@ export class LiquidacionQnaRepository implements ILiquidacionQnaRepository {
       AND (@Organica1 IS NULL OR a.Organica1=@Organica1) AND (@Organica2 IS NULL OR a.Organica2=@Organica2) AND (@Organica3 IS NULL OR a.Organica3=@Organica3)`;
   }
 
-  private async selectApplied(filter: QnaAppliedSelection, transaction: Transaction): Promise<{ id: string; processId: string; appliedAt: Date } | null> {
-    const result = await this.appliedRequest(filter, transaction).input('Anio', sql.SmallInt, filter.anio).input('Quincena', sql.TinyInt, filter.quincena).query(`${APPLIED_CTE}
-      SELECT CONVERT(VARCHAR(30),a.QnaProcesoId) QnaProcesoId,CONVERT(VARCHAR(30),a.LiquidacionSnapshotId) LiquidacionSnapshotId,a.FechaAplicacion FROM Aplicadas a WHERE a.Anio=@Anio AND a.Quincena=@Quincena AND ${this.appliedScopeWhere()}
+  private async selectApplied(filter: QnaAppliedSelection, transaction: Transaction): Promise<AppliedSelectionRecord | null> {
+    const result = await this.appliedRequest(filter, transaction).input('Anio', sql.SmallInt, filter.anio).input('Quincena', sql.TinyInt, filter.quincena).query(`
+      WITH Terminadas AS (
+        SELECT tr.*,ROW_NUMBER() OVER(PARTITION BY tr.QnaProcesoId ORDER BY tr.FechaCreacion DESC,tr.QnaProcesoTransicionId DESC) rn
+        FROM liquidacion.QnaProcesoTransicion tr WHERE tr.EstadoDestino='TERMINADO'
+      ), Aplicadas AS (
+        SELECT p.QnaProcesoId,p.EntidadId,p.Anio,p.Quincena,p.Organica0,p.Organica1,p.Organica2,p.Organica3,t.LiquidacionSnapshotId,
+          t.FechaCreacion FechaAplicacion,t.QnaProcesoTransicionId,s.VersionEsquema,s.LiquidacionSnapshotId SnapshotEncontrado,
+          s.EntidadId SnapshotEntidadId,s.Anio SnapshotAnio,s.Quincena SnapshotQuincena,s.Organica0 SnapshotOrganica0,s.Organica1 SnapshotOrganica1,s.Organica2 SnapshotOrganica2,s.Organica3 SnapshotOrganica3
+        FROM Terminadas t JOIN liquidacion.QnaProceso p ON p.QnaProcesoId=t.QnaProcesoId
+        LEFT JOIN liquidacion.QnaSnapshot s ON s.LiquidacionSnapshotId=t.LiquidacionSnapshotId WHERE t.rn=1
+      )
+      SELECT CONVERT(VARCHAR(30),a.QnaProcesoId) QnaProcesoId,CONVERT(VARCHAR(30),a.LiquidacionSnapshotId) LiquidacionSnapshotId,
+        a.FechaAplicacion,a.VersionEsquema,a.SnapshotEncontrado,a.SnapshotEntidadId,a.SnapshotAnio,a.SnapshotQuincena,a.SnapshotOrganica0,a.SnapshotOrganica1,a.SnapshotOrganica2,a.SnapshotOrganica3,
+        a.EntidadId,a.Anio,a.Quincena,a.Organica0,a.Organica1,a.Organica2,a.Organica3
+      FROM Aplicadas a WHERE a.Anio=@Anio AND a.Quincena=@Quincena AND ${this.appliedScopeWhere()}
       ORDER BY a.FechaAplicacion DESC,a.QnaProcesoTransicionId DESC;`);
-    if (result.recordset.length === 0) {
-      return null;
-    }
+    if (result.recordset.length === 0) return this.selectLegacyApplied(filter, transaction);
     if (result.recordset.length > 1) qnaFail('La liquidacion aplicada es ambigua; especifique el ambito completo', 'QNA_APLICADA_OFICIAL_AMBIGUA', 409);
-    return { id: String(result.recordset[0].LiquidacionSnapshotId), processId: String(result.recordset[0].QnaProcesoId), appliedAt: new Date(result.recordset[0].FechaAplicacion) };
+    const row=result.recordset[0];
+    const sameScope=row.SnapshotEncontrado!=null&&Number(row.SnapshotEntidadId)===Number(row.EntidadId)&&Number(row.SnapshotAnio)===Number(row.Anio)
+      &&Number(row.SnapshotQuincena)===Number(row.Quincena)&&['0','1','2','3'].every(level=>String(row[`SnapshotOrganica${level}`])===String(row[`Organica${level}`]));
+    if(row.LiquidacionSnapshotId==null||row.SnapshotEncontrado==null||![3,4,5].includes(Number(row.VersionEsquema))||!sameScope)
+      qnaFail('La ultima evidencia TERMINADO no referencia un snapshot compatible','QNA_APLICADA_TRANSICION_INTEGRIDAD_INVALIDA',500);
+    return { id: String(row.LiquidacionSnapshotId), processId: String(row.QnaProcesoId),appliedAt:new Date(row.FechaAplicacion),version:Number(row.VersionEsquema) as 3|4|5 };
   }
 
   private async getAppliedBundles(
-    selections: Array<{ id: string; processId: string; appliedAt: Date }>,
+    selections: Array<{ id: string; processId: string; appliedAt: Date; version?: number }>,
     isAdmin: boolean,
     transaction: Transaction,
     exhaustive = true,
     deferMapping = false
   ): Promise<QnaAppliedListItem[] | DeferredRead<QnaAppliedListItem[]>> {
     if (selections.length === 0) return deferMapping ? { resolveAfterCommit: () => [] } : [];
-    const request = new sql.Request(transaction);
-    const values = selections.map((selection, index) => {
-      request.input(`Id${index}`, sql.BigInt, selection.id).input(`Proceso${index}`, sql.BigInt, selection.processId);
-      return `(@Id${index},@Proceso${index})`;
-    }).join(',');
+    const request = new sql.Request(transaction).input('SelectionJson',sql.NVarChar(sql.MAX),JSON.stringify(selections.map(selection=>({id:selection.id,processId:selection.processId}))));
     const result = await request.query(`
-      WITH Seleccion(LiquidacionSnapshotId,QnaProcesoId) AS (SELECT * FROM (VALUES ${values}) v(LiquidacionSnapshotId,QnaProcesoId))
+      ${officialSelectionJsonCte()}
       SELECT CONVERT(VARCHAR(30),x.QnaProcesoId) QnaProcesoId,${APPLIED_HEADER_SELECT},(SELECT COUNT(*) FROM liquidacion.QnaSnapshotTotal t WHERE t.LiquidacionSnapshotId=s.LiquidacionSnapshotId) TotalCount,
         (SELECT MAX(t.Registros) FROM liquidacion.QnaSnapshotTotal t WHERE t.LiquidacionSnapshotId=s.LiquidacionSnapshotId) TotalRegistros,
         (SELECT COUNT(*) FROM liquidacion.QnaSnapshotFuente f WHERE f.LiquidacionSnapshotId=s.LiquidacionSnapshotId) SourceCount,
@@ -366,21 +804,21 @@ export class LiquidacionQnaRepository implements ILiquidacionQnaRepository {
         p.Organica0 ProcessOrganica0,p.Organica1 ProcessOrganica1,p.Organica2 ProcessOrganica2,p.Organica3 ProcessOrganica3
       FROM Seleccion x JOIN liquidacion.QnaSnapshot s ON s.LiquidacionSnapshotId=x.LiquidacionSnapshotId
       JOIN liquidacion.QnaProceso p ON p.QnaProcesoId=x.QnaProcesoId JOIN aportaciones.SnapshotCalculoV2 v ON v.SnapshotId=s.SnapshotCalculoV2Id;
-      WITH Seleccion(LiquidacionSnapshotId,QnaProcesoId) AS (SELECT * FROM (VALUES ${values}) v(LiquidacionSnapshotId,QnaProcesoId))
+      ${officialSelectionJsonCte()}
       SELECT x.QnaProcesoId,f.*,(SELECT COUNT(*) FROM liquidacion.QnaSnapshotFuenteDetalle d WHERE d.LiquidacionSnapshotId=f.LiquidacionSnapshotId AND d.Dominio=f.Dominio) DetailCount
       FROM Seleccion x JOIN liquidacion.QnaSnapshotFuente f ON f.LiquidacionSnapshotId=x.LiquidacionSnapshotId ORDER BY x.QnaProcesoId,f.Dominio;
-      WITH Seleccion(LiquidacionSnapshotId,QnaProcesoId) AS (SELECT * FROM (VALUES ${values}) v(LiquidacionSnapshotId,QnaProcesoId))
+      ${officialSelectionJsonCte()}
       SELECT x.QnaProcesoId,x.LiquidacionSnapshotId,p.Estado,p.Detalle,r.Dominio,r.Estado ReconciliacionEstado,r.Diferencias,r.ErrorDetalle
       FROM Seleccion x JOIN liquidacion.QnaLegacyProjection p ON p.LiquidacionSnapshotId=x.LiquidacionSnapshotId
       LEFT JOIN liquidacion.QnaLegacyReconciliacion r ON r.QnaLegacyProjectionId=p.QnaLegacyProjectionId
        WHERE p.Estado IN('WARNING','ERROR') OR r.Estado IN('WARNING','ERROR') ORDER BY x.QnaProcesoId,r.QnaLegacyReconciliacionId;
-       ${exhaustive ? `WITH Seleccion(LiquidacionSnapshotId,QnaProcesoId) AS (SELECT * FROM (VALUES ${values}) v(LiquidacionSnapshotId,QnaProcesoId))
+       ${exhaustive ? `${officialSelectionJsonCte()}
        SELECT x.QnaProcesoId,t.Registros,${TOTAL_SELECT} FROM Seleccion x JOIN liquidacion.QnaSnapshotTotal t ON t.LiquidacionSnapshotId=x.LiquidacionSnapshotId;
-       WITH Seleccion(LiquidacionSnapshotId,QnaProcesoId) AS (SELECT * FROM (VALUES ${values}) v(LiquidacionSnapshotId,QnaProcesoId))
+       ${officialSelectionJsonCte()}
       SELECT x.QnaProcesoId,d.LiquidacionSnapshotId,d.Dominio,d.Orden,d.ClaveFilaHash,d.SourceScale,
         CONVERT(VARCHAR(40),CAST(d.ImporteOficialD6 AS DECIMAL(19,6))) ImporteOficialD6,d.PayloadCanonico,d.HashFila,d.EmpleadoClave,d.Rfc,d.Nombre,d.PayloadVersion
       FROM Seleccion x JOIN liquidacion.QnaSnapshotFuenteDetalle d ON d.LiquidacionSnapshotId=x.LiquidacionSnapshotId ORDER BY x.QnaProcesoId,d.Dominio,d.Orden;
-      WITH Seleccion(LiquidacionSnapshotId,QnaProcesoId) AS (SELECT * FROM (VALUES ${values}) v(LiquidacionSnapshotId,QnaProcesoId))
+       ${officialSelectionJsonCte()}
       SELECT x.QnaProcesoId,d.LiquidacionSnapshotId,d.Orden,d.EmpleadoClave,d.EmpleadoClaveHash,d.Interno,d.Rfc,d.Nombre,d.SourceScale,d.DiasOrigen,d.HashFila,
         CONVERT(VARCHAR(40),CAST(d.DiasLaborados AS DECIMAL(5,2))) DiasLaborados,
         CONVERT(VARCHAR(40),CAST(d.SueldoD6 AS DECIMAL(19,6))) SueldoD6,CONVERT(VARCHAR(40),CAST(d.OtrasPrestacionesD6 AS DECIMAL(19,6))) OtrasPrestacionesD6,
@@ -1136,3 +1574,100 @@ function searchPattern(value?: string): string | null {
   if (!value) return null;
   return `%${value.replace(/~/g, '~~').replace(/%/g, '~%').replace(/_/g, '~_').replace(/\[/g, '~[')}%`;
 }
+
+function persistedTotalStrategies() {
+  return Object.fromEntries(Object.keys(TOTAL_COLUMNS).map(key => [key, 'PERSISTED'])) as QnaAppliedSummary['totalStrategies'];
+}
+
+function addA2Exact(values:string[]):string{
+  const cents=values.reduce((sum,value)=>{if(!/^-?(0|[1-9]\d*)\.\d{2}$/.test(value))throw new Error('QNA_A2_INVALIDO');const negative=value.startsWith('-');
+    const [whole,fraction]=(negative?value.slice(1):value).split('.');const amount=BigInt(whole)*100n+BigInt(fraction);return sum+(negative?-amount:amount);},0n);
+  const negative=cents<0n;const absolute=negative?-cents:cents;return `${negative?'-':''}${absolute/100n}.${String(absolute%100n).padStart(2,'0')}`;
+}
+function groupRows(rows:Array<Record<string,any>>,keyOf:(row:Record<string,any>)=>string):Map<string,Array<Record<string,any>>>{
+  const grouped=new Map<string,Array<Record<string,any>>>();for(const row of rows){const key=keyOf(row);const values=grouped.get(key);if(values)values.push(row);else grouped.set(key,[row]);}return grouped;
+}
+
+export function snapshotSelectionJsonCte():string{return `WITH X(LiquidacionSnapshotId) AS(
+  SELECT LiquidacionSnapshotId FROM OPENJSON(@SelectionJson) WITH(LiquidacionSnapshotId BIGINT '$.id'))`;}
+export function officialSelectionJsonCte():string{return `WITH Seleccion(LiquidacionSnapshotId,QnaProcesoId) AS(
+  SELECT LiquidacionSnapshotId,QnaProcesoId FROM OPENJSON(@SelectionJson) WITH(LiquidacionSnapshotId BIGINT '$.id',QnaProcesoId BIGINT '$.processId'))`;}
+export function legacySelectionJsonCte():string{return `WITH X(EntidadId,Anio,Quincena,Organica0,Organica1,Organica2,Organica3) AS(
+  SELECT EntidadId,Anio,Quincena,Organica0,Organica1,Organica2,Organica3 FROM OPENJSON(@SelectionJson) WITH(
+    EntidadId INT '$.entidadId',Anio SMALLINT '$.anio',Quincena TINYINT '$.quincena',Organica0 CHAR(2) '$.organica0',Organica1 CHAR(2) '$.organica1',Organica2 CHAR(2) '$.organica2',Organica3 CHAR(2) '$.organica3'))`;}
+
+export function appliedAllSourcesCte():string{return `WITH Terminadas AS(
+  SELECT tr.*,ROW_NUMBER() OVER(PARTITION BY tr.QnaProcesoId ORDER BY tr.FechaCreacion DESC,tr.QnaProcesoTransicionId DESC) rn
+  FROM liquidacion.QnaProcesoTransicion tr WHERE tr.EstadoDestino='TERMINADO'),
+Snapshots AS(SELECT p.QnaProcesoId,p.EntidadId,p.Anio,p.Quincena,p.Organica0,p.Organica1,p.Organica2,p.Organica3,t.LiquidacionSnapshotId,
+  t.FechaCreacion FechaAplicacion,t.QnaProcesoTransicionId,s.VersionEsquema,
+  CAST(CASE WHEN s.VersionEsquema=5 THEN 'SNAPSHOT_OFICIAL' ELSE 'SNAPSHOT_OFICIAL_RECONSTRUIDO' END AS VARCHAR(40)) Fuente,
+  CAST(NULL AS INT) ExactEvidenceCount,CAST(NULL AS INT) ReducedScopeCount,
+  CAST(CASE WHEN t.LiquidacionSnapshotId IS NULL OR s.LiquidacionSnapshotId IS NULL OR s.VersionEsquema NOT IN(3,4,5) THEN 'QNA_APLICADA_TRANSICION_INTEGRIDAD_INVALIDA'
+    WHEN s.EntidadId<>p.EntidadId OR s.Anio<>p.Anio OR s.Quincena<>p.Quincena OR s.Organica0<>p.Organica0 OR s.Organica1<>p.Organica1 OR s.Organica2<>p.Organica2 OR s.Organica3<>p.Organica3
+      THEN 'QNA_APLICADA_TRANSICION_INTEGRIDAD_INVALIDA' END AS VARCHAR(80)) IntegrityCode
+  FROM Terminadas t JOIN liquidacion.QnaProceso p ON p.QnaProcesoId=t.QnaProcesoId LEFT JOIN liquidacion.QnaSnapshot s ON s.LiquidacionSnapshotId=t.LiquidacionSnapshotId WHERE t.rn=1),
+LegacyGrouped AS(SELECT TRY_CONVERT(INT,b.EntidadId) EntidadId,b.Anio,b.Quincena,b.Org0 Organica0,b.Org1 Organica1,b.Org2 Organica2,b.Org3 Organica3,MAX(b.CreatedAt) FechaAplicacion,
+  MAX(b.AfectacionId) OrdenTie,COUNT(*) ExactEvidenceCount FROM afec.BitacoraAfectacionOrg b WHERE b.Entidad='AFILIADOS' AND b.Accion='TERMINADO'
+  AND b.OrgNivel=3 AND b.Resultado='OK' AND TRY_CONVERT(INT,b.EntidadId) IS NOT NULL GROUP BY TRY_CONVERT(INT,b.EntidadId),b.Anio,b.Quincena,b.Org0,b.Org1,b.Org2,b.Org3),
+Legacy AS(SELECT l.*, (SELECT COUNT(*) FROM LegacyGrouped r WHERE r.Anio=l.Anio AND r.Quincena=l.Quincena AND r.Organica0=l.Organica0 AND r.Organica1=l.Organica1) ReducedScopeCount
+  FROM LegacyGrouped l WHERE NOT EXISTS(SELECT 1 FROM Snapshots s WHERE s.EntidadId=l.EntidadId AND s.Anio=l.Anio AND s.Quincena=l.Quincena AND s.Organica0=l.Organica0 AND s.Organica1=l.Organica1 AND s.Organica2=l.Organica2 AND s.Organica3=l.Organica3)),
+Elegibles AS(SELECT EntidadId,Anio,Quincena,Organica0,Organica1,Organica2,Organica3,LiquidacionSnapshotId,QnaProcesoId,FechaAplicacion,QnaProcesoTransicionId OrdenTie,VersionEsquema,Fuente,ExactEvidenceCount,ReducedScopeCount,IntegrityCode FROM Snapshots
+  UNION ALL SELECT EntidadId,Anio,Quincena,Organica0,Organica1,Organica2,Organica3,NULL,NULL,FechaAplicacion,OrdenTie,0,'HISTORICO_LEGACY',ExactEvidenceCount,ReducedScopeCount,
+    CASE WHEN ExactEvidenceCount<>1 OR ReducedScopeCount<>1 THEN 'QNA_APLICADA_LEGACY_AMBIGUA' END FROM Legacy)`;}
+
+export function appliedAllSourcesSearch():string{return `(@Busqueda IS NULL OR (a.Fuente<>'HISTORICO_LEGACY' AND (
+  (a.VersionEsquema=5 AND EXISTS(SELECT 1 FROM liquidacion.QnaSnapshotDetalle d WHERE d.LiquidacionSnapshotId=a.LiquidacionSnapshotId AND CONCAT_WS('|',d.EmpleadoClave,d.Rfc,d.Nombre) COLLATE Latin1_General_100_CI_AI LIKE @Busqueda ESCAPE '~'))
+  OR (a.VersionEsquema IN(3,4) AND EXISTS(SELECT 1 FROM liquidacion.QnaSnapshot s JOIN aportaciones.SnapshotCalculoV2Detalle d ON d.SnapshotId=s.SnapshotCalculoV2Id
+    WHERE s.LiquidacionSnapshotId=a.LiquidacionSnapshotId AND CONCAT_WS('|',d.DiasLaborados,d.DiasOrigen,d.FATD6,d.ViviendaD6,d.PrestacionesD6,d.CAIRFondoD6) COLLATE Latin1_General_100_CI_AI LIKE @Busqueda ESCAPE '~'))
+  OR EXISTS(SELECT 1 FROM liquidacion.QnaSnapshotFuenteDetalle d WHERE d.LiquidacionSnapshotId=a.LiquidacionSnapshotId AND CONCAT_WS('|',d.EmpleadoClave,d.Rfc,d.Nombre,d.PayloadCanonico) COLLATE Latin1_General_100_CI_AI LIKE @Busqueda ESCAPE '~')))
+  OR (a.Fuente='HISTORICO_LEGACY' AND EXISTS(SELECT 1 FROM(
+    SELECT CONVERT(NVARCHAR(MAX),CONCAT_WS('|',interno,nombre,total)) Texto FROM aportaciones.IndividualesAhorroHistorico WHERE clave_organica_0=a.Organica0 AND clave_organica_1=a.Organica1 AND anio=a.Anio AND quincena=a.Quincena AND QnaLiquidacionSnapshotId IS NULL
+    UNION ALL SELECT CONCAT_WS('|',interno,nombre,total) FROM aportaciones.IndividualesViviendaHistorico WHERE clave_organica_0=a.Organica0 AND clave_organica_1=a.Organica1 AND anio=a.Anio AND quincena=a.Quincena AND QnaLiquidacionSnapshotId IS NULL
+    UNION ALL SELECT CONCAT_WS('|',interno,nombre,total) FROM aportaciones.IndividualesPrestacionesHistorico WHERE clave_organica_0=a.Organica0 AND clave_organica_1=a.Organica1 AND anio=a.Anio AND quincena=a.Quincena AND QnaLiquidacionSnapshotId IS NULL
+    UNION ALL SELECT CONCAT_WS('|',interno,nombre,total) FROM aportaciones.IndividualesCairHistorico WHERE clave_organica_0=a.Organica0 AND clave_organica_1=a.Organica1 AND anio=a.Anio AND quincena=a.Quincena AND QnaLiquidacionSnapshotId IS NULL
+    UNION ALL SELECT CONCAT_WS('|',titular_no_empleado,titular_rfc,titular_nombre,recibo_total) FROM aportaciones.GuarderiasHistorico WHERE clave_organica_0=a.Organica0 AND clave_organica_1=a.Organica1 AND anio=a.Anio AND quincena=a.Quincena AND QnaLiquidacionSnapshotId IS NULL
+    UNION ALL SELECT CONCAT_WS('|',interno,rfc,nombres,transitorio) FROM aportaciones.PensionNominaTransitorioHistorico WHERE clave_organica_0=a.Organica0 AND clave_organica_1=a.Organica1 AND anio=a.Anio AND quincena=a.Quincena AND QnaLiquidacionSnapshotId IS NULL
+    UNION ALL SELECT CONCAT_WS('|',noempleado,rfc,nombres,general) FROM aportaciones.AguinaldoHistorico WHERE clave_organica_0=a.Organica0 AND clave_organica_1=a.Organica1 AND anio=a.Anio AND quincena=a.Quincena AND QnaLiquidacionSnapshotId IS NULL
+    UNION ALL SELECT CONCAT_WS('|',interno,rfc,nombre,total) FROM retenciones.PrestamosCortoPlazoHistorico WHERE clave_organica_0=a.Organica0 AND clave_organica_1=a.Organica1 AND anio=a.Anio AND quincena=a.Quincena AND QnaLiquidacionSnapshotId IS NULL
+    UNION ALL SELECT CONCAT_WS('|',interno,rfc,nombre,total) FROM retenciones.PrestamosMedianoPlazoHistorico WHERE clave_organica_0=a.Organica0 AND clave_organica_1=a.Organica1 AND anio=a.Anio AND quincena=a.Quincena AND QnaLiquidacionSnapshotId IS NULL
+    UNION ALL SELECT CONCAT_WS('|',interno,rfc,nombre,cantidad) FROM retenciones.PrestamosHipotecariosHistorico WHERE clave_organica_0=a.Organica0 AND clave_organica_1=a.Organica1 AND anio=a.Anio AND quincena=a.Quincena AND QnaLiquidacionSnapshotId IS NULL
+  )q WHERE q.Texto COLLATE Latin1_General_100_CI_AI LIKE @Busqueda ESCAPE '~')))`;}
+
+export function appliedStructuralConflictSql(alias:string):string{return `(EXISTS(SELECT 1 FROM liquidacion.QnaSnapshotFuente f WHERE f.LiquidacionSnapshotId=${alias}.LiquidacionSnapshotId
+    GROUP BY f.LiquidacionSnapshotId HAVING COUNT(*)<>10 OR COUNT(DISTINCT f.Dominio)<>10)
+  OR NOT EXISTS(SELECT 1 FROM liquidacion.QnaSnapshotFuente f WHERE f.LiquidacionSnapshotId=${alias}.LiquidacionSnapshotId)
+  OR EXISTS(SELECT 1 FROM liquidacion.QnaSnapshotFuente f WHERE f.LiquidacionSnapshotId=${alias}.LiquidacionSnapshotId AND (f.Dominio NOT IN('AHORRO','VIVIENDA','PRESTACIONES','CAIR','GUARDERIAS','TRANSITORIO','AGUINALDO','PCP','PMP','HIP')
+    OR f.Requerida<>1 OR (f.Estado='COMPLETE' AND (f.Registros<=0 OR f.HashFuente IS NULL)) OR (f.Estado='NOT_APPLICABLE' AND (f.Registros<>0 OR f.NotApplicableAprobado<>1 OR f.AprobadoPor IS NULL OR f.Evidencia IS NULL))
+    OR f.Estado NOT IN('COMPLETE','NOT_APPLICABLE')))
+  OR (SELECT COUNT(*) FROM liquidacion.QnaSnapshotTotal t WHERE t.LiquidacionSnapshotId=${alias}.LiquidacionSnapshotId)<>1
+  OR (${alias}.VersionEsquema=5 AND (EXISTS(SELECT 1 FROM liquidacion.QnaSnapshot s WHERE s.LiquidacionSnapshotId=${alias}.LiquidacionSnapshotId AND
+      (s.SnapshotCalculoV2Id IS NULL OR s.NominaCargaId IS NULL OR s.FormulaCalculoVersionId IS NULL OR s.FuentesCompletas<>10 OR s.Estado<>'COMPLETO'))
+    OR EXISTS(SELECT 1 FROM liquidacion.QnaSnapshot s LEFT JOIN aportaciones.SnapshotCalculoV2 v ON v.SnapshotId=s.SnapshotCalculoV2Id
+      WHERE s.LiquidacionSnapshotId=${alias}.LiquidacionSnapshotId AND (v.SnapshotId IS NULL OR v.EntidadId<>s.EntidadId OR v.Anio<>s.Anio OR v.Quincena<>s.Quincena OR v.Organica0<>s.Organica0 OR v.Organica1<>s.Organica1 OR v.Organica2<>s.Organica2 OR v.Organica3<>s.Organica3))
+    OR EXISTS(SELECT 1 FROM liquidacion.QnaSnapshotFuente f WHERE f.LiquidacionSnapshotId=${alias}.LiquidacionSnapshotId AND f.Estado='COMPLETE' AND
+      f.Registros<>(CASE WHEN f.Dominio IN('AHORRO','VIVIENDA','PRESTACIONES','CAIR') THEN (SELECT COUNT(*) FROM liquidacion.QnaSnapshotDetalle d WHERE d.LiquidacionSnapshotId=f.LiquidacionSnapshotId)
+        ELSE (SELECT COUNT(*) FROM liquidacion.QnaSnapshotFuenteDetalle d WHERE d.LiquidacionSnapshotId=f.LiquidacionSnapshotId AND d.Dominio=f.Dominio) END)))))`;}
+
+export function legacyOwnershipConflictSql(alias:string):string{return `(EXISTS(SELECT 1 FROM liquidacion.QnaLegacyScopeOwnership o WHERE o.Organica0=${alias}.Organica0 AND o.Organica1=${alias}.Organica1 AND o.Anio=${alias}.Anio AND o.Quincena=${alias}.Quincena)
+  OR EXISTS(SELECT 1 FROM(
+    SELECT QnaLiquidacionSnapshotId q FROM aportaciones.IndividualesAhorroHistorico h WHERE h.clave_organica_0=${alias}.Organica0 AND h.clave_organica_1=${alias}.Organica1 AND h.anio=${alias}.Anio AND h.quincena=${alias}.Quincena
+    UNION ALL SELECT QnaLiquidacionSnapshotId FROM aportaciones.IndividualesViviendaHistorico h WHERE h.clave_organica_0=${alias}.Organica0 AND h.clave_organica_1=${alias}.Organica1 AND h.anio=${alias}.Anio AND h.quincena=${alias}.Quincena
+    UNION ALL SELECT QnaLiquidacionSnapshotId FROM aportaciones.IndividualesPrestacionesHistorico h WHERE h.clave_organica_0=${alias}.Organica0 AND h.clave_organica_1=${alias}.Organica1 AND h.anio=${alias}.Anio AND h.quincena=${alias}.Quincena
+    UNION ALL SELECT QnaLiquidacionSnapshotId FROM aportaciones.IndividualesCairHistorico h WHERE h.clave_organica_0=${alias}.Organica0 AND h.clave_organica_1=${alias}.Organica1 AND h.anio=${alias}.Anio AND h.quincena=${alias}.Quincena
+    UNION ALL SELECT QnaLiquidacionSnapshotId FROM aportaciones.GuarderiasHistorico h WHERE h.clave_organica_0=${alias}.Organica0 AND h.clave_organica_1=${alias}.Organica1 AND h.anio=${alias}.Anio AND h.quincena=${alias}.Quincena
+    UNION ALL SELECT QnaLiquidacionSnapshotId FROM aportaciones.PensionNominaTransitorioHistorico h WHERE h.clave_organica_0=${alias}.Organica0 AND h.clave_organica_1=${alias}.Organica1 AND h.anio=${alias}.Anio AND h.quincena=${alias}.Quincena
+    UNION ALL SELECT QnaLiquidacionSnapshotId FROM aportaciones.AguinaldoHistorico h WHERE h.clave_organica_0=${alias}.Organica0 AND h.clave_organica_1=${alias}.Organica1 AND h.anio=${alias}.Anio AND h.quincena=${alias}.Quincena
+    UNION ALL SELECT QnaLiquidacionSnapshotId FROM retenciones.PrestamosCortoPlazoHistorico h WHERE h.clave_organica_0=${alias}.Organica0 AND h.clave_organica_1=${alias}.Organica1 AND h.anio=${alias}.Anio AND h.quincena=${alias}.Quincena
+    UNION ALL SELECT QnaLiquidacionSnapshotId FROM retenciones.PrestamosMedianoPlazoHistorico h WHERE h.clave_organica_0=${alias}.Organica0 AND h.clave_organica_1=${alias}.Organica1 AND h.anio=${alias}.Anio AND h.quincena=${alias}.Quincena
+    UNION ALL SELECT QnaLiquidacionSnapshotId FROM retenciones.PrestamosHipotecariosHistorico h WHERE h.clave_organica_0=${alias}.Organica0 AND h.clave_organica_1=${alias}.Organica1 AND h.anio=${alias}.Anio AND h.quincena=${alias}.Quincena
+    UNION ALL SELECT QnaLiquidacionSnapshotId FROM aportaciones.ResumenHistorico h WHERE h.clave_organica_0=${alias}.Organica0 AND h.clave_organica_1=${alias}.Organica1 AND h.anio=${alias}.Anio AND h.quincena=${alias}.Quincena
+  ) owned WHERE owned.q IS NOT NULL)
+  OR EXISTS(SELECT 1 FROM conciliacion.RevisionAplicacionHistorico h WHERE h.Organica0=${alias}.Organica0 AND h.Organica1=${alias}.Organica1 AND h.Organica2=${alias}.Organica2 AND h.Organica3=${alias}.Organica3
+    AND h.Periodo=RIGHT('0'+CONVERT(VARCHAR(2),${alias}.Quincena),2)+RIGHT(CONVERT(VARCHAR(4),${alias}.Anio),2) AND (h.QnaLiquidacionSnapshotId IS NOT NULL OR h.LiquidacionSnapshotId IS NOT NULL)))`;}
+
+function selectionKey(item:AppliedSelectionRecord):string{return item.version===0
+  ? `L:${item.scope.entidadId}:${item.scope.anio}:${item.scope.quincena}:${item.scope.organica0}:${item.scope.organica1}:${item.scope.organica2}:${item.scope.organica3}`:`S:${item.id}`;}
+function appliedItemKey(item:QnaAppliedListItem):string{return item.fuente==='HISTORICO_LEGACY'
+  ? `L:${item.entidadId}:${item.anio}:${item.quincena}:${item.organica0}:${item.organica1}:${item.organica2}:${item.organica3}`:`S:${item.liquidacionSnapshotId}`;}
+function legacyRowKey(row:Record<string,any>):string{return `L:${row.EntidadId}:${row.Anio}:${row.Quincena}:${row.Organica0}:${row.Organica1}:${row.Organica2}:${row.Organica3}`;}

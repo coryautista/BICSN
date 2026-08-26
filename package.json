@@ -45,7 +45,12 @@
     "migrate:qna:phase9:applied-read:desarrollo": "tsx scripts/migrate-qna-phase9-applied-read-desarrollo.ts",
     "apply:qna:phase9:applied-read:desarrollo": "tsx scripts/migrate-qna-phase9-applied-read-desarrollo.ts --execute --confirm-development=SII-ISSSSPEA-DES",
     "verify:qna:phase9:applied-read:desarrollo": "tsx scripts/verify-qna-phase9-applied-read-desarrollo.ts",
-    "check:qna:phase9:applied-plan:desarrollo": "tsx scripts/check-qna-phase9-applied-plan-desarrollo.ts"
+    "check:qna:phase9:applied-plan:desarrollo": "tsx scripts/check-qna-phase9-applied-plan-desarrollo.ts",
+    "inventory:qna:phase10:applied:desarrollo": "tsx scripts/inventory-qna-phase10-applied-desarrollo.ts",
+    "test:qna:phase10:applied:desarrollo": "tsx scripts/test-qna-phase10-applied-integration-desarrollo.ts",
+    "verify:qna:phase10:applied-read:desarrollo": "tsx scripts/verify-qna-phase10-applied-read-desarrollo.ts",
+    "check:qna:phase10:applied-plan:desarrollo": "tsx scripts/check-qna-phase10-applied-plan-desarrollo.ts",
+    "test:qna:phase10:applied": "tsx scripts/test-qna-phase10-applied-contracts.ts"
   },
   "engines": {
     "node": ">=20.0.0"
