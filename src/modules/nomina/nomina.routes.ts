@@ -5,6 +5,7 @@ import { GetNominaAplicacionQnalTxtRegistrosQuery } from './application/queries/
 import { GetNominaAplicacionQnalCargaVigenteQuery } from './application/queries/GetNominaAplicacionQnalCargaVigenteQuery.js';
 import { NominaCargaBloqueadaError, NominaCargaInconsistenteError } from './domain/errors.js';
 import { CargarNominaAplicacionQnalTxtFieldsSchema, GetNominaAplicacionQnalCargaVigenteSchema, GetNominaAplicacionQnalTxtRegistrosSchema } from './nomina.schemas.js';
+import { QnaScopeLockError } from '../../db/qnaScopeLock.js';
 
 export default async function nominaRoutes(app: FastifyInstance) {
   await app.register(import('@fastify/multipart'), {
@@ -59,6 +60,9 @@ export default async function nominaRoutes(app: FastifyInstance) {
             message: 'La nómina TXT no puede reemplazarse después de promover la liquidación oficial.'
           }
         });
+      }
+      if (error instanceof QnaScopeLockError) {
+        return reply.code(error.statusCode).send({ ok: false, error: { code: error.code, message: error.message } });
       }
       throw error;
     }

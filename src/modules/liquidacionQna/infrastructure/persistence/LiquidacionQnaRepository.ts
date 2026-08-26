@@ -19,6 +19,8 @@ import {
 } from '../../domain/entities/LiquidacionQna.js';
 import { qnaFail } from '../../domain/errors.js';
 import { validateQnaCandidate } from '../../domain/services/LiquidacionQnaContracts.js';
+import { validateQnaPromotion } from '../../domain/services/QnaPromotionPolicy.js';
+import { acquireQnaScopeLock } from '../../../../db/qnaScopeLock.js';
 
 const TOTAL_COLUMNS: Record<Exclude<keyof QnaTotals, 'registros'>, string> = {
   cairA2: 'CAIRA2', fraA2: 'FRAA2', freA2: 'FREA2', fhA2: 'FHA2', fvA2: 'FVA2',
@@ -153,6 +155,23 @@ export class LiquidacionQnaRepository implements ILiquidacionQnaRepository {
     const transaction = new sql.Transaction(this.mssqlPool);
     await transaction.begin(sql.ISOLATION_LEVEL.SERIALIZABLE);
     try {
+      const lockScopeResult = await new sql.Request(transaction).input('Id', sql.BigInt, id).query(`
+        SELECT EntidadId,Anio,Quincena,Organica0,Organica1,Organica2,Organica3
+        FROM liquidacion.QnaSnapshot
+        WHERE LiquidacionSnapshotId=@Id;
+      `);
+      const lockScope = lockScopeResult.recordset[0];
+      if (!lockScope) qnaFail('Snapshot no encontrado', 'QNA_SNAPSHOT_NO_ENCONTRADO', 404);
+      await acquireQnaScopeLock(transaction, {
+        entidadId: Number(lockScope.EntidadId),
+        anio: Number(lockScope.Anio),
+        quincena: Number(lockScope.Quincena),
+        organica0: String(lockScope.Organica0),
+        organica1: String(lockScope.Organica1),
+        organica2: String(lockScope.Organica2),
+        organica3: String(lockScope.Organica3),
+      });
+
       const eligibility = await new sql.Request(transaction).input('Id', sql.BigInt, id).query(`
         SELECT s.*,d.Decision,
           (SELECT COUNT(*) FROM liquidacion.QnaSnapshotFuente f WITH (UPDLOCK,HOLDLOCK)
@@ -171,6 +190,67 @@ export class LiquidacionQnaRepository implements ILiquidacionQnaRepository {
         qnaFail('Snapshot incompleto', 'QNA_SNAPSHOT_INCOMPLETO');
       }
       if (snapshot.Decision !== 'APROBADO') qnaFail('La ultima decision no es APROBADO', 'QNA_SNAPSHOT_NO_APROBADO');
+
+      const validationResult = await new sql.Request(transaction).input('Id', sql.BigInt, id).query(`
+        SELECT
+          CASE WHEN c.Id = s.NominaCargaId AND c.TipoCarga = 'TXT' AND c.Estatus = 'APLICADA' AND c.EsVigente = 1
+            AND c.Id = (
+              SELECT TOP (1) cv.Id FROM dbo.NominaAplicacionQnalCarga cv WITH (UPDLOCK,HOLDLOCK)
+              WHERE cv.EntidadId=s.EntidadId AND cv.Anio=s.Anio AND cv.Quincena=s.Quincena
+                AND cv.Organica0=s.Organica0 AND cv.Organica1=s.Organica1 AND cv.Organica2=s.Organica2 AND cv.Organica3=s.Organica3
+                AND cv.TipoCarga='TXT' AND cv.Estatus='APLICADA' AND cv.EsVigente=1
+              ORDER BY cv.Id DESC
+            ) THEN 1 ELSE 0 END AS CargaVigente,
+          CASE WHEN v.EntidadId=s.EntidadId AND v.Anio=s.Anio AND v.Quincena=s.Quincena AND v.Periodo=s.Periodo
+            AND v.Organica0=s.Organica0 AND v.Organica1=s.Organica1 AND v.Organica2=s.Organica2 AND v.Organica3=s.Organica3
+            AND v.Ambiente=s.Ambiente THEN 1 ELSE 0 END AS MismoAmbito,
+          CASE WHEN s.SnapshotCalculoV2Id IS NOT NULL AND s.NominaCargaId IS NOT NULL AND s.FormulaCalculoVersionId IS NOT NULL
+            AND v.NominaCargaId=s.NominaCargaId AND v.FormulaCalculoVersionId=s.FormulaCalculoVersionId
+            AND formula.FormulaCalculoVersionId=s.FormulaCalculoVersionId
+            AND formula.PrecisionPolicy=s.PrecisionPolicy AND formula.AnioVigencia=s.Anio
+            AND s.Quincena BETWEEN formula.QuincenaDesde AND formula.QuincenaHasta THEN 1 ELSE 0 END AS MismosEnlaces,
+          CASE WHEN v.Fuente='LIQUIDACION_V2' AND v.Estado='COMPLETO' AND v.EsCerrado=1
+            AND v.PrecisionPolicy=s.PrecisionPolicy THEN 1 ELSE 0 END AS SnapshotV2Valido,
+          CASE WHEN v.Registros=(SELECT COUNT(*) FROM aportaciones.SnapshotCalculoV2Detalle vd WITH (UPDLOCK,HOLDLOCK) WHERE vd.SnapshotId=v.SnapshotId)
+            AND c.TotalDetalles=(SELECT COUNT(*) FROM dbo.NominaAplicacionQnalDetalle nd WITH (UPDLOCK,HOLDLOCK) WHERE nd.CargaId=c.Id)
+            AND t.Registros=v.Registros
+            AND NOT EXISTS (
+              SELECT 1 FROM liquidacion.QnaSnapshotFuente f WITH (UPDLOCK,HOLDLOCK)
+              WHERE f.LiquidacionSnapshotId=s.LiquidacionSnapshotId AND f.Dominio IN ('GUARDERIAS','TRANSITORIO','AGUINALDO','PCP','PMP','HIP')
+                AND f.Registros<>(SELECT COUNT(*) FROM liquidacion.QnaSnapshotFuenteDetalle fd WITH (UPDLOCK,HOLDLOCK)
+                  WHERE fd.LiquidacionSnapshotId=s.LiquidacionSnapshotId AND fd.Dominio=f.Dominio)
+            ) THEN 1 ELSE 0 END AS ConteosValidos,
+          CASE WHEN NOT EXISTS (
+              SELECT 1 FROM liquidacion.QnaSnapshotFuente f WITH (UPDLOCK,HOLDLOCK)
+              WHERE f.LiquidacionSnapshotId=s.LiquidacionSnapshotId AND f.Dominio IN ('AHORRO','VIVIENDA','PRESTACIONES','CAIR')
+                AND (f.Estado<>'COMPLETE' OR f.TipoFuente<>'SQL_HISTORICO' OR f.SourceScale<>6 OR f.Registros<>v.Registros
+                  OR f.HashFuente<>v.HashContenido
+                  OR f.IdentificadorFuente<>CONCAT('aportaciones.SnapshotCalculoV2:',v.SnapshotId,':',f.Dominio))
+            ) THEN 1 ELSE 0 END AS FuentesValidas,
+          CASE WHEN t.CAIRA2=v.CAIR AND t.FRAA2=v.FRA AND t.FREA2=v.FRE AND t.FHA2=v.FH AND t.FVA2=v.FV
+            AND t.FAAA2=v.FAA AND t.FAEA2=v.FAE AND t.FATA2=v.FAT AND t.FAIA2=v.FAI
+            AND t.AhorroA2=v.FAT AND t.ViviendaA2=COALESCE(v.VIVIENDA,v.FH+v.FV)
+            AND t.PrestacionesA2=COALESCE(v.PRESTACIONES,v.FRA+v.FRE)
+            AND COALESCE(t.CAIRFondoA2,t.CAIRA2)=COALESCE(v.CAIR_FONDO,v.CAIR) THEN 1 ELSE 0 END AS TotalesValidos
+        FROM liquidacion.QnaSnapshot s WITH (UPDLOCK,HOLDLOCK)
+        LEFT JOIN aportaciones.SnapshotCalculoV2 v WITH (UPDLOCK,HOLDLOCK) ON v.SnapshotId=s.SnapshotCalculoV2Id
+        LEFT JOIN dbo.NominaAplicacionQnalCarga c WITH (UPDLOCK,HOLDLOCK) ON c.Id=s.NominaCargaId
+        LEFT JOIN aportaciones.FormulaCalculoVersion formula WITH (UPDLOCK,HOLDLOCK)
+          ON formula.FormulaCalculoVersionId=s.FormulaCalculoVersionId
+        LEFT JOIN liquidacion.QnaSnapshotTotal t WITH (UPDLOCK,HOLDLOCK) ON t.LiquidacionSnapshotId=s.LiquidacionSnapshotId
+        WHERE s.LiquidacionSnapshotId=@Id;
+      `);
+      const validation = validationResult.recordset[0];
+      if (!validation) qnaFail('Snapshot no encontrado', 'QNA_SNAPSHOT_NO_ENCONTRADO', 404);
+      validateQnaPromotion({
+        cargaVigente: Number(validation.CargaVigente) === 1,
+        mismoAmbito: Number(validation.MismoAmbito) === 1,
+        mismosEnlaces: Number(validation.MismosEnlaces) === 1,
+        snapshotV2Valido: Number(validation.SnapshotV2Valido) === 1,
+        conteosValidos: Number(validation.ConteosValidos) === 1,
+        fuentesValidas: Number(validation.FuentesValidas) === 1,
+        totalesValidos: Number(validation.TotalesValidos) === 1,
+      });
 
       let processResult = await this.scope(new sql.Request(transaction), snapshot).query(`SELECT QnaProcesoId FROM liquidacion.QnaProceso WITH (UPDLOCK,HOLDLOCK)
         WHERE EntidadId=@EntidadId AND Anio=@Anio AND Quincena=@Quincena AND Organica0=@Organica0

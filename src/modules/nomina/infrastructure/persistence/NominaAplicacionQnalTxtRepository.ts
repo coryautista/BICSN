@@ -11,6 +11,7 @@ import {
 } from '../../domain/entities/NominaAplicacionQnalTxt.js';
 import { NominaCargaBloqueadaError, NominaCargaInconsistenteError } from '../../domain/errors.js';
 import { INominaAplicacionQnalTxtRepository } from '../../domain/repositories/INominaAplicacionQnalTxtRepository.js';
+import { acquireQnaScopeLock } from '../../../../db/qnaScopeLock.js';
 
 export class NominaAplicacionQnalTxtRepository implements INominaAplicacionQnalTxtRepository {
   constructor(private mssqlPool: ConnectionPool) {}
@@ -51,6 +52,7 @@ export class NominaAplicacionQnalTxtRepository implements INominaAplicacionQnalT
     await transaction.begin(sql.ISOLATION_LEVEL.SERIALIZABLE);
 
     try {
+      await acquireQnaScopeLock(transaction, input);
       await this.assertCargaMutable(transaction, input);
       await this.applyScopeInputs(new sql.Request(transaction), input).query(`
         UPDATE dbo.NominaAplicacionQnalCarga

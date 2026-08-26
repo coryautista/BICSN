@@ -2,6 +2,8 @@ import assert from 'node:assert/strict';
 import { QNA_DOMAINS, type CreateQnaCandidateInput, type QnaSource, type QnaTotals } from '../src/modules/liquidacionQna/domain/entities/LiquidacionQna.js';
 import { calculateQnaHash, countCompleteQnaSources, validateQnaTotals } from '../src/modules/liquidacionQna/domain/services/LiquidacionQnaContracts.js';
 import { LiquidacionQnaError } from '../src/modules/liquidacionQna/domain/errors.js';
+import { validateQnaPromotion, type QnaPromotionValidation } from '../src/modules/liquidacionQna/domain/services/QnaPromotionPolicy.js';
+import { buildQnaScopeLockResource } from '../src/db/qnaScopeLock.js';
 
 const HASH = 'A'.repeat(64);
 const sources = (): QnaSource[] => QNA_DOMAINS.map(dominio => ({
@@ -39,7 +41,7 @@ assert.equal(countCompleteQnaSources(incomplete), 9);
 
 validateQnaTotals(totals());
 const independentFat = { ...totals(), fatA2: '10.99' };
-assert.doesNotThrow(() => validateQnaTotals(independentFat));
+assert.throws(() => validateQnaTotals(independentFat), (error: unknown) => error instanceof LiquidacionQnaError && error.code === 'QNA_TOTAL_FAT_INCONSISTENTE');
 const invalidParent = { ...totals(), totalGeneralA2: '219.99' };
 assert.throws(() => validateQnaTotals(invalidParent), (error: unknown) => error instanceof LiquidacionQnaError && error.code === 'QNA_TOTAL_GENERAL_INCONSISTENTE');
 const invalidContributions = { ...totals(), totalAportacionesA2: '213.99' };
@@ -55,5 +57,30 @@ assert.equal(calculateQnaHash(first), calculateQnaHash(reordered));
 assert.match(calculateQnaHash(first), /^[0-9A-F]{64}$/);
 reordered.totales.totalGeneralA2 = '220.01';
 assert.notEqual(calculateQnaHash(first), calculateQnaHash(reordered));
+
+const validPromotion: QnaPromotionValidation = {
+  cargaVigente: true,
+  mismoAmbito: true,
+  mismosEnlaces: true,
+  snapshotV2Valido: true,
+  conteosValidos: true,
+  fuentesValidas: true,
+  totalesValidos: true,
+};
+assert.doesNotThrow(() => validateQnaPromotion(validPromotion));
+assert.throws(
+  () => validateQnaPromotion({ ...validPromotion, cargaVigente: false }),
+  (error: unknown) => error instanceof LiquidacionQnaError && error.code === 'QNA_NOMINA_CARGA_DESACTUALIZADA'
+);
+for (const key of ['mismoAmbito', 'mismosEnlaces', 'snapshotV2Valido', 'conteosValidos', 'fuentesValidas', 'totalesValidos'] as const) {
+  assert.throws(
+    () => validateQnaPromotion({ ...validPromotion, [key]: false }),
+    (error: unknown) => error instanceof LiquidacionQnaError && error.code === 'QNA_PROMOCION_INTEGRIDAD_INVALIDA'
+  );
+}
+assert.equal(
+  buildQnaScopeLockResource({ entidadId: 1, anio: 2026, quincena: 15, organica0: '04', organica1: '24', organica2: '01', organica3: '01' }),
+  'BICSN:QNA:1:2026:15:04:24:01:01'
+);
 
 console.log('Liquidacion QNA pure contracts: OK');

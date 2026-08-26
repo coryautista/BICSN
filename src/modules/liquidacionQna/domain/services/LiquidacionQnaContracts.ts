@@ -33,6 +33,7 @@ export function validateQnaTotals(totals: QnaTotals): void {
       qnaFail(`Importe ${key} invalido`, 'QNA_IMPORTE_A2_INVALIDO', 400);
     }
   }
+  assertSum(totals.fatA2, [totals.faaA2, totals.faeA2], 'QNA_TOTAL_FAT_INCONSISTENTE');
   assertSum(totals.totalAportacionesA2, [
     totals.ahorroA2, totals.viviendaA2, totals.prestacionesA2, totals.cairFondoA2,
     totals.guarderiasA2, totals.transitorioA2, totals.aguinaldoA2,
@@ -73,7 +74,7 @@ export function calculateCanonicalHash(value: unknown): string {
 export function canonicalQnaContent(input: CreateQnaCandidateInput): string {
   const content = {
     precisionPolicy: PRECISION_POLICY,
-    versionEsquema: 3,
+    versionEsquema: 4,
     entidadId: input.entidadId,
     anio: input.anio,
     quincena: input.quincena,

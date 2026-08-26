@@ -8,7 +8,7 @@ const { validateQnaCandidate } = await import('../src/modules/liquidacionQna/dom
 
 const totals = {
   CAIR: '1.00', CAIR_FONDO: '1.01', FRA: '2.00', FRE: '3.00', PRESTACIONES: '5.01',
-  FH: '4.00', FV: '5.00', VIVIENDA: '9.01', FAA: '6.00', FAE: '7.00', FAT: '13.01', FAI: '8.00'
+  FH: '4.00', FV: '5.00', VIVIENDA: '9.01', FAA: '6.00', FAE: '7.00', FAT: '13.00', FAI: '8.00'
 };
 const latest = { snapshot: { snapshotId: '10', revision: 2, hashContenido: 'A'.repeat(64), nominaCargaId: '20', formulaCalculoVersionId: '30' } };
 const official = { origen: 'SNAPSHOT_V2', fallback: { aplicado: false, motivo: null }, snapshot: { snapshotId: '10', revision: 2, hashContenido: 'A'.repeat(64), registros: 1 }, totalesA2: totals };
