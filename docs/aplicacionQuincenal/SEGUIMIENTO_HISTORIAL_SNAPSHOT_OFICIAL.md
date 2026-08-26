@@ -65,13 +65,15 @@ Objetivo: validar carga, formula y enlaces dentro de la transaccion de promocion
 - [x] Detectar que carga, formula y Snapshot V2 no se revalidan durante la promocion.
 - [x] Detectar ausencia de `QNA_NOMINA_CARGA_DESACTUALIZADA`.
 - [x] Detectar ausencia de un application lock comun por ambito.
-- [ ] Adquirir `sp_getapplock` transaccional por periodo y organicas.
-- [ ] Comparar periodo, ambito y ambiente entre snapshots.
-- [ ] Exigir la misma carga nominal y formula.
-- [ ] Exigir carga `TXT`, `APLICADA` y `EsVigente = 1`.
-- [ ] Revalidar conteos, hashes y totales persistidos.
-- [ ] Emitir `QNA_NOMINA_CARGA_DESACTUALIZADA` ante sustitucion.
+- [x] Adquirir `sp_getapplock` transaccional por periodo y organicas.
+- [x] Comparar periodo, ambito y ambiente entre snapshots.
+- [x] Exigir la misma carga nominal y formula.
+- [x] Exigir carga `TXT`, `APLICADA` y `EsVigente = 1`.
+- [x] Revalidar conteos, hashes y totales persistidos.
+- [x] Emitir `QNA_NOMINA_CARGA_DESACTUALIZADA` ante sustitucion.
 - [ ] Probar promociones y sustituciones concurrentes.
+
+La prueba transaccional `npm run test:liquidacion-qna:scope-lock` esta preparada y es read-only, pero el 2026-08-25 no pudo conectarse a `10.20.1.92:1433`. La fase no se cierra hasta ejecutar esa evidencia en Desarrollo.
 
 ## Fases Cerradas
 
@@ -176,6 +178,7 @@ No deben incluirse, revertirse ni ajustarse como parte de esta fase. Requieren u
 | 2026-08-25 | 0 | COMPLETADA | Commit `e7a3327`; ADR y tablero creados; scripts clasificados; `git diff --check` aprobado | Iniciar fase 1 |
 | 2026-08-25 | 1 | COMPLETADA | Commit `08bfae1`; `ORGANICA_SCOPE_POLICY_TESTS_OK`; build y contratos aprobados | Iniciar fase 2 |
 | 2026-08-25 | 2 | EN_PROGRESO | Flujo de promocion e invariantes auditados | Implementar validacion final y lock transaccional |
+| 2026-08-25 | 2 | EN_PROGRESO | Commit `837a691`; build y pruebas puras aprobados; prueba SQL bloqueada por conectividad | Ejecutar `test:liquidacion-qna:scope-lock` en Desarrollo |
 
 ## Regla de Actualizacion
 

@@ -594,6 +594,6 @@ Compilar no es evidencia suficiente para marcar una fase como completada.
 | 2026-08-21 | Prerrequisito | COMPLETADO_EN_CALIDAD | - | `QNA_SNAPSHOT_FK_CALIDAD_MIGRATION_OK`; `QNA_V3_CALIDAD_SCHEMA_ALIGNED_OK`; `APORTACIONES_OFFICIAL_1526_CALIDAD_OK`; build y contratos de liquidacion OK | Creada y validada `liquidacion.FK_QnaSnapshot_SnapshotCalculoV2`; tres FK habilitadas y confiables, cero huerfanos; Calidad alineada con Produccion en 91 tablas y columnas |
 | 2026-08-25 | 0 | COMPLETADA | `e7a3327` | ADR y tablero ejecutivo creados; scripts operativos clasificados; `git diff --check` aprobado | Fase documental cerrada; iniciar autorizacion y ambito |
 | 2026-08-25 | 1 | COMPLETADA | `08bfae1` | `ORGANICA_SCOPE_POLICY_TESTS_OK`; build; contratos de aportaciones y liquidacion OK | Ambito externo requiere `admin`; entidades usan exclusivamente organicas del token; clasificacion independiente del orden de roles |
-| 2026-08-25 | 2 | EN_PROGRESO | Pendiente | Auditoria del flujo de promocion completada | Faltan application lock, vigencia de carga, enlaces cruzados, conteos, hashes, totales y concurrencia |
+| 2026-08-25 | 2 | EN_PROGRESO | `837a691` | Application lock compartido; vigencia de carga, formula, enlaces, conteos, hashes y totales validados; build y pruebas puras OK | Prueba SQL de concurrencia preparada; bloqueada por conectividad a Desarrollo |
 
 Actualizar esta tabla despues de cada cambio relevante. No marcar una fase como completada sin evidencia y referencia al commit correspondiente.
