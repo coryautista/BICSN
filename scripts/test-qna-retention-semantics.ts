@@ -39,6 +39,13 @@ assert.throws(() => validateQnaRetentionSemantics([{ ...details[2], importeOfici
 assert.throws(() => validateQnaRetentionSemantics(details, [source('PCP', 'FIREBIRD:AP_S_VIV:DESARROLLO:1726:04:24'), ...sources.slice(1)], context, []), /Procedencia PCP/);
 assert.throws(() => validateQnaRetentionSemantics(details, [sources[0], source('PMP', 'FIREBIRD:AP_S_VIV:CALIDAD:1726:04:24'), sources[2]], context, []), /Procedencia PMP/);
 assert.throws(() => validateQnaRetentionSemantics(details, sources, context, ['1726']), /Procedencia HIP/);
+validateQnaRetentionSemantics(details, sources, context, null, { retentionProvenanceMode: 'PERSISTED_HISTORICAL' });
+validateQnaRetentionSemantics(details, [sources[0], sources[1], source('HIP', 'FIREBIRD:AP_S_COMP_QNA:DESARROLLO:1726:04:24')],
+  context, null, { retentionProvenanceMode: 'PERSISTED_HISTORICAL' });
+assert.throws(() => validateQnaRetentionSemantics(details,
+  [sources[0], sources[1], source('HIP', 'FIREBIRD:OTRO:DESARROLLO:1726:04:24')], context, null,
+  { retentionProvenanceMode: 'PERSISTED_HISTORICAL' }), /Procedencia HIP/);
+assert.throws(() => validateQnaRetentionSemantics(details, sources, context, null), /Politica HIP no configurada/);
 assert.throws(() => validateQnaRetentionSemantics([{ ...details[1], payloadCanonico: { ...pmpPayload, extra: null } }, details[0], details[2]], sources, context, []), /Payload V1 PMP/);
 const malformedComponent = { ...pcpPayload, capital_d6: '1.2' };
 assert.throws(() => validateQnaRetentionSemantics([

@@ -9,14 +9,35 @@ import type { GetQnaSnapshotQuery } from './application/queries/GetQnaSnapshotQu
 import type { ListQnaSnapshotsQuery } from './application/queries/ListQnaSnapshotsQuery.js';
 import type { ResolveOfficialQnaSnapshotQuery } from './application/queries/ResolveOfficialQnaSnapshotQuery.js';
 import type { CreateAndPromoteQnaCandidateCommand } from './application/commands/CreateAndPromoteQnaCandidateCommand.js';
+import type { ListAppliedQnaQuery } from './application/queries/ListAppliedQnaQuery.js';
+import type { GetAppliedQnaSummaryQuery } from './application/queries/GetAppliedQnaSummaryQuery.js';
+import type { GetAppliedQnaDetailsQuery } from './application/queries/GetAppliedQnaDetailsQuery.js';
 import { handleLiquidacionQnaError } from './infrastructure/errorHandler.js';
 import { resolveOrganicaScope } from '../auth/domain/policies/OrganicaScopePolicy.js';
 import {
-  CreateQnaCandidateSchema, QnaDecisionSchema, QnaIdParamsSchema, QnaListSchema, QnaPromoteSchema,
+  CreateQnaCandidateSchema, QnaAppliedDetailSchema, QnaAppliedDomainParamsSchema, QnaAppliedListSchema,
+  QnaAppliedSelectionSchema, QnaDecisionSchema, QnaIdParamsSchema, QnaListSchema, QnaPromoteSchema,
 } from './liquidacionQna.schemas.js';
+import { qnaAppliedDetailResponses, qnaAppliedListResponses, qnaAppliedSummaryResponses } from './liquidacionQna.applied.openapi.js';
 
 const idParams = { type: 'object', additionalProperties: false, required: ['id'], properties: { id: { type: 'string', pattern: '^[1-9]\\d*$' } } };
 const security = [{ bearerAuth: [] }];
+const appliedScopeProperties = {
+  entidadId: { type: 'string', pattern: '^[1-9]\\d*$' }, organica0: { type: 'string', pattern: '^\\d{2}$' },
+  organica1: { type: 'string', pattern: '^\\d{2}$' }, organica2: { type: 'string', pattern: '^\\d{2}$' }, organica3: { type: 'string', pattern: '^\\d{2}$' },
+};
+const appliedPeriodProperties = {
+  anio: { type: 'string', pattern: '^\\d{4}$' }, quincena: { type: 'string', pattern: '^(?:[1-9]|1\\d|2[0-4])$' },
+};
+const appliedPaginationProperties = {
+  page: { type: 'string', pattern: '^[1-9]\\d*$', default: '1' }, pageSize: { type: 'string', pattern: '^[1-9]\\d*$', default: '100' },
+  buscar: { type: 'string', minLength: 1, maxLength: 200 },
+};
+const rejectLegacySearch = async (request: any, reply: any) => {
+  if (new URL(request.raw.url,'http://localhost').searchParams.has('search')) {
+    return reply.code(400).send(fail('El parametro search no esta permitido; use buscar', 'QNA_PARAMETRO_INVALIDO'));
+  }
+};
 const moneyA2 = { type: 'string', pattern: '^-?(0|[1-9]\\d*)\\.\\d{2}$' };
 const hash = { type: 'string', pattern: '^[0-9A-F]{64}$' };
 const totalNames = [
@@ -61,7 +82,65 @@ const candidateBody = {
   },
 };
 
-export default async function liquidacionQnaRoutes(app: FastifyInstance) {
+export async function registerLiquidacionQnaRoutes(app: FastifyInstance, appliedReadAuth = requireAuth) {
+  app.get('/liquidaciones-qna/aplicadas', {
+    onRequest: [rejectLegacySearch],
+    preHandler: [appliedReadAuth],
+    schema: { description: '[SQL SERVER] Lista paginada de liquidaciones QNA V5 cuya evidencia aplicada es la ultima transicion TERMINADO. El administrador obtiene una lista global si omite el ambito.',
+      tags: ['liquidacionQna', 'sql-server'], security, querystring: { type: 'object', additionalProperties: false,
+        properties: { ...appliedPeriodProperties, ...appliedScopeProperties, ...appliedPaginationProperties } }, response: qnaAppliedListResponses },
+  }, async (request, reply) => {
+    try {
+      const parsed = QnaAppliedListSchema.safeParse(request.query);
+      if (!parsed.success) return reply.code(400).send(fail('Filtros de liquidaciones aplicadas invalidos', 'QNA_PARAMETRO_INVALIDO'));
+      const esAdmin = request.user!.roles.some(role => role.toLowerCase() === 'admin');
+      const scope = resolveAppliedReadScope(request.user!, parsed.data, esAdmin);
+      const query = request.diScope.resolve<ListAppliedQnaQuery>('listAppliedQnaQuery');
+      return reply.send(ok(await query.execute({ ...parsed.data, ...scope, esAdmin })));
+    } catch (error) { return handleLiquidacionQnaError(error, request, reply); }
+  });
+
+  app.get('/liquidaciones-qna/aplicada/resumen', {
+    onRequest: [rejectLegacySearch],
+    preHandler: [appliedReadAuth],
+    schema: { description: '[SQL SERVER] Resumen y totales persistidos del Snapshot oficial V5 aplicado. Un administrador debe indicar ambito si el periodo es ambiguo.',
+      tags: ['liquidacionQna', 'sql-server'], security, querystring: { type: 'object', additionalProperties: false, required: ['anio', 'quincena'],
+        properties: { ...appliedPeriodProperties, ...appliedScopeProperties } }, response: qnaAppliedSummaryResponses },
+  }, async (request, reply) => {
+    try {
+      const parsed = QnaAppliedSelectionSchema.safeParse(request.query);
+      if (!parsed.success) return reply.code(400).send(fail('Seleccion de liquidacion aplicada invalida', 'QNA_PARAMETRO_INVALIDO'));
+      const esAdmin = request.user!.roles.some(role => role.toLowerCase() === 'admin');
+      const scope = resolveAppliedReadScope(request.user!, parsed.data, esAdmin);
+      const query = request.diScope.resolve<GetAppliedQnaSummaryQuery>('getAppliedQnaSummaryQuery');
+      const result = await query.execute({ ...parsed.data, ...scope, esAdmin });
+      if (!result) return reply.code(404).send(fail('Liquidacion QNA oficial aplicada no encontrada', 'QNA_APLICADA_OFICIAL_NO_ENCONTRADA'));
+      return reply.send(ok(result));
+    } catch (error) { return handleLiquidacionQnaError(error, request, reply); }
+  });
+
+  app.get('/liquidaciones-qna/aplicada/detalles/:dominio', {
+    onRequest: [rejectLegacySearch],
+    preHandler: [appliedReadAuth],
+    schema: { description: '[SQL SERVER] Detalle canonico paginado de uno de los diez dominios del Snapshot oficial V5 aplicado. No recalcula importes.',
+      tags: ['liquidacionQna', 'sql-server'], security,
+      params: { type: 'object', additionalProperties: false, required: ['dominio'], properties: { dominio: { type: 'string', pattern: '^[A-Za-z]+$' } } },
+      querystring: { type: 'object', additionalProperties: false, required: ['anio', 'quincena'],
+        properties: { ...appliedPeriodProperties, ...appliedScopeProperties, ...appliedPaginationProperties } }, response: qnaAppliedDetailResponses },
+  }, async (request, reply) => {
+    try {
+      const params = QnaAppliedDomainParamsSchema.safeParse(request.params);
+      const parsed = QnaAppliedDetailSchema.safeParse(request.query);
+      if (!params.success || !parsed.success) return reply.code(400).send(fail('Detalle de liquidacion aplicada invalido', 'QNA_PARAMETRO_INVALIDO'));
+      const esAdmin = request.user!.roles.some(role => role.toLowerCase() === 'admin');
+      const scope = resolveAppliedReadScope(request.user!, parsed.data, esAdmin);
+      const query = request.diScope.resolve<GetAppliedQnaDetailsQuery>('getAppliedQnaDetailsQuery');
+      const result = await query.execute({ ...parsed.data, ...scope, dominio: params.data.dominio, esAdmin });
+      if (!result) return reply.code(404).send(fail('Liquidacion QNA oficial aplicada no encontrada', 'QNA_APLICADA_OFICIAL_NO_ENCONTRADA'));
+      return reply.send(ok(result));
+    } catch (error) { return handleLiquidacionQnaError(error, request, reply); }
+  });
+
   app.post('/liquidaciones-qna/orquestar', {
     preHandler: [requireAuth],
     schema: { description: '[SQL SERVER + FIREBIRD] Crea, aprueba y promueve automáticamente una liquidación QNA con el usuario autenticado cuando las diez fuentes son válidas.', tags: ['liquidacionQna'], security,
@@ -195,4 +274,17 @@ export default async function liquidacionQnaRoutes(app: FastifyInstance) {
       return reply.send(ok(result));
     } catch (error) { return handleLiquidacionQnaError(error, request, reply); }
   });
+}
+
+export default async function liquidacionQnaRoutes(app: FastifyInstance) {
+  return registerLiquidacionQnaRoutes(app, requireAuth);
+}
+
+function resolveAppliedReadScope(
+  user: NonNullable<Parameters<typeof resolveOrganicaScope>[0]>,
+  requested: { entidadId?: number; organica0?: string; organica1?: string; organica2?: string; organica3?: string },
+  isAdmin: boolean
+) {
+  if (isAdmin && requested.entidadId === undefined) return {};
+  return resolveOrganicaScope(user, requested);
 }

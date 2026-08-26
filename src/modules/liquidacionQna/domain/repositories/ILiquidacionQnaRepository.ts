@@ -3,6 +3,10 @@ import type {
   QnaDecisionRecord, QnaListFilter, QnaListResult, QnaSnapshot, QnaProcessState, QnaScope,
 } from '../entities/LiquidacionQna.js';
 import type { SnapshotCalculoV2Input } from '../../../aportacionesFondos/domain/entities/SnapshotCalculoV2.js';
+import type {
+  QnaAppliedDetailFilter, QnaAppliedDetailResult, QnaAppliedListFilter, QnaAppliedListResult,
+  QnaAppliedSelection, QnaAppliedSummary,
+} from '../entities/QnaAppliedRead.js';
 
 export type CreateQnaOfficialV5Input = {
   snapshotV2: SnapshotCalculoV2Input;
@@ -20,4 +24,7 @@ export interface ILiquidacionQnaRepository {
   resolveOfficialById(id: string): Promise<QnaSnapshot | null>;
   resolveOfficialByScope(scope: QnaScope): Promise<QnaSnapshot | null>;
   appendProcessTransition(id: string, destination: QnaProcessState, motivo: string | null, usuarioId: string, allowSame?: boolean): Promise<void>;
+  listApplied(filter: QnaAppliedListFilter): Promise<QnaAppliedListResult>;
+  getAppliedSummary(filter: QnaAppliedSelection): Promise<QnaAppliedSummary | null>;
+  getAppliedDetails(filter: QnaAppliedDetailFilter): Promise<QnaAppliedDetailResult | null>;
 }

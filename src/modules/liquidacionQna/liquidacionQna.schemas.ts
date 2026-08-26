@@ -81,3 +81,40 @@ export const QnaListSchema = z.object({
   quincena: z.coerce.number().int().min(1).max(24).optional(),
   estado: z.enum(['COMPLETO', 'INCOMPLETO']).optional(),
 }).strict();
+
+const appliedScopeFields = {
+  entidadId: z.coerce.number().int().positive().optional(),
+  organica0: organica.optional(), organica1: organica.optional(),
+  organica2: organica.optional(), organica3: organica.optional(),
+};
+const appliedScopeKeys = ['entidadId', 'organica0', 'organica1', 'organica2', 'organica3'] as const;
+const completeScope = <T extends Record<string, unknown>>(value: T, context: z.RefinementCtx) => {
+  const count = appliedScopeKeys.filter(key => value[key] !== undefined).length;
+  if (count !== 0 && count !== appliedScopeKeys.length) context.addIssue({ code: 'custom', message: 'El ámbito debe enviarse completo' });
+};
+
+export const QnaAppliedListSchema = z.object({
+  page: z.coerce.number().int().positive().default(1),
+  pageSize: z.coerce.number().int().min(1).max(500).default(100),
+  anio: z.coerce.number().int().min(2000).max(9999).optional(),
+  quincena: z.coerce.number().int().min(1).max(24).optional(),
+  buscar: z.string().trim().min(1).max(200).optional(),
+  ...appliedScopeFields,
+}).strict().superRefine(completeScope);
+
+export const QnaAppliedSelectionSchema = z.object({
+  anio: z.coerce.number().int().min(2000).max(9999),
+  quincena: z.coerce.number().int().min(1).max(24),
+  ...appliedScopeFields,
+}).strict().superRefine(completeScope);
+
+export const QnaAppliedDetailSchema = z.object({
+  anio: z.coerce.number().int().min(2000).max(9999),
+  quincena: z.coerce.number().int().min(1).max(24),
+  page: z.coerce.number().int().positive().default(1),
+  pageSize: z.coerce.number().int().min(1).max(500).default(100),
+  buscar: z.string().trim().min(1).max(200).optional(),
+  ...appliedScopeFields,
+}).strict().superRefine(completeScope);
+
+export const QnaAppliedDomainParamsSchema = z.object({ dominio: z.string().transform(value => value.toUpperCase()).pipe(z.enum(QNA_DOMAINS)) }).strict();

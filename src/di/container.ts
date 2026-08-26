@@ -216,6 +216,9 @@ import { ListQnaSnapshotsQuery } from '../modules/liquidacionQna/application/que
 import { ResolveOfficialQnaSnapshotQuery } from '../modules/liquidacionQna/application/queries/ResolveOfficialQnaSnapshotQuery.js';
 import { CreateAndPromoteQnaCandidateCommand } from '../modules/liquidacionQna/application/commands/CreateAndPromoteQnaCandidateCommand.js';
 import { CaptureQnaTenDomainsQuery } from '../modules/liquidacionQna/application/queries/CaptureQnaTenDomainsQuery.js';
+import { ListAppliedQnaQuery } from '../modules/liquidacionQna/application/queries/ListAppliedQnaQuery.js';
+import { GetAppliedQnaSummaryQuery } from '../modules/liquidacionQna/application/queries/GetAppliedQnaSummaryQuery.js';
+import { GetAppliedQnaDetailsQuery } from '../modules/liquidacionQna/application/queries/GetAppliedQnaDetailsQuery.js';
 import { CatalogoPorcentajeFondoRepository } from '../modules/catalogoPorcentajeFondo/infrastructure/persistence/CatalogoPorcentajeFondoRepository.js';
 import { GetAllCatalogoPorcentajeFondoQuery } from '../modules/catalogoPorcentajeFondo/application/queries/GetAllCatalogoPorcentajeFondoQuery.js';
 import { GetCatalogoPorcentajeFondoByIdQuery } from '../modules/catalogoPorcentajeFondo/application/queries/GetCatalogoPorcentajeFondoByIdQuery.js';
@@ -1346,6 +1349,9 @@ container.register({
   resolveOfficialQnaSnapshotQuery: asClass(ResolveOfficialQnaSnapshotQuery).scoped(),
   createAndPromoteQnaCandidateCommand: asClass(CreateAndPromoteQnaCandidateCommand).scoped(),
   captureQnaTenDomainsQuery: asClass(CaptureQnaTenDomainsQuery).scoped(),
+  listAppliedQnaQuery: asClass(ListAppliedQnaQuery).scoped(),
+  getAppliedQnaSummaryQuery: asClass(GetAppliedQnaSummaryQuery).scoped(),
+  getAppliedQnaDetailsQuery: asClass(GetAppliedQnaDetailsQuery).scoped(),
 
   // ============================================================================
   // CATALOGO PORCENTAJE FONDO MODULE

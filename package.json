@@ -38,7 +38,14 @@
     "migrate:qna:phase8:legacy:desarrollo": "tsx scripts/migrate-qna-phase8-legacy-desarrollo.ts",
     "verify:qna:phase8:legacy:desarrollo": "tsx scripts/verify-qna-phase8-legacy-desarrollo.ts",
     "test:qna:phase8:legacy": "tsx scripts/test-qna-phase8-legacy-contracts.ts",
-    "test:qna:phase8:legacy:desarrollo": "tsx scripts/test-qna-phase8-legacy-integration-desarrollo.ts"
+    "test:qna:phase8:legacy:desarrollo": "tsx scripts/test-qna-phase8-legacy-integration-desarrollo.ts",
+    "test:qna:phase9:applied": "tsx scripts/test-qna-phase9-applied-contracts.ts",
+    "test:qna:phase9:applied:http": "tsx scripts/test-qna-phase9-applied-http.ts",
+    "test:qna:phase9:applied:desarrollo": "tsx scripts/test-qna-phase9-applied-integration-desarrollo.ts",
+    "migrate:qna:phase9:applied-read:desarrollo": "tsx scripts/migrate-qna-phase9-applied-read-desarrollo.ts",
+    "apply:qna:phase9:applied-read:desarrollo": "tsx scripts/migrate-qna-phase9-applied-read-desarrollo.ts --execute --confirm-development=SII-ISSSSPEA-DES",
+    "verify:qna:phase9:applied-read:desarrollo": "tsx scripts/verify-qna-phase9-applied-read-desarrollo.ts",
+    "check:qna:phase9:applied-plan:desarrollo": "tsx scripts/check-qna-phase9-applied-plan-desarrollo.ts"
   },
   "engines": {
     "node": ">=20.0.0"
