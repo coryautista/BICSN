@@ -4,7 +4,7 @@ process.env.SQLSERVER_DB = 'SII-ISSSSPEA-DES';
 process.env.FIREBIRD_DATABASE = '/db/db/dbRestaura.fdb';
 
 const { CreateAndPromoteQnaCandidateCommand } = await import('../src/modules/liquidacionQna/application/commands/CreateAndPromoteQnaCandidateCommand.js');
-const { validateQnaCandidate } = await import('../src/modules/liquidacionQna/domain/services/LiquidacionQnaContracts.js');
+const { calculateCanonicalHash, validateQnaCandidate } = await import('../src/modules/liquidacionQna/domain/services/LiquidacionQnaContracts.js');
 
 const totals = {
   CAIR: '1.00', CAIR_FONDO: '1.01', FRA: '2.00', FRE: '3.00', PRESTACIONES: '5.01',
@@ -17,20 +17,49 @@ let captured: any;
 const calls: string[] = [];
 let officialReads = 0;
 
-const aportacionFondoRepo = {
-  obtenerAportacionGuarderias: async () => [{ titular_no_empleado: 'E1', titular_rfc: 'RFC1', recibo_folio: 'F1', menor_id: 1, recibo_total_d6: '1.111111' }],
-  obtenerPensionNominaTransitorio: async () => [{ interno: 1, rfc: 'RFC1', cconcepto: 'C1', total_d6: '2.222222' }],
-  obtenerAguinaldo: async () => [{ interno: 1, rfc: 'RFC1', movimiento: 'A', general_d6: '3.333333' }],
-  obtenerPrestamos: async () => [{ interno: 1, rfc: 'RFC1', prestamo: 1, letra: 1, plazo: 1, total_d6: '4.444444' }],
-  obtenerPrestamosMedianoPlazo: async () => [{ interno: 1, rfc: 'RFC1', prestamo: 2, letra: 1, folio: 2, total_d6: '5.555555' }],
-  obtenerPrestamosHipotecarios: async () => [{ interno: 1, rfc: 'RFC1', pno_solicitud: 3, pano: 2026, cantidad_d6: '6.666666' }],
+function auxiliary(dominio: string, amount: string) {
+  const payload = { dominio, interno: 1, total_d6: amount };
+  const detail = {
+    dominio, orden: 1, claveFilaHash: calculateCanonicalHash([dominio, 1]), sourceScale: dominio === 'PCP' || dominio === 'PMP' || dominio === 'HIP' ? 2 : 6,
+    importeOficialD6: amount, payloadCanonico: payload, hashFila: calculateCanonicalHash(payload),
+    empleadoClave: '1', rfc: 'RFC1', nombre: 'Nombre Uno', payloadVersion: 1, captureOrdinal: 1,
+  };
+  return {
+    procedure: dominio,
+    source: {
+      dominio, tipoFuente: 'FIREBIRD', estado: 'COMPLETE', requerida: true,
+      identificadorFuente: `FIREBIRD:${dominio}`, hashFuente: calculateCanonicalHash([[detail.claveFilaHash, detail.hashFila]]),
+      sourceScale: detail.sourceScale, registros: 1, notApplicableAprobado: false, aprobadoPor: null, evidencia: null, errorCode: null,
+    },
+    details: [detail],
+    totalA2: amount.slice(0, amount.indexOf('.') + 3),
+  };
+}
+const captureQnaTenDomainsQuery = {
+  execute: async () => ({
+    formulaCalculoVersionId: '30', nominaCargaId: '20',
+    fondos: {
+      AHORRO: { totalA2: '13.00', rows: [{}] },
+      VIVIENDA: { totalA2: '9.01', rows: [{}] },
+      PRESTACIONES: { totalA2: '5.01', rows: [{}] },
+      CAIR: { totalA2: '1.01', rows: [{}] },
+    },
+    auxiliares: {
+      GUARDERIAS: auxiliary('GUARDERIAS', '1.111111'),
+      TRANSITORIO: auxiliary('TRANSITORIO', '2.222222'),
+      AGUINALDO: auxiliary('AGUINALDO', '3.333333'),
+      PCP: auxiliary('PCP', '4.444444'),
+      PMP: auxiliary('PMP', '5.555555'),
+      HIP: auxiliary('HIP', '6.666666'),
+    },
+  }),
 };
 const liquidacionQnaRepo = {
   getById: async () => ({ estado: 'COMPLETO', fuentesCompletas: 10, esOficial: false, ultimaDecision: null }),
   resolveOfficialById: async () => ({ liquidacionSnapshotId: '100', esOficial: true }),
 };
 const command = new CreateAndPromoteQnaCandidateCommand(
-  aportacionFondoRepo as any,
+  captureQnaTenDomainsQuery as any,
   { execute: async () => latest } as any,
   { execute: async () => officialReads++ === 0 ? pendingApproval : official } as any,
   { execute: async (snapshotId: string, decision: string, _comentario: string, usuarioId: string) => {

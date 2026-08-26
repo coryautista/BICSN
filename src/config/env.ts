@@ -1,5 +1,17 @@
 import 'dotenv/config';
 
+export function parseQnaHipLegacyPeriods(value: string | undefined): string[] | null {
+  if (value === undefined) return null;
+  const normalized = value.trim().toUpperCase();
+  if (normalized === 'NONE') return [];
+  if (!normalized) throw new Error('QNA_HIP_LEGACY_PERIODS_INVALIDO');
+  const periods = normalized.split(',').map((period) => period.trim());
+  if (periods.some((period) => !/^(0[1-9]|1\d|2[0-4])\d{2}$/.test(period))) {
+    throw new Error('QNA_HIP_LEGACY_PERIODS_INVALIDO');
+  }
+  return [...new Set(periods)];
+}
+
 export const env = {
   host: process.env.HOST ?? '0.0.0.0',
   port: Number(process.env.PORT ?? 4000),
@@ -9,6 +21,9 @@ export const env = {
     snapshotCalculoV2ShadowEnabled: process.env.SNAPSHOT_CALCULO_V2_SHADOW_ENABLED === 'true',
     snapshotCalculoV2ReadEnabled: process.env.SNAPSHOT_CALCULO_V2_READ_ENABLED === 'true',
     snapshotCalculoV2OfficialReadEnabled: process.env.SNAPSHOT_CALCULO_V2_OFFICIAL_READ_ENABLED === 'true'
+  },
+  qna: {
+    hipLegacyPeriods: parseQnaHipLegacyPeriods(process.env.QNA_HIP_LEGACY_PERIODS)
   },
   sql: {
     user: process.env.SQLSERVER_USER!,

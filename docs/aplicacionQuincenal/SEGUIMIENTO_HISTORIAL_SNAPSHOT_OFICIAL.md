@@ -43,7 +43,7 @@ Para cada QNA nueva aplicada, reproducir sin fuentes vivas los diez dominios con
 | 2 | Invariantes transaccionales de promocion | COMPLETADA | Fase 1 |
 | 3 | Precedencia correcta de quinquenio | COMPLETADA | Fase 2 |
 | 4 | Migracion idempotente de proyecciones y restricciones | COMPLETADA | Fase 3 |
-| 5 | Captura unica en memoria de diez dominios | PENDIENTE | Fase 4 |
+| 5 | Captura unica en memoria de diez dominios | EN_PROGRESO | Fase 4 |
 | 6 | Detalles, payloads, hashes y totales persistidos | PENDIENTE | Fase 5 |
 | 7 | Retenciones V3 completas por identidad y hash | PENDIENTE | Fase 6 |
 | 8 | Dual-write y conciliacion automatizada | PENDIENTE | Fase 7 |
@@ -57,6 +57,22 @@ Para cada QNA nueva aplicada, reproducir sin fuentes vivas los diez dominios con
 ## Fase Actual: 5
 
 Objetivo: capturar una sola vez y mantener en memoria los diez dominios que formaran el Snapshot oficial.
+
+## Evidencia de la Fase 5
+
+- [x] Compartir una lectura de personal, formula y nomina entre los cuatro fondos.
+- [x] Consultar una vez cada uno de los seis dominios auxiliares.
+- [x] Resolver identidad exclusivamente por `Interno` y bloquear identidades ambiguas.
+- [x] Congelar el nombre final mostrado, sin sustitutos y con limite de 255 caracteres.
+- [x] Definir payload V1 completo en `snake_case`, con fechas ISO, nulls y D6.
+- [x] Preservar filas repetidas, multiplicidad, hashes y orden canonico.
+- [x] Congelar recursivamente el agregado y prohibir relecturas posteriores.
+- [x] Dejar fuentes vacias como `EMPTY` sin aprobacion automatica.
+- [x] Retirar la seleccion HIP del contrato HTTP y validar estrictamente su configuracion.
+- [x] Aprobar build, pruebas puras, orquestacion y revision sin bloqueos.
+- [ ] Confirmar el valor operativo de `QNA_HIP_LEGACY_PERIODS`.
+- [ ] Ejecutar una captura read-only en Desarrollo.
+- [ ] Registrar el commit de cierre.
 
 ## Evidencia de la Fase 4
 
@@ -208,6 +224,7 @@ No deben incluirse, revertirse ni ajustarse como parte de esta fase. Requieren u
 | 2026-08-25 | 3 | COMPLETADA | Commit `3641588`; precedencia, D6, cero real y ausencia verificadas | Iniciar fase 4 |
 | 2026-08-25 | 4 | EN_PROGRESO | Migracion aplicada y reaplicada; `QNA_OFFICIAL_PROJECTIONS_DESARROLLO_VERIFY_OK`; cero filas modificadas | Revisar diff y registrar commit funcional |
 | 2026-08-25 | 4 | COMPLETADA | Commit `612d791`; esquema V5 verificado e idempotente en Desarrollo; revision sin bloqueos | Iniciar fase 5 |
+| 2026-08-25 | 5 | EN_PROGRESO | Captura unica, payload V1, identidad por interno e inmutabilidad probados; revision sin bloqueos | Confirmar politica HIP y validar captura read-only en Desarrollo |
 
 ## Regla de Actualizacion
 

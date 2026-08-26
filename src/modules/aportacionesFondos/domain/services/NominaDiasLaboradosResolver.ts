@@ -11,6 +11,7 @@ export type NominaDiasDetalle = {
 export type NominaDiasContext = {
   tieneArchivo: boolean;
   fuente?: 'txt' | 'movimiento' | 'default';
+  cargaId?: string | null;
   registros: Map<string, NominaDiasDetalle>;
 };
 

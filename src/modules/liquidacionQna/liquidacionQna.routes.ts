@@ -69,7 +69,6 @@ export default async function liquidacionQnaRoutes(app: FastifyInstance) {
         entidadId: { type: 'integer', minimum: 1, default: 1 }, anio: { type: 'integer', minimum: 2000, maximum: 9999 }, quincena: { type: 'integer', minimum: 1, maximum: 24 },
         organica0: { type: 'string', pattern: '^\\d{1,2}$' }, organica1: { type: 'string', pattern: '^\\d{1,2}$' },
         organica2: { type: 'string', pattern: '^\\d{1,2}$' }, organica3: { type: 'string', pattern: '^\\d{1,2}$' },
-        computadoraAntiguaHip: { type: 'boolean', default: false },
       } } },
   }, async (request, reply) => {
     try {
@@ -85,7 +84,7 @@ export default async function liquidacionQnaRoutes(app: FastifyInstance) {
       return reply.send(ok(await command.execute({
         entidadId: scope.entidadId, anio: body.anio, quincena: body.quincena,
         organica0: scope.organica0, organica1: scope.organica1, organica2: scope.organica2!, organica3: scope.organica3!,
-        computadoraAntiguaHip: body.computadoraAntiguaHip, usuarioId: String(request.user!.sub),
+        usuarioId: String(request.user!.sub),
       })));
     } catch (error) { return handleLiquidacionQnaError(error, request, reply); }
   });

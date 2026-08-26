@@ -1,5 +1,6 @@
 // Domain entity for aportación guarderías
 export interface AportacionGuarderia {
+  titular_interno: number | null;
   titular_nombre: string | null;
   titular_no_empleado: string | null;
   titular_monto: number | null;

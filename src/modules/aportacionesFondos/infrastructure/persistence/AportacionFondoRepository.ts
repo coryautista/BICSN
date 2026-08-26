@@ -165,11 +165,13 @@ export class AportacionFondoRepository implements IAportacionFondoRepository {
 
   async obtenerAportacionesCompletas(
     claveOrganica0: string,
-    claveOrganica1: string
+    claveOrganica1: string,
+    periodo?: string,
+    scope?: { entidadId?: number; organica2: string; organica3: string }
   ): Promise<AportacionCompleta> {
     try {
       // OPTIMIZED: Get records once and calculate all fund types (with nombre)
-      const registros = await this.obtenerOrgPersonalConNombre(claveOrganica0, claveOrganica1);
+      const registros = await this.obtenerOrgPersonalConNombre(claveOrganica0, claveOrganica1, scope);
 
       if (registros.length === 0) {
         throw new AportacionFondoDomainError(
@@ -178,8 +180,15 @@ export class AportacionFondoRepository implements IAportacionFondoRepository {
         );
       }
 
-      const periodoInfo = await this.obtenerPeriodoAplicacion(claveOrganica0, claveOrganica1);
-      const formula = await this.obtenerFormulaPeriodo(periodoInfo.periodo);
+      const periodoAplicacion = periodo ?? (await this.obtenerPeriodoAplicacion(claveOrganica0, claveOrganica1)).periodo;
+      const formula = await this.obtenerFormulaPeriodo(periodoAplicacion);
+      const diasContext = await this.obtenerDiasLaboradosNominaMap(
+        registros.map((registro) => registro.rfc).filter(Boolean),
+        periodoAplicacion,
+        claveOrganica0,
+        claveOrganica1,
+        scope
+      );
       let totalContribucionGeneralA2 = this.monetaryKernel.truncarA2('0');
       let totalSueldoBaseGeneralA2 = this.monetaryKernel.truncarA2('0');
 
@@ -197,6 +206,7 @@ export class AportacionFondoRepository implements IAportacionFondoRepository {
         },
         precision_policy: formula.precisionPolicy,
         formula_version_id: formula.formulaCalculoVersionId,
+        nomina_carga_id: diasContext.fuente === 'txt' ? diasContext.cargaId ?? null : null,
         fuente_datos: 'CALCULO_VIVO'
       };
 
@@ -208,10 +218,11 @@ export class AportacionFondoRepository implements IAportacionFondoRepository {
             registros,
             tipo,
             true,
-            periodoInfo.periodo,
+            periodoAplicacion,
             claveOrganica0,
             claveOrganica1,
-            formula
+            formula,
+            diasContext
           );
           
           // Calcular resumen para este tipo
@@ -1274,6 +1285,8 @@ export class AportacionFondoRepository implements IAportacionFondoRepository {
       );
       const dato: AportacionFondo = {
         interno: Number(row.interno),
+        rfc: null,
+        numero_empleado: null,
         nombre: row.nombre == null ? null : String(row.nombre),
         sueldo: row.sueldo == null ? null : Number(sueldoD6),
         quinquenios: row.quinquenios == null ? null : Number(quinqueniosD6),
@@ -1287,6 +1300,7 @@ export class AportacionFondoRepository implements IAportacionFondoRepository {
         base_cotizacion_quinquenios: null,
         quinquenios_aplicado: null,
         base_cotizacion_quinquenios_d6: null,
+        base_cotizacion_sueldo_d6: null,
         quinquenios_aplicado_d6: null,
         sueldo_d6: sueldoD6,
         quinquenios_d6: quinqueniosD6,
@@ -1330,7 +1344,8 @@ export class AportacionFondoRepository implements IAportacionFondoRepository {
    */
   private async obtenerOrgPersonalConNombre(
     claveOrganica0: string,
-    claveOrganica1: string
+    claveOrganica1: string,
+    scope?: { organica2: string; organica3: string }
   ): Promise<any[]> {
     const startTime = Date.now();
     const logContext = { claveOrganica0, claveOrganica1 };
@@ -1363,11 +1378,13 @@ export class AportacionFondoRepository implements IAportacionFondoRepository {
         o.BC,
         o.PORCENTAJE,
         p.RFC,
+        p.NOEMPLEADO,
         COALESCE(p.FULLNAME, p.NOMBRE) AS NOMBRE_EMPLEADO
       FROM ORG_PERSONAL o
       INNER JOIN PERSONAL p ON p.INTERNO = o.INTERNO
       WHERE o.CLAVE_ORGANICA_0 = ? 
         AND o.CLAVE_ORGANICA_1 = ? 
+        ${scope ? 'AND o.CLAVE_ORGANICA_2 = ? AND o.CLAVE_ORGANICA_3 = ?' : ''}
         AND o.ACTIVO = 'A'
       ORDER BY o.INTERNO
     `;
@@ -1398,7 +1415,7 @@ export class AportacionFondoRepository implements IAportacionFondoRepository {
           sql: sql.substring(0, 200) + '...'
         });
 
-        db.query(sql, [claveOrganica0, claveOrganica1], (err: any, result: any) => {
+        db.query(sql, [claveOrganica0, claveOrganica1, ...(scope ? [scope.organica2, scope.organica3] : [])], (err: any, result: any) => {
           const elapsed = Date.now() - startTime;
           
           if (timeoutTriggered) {
@@ -1510,6 +1527,7 @@ export class AportacionFondoRepository implements IAportacionFondoRepository {
               bc: row.BC || row.bc || null,
               porcentaje: row.PORCENTAJE || row.porcentaje || null,
               rfc: row.RFC || row.rfc || null,
+              numero_empleado: row.NOEMPLEADO || row.noempleado || null,
               nombre: nombreValue || null
             };
           });
@@ -1536,7 +1554,8 @@ export class AportacionFondoRepository implements IAportacionFondoRepository {
     periodo?: string,
     org0?: string,
     org1?: string,
-    formula?: FormulaCalculo
+    formula?: FormulaCalculo,
+    diasContextCapturado?: NominaDiasContext
   ): Promise<AportacionFondo[]> {
     const formulaCalculo = formula ?? await this.obtenerFormulaPeriodo(periodo);
     const diasResolver = new NominaDiasLaboradosResolver(
@@ -1544,14 +1563,14 @@ export class AportacionFondoRepository implements IAportacionFondoRepository {
       Number(formulaCalculo.parametros.DIAS_MIN),
       Number(formulaCalculo.parametros.DIAS_MAX)
     );
-    const diasContext = usarDiasLaboradosNomina && periodo && org0 && org1
+    const diasContext = diasContextCapturado ?? (usarDiasLaboradosNomina && periodo && org0 && org1
       ? await this.obtenerDiasLaboradosNominaMap(
           registros.map((registro) => registro.rfc).filter(Boolean),
           periodo,
           org0,
           org1
         )
-      : { tieneArchivo: false, registros: new Map() };
+      : { tieneArchivo: false, registros: new Map() });
 
     return registros.map(registro => {
       const sueldoFuente = this.decimalFuente(registro.sueldo_decimal ?? registro.sueldo);
@@ -1574,6 +1593,8 @@ export class AportacionFondoRepository implements IAportacionFondoRepository {
       }
       return this.aportacionCalculator.calcular(tipo, {
         interno: Number(registro.interno),
+        rfc: registro.rfc == null ? null : String(registro.rfc),
+        numeroEmpleado: registro.numero_empleado == null ? null : String(registro.numero_empleado),
         nombre: registro.nombre || null,
         sueldoMensual: sueldoFuente,
         otrasPrestacionesMensuales: otrasPrestacionesFuente,
@@ -1714,7 +1735,7 @@ export class AportacionFondoRepository implements IAportacionFondoRepository {
     periodo: string,
     org0: string,
     org1: string,
-    scope?: { organica2: string; organica3: string }
+    scope?: { entidadId?: number; organica2: string; organica3: string }
   ): Promise<NominaDiasContext> {
     const registros = new Map<string, {
       dias: number | null;
@@ -1733,7 +1754,7 @@ export class AportacionFondoRepository implements IAportacionFondoRepository {
 
     const pool = await getPool();
     const cargaRequest = pool.request()
-      .input('entidadId', sql.Int, 1)
+      .input('entidadId', sql.Int, scope?.entidadId ?? 1)
       .input('anio', sql.SmallInt, anio)
       .input('quincena', sql.TinyInt, quincena)
       .input('org0', sql.Char(2), org0)
@@ -1777,6 +1798,7 @@ export class AportacionFondoRepository implements IAportacionFondoRepository {
       return {
         tieneArchivo: cargaResult.recordset.length === 1,
         fuente: cargaResult.recordset.length === 1 ? 'txt' : 'default',
+        cargaId: cargaResult.recordset.length === 1 ? String(cargaResult.recordset[0].CargaId) : null,
         registros
       };
     }
@@ -1785,7 +1807,7 @@ export class AportacionFondoRepository implements IAportacionFondoRepository {
     let cargaIds = cargaResult.recordset.map((row) => String(row.CargaId));
     if (cargaIds.length === 0) {
       const movimientosRequest = pool.request()
-        .input('entidadId', sql.Int, 1)
+        .input('entidadId', sql.Int, scope?.entidadId ?? 1)
         .input('anio', sql.SmallInt, anio)
         .input('quincena', sql.TinyInt, quincena)
         .input('org0', sql.Char(2), org0)
@@ -1807,7 +1829,7 @@ export class AportacionFondoRepository implements IAportacionFondoRepository {
       cargaIds = movimientosResult.recordset.map((row) => String(row.CargaId));
       fuente = cargaIds.length > 0 ? 'movimiento' : 'default';
     }
-    if (fuente === 'default') return { tieneArchivo: false, fuente, registros };
+    if (fuente === 'default') return { tieneArchivo: false, fuente, cargaId: null, registros };
 
     for (let i = 0; i < uniqueRfcs.length; i += 500) {
       const batch = uniqueRfcs.slice(i, i + 500);
@@ -1854,7 +1876,12 @@ export class AportacionFondoRepository implements IAportacionFondoRepository {
       }
     }
 
-    return { tieneArchivo: fuente === 'txt', fuente, registros };
+    return {
+      tieneArchivo: fuente === 'txt',
+      fuente,
+      cargaId: fuente === 'txt' ? cargaIds[0] ?? null : null,
+      registros
+    };
   }
 
   private async enriquecerConDiasLaborados<T>(
@@ -2042,6 +2069,12 @@ export class AportacionFondoRepository implements IAportacionFondoRepository {
     // Ejecutar función EBI2_RECIBOS_IMPRIMIR de forma serializada
     const sql = `
       SELECT 
+        (SELECT MIN(e.INTERNO) FROM PERSONAL e
+          WHERE e.NOEMPLEADO = p.TITULAR_NO_EMPLEADO
+            AND (p.TITULAR_RFC IS NULL OR UPPER(TRIM(e.RFC)) = UPPER(TRIM(p.TITULAR_RFC)))) AS TITULAR_INTERNO,
+        (SELECT COUNT(*) FROM PERSONAL e
+          WHERE e.NOEMPLEADO = p.TITULAR_NO_EMPLEADO
+            AND (p.TITULAR_RFC IS NULL OR UPPER(TRIM(e.RFC)) = UPPER(TRIM(p.TITULAR_RFC)))) AS TITULAR_COINCIDENCIAS,
         p.TITULAR_NOMBRE, 
         p.TITULAR_NO_EMPLEADO, 
         p.TITULAR_MONTO, 
@@ -2126,9 +2159,18 @@ export class AportacionFondoRepository implements IAportacionFondoRepository {
 
               // Decodificar resultados de Firebird antes de mapear
               const decodedResult = resultArray.map((row: any) => normalizeTextDeep(decodeFirebirdObject(row)));
-              
+              const identidadAmbigua = decodedResult.find((row: any) => Number(row.TITULAR_COINCIDENCIAS) !== 1);
+              if (identidadAmbigua) {
+                reject(new AportacionFondoDomainError(
+                  `Identidad de guardería no verificable para empleado ${String(identidadAmbigua.TITULAR_NO_EMPLEADO ?? '')}`,
+                  AportacionFondoError.ERROR_CALCULO_APORTACION
+                ));
+                return;
+              }
+
               // Mapear resultados a entidad AportacionGuarderia
               const aportaciones: AportacionGuarderia[] = decodedResult.map((row: any) => ({
+                titular_interno: row.TITULAR_INTERNO !== null && row.TITULAR_INTERNO !== undefined ? Number(row.TITULAR_INTERNO) : null,
                 titular_nombre: row.TITULAR_NOMBRE || null,
                 titular_no_empleado: row.TITULAR_NO_EMPLEADO || null,
                 titular_monto: row.TITULAR_MONTO !== null && row.TITULAR_MONTO !== undefined ? Number(row.TITULAR_MONTO) : null,

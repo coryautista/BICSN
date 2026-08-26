@@ -5,6 +5,8 @@ import { AportacionesMonetaryKernel } from './AportacionesMonetaryKernel.js';
 
 export type AportacionFondoCalculationInput = {
   interno: number;
+  rfc?: string | null;
+  numeroEmpleado?: string | null;
   nombre: string | null;
   sueldoMensual: string;
   otrasPrestacionesMensuales: string;
@@ -54,6 +56,8 @@ export class AportacionFondoCalculator {
     ]);
     const result: AportacionFondo = {
       interno: input.interno,
+      rfc: input.rfc ?? null,
+      numero_empleado: input.numeroEmpleado ?? null,
       nombre: input.nombre,
       sueldo: Number(sueldoD6),
       quinquenios: Number(quinqueniosD6),
@@ -67,6 +71,7 @@ export class AportacionFondoCalculator {
       base_cotizacion_quinquenios: usaBasesTxt ? Number(quinqueniosAplicadoD6) : null,
       quinquenios_aplicado: tipo === 'prestaciones' ? Number(quinqueniosAplicadoD6) : null,
       base_cotizacion_quinquenios_d6: usaBasesTxt ? quinqueniosAplicadoD6 : null,
+      base_cotizacion_sueldo_d6: usaBasesTxt ? calculo.sueldoProporcionalD6 : null,
       quinquenios_aplicado_d6: tipo === 'prestaciones' ? quinqueniosAplicadoD6 : null,
       sueldo_d6: sueldoD6,
       quinquenios_d6: quinqueniosD6,

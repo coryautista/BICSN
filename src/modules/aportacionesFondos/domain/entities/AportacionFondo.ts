@@ -4,6 +4,8 @@ import type { FormulaCalculo } from './FormulaCalculo.js';
 // Domain entity for fund contributions
 export interface AportacionFondo {
   interno: number;
+  rfc: string | null;
+  numero_empleado: string | null;
   nombre: string | null;
   sueldo: number | null;
   quinquenios: number | null;
@@ -22,6 +24,7 @@ export interface AportacionFondo {
   base_cotizacion_quinquenios?: number | null;
   quinquenios_aplicado?: number | null;
   base_cotizacion_quinquenios_d6: MoneyD6 | null;
+  base_cotizacion_sueldo_d6: MoneyD6 | null;
   quinquenios_aplicado_d6: MoneyD6 | null;
   sueldo_d6: MoneyD6;
   quinquenios_d6: MoneyD6;
@@ -75,6 +78,7 @@ export interface AportacionCompleta {
   };
   precision_policy: FormulaCalculo['precisionPolicy'];
   formula_version_id: string;
+  nomina_carga_id: string | null;
   fuente_datos: 'CALCULO_VIVO';
 }
 

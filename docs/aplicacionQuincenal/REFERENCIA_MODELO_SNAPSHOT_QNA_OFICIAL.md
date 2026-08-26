@@ -123,6 +123,37 @@ La identidad V5 es coherente como conjunto: filas antiguas tienen las cuatro col
 
 `PayloadCanonico` contiene todos los campos mostrados por el modal del dominio. El contrato de payload version 1 se fija en la captura unica de fase 5.
 
+### Contrato de captura V1
+
+- Los nombres JSON usan `snake_case` y corresponden a las entidades de dominio vigentes.
+- Todos los campos declarados se incluyen; `undefined` se representa como JSON `null`.
+- Fechas se convierten a ISO 8601 antes de calcular hashes.
+- Valores D6 y proyecciones numericas legacy se conservan simultaneamente.
+- El nombre se guarda despues de decodificar y aplicar `trim`, sin textos sustitutos.
+- `EmpleadoClave` es exclusivamente el `Interno` convertido a texto.
+- El orden se obtiene por hash de clave, hash de payload y ordinal canonico final.
+- Filas identicas conservan multiplicidad, hashes iguales y ordenes distintos.
+- Una fuente sin filas queda `EMPTY`; no recibe aprobacion `NOT_APPLICABLE` automatica.
+
+Las listas exactas de campos se mantienen en:
+
+```text
+src/modules/liquidacionQna/domain/services/QnaAuxiliaryPayloadV1.ts
+```
+
+Guarderias resuelve `titular_interno` en la misma consulta Firebird. La consulta rechaza cero o multiples coincidencias de identidad y nunca multiplica recibos mediante un join.
+
+### Fuente HIP
+
+La seleccion entre `AP_S_HIP_QNA` y `AP_S_COMP_QNA` no se acepta desde HTTP. Se deriva de `QNA_HIP_LEGACY_PERIODS`:
+
+```text
+QNA_HIP_LEGACY_PERIODS=1526,1626
+QNA_HIP_LEGACY_PERIODS=NONE
+```
+
+Cada valor usa formato `QQAA`, con quincena entre `01` y `24`. Una configuracion ausente o invalida bloquea la captura.
+
 ## Multiplicidad
 
 Una persona puede tener varias filas, incluso con la misma clave de negocio o payload:
@@ -145,6 +176,22 @@ La canonicalizacion vigente:
 Para filas auxiliares, `HashFila` es el hash de `PayloadCanonico`. Para una fuente, el hash incluye cada par `ClaveFilaHash` y `HashFila`; los duplicados no se eliminan.
 
 La lista canonica exacta de campos de `QnaSnapshotDetalle.HashFila` se versiona junto con el escritor V5 en fase 6.
+
+## Captura Unica En Memoria
+
+`CaptureQnaTenDomainsQuery` consulta una vez:
+
+- Personal activo, formula y contexto nominal compartidos por los cuatro fondos.
+- Guarderias.
+- Transitorio.
+- Aguinaldo.
+- PCP.
+- PMP.
+- HIP.
+
+`QnaTenDomainCaptureFactory` copia y congela recursivamente el agregado. Despues de retornar no se permite releer ninguna fuente para construir el candidato.
+
+Durante la transicion de fase 5, el candidato V4 compara carga, formula, conteo y totales de los cuatro fondos capturados contra el Snapshot V2 aprobado. La fase 6 creara el nuevo Snapshot V2 y el Snapshot QNA V5 desde este mismo agregado.
 
 ## Inmutabilidad
 

@@ -24,7 +24,9 @@ export interface IAportacionFondoRepository {
   // Obtener aportaciones combinadas de todos los tipos
   obtenerAportacionesCompletas(
     claveOrganica0: string,
-    claveOrganica1: string
+    claveOrganica1: string,
+    periodo?: string,
+    scope?: { entidadId?: number; organica2: string; organica3: string }
   ): Promise<AportacionCompleta>;
   
   // Obtener préstamos a corto plazo ejecutando procedimiento AP_S_PCP
