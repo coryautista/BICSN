@@ -2,7 +2,7 @@
 
 ## Estado
 
-FASES 0 A 8 COMPLETADAS. FASE 9 PENDIENTE.
+FASES 0 A 9 COMPLETADAS. FASE 10 PENDIENTE.
 
 Este documento es la fuente de seguimiento del backend para conservar y consultar la informacion exacta capturada al confirmar la aplicacion de una QNA.
 
@@ -481,7 +481,7 @@ No eliminar tablas legacy al retirar su escritura.
 | 6 | Poblar detalles, payloads, hashes y totales | COMPLETADA |
 | 7 | Fortalecer retenciones V3 por identidad/hash | COMPLETADA |
 | 8 | Activar dual-write y conciliacion | COMPLETADA |
-| 9 | Implementar endpoints de lectura aplicada | PENDIENTE |
+| 9 | Implementar endpoints de lectura aplicada | COMPLETADA |
 | 10 | Implementar fallback legacy identificado | PENDIENTE |
 | 11 | Probar saga, recuperacion e idempotencia | PENDIENTE |
 | 12 | Validar en Calidad y entregar contrato frontend | PENDIENTE |
@@ -611,5 +611,6 @@ Compilar no es evidencia suficiente para marcar una fase como completada.
 | 2026-08-26 | 6 | COMPLETADA | `1b484ed` | `QNA_V5_WRITER_INTEGRATION_DESARROLLO_ROLLBACK_OK`; `SNAPSHOT_V2_AUTOMATIC_APPROVAL_POLICY_TESTS_OK`; build, contratos, captura, orquestacion, calculo oficial y revision independiente aprobados | Snapshot V2 y QNA V5 escritos atomicamente desde el mismo agregado; reintentos idempotentes; iniciar fase 7 |
 | 2026-08-26 | 7 | COMPLETADA | `2e61284` | `RETENCIONES_V3_PROJECTION_DESARROLLO_MIGRATION_OK` en aplicacion y reaplicacion; `RETENCIONES_V3_PROJECTION_DESARROLLO_VERIFY_OK`; `RETENCIONES_V3_PROJECTION_INTEGRATION_DESARROLLO_ROLLBACK_OK`; revision sin bloqueos | PCP, PMP e HIP proyectados desde evidencia V5 por `Interno`, payload y hashes; iniciar fase 8 |
 | 2026-08-26 | 8 | COMPLETADA | `2d70bdc` | `QNA_PHASE8_LEGACY_DESARROLLO_MIGRATION_OK` en aplicacion y reaplicacion; `QNA_PHASE8_LEGACY_DESARROLLO_VERIFY_OK`; `QNA_PHASE8_LEGACY_INTEGRATION_DESARROLLO_ROLLBACK_OK`; revision sin bloqueos | Dual-write exacto a 12 almacenes legacy, WARNING no bloqueante, colision y reemplazo verificados; iniciar fase 9 |
+| 2026-08-26 | 9 | COMPLETADA | `1078beb` | `QNA_PHASE9_APPLIED_READ_MIGRATION_OK` en aplicacion y reaplicacion; `QNA_PHASE9_APPLIED_READ_VERIFY_OK`; `QNA_PHASE9_APPLIED_PLAN_OK`; contratos, HTTP e integracion rollback aprobados | Tres endpoints V5 aplicados, Swagger, scope, paginacion, busqueda e integridad verificados; iniciar fase 10 |
 
 Actualizar esta tabla despues de cada cambio relevante. No marcar una fase como completada sin evidencia y referencia al commit correspondiente.

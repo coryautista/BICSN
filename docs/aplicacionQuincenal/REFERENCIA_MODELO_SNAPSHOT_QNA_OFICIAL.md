@@ -225,6 +225,24 @@ Los historicos legacy usan una clave reducida. Si otro scope V5 comparte `(Org0,
 
 Los modulos firmados y roles dedicados restringen proyeccion y reparacion para principales de privilegio minimo. En Desarrollo, `usrISSSSPEA` es `db_owner`; se acepta y reporta `DB_OWNER_EXCEPTION_SQL_ISOLATION_NOT_ENFORCEABLE`, por lo que esa cuenta puede eludir controles de objeto.
 
+## Lectura Oficial Aplicada
+
+Fase 9 publica:
+
+```http
+GET /v1/liquidaciones-qna/aplicadas
+GET /v1/liquidaciones-qna/aplicada/resumen
+GET /v1/liquidaciones-qna/aplicada/detalles/:dominio
+```
+
+La evidencia se selecciona por la ultima transicion `QnaProcesoTransicion.EstadoDestino='TERMINADO'` vinculada al snapshot V5. No usa `QnaSnapshotOficialActual`, Firebird, nomina vigente ni historicos legacy como prueba de aplicacion.
+
+Lista y detalle usan `page=1`, `pageSize=100`, maximo `500`; el detalle acepta `buscar` con coincidencia literal, sin distincion de mayusculas o acentos, y orden canonico del snapshot. Los totales A2 permanecen sin filtrar y no se recalculan desde la pagina.
+
+Administradores pueden listar globalmente o enviar scope completo. Otros usuarios leen exclusivamente el scope completo resuelto desde su token. Warnings estructurados son visibles a todos; identificadores completos, hashes, aprobador y evidencia son auditoria administrativa. Los payloads auxiliares V1 se devuelven completos con nulls explicitos.
+
+Fase 9 expone exclusivamente `SNAPSHOT_OFICIAL`. Snapshots V3/V4 y fallback se reservan para fase 10. Un V5 aplicado con integridad rota devuelve error; no se oculta ni reconstruye.
+
 ## Inmutabilidad
 
 Los triggers siguientes bloquean `UPDATE` y `DELETE`:
@@ -247,6 +265,8 @@ database/migrations/20260826_11_strengthen_retenciones_v3_projection.sql
 database/migrations/20260826_12_verify_retenciones_v3_projection.sql
 database/migrations/20260826_13_add_qna_phase8_legacy_dual_write.sql
 database/migrations/20260826_14_verify_qna_phase8_legacy_dual_write.sql
+database/migrations/20260826_15_add_qna_phase9_applied_read_index.sql
+database/migrations/20260826_16_verify_qna_phase9_applied_read_index.sql
 scripts/migrate-qna-official-projections-desarrollo.ts
 scripts/verify-qna-official-projections-desarrollo.ts
 ```

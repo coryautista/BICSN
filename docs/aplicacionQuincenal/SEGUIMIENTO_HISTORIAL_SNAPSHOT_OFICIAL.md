@@ -15,8 +15,8 @@ Este tablero no sustituye el plan tecnico ni autoriza migraciones, reprocesos, c
 ## Estado General
 
 ```text
-FASES_0_A_8_COMPLETADAS
-FASE_9_PENDIENTE
+FASES_0_A_9_COMPLETADAS
+FASE_10_PENDIENTE
 ```
 
 Ultima actualizacion: 2026-08-26.
@@ -47,16 +47,31 @@ Para cada QNA nueva aplicada, reproducir sin fuentes vivas los diez dominios con
 | 6 | Detalles, payloads, hashes y totales persistidos | COMPLETADA | Fase 5 |
 | 7 | Retenciones V3 completas por identidad y hash | COMPLETADA | Fase 6 |
 | 8 | Dual-write y conciliacion automatizada | COMPLETADA | Fase 7 |
-| 9 | Endpoints oficiales de periodos, resumen y detalle | PENDIENTE | Fase 8 |
+| 9 | Endpoints oficiales de periodos, resumen y detalle | COMPLETADA | Fase 8 |
 | 10 | Fuentes discriminadas y fallback legacy | PENDIENTE | Fase 9 |
 | 11 | Saga, recuperacion e idempotencia verificadas | PENDIENTE | Fase 10 |
 | 12 | Evidencia integral en Calidad y contrato frontend | PENDIENTE | Fase 11 |
 | 13 | Retiro autorizado de escritura legacy para QNA nuevas | PENDIENTE | Fase 12 y aprobacion operativa |
 | 14 | Migracion y liberacion controlada en Produccion | PENDIENTE | Fase 13 |
 
-## Fase Actual: 9
+## Fase Actual: 10
 
-Objetivo: implementar endpoints oficiales de periodos, resumen y detalle aplicado.
+Objetivo: implementar fuentes discriminadas y fallback legacy identificado sin consultar fuentes vivas para V5.
+
+## Evidencia de la Fase 9
+
+- [x] Seleccionar evidencia aplicada exclusivamente por la ultima transicion V5 `TERMINADO`.
+- [x] Implementar lista global admin y scope exacto para usuarios no administrativos.
+- [x] Implementar resumen con metadata, fuentes, warnings y totales oficiales.
+- [x] Implementar detalle discriminado para los diez dominios.
+- [x] Conservar A2/D6 e IDs como strings de escala fija.
+- [x] Exponer payload auxiliar V1 completo y redactar auditoria para usuarios ordinarios.
+- [x] Aplicar paginacion 100, maximo 500, busqueda literal CI/AI y orden canonico.
+- [x] Validar hashes, fuentes, totales y enlaces V2 en lecturas exhaustivas.
+- [x] Publicar Swagger para respuestas y errores 400/401/403/404/409/500.
+- [x] Aplicar y reaplicar el indice `TERMINADO` exclusivamente en Desarrollo.
+- [x] Aprobar verificador, plan de ejecucion, contratos, HTTP e integracion rollback.
+- [x] Registrar el commit funcional `1078beb`.
 
 ## Evidencia de la Fase 8
 
@@ -278,6 +293,7 @@ No deben incluirse, revertirse ni ajustarse como parte de esta fase. Requieren u
 | 2026-08-26 | 6 | COMPLETADA | Commit `1b484ed`; `QNA_V5_WRITER_INTEGRATION_DESARROLLO_ROLLBACK_OK`; 169 proyecciones, reintento idempotente y rollback completo; revision sin bloqueos altos | Iniciar fase 7 |
 | 2026-08-26 | 7 | COMPLETADA | Commit `2e61284`; migracion idempotente, verificador fuerte e integracion rollback de retenciones V3 aprobados; cero filas modificadas o retenidas | Iniciar fase 8 |
 | 2026-08-26 | 8 | COMPLETADA | Commit `2d70bdc`; dual-write y conciliacion exacta aplicados y reaplicados en Desarrollo; colision, reemplazo, HIP legacy, normalizacion y seguridad verificados | Iniciar fase 9 |
+| 2026-08-26 | 9 | COMPLETADA | Commit `1078beb`; endpoints aplicados V5, Swagger, autorizacion, integridad, indice y plan verificados; integracion rollback sin fuentes vivas | Iniciar fase 10 |
 
 ## Regla de Actualizacion
 

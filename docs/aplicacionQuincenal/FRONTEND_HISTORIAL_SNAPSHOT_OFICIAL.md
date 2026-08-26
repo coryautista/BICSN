@@ -33,19 +33,19 @@ Actualizar `/dependencia/aportaciones-proceso-verificacion` para mostrar la evid
 ### Periodos aplicados
 
 ```http
-GET /liquidaciones-qna/aplicadas
+GET /v1/liquidaciones-qna/aplicadas?page=1&pageSize=100
 ```
 
 ### Resumen
 
 ```http
-GET /liquidaciones-qna/aplicada/resumen?anio=2026&quincena=15
+GET /v1/liquidaciones-qna/aplicada/resumen?anio=2026&quincena=15
 ```
 
 ### Detalle por dominio
 
 ```http
-GET /liquidaciones-qna/aplicada/detalles/:dominio
+GET /v1/liquidaciones-qna/aplicada/detalles/:dominio?anio=2026&quincena=15&page=1&pageSize=100&buscar=texto
 ```
 
 Parametros:
@@ -57,6 +57,10 @@ page
 pageSize
 buscar
 ```
+
+`pageSize` usa `100` por defecto y admite hasta `500`. `buscar` es substring literal, case-insensitive y accent-insensitive; `%`, `_` y `[` no funcionan como wildcard. No existe orden configurable: las filas conservan el orden canonico persistido. `:dominio` acepta mayusculas o minusculas y responde con el discriminante canonico en mayusculas.
+
+Administradores pueden listar todos los scopes. Para resumen o detalle pueden enviar `entidadId` y las cuatro organicas; sin scope, multiples coincidencias para el mismo periodo devuelven `409`. Usuarios ordinarios no eligen dependencia: backend resuelve su scope completo desde el token.
 
 Dominios:
 
@@ -96,6 +100,11 @@ Debe exigir:
 - `hashContenido`.
 - Fecha de creacion.
 - Organicas efectivas.
+- Fecha de aplicacion tomada de la transicion `TERMINADO`.
+- `warnings` estructurados.
+- `reconstructionStrategy: null`.
+
+El detalle auxiliar devuelve `payloadCanonico` V1 completo. Hashes, identificador de fuente completo, aprobador y evidencia son exclusivos de respuestas administrativas. Importes e IDs permanecen strings; los totales del resumen no dependen de `buscar` ni de la pagina.
 
 ### Snapshot reconstruido
 
