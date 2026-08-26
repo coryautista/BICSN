@@ -17,8 +17,10 @@ export type QnaCaptureScope = {
   organica3: string;
 };
 
+export type CapturedQnaFundRow = AportacionFondo & { faiD6: string };
+
 export type CapturedQnaFund = {
-  rows: readonly Readonly<AportacionFondo>[];
+  rows: readonly Readonly<CapturedQnaFundRow>[];
   totalA2: string;
   componentsA2: Readonly<Record<string, string>>;
 };

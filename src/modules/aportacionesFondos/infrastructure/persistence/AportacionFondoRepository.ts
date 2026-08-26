@@ -1,5 +1,6 @@
 import {
   IAportacionFondoRepository,
+  FondoFaiIdentity,
   NumerosEmpleadoLookup
 } from '../../domain/repositories/IAportacionFondoRepository.js';
 import { AportacionIndividual, AportacionCompleta, TipoFondo, AportacionFondo } from '../../domain/entities/AportacionFondo.js';
@@ -13,7 +14,7 @@ import { Aguinaldo } from '../../domain/entities/Aguinaldo.js';
 import { AportacionFondoDomainError, AportacionFondoError, AportacionFondoErrorMessages } from '../../domain/errors.js';
 import { getOrgPersonalByClavesOrganicas } from '../../../orgPersonal/infrastructure/persistence/OrgPersonalRepository.js';
 import { getPool, sql } from '../../../../db/mssql.js';
-import { executeSerializedQuery, decodeFirebirdObject, executeSelectableProcedure, FIREBIRD_TIMEOUTS } from '../../../../db/firebird.js';
+import { executeSerializedQuery, decodeFirebirdObject, executeSelectableProcedure, executeSafeQuery, FIREBIRD_TIMEOUTS } from '../../../../db/firebird.js';
 import { normalizeTextDeep } from '../../../../utils/encoding.js';
 import {
   NominaDiasContext,
@@ -1337,6 +1338,18 @@ export class AportacionFondoRepository implements IAportacionFondoRepository {
       formula_version_id: formulaVersionIds[0] ?? '0',
       fuente_datos: 'HISTORICO_SQL'
     };
+  }
+
+  async obtenerFondosFai(claveOrganica0: string, claveOrganica1: string, periodo: string): Promise<FondoFaiIdentity[]> {
+    const rows = await executeSafeQuery(`
+      SELECT INTERNO,RFC,CAST(FAI AS VARCHAR(40)) AS FAI
+      FROM AP_S_FONDOS(?, ?, ?)
+    `, [claveOrganica0, claveOrganica1, periodo], FIREBIRD_TIMEOUTS.BATCH_OPERATION);
+    return rows.map((row) => ({
+      interno: Number(row.INTERNO),
+      rfc: row.RFC === null || row.RFC === undefined ? null : String(row.RFC).trim(),
+      faiD6: decimalSourceToD6(row.FAI ?? '0')
+    }));
   }
 
   /**

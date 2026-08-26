@@ -3,12 +3,16 @@ import { fail } from '../../../utils/http.js';
 import { LiquidacionQnaError } from '../domain/errors.js';
 import { OrganicaScopePolicyError } from '../../auth/domain/policies/OrganicaScopePolicy.js';
 import { QnaScopeLockError } from '../../../db/qnaScopeLock.js';
+import { SnapshotCalculoV2AutomaticApprovalError } from '../../aportacionesFondos/domain/services/SnapshotCalculoV2AutomaticApprovalPolicy.js';
 
 export function handleLiquidacionQnaError(error: unknown, request: FastifyRequest, reply: FastifyReply) {
   if (error instanceof OrganicaScopePolicyError) {
     return reply.code(error.statusCode).send(fail(error.message, error.code));
   }
   if (error instanceof QnaScopeLockError) {
+    return reply.code(error.statusCode).send(fail(error.message, error.code));
+  }
+  if (error instanceof SnapshotCalculoV2AutomaticApprovalError) {
     return reply.code(error.statusCode).send(fail(error.message, error.code));
   }
   if (error instanceof LiquidacionQnaError) {

@@ -4,7 +4,9 @@ import {
   QNA_DOMAINS,
   type CreateQnaCandidateInput,
   type MoneyA2,
+  type QnaEmployeeDetail,
   type QnaSource,
+  type QnaSourceDetail,
   type QnaTotals,
 } from '../entities/LiquidacionQna.js';
 import { qnaFail } from '../errors.js';
@@ -74,7 +76,7 @@ export function calculateCanonicalHash(value: unknown): string {
 export function canonicalQnaContent(input: CreateQnaCandidateInput): string {
   const content = {
     precisionPolicy: PRECISION_POLICY,
-    versionEsquema: 4,
+    versionEsquema: input.versionEsquema ?? 4,
     entidadId: input.entidadId,
     anio: input.anio,
     quincena: input.quincena,
@@ -90,6 +92,9 @@ export function canonicalQnaContent(input: CreateQnaCandidateInput): string {
     fuentes: [...input.fuentes].sort((a, b) => a.dominio < b.dominio ? -1 : a.dominio > b.dominio ? 1 : 0),
     totales: input.totales,
     detalles: [...input.detalles].sort((a, b) => (a.dominio < b.dominio ? -1 : a.dominio > b.dominio ? 1 : 0) || a.orden - b.orden),
+    ...((input.versionEsquema ?? 4) >= 5
+      ? { detallesEmpleado: [...(input.detallesEmpleado ?? [])].sort((a, b) => a.orden - b.orden) }
+      : {}),
   };
   return JSON.stringify(canonicalize(content));
 }
@@ -113,6 +118,18 @@ export function validateQnaCandidate(input: CreateQnaCandidateInput): { completa
       qnaFail('Hash de fila no coincide con su payload', 'QNA_HASH_FILA_INCONSISTENTE', 400);
     }
   }
+  if ((input.versionEsquema ?? 4) >= 5) {
+    if (!input.detallesEmpleado || input.detallesEmpleado.length !== input.totales.registros) {
+      qnaFail('Proyeccion legible V5 incompleta', 'QNA_DETALLE_V5_INCOMPLETO', 400);
+    }
+    for (const detail of input.detallesEmpleado) {
+      if (!HASH_PATTERN.test(detail.empleadoClaveHash) || !HASH_PATTERN.test(detail.hashFila)
+          || detail.hashFila !== calculateQnaEmployeeDetailHash(detail)) {
+        qnaFail('Hash de proyeccion V5 inconsistente', 'QNA_HASH_DETALLE_V5_INCONSISTENTE', 400);
+      }
+    }
+    validateQnaAuxiliaryEmployeeProjection(input.detalles, input.detallesEmpleado);
+  }
   for (const [domain, totalName] of Object.entries(detailTotalNames)) {
     const source = input.fuentes.find(item => item.dominio === domain)!;
     const details = input.detalles.filter(item => item.dominio === domain);
@@ -132,6 +149,32 @@ export function validateQnaCandidate(input: CreateQnaCandidateInput): { completa
   return { completas, hashContenido: calculateQnaHash(input) };
 }
 
+export function calculateQnaEmployeeDetailHash(detail: import('../entities/LiquidacionQna.js').QnaEmployeeDetail): string {
+  const { hashFila: _hashFila, ...businessProjection } = detail;
+  return calculateCanonicalHash(businessProjection);
+}
+
+export function validateQnaAuxiliaryEmployeeProjection(
+  details: QnaSourceDetail[],
+  employeeDetails: QnaEmployeeDetail[]
+): void {
+  const fields = {
+    GUARDERIAS: 'guarderiasD6', TRANSITORIO: 'transitorioD6', AGUINALDO: 'aguinaldoD6',
+    PCP: 'retencionPcpD6', PMP: 'retencionPmpD6', HIP: 'retencionHipD6'
+  } as const;
+  for (const employee of employeeDetails) {
+    for (const [domain, field] of Object.entries(fields)) {
+      const amounts = details
+        .filter((detail) => detail.dominio === domain && detail.empleadoClave === employee.empleadoClave)
+        .map((detail) => detail.importeOficialD6);
+      if (sumD6(amounts) !== employee[field]) {
+        qnaFail(`Proyeccion auxiliar ${domain} inconsistente para ${employee.empleadoClave}`,
+          'QNA_DETALLE_AUXILIAR_EMPLEADO_INCONSISTENTE', 400);
+      }
+    }
+  }
+}
+
 function d6ValuesToA2(values: string[]): string {
   const micros = values.reduce((sum, value) => {
     const negative = value.startsWith('-');
@@ -143,4 +186,17 @@ function d6ValuesToA2(values: string[]): string {
   const negative = cents < 0n;
   const absolute = negative ? -cents : cents;
   return `${negative ? '-' : ''}${absolute / 100n}.${String(absolute % 100n).padStart(2, '0')}`;
+}
+
+function sumD6(values: string[]): string {
+  const micros = values.reduce((sum, value) => {
+    if (!MONEY_D6_PATTERN.test(value)) qnaFail('Importe D6 invalido', 'QNA_DETALLE_INVALIDO', 400);
+    const negative = value.startsWith('-');
+    const [whole, fraction] = (negative ? value.slice(1) : value).split('.');
+    const units = BigInt(whole) * 1_000_000n + BigInt(fraction);
+    return sum + (negative ? -units : units);
+  }, 0n);
+  const negative = micros < 0n;
+  const absolute = negative ? -micros : micros;
+  return `${negative ? '-' : ''}${absolute / 1_000_000n}.${String(absolute % 1_000_000n).padStart(6, '0')}`;
 }

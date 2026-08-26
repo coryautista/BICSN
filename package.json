@@ -24,10 +24,12 @@
     "test:liquidacion-qna:capture": "tsx scripts/test-liquidacion-qna-single-capture.ts",
     "test:auth:organica-scope": "tsx scripts/test-organica-scope-policy.ts",
     "test:snapshot:quinquenio": "tsx scripts/test-snapshot-quinquenio-precedence.ts",
+    "test:snapshot:v2-automatic-approval": "tsx scripts/test-snapshot-v2-automatic-approval-policy.ts",
     "migrate:qna:official-projections:desarrollo": "tsx scripts/migrate-qna-official-projections-desarrollo.ts",
     "verify:qna:official-projections:desarrollo": "tsx scripts/verify-qna-official-projections-desarrollo.ts",
     "test:liquidacion-qna:scope-lock": "tsx scripts/test-qna-scope-lock-integration-desarrollo.ts",
-    "verify:liquidacion-qna:capture:desarrollo": "tsx scripts/verify-qna-ten-domain-capture-desarrollo.ts"
+    "verify:liquidacion-qna:capture:desarrollo": "tsx scripts/verify-qna-ten-domain-capture-desarrollo.ts",
+    "test:liquidacion-qna:v5-writer:desarrollo": "tsx scripts/test-qna-v5-writer-integration-desarrollo.ts"
   },
   "engines": {
     "node": ">=20.0.0"

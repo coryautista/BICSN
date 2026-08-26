@@ -86,6 +86,48 @@ export interface QnaSourceDetail {
   importeOficialD6: MoneyD6;
   payloadCanonico: Record<string, unknown>;
   hashFila: string;
+  empleadoClave?: string;
+  rfc?: string | null;
+  nombre?: string;
+  payloadVersion?: 1;
+}
+
+export interface QnaEmployeeDetail {
+  orden: number;
+  empleadoClave: string;
+  empleadoClaveHash: string;
+  interno: number;
+  rfc: string | null;
+  nombre: string;
+  sourceScale: 6;
+  sueldoD6: MoneyD6;
+  otrasPrestacionesD6: MoneyD6;
+  quinqueniosD6: MoneyD6;
+  diasLaborados: string;
+  diasOrigen: string;
+  sueldoMensualD6: MoneyD6;
+  baseCotizacionSueldoD6: MoneyD6 | null;
+  quinqueniosMensualD6: MoneyD6;
+  baseCotizacionQuinqueniosD6: MoneyD6 | null;
+  cairD6: MoneyD6;
+  cairFondoD6: MoneyD6;
+  fraD6: MoneyD6;
+  freD6: MoneyD6;
+  prestacionesD6: MoneyD6;
+  fhD6: MoneyD6;
+  fvD6: MoneyD6;
+  viviendaD6: MoneyD6;
+  faaD6: MoneyD6;
+  faeD6: MoneyD6;
+  fatD6: MoneyD6;
+  faiD6: MoneyD6;
+  guarderiasD6: MoneyD6;
+  transitorioD6: MoneyD6;
+  aguinaldoD6: MoneyD6;
+  retencionPcpD6: MoneyD6;
+  retencionPmpD6: MoneyD6;
+  retencionHipD6: MoneyD6;
+  hashFila: string;
 }
 
 export interface CreateQnaCandidateInput extends QnaScope {
@@ -97,6 +139,8 @@ export interface CreateQnaCandidateInput extends QnaScope {
   totales: QnaTotals;
   detalles: QnaSourceDetail[];
   usuarioId: string | null;
+  versionEsquema?: 3 | 4 | 5;
+  detallesEmpleado?: QnaEmployeeDetail[];
 }
 
 export interface QnaDecisionRecord {
@@ -114,7 +158,7 @@ export interface QnaSnapshot extends CreateQnaCandidateInput {
   estado: 'COMPLETO' | 'INCOMPLETO';
   revision: number;
   precisionPolicy: QnaPrecisionPolicy;
-  versionEsquema: 3 | 4;
+  versionEsquema: 3 | 4 | 5;
   hashContenido: string;
   fuentesEsperadas: 10;
   fuentesCompletas: number;

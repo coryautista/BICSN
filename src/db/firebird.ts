@@ -287,12 +287,22 @@ async function executeQueryOn(att: Attachment, tx: Transaction, sql: string, par
 export async function executeSafeQuery(sql: string, params: any[] = [], timeoutMs?: number): Promise<any[]> {
   const timeout = timeoutMs ?? DEFAULT_TIMEOUT_MS;
   return runSerialized(async () => {
-    return await Promise.race([
-      withTransaction(async (att, tx) => {
-        return await executeQueryOn(att, tx, sql, params);
-      }),
-      new Promise<any[]>((_, rej) => setTimeout(() => rej(new Error(`Tiempo de espera agotado en consulta Firebird (${timeout}ms)`)), timeout)),
-    ]);
+    let timeoutHandle: NodeJS.Timeout | undefined;
+    try {
+      return await Promise.race([
+        withTransaction(async (att, tx) => {
+          return await executeQueryOn(att, tx, sql, params);
+        }),
+        new Promise<any[]>((_, reject) => {
+          timeoutHandle = setTimeout(
+            () => reject(new Error(`Tiempo de espera agotado en consulta Firebird (${timeout}ms)`)),
+            timeout
+          );
+        }),
+      ]);
+    } finally {
+      if (timeoutHandle) clearTimeout(timeoutHandle);
+    }
   });
 }
 
@@ -357,7 +367,12 @@ export async function executeProcedureInTransaction(
 }
 
 export async function closeFirebirdPool(): Promise<void> {
-  invalidateAttachment();
+  const current = attachment;
+  attachment = null;
+  charsetApplied = false;
+  if (current?.isValid) {
+    try { await current.disconnect(); } catch { /* ignore during shutdown */ }
+  }
   database = null;
 }
 

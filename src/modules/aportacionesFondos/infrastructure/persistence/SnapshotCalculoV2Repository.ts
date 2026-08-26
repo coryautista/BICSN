@@ -14,23 +14,26 @@ import type {
 } from '../../domain/entities/SnapshotCalculoV2Consulta.js';
 import type { SnapshotTotalesA2 } from '../../domain/entities/SnapshotCalculoV2.js';
 import { AportacionesMonetaryKernel } from '../../domain/services/AportacionesMonetaryKernel.js';
-import type {
-  SnapshotCalculoV2BandejaFiltro,
-  SnapshotCalculoV2BandejaReferencia,
-  SnapshotDecisionInput,
-  SnapshotDecision,
-  SnapshotDecisionRegistro
+import {
+  SNAPSHOT_V2_ACCEPTANCE_POLICY,
+  type SnapshotCalculoV2BandejaFiltro,
+  type SnapshotCalculoV2BandejaReferencia,
+  type SnapshotDecisionInput,
+  type SnapshotDecision,
+  type SnapshotDecisionRegistro
 } from '../../domain/entities/SnapshotCalculoV2Bandeja.js';
 import type {
   SnapshotHistoricoAgregado,
   SnapshotLecturaOficialFiltro
 } from '../../domain/entities/SnapshotCalculoV2Official.js';
 import { FORMULA_PRECISION_POLICY, FORMULA_PRECISION_POLICY_LEGACY } from '../../domain/entities/FormulaCalculo.js';
+import { resolveSnapshotV2AutomaticApproval } from '../../domain/services/SnapshotCalculoV2AutomaticApprovalPolicy.js';
 
 const HASH_PATTERN = /^[0-9A-F]{64}$/;
 const MONEY_D6_PATTERN = /^-?(0|[1-9]\d*)\.\d{6}$/;
 const MONEY_A2_PATTERN = /^-?(0|[1-9]\d*)\.\d{2}$/;
 const DAYS_D2_PATTERN = /^(?:0|[1-9]\d*)\.\d{2}$/;
+export const SNAPSHOT_V2_V5_APPROVAL_COMMENT = 'Aprobacion atomica del Snapshot V2 asociado al Snapshot QNA V5';
 
 export class SnapshotCalculoV2Repository implements ISnapshotCalculoV2Repository {
   private readonly kernel = new AportacionesMonetaryKernel();
@@ -338,6 +341,40 @@ export class SnapshotCalculoV2Repository implements ISnapshotCalculoV2Repository
       `);
     const row = result.recordset[0];
     return !row?.DecisionId ? null : this.mapDecision(row);
+  }
+
+  async guardarDecisionAprobadaEnTransaccion(
+    transaction: sql.Transaction,
+    snapshotId: string,
+    usuarioId: string,
+    comentario = SNAPSHOT_V2_V5_APPROVAL_COMMENT
+  ): Promise<SnapshotDecisionRegistro> {
+    const latest = await new sql.Request(transaction)
+      .input('SnapshotId', sql.BigInt, snapshotId)
+      .query(`SELECT SnapshotId FROM aportaciones.SnapshotCalculoV2 WITH (UPDLOCK,HOLDLOCK) WHERE SnapshotId=@SnapshotId;
+        SELECT TOP (1) DecisionId,Decision,PoliticaVersion,Comentario,UsuarioId,FechaCreacion
+        FROM aportaciones.SnapshotCalculoV2Decision WITH (UPDLOCK,HOLDLOCK)
+        WHERE SnapshotId=@SnapshotId ORDER BY FechaCreacion DESC,DecisionId DESC;`);
+    const sets = latest.recordsets as Array<Array<Record<string, unknown>>>;
+    if (!sets[0][0]) throw new Error('SNAPSHOT_V2_NO_ENCONTRADO');
+    const row = sets[1][0];
+    const action = resolveSnapshotV2AutomaticApproval(row ? {
+      decision: row.Decision as SnapshotDecision,
+      politicaVersion: String(row.PoliticaVersion)
+    } : null);
+    if (action === 'REUSE_APPROVED') {
+      return this.mapDecision(row);
+    }
+    const inserted = await new sql.Request(transaction)
+      .input('SnapshotId', sql.BigInt, snapshotId)
+      .input('Decision', sql.VarChar(20), 'APROBADO')
+      .input('PoliticaVersion', sql.VarChar(50), SNAPSHOT_V2_ACCEPTANCE_POLICY)
+      .input('Comentario', sql.NVarChar(500), comentario)
+      .input('UsuarioId', sql.UniqueIdentifier, usuarioId)
+      .query(`INSERT INTO aportaciones.SnapshotCalculoV2Decision (SnapshotId,Decision,PoliticaVersion,Comentario,UsuarioId)
+        OUTPUT INSERTED.DecisionId,INSERTED.Decision,INSERTED.PoliticaVersion,INSERTED.Comentario,INSERTED.UsuarioId,INSERTED.FechaCreacion
+        VALUES (@SnapshotId,@Decision,@PoliticaVersion,@Comentario,@UsuarioId);`);
+    return this.mapDecision(inserted.recordset[0]);
   }
 
   async consultarUltimaDecision(snapshotId: string): Promise<SnapshotDecisionRegistro | null> {

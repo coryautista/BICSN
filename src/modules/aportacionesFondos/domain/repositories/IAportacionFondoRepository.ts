@@ -11,6 +11,12 @@ export type NumerosEmpleadoLookup = {
   porRfc: Record<string, string>;
 };
 
+export type FondoFaiIdentity = {
+  interno: number;
+  rfc: string | null;
+  faiD6: string;
+};
+
 export interface IAportacionFondoRepository {
   // Obtener aportaciones de un tipo específico
   obtenerAportacionesIndividuales(
@@ -28,6 +34,8 @@ export interface IAportacionFondoRepository {
     periodo?: string,
     scope?: { entidadId?: number; organica2: string; organica3: string }
   ): Promise<AportacionCompleta>;
+
+  obtenerFondosFai(claveOrganica0: string, claveOrganica1: string, periodo: string): Promise<FondoFaiIdentity[]>;
   
   // Obtener préstamos a corto plazo ejecutando procedimiento AP_S_PCP
   obtenerPrestamos(

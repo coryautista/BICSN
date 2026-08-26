@@ -69,6 +69,11 @@ export default async function liquidacionQnaRoutes(app: FastifyInstance) {
         entidadId: { type: 'integer', minimum: 1, default: 1 }, anio: { type: 'integer', minimum: 2000, maximum: 9999 }, quincena: { type: 'integer', minimum: 1, maximum: 24 },
         organica0: { type: 'string', pattern: '^\\d{1,2}$' }, organica1: { type: 'string', pattern: '^\\d{1,2}$' },
         organica2: { type: 'string', pattern: '^\\d{1,2}$' }, organica3: { type: 'string', pattern: '^\\d{1,2}$' },
+        notApplicableApprovals: { type: 'array', maxItems: 6, items: { type: 'object', additionalProperties: false,
+          required: ['dominio', 'motivo', 'evidencia'], properties: {
+            dominio: { type: 'string', enum: ['GUARDERIAS', 'TRANSITORIO', 'AGUINALDO', 'PCP', 'PMP', 'HIP'] },
+            motivo: { type: 'string', minLength: 1, maxLength: 200 }, evidencia: { type: 'string', minLength: 1, maxLength: 250 }
+          } } },
       } } },
   }, async (request, reply) => {
     try {
@@ -84,7 +89,9 @@ export default async function liquidacionQnaRoutes(app: FastifyInstance) {
       return reply.send(ok(await command.execute({
         entidadId: scope.entidadId, anio: body.anio, quincena: body.quincena,
         organica0: scope.organica0, organica1: scope.organica1, organica2: scope.organica2!, organica3: scope.organica3!,
-        usuarioId: String(request.user!.sub),
+         usuarioId: String(request.user!.sub),
+        roles: request.user!.roles,
+        notApplicableApprovals: body.notApplicableApprovals,
       })));
     } catch (error) { return handleLiquidacionQnaError(error, request, reply); }
   });

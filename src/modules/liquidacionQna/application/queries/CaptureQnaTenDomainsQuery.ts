@@ -20,13 +20,14 @@ export class CaptureQnaTenDomainsQuery {
     if (env.qna.hipLegacyPeriods === null) throw new Error('QNA_HIP_POLICY_NOT_CONFIGURED');
     const hipLegacy = env.qna.hipLegacyPeriods.includes(periodo);
     const hipProcedure = hipLegacy ? 'AP_S_COMP_QNA' : 'AP_S_HIP_QNA';
-    const [fondos, guarderias, transitorio, aguinaldo, pcp, pmp, hip] = await Promise.all([
+    const [fondos, identidadesFai, guarderias, transitorio, aguinaldo, pcp, pmp, hip] = await Promise.all([
       this.aportacionFondoRepo.obtenerAportacionesCompletas(
         input.organica0,
         input.organica1,
         periodo,
         { entidadId: input.entidadId, organica2: input.organica2, organica3: input.organica3 }
       ),
+      this.aportacionFondoRepo.obtenerFondosFai(input.organica0, input.organica1, periodo),
       this.aportacionFondoRepo.obtenerAportacionGuarderias(input.organica0, input.organica1, periodo),
       this.aportacionFondoRepo.obtenerPensionNominaTransitorio('04', '60', input.organica0, input.organica1, periodo),
       this.aportacionFondoRepo.obtenerAguinaldo(input.organica0, input.organica1, periodo),
@@ -59,6 +60,7 @@ export class CaptureQnaTenDomainsQuery {
       usuarioId: input.usuarioId,
       hipProcedure,
       fondos,
+      identidadesFai,
       guarderias: guarderiasConInterno,
       transitorio,
       aguinaldo,

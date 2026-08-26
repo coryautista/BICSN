@@ -1,4 +1,5 @@
 import type { AportacionCompleta, AportacionFondo, AportacionIndividual } from '../../../aportacionesFondos/domain/entities/AportacionFondo.js';
+import type { FondoFaiIdentity } from '../../../aportacionesFondos/domain/repositories/IAportacionFondoRepository.js';
 import type { AportacionGuarderia } from '../../../aportacionesFondos/domain/entities/AportacionGuarderia.js';
 import type { Aguinaldo } from '../../../aportacionesFondos/domain/entities/Aguinaldo.js';
 import type { PensionNominaTransitorio } from '../../../aportacionesFondos/domain/entities/PensionNominaTransitorio.js';
@@ -29,6 +30,7 @@ export type QnaTenDomainCaptureFactoryInput = {
   usuarioId: string;
   hipProcedure: 'AP_S_HIP_QNA' | 'AP_S_COMP_QNA';
   fondos: AportacionCompleta;
+  identidadesFai: FondoFaiIdentity[];
   guarderias: GuarderiaCaptureRow[];
   transitorio: PensionNominaTransitorio[];
   aguinaldo: Aguinaldo[];
@@ -50,13 +52,15 @@ export class QnaTenDomainCaptureFactory {
   create(input: QnaTenDomainCaptureFactoryInput): QnaTenDomainCapture {
     if (!/^\d{4}$/.test(input.periodo)) throw new Error('QNA_CAPTURE_PERIODO_INVALIDO');
     if (!input.captureId || !input.usuarioId) throw new Error('QNA_CAPTURE_IDENTIDAD_INVALIDA');
+    const fai = this.indexFai(input.identidadesFai);
     const fondos = {
-      AHORRO: this.captureFund('AHORRO', input.fondos.ahorro),
-      VIVIENDA: this.captureFund('VIVIENDA', input.fondos.vivienda),
-      PRESTACIONES: this.captureFund('PRESTACIONES', input.fondos.prestaciones),
-      CAIR: this.captureFund('CAIR', input.fondos.cair)
+      AHORRO: this.captureFund('AHORRO', input.fondos.ahorro, fai),
+      VIVIENDA: this.captureFund('VIVIENDA', input.fondos.vivienda, fai),
+      PRESTACIONES: this.captureFund('PRESTACIONES', input.fondos.prestaciones, fai),
+      CAIR: this.captureFund('CAIR', input.fondos.cair, fai)
     };
     this.validateSameEmployees(fondos);
+    this.validateFaiEmployees(fai, fondos.AHORRO.rows);
 
     const context = `${input.periodo}:${input.scope.organica0}:${input.scope.organica1}`;
     const auxiliares = {
@@ -133,7 +137,7 @@ export class QnaTenDomainCaptureFactory {
     });
   }
 
-  private captureFund(domain: string, fund: AportacionIndividual | undefined): CapturedQnaFund {
+  private captureFund(domain: string, fund: AportacionIndividual | undefined, fai: Map<number, FondoFaiIdentity>): CapturedQnaFund {
     if (!fund) throw new Error(`QNA_CAPTURE_FONDO_FALTANTE:${domain}`);
     const seen = new Set<number>();
     const rows = fund.datos.map((row) => {
@@ -141,7 +145,9 @@ export class QnaTenDomainCaptureFactory {
       if (seen.has(interno)) throw new Error(`QNA_CAPTURE_INTERNO_DUPLICADO:${domain}:${interno}`);
       seen.add(interno);
       const nombre = requiredName(row.nombre, domain);
-      return { ...row, nombre } as AportacionFondo;
+      const identity = fai.get(interno);
+      if (!identity) throw new Error(`QNA_CAPTURE_FAI_FALTANTE:${interno}`);
+      return { ...row, nombre, faiD6: requiredD6(identity.faiD6, 'FAI') };
     });
     return {
       rows,
@@ -151,11 +157,28 @@ export class QnaTenDomainCaptureFactory {
     };
   }
 
+  private indexFai(rows: FondoFaiIdentity[]): Map<number, FondoFaiIdentity> {
+    const result = new Map<number, FondoFaiIdentity>();
+    for (const row of rows) {
+      const interno = requiredInterno(row.interno, 'FAI');
+      if (result.has(interno)) throw new Error(`QNA_CAPTURE_FAI_DUPLICADO:${interno}`);
+      result.set(interno, row);
+    }
+    return result;
+  }
+
   private validateSameEmployees(funds: Record<string, CapturedQnaFund>): void {
     const expected = funds.AHORRO.rows.map((row) => row.interno).sort((left, right) => left - right).join('|');
     for (const [domain, fund] of Object.entries(funds)) {
       const actual = fund.rows.map((row) => row.interno).sort((left, right) => left - right).join('|');
       if (actual !== expected) throw new Error(`QNA_CAPTURE_FONDO_EMPLEADOS_DIFERENTES:${domain}`);
+    }
+  }
+
+  private validateFaiEmployees(fai: Map<number, FondoFaiIdentity>, fundRows: readonly Readonly<AportacionFondo>[]): void {
+    const fundEmployees = new Set(fundRows.map((row) => row.interno));
+    if (fai.size !== fundEmployees.size || [...fai.keys()].some((interno) => !fundEmployees.has(interno))) {
+      throw new Error('QNA_CAPTURE_FAI_EMPLEADOS_DIFERENTES');
     }
   }
 
