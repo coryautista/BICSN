@@ -7,61 +7,19 @@
   "scripts": {
     "dev": "tsx watch src/server.ts",
     "build": "tsc",
-    "build:quiet": "tsc",
     "start": "node dist/server.js",
-    "recover:revision:calidad": "tsx scripts/recover-revision-1426-calidad.ts",
-    "recover:revision:saldo-1326": "tsx scripts/recover-revision-saldo-1326.ts",
-    "recover:revision:concepto13-1426": "tsx scripts/recover-revision-concepto13-1426.ts",
-    "recover:revision:anuales-1426": "tsx scripts/recover-revision-anuales-1426.ts",
-    "reprocess:revision:pcp": "tsx scripts/reprocess-revision-pcp.ts",
-    "golden:aportaciones:1126": "tsx scripts/generate-aportaciones-1126-golden.ts",
-    "verify:formula:databases": "tsx scripts/verify-formula-calculo-databases.ts",
-    "snapshot:historico:contracts": "tsx scripts/snapshot-aportaciones-historico-contracts.ts",
-    "test:aportaciones:phase1": "tsx scripts/test-aportaciones-phase1.ts",
     "test:aportaciones:official-calculation": "tsx scripts/test-aportaciones-official-calculation.ts",
-    "verify:aportaciones:official-1426-local": "tsx scripts/verify-aportaciones-official-1426-local.ts",
-    "verify:aportaciones:official:1526:calidad": "tsx scripts/verify-aportaciones-official-1526-calidad.ts",
-    "verify:liquidacion-qna:1526:readonly": "tsx scripts/verify-liquidacion-qna-1526-readonly.ts",
-    "verify:nomina:movimiento-txt:calidad": "tsx scripts/verify-nomina-txt-replaces-movimiento-calidad.ts",
-    "verify:formula:repository": "tsx scripts/verify-formula-calculo-repository.ts",
-    "shadow:aportaciones:1126": "tsx scripts/run-aportaciones-1126-shadow.ts",
-    "verify:nomina:selection": "tsx scripts/verify-nomina-carga-selection.ts",
-    "test:aportaciones:phase3": "tsx scripts/test-aportaciones-phase3.ts",
-    "verify:aportaciones:phase3:e2e": "tsx scripts/verify-aportaciones-phase3-e2e.ts",
     "verify:database:environments": "tsx scripts/verify-database-environments.ts",
-    "shadow:aportaciones:1426": "tsx scripts/verify-aportaciones-1426-shadow.ts",
-    "migrate:aportaciones:snapshot-v2:calidad": "tsx scripts/migrate-aportaciones-snapshot-v2-calidad.ts",
-    "shadow:aportaciones:snapshot-v2:1426": "tsx scripts/verify-aportaciones-snapshot-v2-1426.ts",
-    "export:nomina:1426:produccion": "tsx scripts/export-nomina-1426-produccion.ts",
-    "load:nomina:1426:calidad": "tsx scripts/load-nomina-1426-calidad.ts",
-    "test:aportaciones:phase4": "tsx scripts/test-aportaciones-phase4.ts",
     "package:deploy:calidad": "tsx scripts/package-quality-deploy.ts",
     "package:deploy:produccion": "tsx scripts/package-production-deploy.ts",
     "preflight:produccion:readonly": "tsx scripts/preflight-produccion-readonly.ts",
     "verify:produccion:v3:postmigration": "tsx scripts/verify-produccion-v3-postmigration-readonly.ts",
-    "migrate:liquidacion-qna-v3:produccion": "tsx scripts/migrate-liquidacion-qna-v3-produccion.ts",
-    "migrate:snapshot-base-sueldo:calidad": "tsx scripts/migrate-snapshot-base-cotizacion-sueldo.ts --environment=calidad --execute --confirm-quality=SII-ISSSSPEA",
-    "migrate:snapshot-base-sueldo:produccion": "tsx scripts/migrate-snapshot-base-cotizacion-sueldo.ts --environment=produccion --execute --confirm-production=SII-ISSSSPEA-PROD",
-    "test:aportaciones:phase5": "tsx scripts/test-aportaciones-phase5.ts",
-    "verify:aportaciones:snapshot-v2:read:1426": "tsx scripts/verify-aportaciones-snapshot-v2-read-1426.ts",
-    "test:aportaciones:phase6": "tsx scripts/test-aportaciones-phase6.ts",
-    "verify:aportaciones:phase6:1426": "tsx scripts/verify-aportaciones-phase6-1426.ts",
-    "test:aportaciones:phase7": "tsx scripts/test-aportaciones-phase7.ts",
-    "test:aportaciones:phase8": "tsx scripts/test-aportaciones-phase8.ts",
-    "test:prestamos:d6": "tsx scripts/test-prestamos-d6-contracts.ts",
     "test:revision:concepto2:dias": "tsx scripts/test-revision-concepto2-dias.ts",
-    "test:revision:concepto2:snapshot": "tsx scripts/test-revision-concepto2-snapshot.ts",
     "test:revision:ftp:opcional": "tsx scripts/test-revision-ftp-opcional.ts",
     "test:revision:estado:ftp:opcional": "tsx scripts/test-revision-estado-ftp-opcional.ts",
     "test:movimiento:fechas": "tsx scripts/test-movimiento-fechas.ts",
-    "test:movimiento:sueldo-categoria": "tsx scripts/test-sueldo-categoria-puesto-firebird.ts",
     "test:liquidacion-qna": "tsx scripts/test-liquidacion-qna-contracts.ts",
-    "test:liquidacion-qna:auto": "tsx scripts/test-liquidacion-qna-auto-orchestration.ts",
-    "migrate:liquidacion-qna-v3:calidad": "tsx scripts/migrate-liquidacion-qna-v3-calidad.ts",
-    "migrate:liquidacion-qna-v3:calidad:execute": "tsx scripts/migrate-liquidacion-qna-v3-calidad.ts --execute",
-    "test:linea-pago:snapshot": "tsx scripts/test-linea-pago-snapshot.ts",
-    "recover:revision:concepto2:dias:1426:calidad": "tsx scripts/recover-revision-concepto2-dias-1426-calidad.ts",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test:liquidacion-qna:auto": "tsx scripts/test-liquidacion-qna-auto-orchestration.ts"
   },
   "engines": {
     "node": ">=20.0.0"
@@ -84,7 +42,7 @@
     "@fastify/multipart": "^9.3.0",
     "@fastify/rate-limit": "^10.3.0",
     "@fastify/swagger": "^9.5.2",
-    "@fastify/swagger-ui": "^5.2.3",
+    "@fastify/swagger-ui": "^6.1.1",
     "@types/bcrypt": "^6.0.0",
     "argon2": "^0.44.0",
     "awilix": "^12.0.5",
@@ -118,6 +76,10 @@
     "typescript": "^5.9.3"
   },
   "overrides": {
-    "tar": "^7.5.4"
+    "@azure/identity": "4.13.1",
+    "exceljs": {
+      "uuid": "11.1.1"
+    },
+    "tar": "^7.5.22"
   }
 }

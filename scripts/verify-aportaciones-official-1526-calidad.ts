@@ -25,11 +25,11 @@ async function main(): Promise<void> {
     const repository = new aportacionModule.AportacionFondoRepository(formulaRepository);
     const result = await repository.obtenerAportacionesIndividuales('ahorro', ORG0, ORG1, true, PERIODO);
     assert.equal(result.precision_policy, 'MXN-BASE2-LEAF2-FUND2-APSFONDOS-v3');
-    assert.equal(result.fuente_datos, 'CALCULO_VIVO');
+    assert.equal(result.fuente_datos, 'HISTORICO_SQL');
     assert.match(result.formula_version_id, /^\d+$/);
     assert.ok(result.datos.length > 0);
     assert.ok(result.datos.every((row) => /^-?(0|[1-9]\d*)\.\d{6}$/.test(row.total_d6)));
-    assert.ok(result.datos.every((row) => row.dias_laborados_origen === 'nomina'), '1526 debe usar exclusivamente días del TXT vigente');
+    assert.ok(result.datos.every((row) => row.dias_laborados_origen === 'historico_snapshot'), '1526 debe conservar los días del Snapshot cerrado');
     const kernel = new kernelModule.AportacionesMonetaryKernel();
     assert.equal(
       result.resumen.total_contribucion_a2,
@@ -48,6 +48,7 @@ async function main(): Promise<void> {
       totalAhorroA2: result.resumen.total_contribucion_a2,
       readOnly: true
     }, null, 2));
+    console.log('APORTACIONES_OFFICIAL_1526_CALIDAD_OK');
   } finally {
     await closeDatabaseConnection();
     await closeFirebirdConnection();
