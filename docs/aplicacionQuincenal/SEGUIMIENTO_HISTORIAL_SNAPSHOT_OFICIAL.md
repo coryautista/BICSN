@@ -42,7 +42,7 @@ Para cada QNA nueva aplicada, reproducir sin fuentes vivas los diez dominios con
 | 1 | Politica central de autorizacion y ambito | COMPLETADA | Fase 0 |
 | 2 | Invariantes transaccionales de promocion | COMPLETADA | Fase 1 |
 | 3 | Precedencia correcta de quinquenio | COMPLETADA | Fase 2 |
-| 4 | Migracion idempotente de proyecciones y restricciones | PENDIENTE | Fase 3 |
+| 4 | Migracion idempotente de proyecciones y restricciones | EN_PROGRESO | Fase 3 |
 | 5 | Captura unica en memoria de diez dominios | PENDIENTE | Fase 4 |
 | 6 | Detalles, payloads, hashes y totales persistidos | PENDIENTE | Fase 5 |
 | 7 | Retenciones V3 completas por identidad y hash | PENDIENTE | Fase 6 |
@@ -57,6 +57,18 @@ Para cada QNA nueva aplicada, reproducir sin fuentes vivas los diez dominios con
 ## Fase Actual: 4
 
 Objetivo: crear y validar la migracion idempotente de proyecciones y restricciones del Snapshot oficial.
+
+## Evidencia de la Fase 4
+
+- [x] Confirmar `VersionEsquema = 5`, tipos de identidad y compatibilidad nullable.
+- [x] Agregar 17 columnas de proyeccion y cuatro columnas de payload/identidad.
+- [x] Crear FK confiable, unicidades filtradas y checks de dias, hashes y completitud V5.
+- [x] Permitir filas auxiliares repetidas sin perder orden, conteo ni hash.
+- [x] Aplicar exclusivamente en `SII-ISSSSPEA-DES` sin modificar filas.
+- [x] Reaplicar la migracion para comprobar idempotencia.
+- [x] Aprobar verificador read-only, build y contratos afectados.
+- [x] Crear `REFERENCIA_MODELO_SNAPSHOT_QNA_OFICIAL.md`.
+- [ ] Registrar el commit exclusivo de cierre.
 
 ## Evidencia de la Fase 3
 
@@ -194,6 +206,7 @@ No deben incluirse, revertirse ni ajustarse como parte de esta fase. Requieren u
 | 2026-08-25 | 2 | COMPLETADA | `QNA_SCOPE_LOCK_INTEGRATION_DESARROLLO_OK`; build y seis suites afectadas OK | Iniciar fase 3 |
 | 2026-08-25 | 3 | EN_PROGRESO | `SNAPSHOT_QUINQUENIO_PRECEDENCE_TESTS_OK`; build, calculo oficial, Liquidacion QNA y Snapshot V2 OK | Registrar commit exclusivo de cierre |
 | 2026-08-25 | 3 | COMPLETADA | Commit `3641588`; precedencia, D6, cero real y ausencia verificadas | Iniciar fase 4 |
+| 2026-08-25 | 4 | EN_PROGRESO | Migracion aplicada y reaplicada; `QNA_OFFICIAL_PROJECTIONS_DESARROLLO_VERIFY_OK`; cero filas modificadas | Revisar diff y registrar commit funcional |
 
 ## Regla de Actualizacion
 

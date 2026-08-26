@@ -268,6 +268,14 @@ PayloadVersion
 
 `PayloadCanonico` debe contener todos los campos mostrados en el modal correspondiente. Una persona puede tener varias filas por prestamo, recibo o concepto.
 
+Decisiones de esquema confirmadas para fase 4:
+
+- El contrato completo usa `VersionEsquema = 5`.
+- `Interno` usa `INT NULL` y `Nombre` usa `NVARCHAR(255) NULL` para compatibilidad historica.
+- Las unicidades nuevas son indices filtrados para no inventar enlaces en snapshots anteriores.
+- `ClaveFilaHash` deja de ser unica; el orden, conteo y hash conservan filas repetidas.
+- No se realiza backfill desde fuentes vivas.
+
 ### `aportaciones.SnapshotCalculoV2Detalle`
 
 Continua siendo evidencia matematica anonimizada de los cuatro fondos. No se utilizara como unica fuente de identidad legible.
@@ -468,7 +476,7 @@ No eliminar tablas legacy al retirar su escritura.
 | 1 | Centralizar autorizacion y ambito | COMPLETADA |
 | 2 | Validar carga, formula y enlaces dentro de promocion | COMPLETADA |
 | 3 | Corregir precedencia de quinquenio | COMPLETADA |
-| 4 | Crear migracion de proyecciones y restricciones | PENDIENTE |
+| 4 | Crear migracion de proyecciones y restricciones | EN_PROGRESO |
 | 5 | Implementar captura unica de diez dominios | PENDIENTE |
 | 6 | Poblar detalles, payloads, hashes y totales | PENDIENTE |
 | 7 | Fortalecer retenciones V3 por identidad/hash | PENDIENTE |
@@ -597,5 +605,6 @@ Compilar no es evidencia suficiente para marcar una fase como completada.
 | 2026-08-25 | 2 | EN_PROGRESO | `837a691` | Application lock compartido; vigencia de carga, formula, enlaces, conteos, hashes y totales validados; build y pruebas puras OK | Prueba SQL de concurrencia preparada; bloqueada por conectividad a Desarrollo |
 | 2026-08-25 | 2 | COMPLETADA | `837a691` | `QNA_SCOPE_LOCK_INTEGRATION_DESARROLLO_OK`; build; contratos de liquidacion, aportaciones, autorizacion, movimientos y REVISA OK | Validacion transaccional y concurrencia verificadas en Desarrollo |
 | 2026-08-25 | 3 | COMPLETADA | `3641588` | `SNAPSHOT_QUINQUENIO_PRECEDENCE_TESTS_OK`; `APORTACIONES_PHASE4_TESTS_OK`; `DATABASE_ENVIRONMENTS_OK`; calculo oficial, contratos de Liquidacion QNA, build y `git diff --check` aprobados | Precedencia implementada y documentada; iniciar fase 4 |
+| 2026-08-25 | 4 | EN_PROGRESO | Pendiente | `QNA_OFFICIAL_PROJECTIONS_DESARROLLO_MIGRATION_OK` en primera aplicacion y reaplicacion; `QNA_OFFICIAL_PROJECTIONS_DESARROLLO_VERIFY_OK`; build y contratos afectados OK | Revisar diff y crear commit funcional de fase 4 |
 
 Actualizar esta tabla despues de cada cambio relevante. No marcar una fase como completada sin evidencia y referencia al commit correspondiente.

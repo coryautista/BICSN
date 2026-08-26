@@ -1,0 +1,171 @@
+# Referencia del Modelo Snapshot QNA Oficial
+
+## Alcance
+
+Este documento describe el contrato de persistencia del Snapshot QNA oficial a partir de `VersionEsquema = 5`.
+
+El modelo conserva evidencia inmutable de los diez dominios sin reconstruir periodos cerrados desde fuentes vivas:
+
+- Ahorro.
+- Vivienda.
+- Prestaciones.
+- CAIR.
+- Guarderias.
+- Transitorio.
+- Aguinaldo.
+- PCP.
+- PMP.
+- HIP.
+
+La aplicacion oficial se acredita mediante una transicion de `liquidacion.QnaProcesoTransicion` a `TERMINADO`. La tabla `liquidacion.QnaSnapshotOficialActual` selecciona el snapshot vigente, pero no sustituye esa evidencia.
+
+## Versiones
+
+| Version | Semantica |
+|---:|---|
+| 1-4 | Contratos anteriores o reducidos. Pueden no tener proyeccion legible completa. |
+| 5 | Proyeccion legible de cuatro fondos y payload completo de seis dominios auxiliares. |
+
+No se actualizan snapshots anteriores a version 5 ni se rellenan columnas nuevas desde SQL Server o Firebird vivos.
+
+## Precision
+
+- Detalle monetario: `DECIMAL(19,6)`, representado como D6 en contratos.
+- Totales oficiales: `DECIMAL(19,2)`, representados como A2 en contratos.
+- Dias laborados: `DECIMAL(5,2)` entre 0 y 15.
+- Hashes: SHA-256 hexadecimal mayusculo de 64 caracteres.
+- Ausencia no verificable: `NULL`, nunca cero sintetico.
+
+## Cabecera Oficial
+
+### `liquidacion.QnaSnapshot`
+
+Identifica periodo, organicas, ambiente, revision, formula, carga nominal y `aportaciones.SnapshotCalculoV2` asociados.
+
+Para snapshots nuevos completos:
+
+```text
+VersionEsquema = 5
+FuentesEsperadas = 10
+FuentesCompletas = 10
+Estado = COMPLETO
+```
+
+Los enlaces de cabecera deben coincidir en periodo, ambito, ambiente, carga y formula con el Snapshot V2.
+
+### `liquidacion.QnaSnapshotFuente`
+
+Contiene exactamente una fila por dominio. Registra estado, fuente, identificador, escala, conteo y hash de fuente.
+
+### `liquidacion.QnaSnapshotTotal`
+
+Conserva totales A2 de componentes, fondos, dominios auxiliares, retenciones y total general. El frontend no recalcula totales oficiales desde paginas de detalle.
+
+## Proyeccion por Empleado
+
+### `liquidacion.QnaSnapshotDetalle`
+
+Conserva las columnas historicas y agrega la proyeccion V5:
+
+| Columna | Tipo | Regla V5 |
+|---|---|---|
+| `SnapshotCalculoV2DetalleId` | `BIGINT NULL` | Requerido; FK al detalle matematico congelado. |
+| `EmpleadoClaveHash` | `CHAR(64) NULL` | Requerido; unico por snapshot cuando no es nulo. |
+| `Interno` | `INT NULL` | Requerido para filas V5. |
+| `Nombre` | `NVARCHAR(255) NULL` | Nombre exacto mostrado al aplicar. |
+| `DiasLaborados` | `DECIMAL(5,2) NULL` | Requerido; rango 0 a 15. |
+| `DiasOrigen` | `VARCHAR(40) NULL` | Requerido. |
+| `SueldoMensualD6` | `DECIMAL(19,6) NULL` | Requerido. |
+| `BaseCotizacionSueldoD6` | `DECIMAL(19,6) NULL` | Nulo si no es verificable. |
+| `QuinqueniosMensualD6` | `DECIMAL(19,6) NULL` | Requerido. |
+| `BaseCotizacionQuinqueniosD6` | `DECIMAL(19,6) NULL` | Nulo si no es verificable. |
+| `CAIRFondoD6` | `DECIMAL(19,6) NULL` | Requerido. |
+| `PrestacionesD6` | `DECIMAL(19,6) NULL` | Requerido. |
+| `ViviendaD6` | `DECIMAL(19,6) NULL` | Requerido. |
+| `GuarderiasD6` | `DECIMAL(19,6) NULL` | Requerido; cero real cuando no hay importe del empleado. |
+| `TransitorioD6` | `DECIMAL(19,6) NULL` | Requerido; cero real cuando no hay importe del empleado. |
+| `AguinaldoD6` | `DECIMAL(19,6) NULL` | Requerido; cero real cuando no hay importe del empleado. |
+| `HashFila` | `CHAR(64) NULL` | Requerido; integridad de la proyeccion. |
+
+Compatibilidad:
+
+- Una fila anterior puede tener todas las columnas V5 en `NULL`.
+- Si se informa cualquier columna V5, la fila debe satisfacer `CK_QnaSnapshotDetalle_ProyeccionV5`.
+- Las dos bases de cotizacion pueden permanecer nulas dentro de una proyeccion completa.
+- `TR_QnaSnapshotDetalle_V5_Completitud` impide la forma legacy cuando la cabecera declara version 5 o posterior.
+
+Integridad:
+
+- `UX_QnaSnapshotDetalle_EmpleadoHash` es unico y filtrado por valor no nulo.
+- `UX_QnaSnapshotDetalle_CalculoDetalle` es unico y filtrado por valor no nulo.
+- `FK_QnaSnapshotDetalle_SnapshotCalculoV2Detalle` debe estar habilitada y ser confiable.
+- `CK_QnaSnapshotDetalle_FAT` conserva `FATD6 = FAAD6 + FAED6`.
+- La correspondencia entre el detalle V2 enlazado y el `SnapshotCalculoV2Id` de cabecera se revalida transaccionalmente en el repositorio.
+
+## Filas Auxiliares
+
+### `liquidacion.QnaSnapshotFuenteDetalle`
+
+Cada fila exacta de Guarderias, Transitorio, Aguinaldo, PCP, PMP e HIP se conserva sin agrupar por empleado.
+
+Columnas V5:
+
+| Columna | Tipo | Regla V5 |
+|---|---|---|
+| `EmpleadoClave` | `NVARCHAR(50) NULL` | Requerida en payload V5. |
+| `Rfc` | `NVARCHAR(20) NULL` | Nulo cuando la fuente no lo acredita. |
+| `Nombre` | `NVARCHAR(255) NULL` | Nombre exacto mostrado. |
+| `PayloadVersion` | `SMALLINT NULL` | `1` para el primer contrato completo. |
+
+La identidad V5 es coherente como conjunto: filas antiguas tienen las cuatro columnas nulas; filas nuevas requieren empleado, nombre y version positiva.
+
+`TR_QnaSnapshotFuenteDetalle_V5_Completitud` exige identidad y `PayloadVersion = 1` cuando la cabecera declara version 5 o posterior.
+
+`PayloadCanonico` contiene todos los campos mostrados por el modal del dominio. El contrato de payload version 1 se fija en la captura unica de fase 5.
+
+## Multiplicidad
+
+Una persona puede tener varias filas, incluso con la misma clave de negocio o payload:
+
+- `UQ_QnaSnapshotFuenteDetalle_Orden` conserva un orden unico por snapshot y dominio.
+- `ClaveFilaHash` identifica la clave canonica, pero no es unica.
+- `IX_QnaSnapshotFuenteDetalle_Clave` permite localizar claves repetidas.
+- La multiplicidad forma parte del conteo y del hash de fuente.
+
+## Canonicalizacion y Hashes
+
+La canonicalizacion vigente:
+
+1. Ordena alfabeticamente las claves de objetos.
+2. Conserva el orden de arreglos.
+3. Representa valores D6 y A2 como cadenas con escala fija.
+4. Representa ausencia verificable como JSON `null`.
+5. Calcula SHA-256 sobre JSON UTF-8 y devuelve hexadecimal mayusculo.
+
+Para filas auxiliares, `HashFila` es el hash de `PayloadCanonico`. Para una fuente, el hash incluye cada par `ClaveFilaHash` y `HashFila`; los duplicados no se eliminan.
+
+La lista canonica exacta de campos de `QnaSnapshotDetalle.HashFila` se versiona junto con el escritor V5 en fase 6.
+
+## Inmutabilidad
+
+Los triggers siguientes bloquean `UPDATE` y `DELETE`:
+
+```text
+liquidacion.TR_QnaSnapshotDetalle_Inmutable
+liquidacion.TR_QnaSnapshotFuenteDetalle_Inmutable
+```
+
+Una correccion crea una nueva revision; no modifica evidencia persistida.
+
+## Migracion y Verificacion
+
+Archivos oficiales:
+
+```text
+database/migrations/20260825_09_add_qna_official_snapshot_projections.sql
+database/migrations/20260825_10_verify_qna_official_snapshot_projections.sql
+scripts/migrate-qna-official-projections-desarrollo.ts
+scripts/verify-qna-official-projections-desarrollo.ts
+```
+
+La migracion es aditiva, idempotente y no modifica filas. Su primera aplicacion se limita a Desarrollo conforme a la matriz obligatoria de bases.
