@@ -26,7 +26,8 @@
     "test:snapshot:quinquenio": "tsx scripts/test-snapshot-quinquenio-precedence.ts",
     "migrate:qna:official-projections:desarrollo": "tsx scripts/migrate-qna-official-projections-desarrollo.ts",
     "verify:qna:official-projections:desarrollo": "tsx scripts/verify-qna-official-projections-desarrollo.ts",
-    "test:liquidacion-qna:scope-lock": "tsx scripts/test-qna-scope-lock-integration-desarrollo.ts"
+    "test:liquidacion-qna:scope-lock": "tsx scripts/test-qna-scope-lock-integration-desarrollo.ts",
+    "verify:liquidacion-qna:capture:desarrollo": "tsx scripts/verify-qna-ten-domain-capture-desarrollo.ts"
   },
   "engines": {
     "node": ">=20.0.0"
