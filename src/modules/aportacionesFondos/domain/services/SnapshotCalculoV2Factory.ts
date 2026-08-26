@@ -113,7 +113,11 @@ export class SnapshotCalculoV2Factory {
         otrasPrestacionesMensualesD6: this.nullableD6(rowAhorro.otras_prestaciones_d6 ?? rowAhorro.otras_prestaciones),
         quinqueniosMensualD6: this.d6(rowAhorro.quinquenios_d6 ?? rowAhorro.quinquenios),
         baseCotizacionSueldoD6: baseCotizacionSueldo == null ? null : this.d6(baseCotizacionSueldo),
-        baseCotizacionQuinqueniosD6: this.nullableD6(rowPrestaciones.quinquenios_aplicado_d6),
+        baseCotizacionQuinqueniosD6: this.resolverQuinquenioAplicadoD6(
+          rowPrestaciones,
+          dias.baseCotizacionQuinquenios,
+          input.nominaCargaId !== null && dias.origen === 'nomina'
+        ),
         cairD6: this.d6(rowCair.afe_d6 ?? rowCair.afe),
         cairFondoD6: this.d6(rowCair.total_d6 ?? rowCair.afe_d6 ?? rowCair.afe),
         fraD6: this.d6(rowPrestaciones.afpa_d6 ?? rowPrestaciones.afpa),
@@ -206,6 +210,21 @@ export class SnapshotCalculoV2Factory {
 
   private nullableD6(value: number | string | null | undefined): string | null {
     return value === null || value === undefined ? null : this.d6(value);
+  }
+
+  private resolverQuinquenioAplicadoD6(
+    prestaciones: PrestacionesDetalle,
+    baseCotizacionCarga: number | string | null,
+    cargaCongelada: boolean
+  ): string | null {
+    if (prestaciones.quinquenios_aplicado_d6 !== null
+        && prestaciones.quinquenios_aplicado_d6 !== undefined) {
+      return this.d6(prestaciones.quinquenios_aplicado_d6);
+    }
+    if (prestaciones.quinquenios_d6 !== undefined) {
+      return this.kernel.multiplicarD6(prestaciones.quinquenios_d6, '0.5');
+    }
+    return cargaCongelada ? this.nullableD6(baseCotizacionCarga) : null;
   }
 
   private diasD2(value: number, maximum: number): string {

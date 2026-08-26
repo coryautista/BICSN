@@ -21,6 +21,7 @@
     "test:liquidacion-qna": "tsx scripts/test-liquidacion-qna-contracts.ts",
     "test:liquidacion-qna:auto": "tsx scripts/test-liquidacion-qna-auto-orchestration.ts",
     "test:auth:organica-scope": "tsx scripts/test-organica-scope-policy.ts",
+    "test:snapshot:quinquenio": "tsx scripts/test-snapshot-quinquenio-precedence.ts",
     "test:liquidacion-qna:scope-lock": "tsx scripts/test-qna-scope-lock-integration-desarrollo.ts"
   },
   "engines": {

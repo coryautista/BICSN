@@ -41,7 +41,7 @@ Para cada QNA nueva aplicada, reproducir sin fuentes vivas los diez dominios con
 | 0 | Decisiones, ADR, tablero y linea base documental | COMPLETADA | Prerrequisitos completados |
 | 1 | Politica central de autorizacion y ambito | COMPLETADA | Fase 0 |
 | 2 | Invariantes transaccionales de promocion | COMPLETADA | Fase 1 |
-| 3 | Precedencia correcta de quinquenio | PENDIENTE | Fase 2 |
+| 3 | Precedencia correcta de quinquenio | EN_PROGRESO | Fase 2 |
 | 4 | Migracion idempotente de proyecciones y restricciones | PENDIENTE | Fase 3 |
 | 5 | Captura unica en memoria de diez dominios | PENDIENTE | Fase 4 |
 | 6 | Detalles, payloads, hashes y totales persistidos | PENDIENTE | Fase 5 |
@@ -57,6 +57,16 @@ Para cada QNA nueva aplicada, reproducir sin fuentes vivas los diez dominios con
 ## Fase Actual: 3
 
 Objetivo: corregir y probar la precedencia del quinquenio congelado.
+
+## Evidencia de la Fase 3
+
+- [x] Priorizar `quinquenios_aplicado_d6` sin confundir cero con ausencia.
+- [x] Transformar `quinquenios_d6` mensual mediante la regla quincenal estandar y precision D6.
+- [x] Usar `BaseCotizacionQuinquenios` solo desde el `nominaCargaId` congelado cuando faltan los niveles anteriores.
+- [x] Persistir `null` cuando el valor no puede verificarse.
+- [x] Probar los cuatro niveles, redondeo D6 y cero real.
+- [x] Aprobar build, calculo oficial, contratos de Liquidacion QNA y suite previa de Snapshot V2.
+- [ ] Registrar el commit exclusivo de cierre.
 
 ## Evidencia de la Fase 2
 
@@ -182,6 +192,7 @@ No deben incluirse, revertirse ni ajustarse como parte de esta fase. Requieren u
 | 2026-08-25 | 2 | EN_PROGRESO | Flujo de promocion e invariantes auditados | Implementar validacion final y lock transaccional |
 | 2026-08-25 | 2 | EN_PROGRESO | Commit `837a691`; build y pruebas puras aprobados; prueba SQL bloqueada por conectividad | Ejecutar `test:liquidacion-qna:scope-lock` en Desarrollo |
 | 2026-08-25 | 2 | COMPLETADA | `QNA_SCOPE_LOCK_INTEGRATION_DESARROLLO_OK`; build y seis suites afectadas OK | Iniciar fase 3 |
+| 2026-08-25 | 3 | EN_PROGRESO | `SNAPSHOT_QUINQUENIO_PRECEDENCE_TESTS_OK`; build, calculo oficial, Liquidacion QNA y Snapshot V2 OK | Registrar commit exclusivo de cierre |
 
 ## Regla de Actualizacion
 

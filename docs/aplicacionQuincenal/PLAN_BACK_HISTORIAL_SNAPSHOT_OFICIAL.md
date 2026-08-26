@@ -467,7 +467,7 @@ No eliminar tablas legacy al retirar su escritura.
 | 0 | Confirmar decisiones y actualizar documentos | COMPLETADA |
 | 1 | Centralizar autorizacion y ambito | COMPLETADA |
 | 2 | Validar carga, formula y enlaces dentro de promocion | COMPLETADA |
-| 3 | Corregir precedencia de quinquenio | PENDIENTE |
+| 3 | Corregir precedencia de quinquenio | EN_PROGRESO |
 | 4 | Crear migracion de proyecciones y restricciones | PENDIENTE |
 | 5 | Implementar captura unica de diez dominios | PENDIENTE |
 | 6 | Poblar detalles, payloads, hashes y totales | PENDIENTE |
@@ -596,5 +596,6 @@ Compilar no es evidencia suficiente para marcar una fase como completada.
 | 2026-08-25 | 1 | COMPLETADA | `08bfae1` | `ORGANICA_SCOPE_POLICY_TESTS_OK`; build; contratos de aportaciones y liquidacion OK | Ambito externo requiere `admin`; entidades usan exclusivamente organicas del token; clasificacion independiente del orden de roles |
 | 2026-08-25 | 2 | EN_PROGRESO | `837a691` | Application lock compartido; vigencia de carga, formula, enlaces, conteos, hashes y totales validados; build y pruebas puras OK | Prueba SQL de concurrencia preparada; bloqueada por conectividad a Desarrollo |
 | 2026-08-25 | 2 | COMPLETADA | `837a691` | `QNA_SCOPE_LOCK_INTEGRATION_DESARROLLO_OK`; build; contratos de liquidacion, aportaciones, autorizacion, movimientos y REVISA OK | Validacion transaccional y concurrencia verificadas en Desarrollo |
+| 2026-08-25 | 3 | EN_PROGRESO | Pendiente | `SNAPSHOT_QUINQUENIO_PRECEDENCE_TESTS_OK`; `APORTACIONES_PHASE4_TESTS_OK`; `DATABASE_ENVIRONMENTS_OK`; calculo oficial, contratos de Liquidacion QNA, build y `git diff --check` aprobados | Precedencia implementada y documentada; falta commit exclusivo para cerrar la fase |
 
 Actualizar esta tabla despues de cada cambio relevante. No marcar una fase como completada sin evidencia y referencia al commit correspondiente.

@@ -20,6 +20,17 @@ Para prestaciones economicas, el valor de quinquenios aplicado debe resolverse a
 
 No se debe usar `quinquenios / 30 * dias_laborados` como fallback para quinquenios de prestaciones.
 
+### Precedencia Para Congelar Snapshot V2
+
+La regla anterior define el calculo operativo. Al persistir `BaseCotizacionQuinqueniosD6` en el Snapshot V2 se conserva primero el resultado que ya utilizo ese calculo:
+
+1. `quinquenios_aplicado_d6` del resultado de prestaciones.
+2. `quinquenios_d6 * 0.5`, transformado por el kernel monetario D6.
+3. `BaseCotizacionQuinquenios` perteneciente al `nominaCargaId` congelado.
+4. `null` cuando ninguna fuente es verificable.
+
+Esta precedencia permite recibir contratos parciales sin consultar una carga viva. Un cero explicito se conserva como `0.000000`; la ausencia nunca se sustituye por cero.
+
 ## Regla Confirmada Para AFPA
 
 Para prestaciones economicas, `AFPA` debe calcularse solo sobre sueldo proporcional.
