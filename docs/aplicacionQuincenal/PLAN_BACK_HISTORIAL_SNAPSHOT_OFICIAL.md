@@ -2,7 +2,7 @@
 
 ## Estado
 
-FASE 0 EN PROGRESO. IMPLEMENTACION FUNCIONAL PENDIENTE.
+FASE 0 COMPLETADA. FASE 1 PENDIENTE.
 
 Este documento es la fuente de seguimiento del backend para conservar y consultar la informacion exacta capturada al confirmar la aplicacion de una QNA.
 
@@ -464,7 +464,7 @@ No eliminar tablas legacy al retirar su escritura.
 
 | Fase | Objetivo | Estado |
 |---:|---|---|
-| 0 | Confirmar decisiones y actualizar documentos | EN_PROGRESO |
+| 0 | Confirmar decisiones y actualizar documentos | COMPLETADA |
 | 1 | Centralizar autorizacion y ambito | PENDIENTE |
 | 2 | Validar carga, formula y enlaces dentro de promocion | PENDIENTE |
 | 3 | Corregir precedencia de quinquenio | PENDIENTE |
@@ -592,6 +592,6 @@ Compilar no es evidencia suficiente para marcar una fase como completada.
 | 2026-08-21 | 0 | PLANIFICADA | - | Tercera revision documental | Decisiones de alcance, captura, legacy y detalle cerradas |
 | 2026-08-21 | Prerrequisito | COMPLETADO_EN_DESARROLLO | - | `QNA_V3_DESARROLLO_MIGRATION_OK`; `QNA_V3_DESARROLLO_SCHEMA_ALIGNED_OK`; build y siete pruebas de liberacion OK | `SII-ISSSSPEA-DES` alineada con Produccion en 91 tablas, columnas, objetos programables, relaciones, indices estables y triggers; formula V3 activa |
 | 2026-08-21 | Prerrequisito | COMPLETADO_EN_CALIDAD | - | `QNA_SNAPSHOT_FK_CALIDAD_MIGRATION_OK`; `QNA_V3_CALIDAD_SCHEMA_ALIGNED_OK`; `APORTACIONES_OFFICIAL_1526_CALIDAD_OK`; build y contratos de liquidacion OK | Creada y validada `liquidacion.FK_QnaSnapshot_SnapshotCalculoV2`; tres FK habilitadas y confiables, cero huerfanos; Calidad alineada con Produccion en 91 tablas y columnas |
-| 2026-08-25 | 0 | EN_PROGRESO | Pendiente | ADR y tablero ejecutivo creados; scripts operativos clasificados; `git diff --check` aprobado | Falta commit exclusivo de fase 0 |
+| 2026-08-25 | 0 | COMPLETADA | `e7a3327` | ADR y tablero ejecutivo creados; scripts operativos clasificados; `git diff --check` aprobado | Fase documental cerrada; iniciar autorizacion y ambito |
 
 Actualizar esta tabla despues de cada cambio relevante. No marcar una fase como completada sin evidencia y referencia al commit correspondiente.

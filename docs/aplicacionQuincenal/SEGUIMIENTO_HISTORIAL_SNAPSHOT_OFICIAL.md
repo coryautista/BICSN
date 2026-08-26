@@ -15,7 +15,7 @@ Este tablero no sustituye el plan tecnico ni autoriza migraciones, reprocesos, c
 ## Estado General
 
 ```text
-FASE_0_EN_PROGRESO
+FASE_0_COMPLETADA
 ```
 
 Ultima actualizacion: 2026-08-25.
@@ -37,7 +37,7 @@ Para cada QNA nueva aplicada, reproducir sin fuentes vivas los diez dominios con
 
 | Fase | Entregable verificable | Estado | Dependencia |
 |---:|---|---|---|
-| 0 | Decisiones, ADR, tablero y linea base documental | EN_PROGRESO | Prerrequisitos completados |
+| 0 | Decisiones, ADR, tablero y linea base documental | COMPLETADA | Prerrequisitos completados |
 | 1 | Politica central de autorizacion y ambito | PENDIENTE | Fase 0 |
 | 2 | Invariantes transaccionales de promocion | PENDIENTE | Fase 1 |
 | 3 | Precedencia correcta de quinquenio | PENDIENTE | Fase 2 |
@@ -69,7 +69,7 @@ Objetivo: establecer una linea base documental y operativa revisable antes de mo
 - [x] Crear este tablero ejecutivo.
 - [x] Clasificar los cambios locales ajenos a la fase.
 - [x] Revisar el diff documental final.
-- [ ] Crear un commit exclusivo de fase 0 con referencia en las bitacoras.
+- [x] Crear un commit exclusivo de fase 0 con referencia en las bitacoras.
 
 ### Politica sobre Scripts Operativos
 
@@ -139,7 +139,7 @@ No deben incluirse, revertirse ni ajustarse como parte de esta fase. Requieren u
 |---|---:|---|---|---|
 | 2026-08-21 | Prerrequisito | COMPLETADO | Desarrollo y Calidad alineados; publicaciones saludables | Establecer fase 0 |
 | 2026-08-21 | Linea base | COMPLETADO | Commit `3f51713` | Crear ADR y tablero |
-| 2026-08-25 | 0 | EN_PROGRESO | ADR y tablero creados; scripts clasificados; `git diff --check` aprobado | Versionar fase 0 |
+| 2026-08-25 | 0 | COMPLETADA | Commit `e7a3327`; ADR y tablero creados; scripts clasificados; `git diff --check` aprobado | Iniciar fase 1 |
 
 ## Regla de Actualizacion
 
