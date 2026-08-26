@@ -477,7 +477,7 @@ No eliminar tablas legacy al retirar su escritura.
 | 2 | Validar carga, formula y enlaces dentro de promocion | COMPLETADA |
 | 3 | Corregir precedencia de quinquenio | COMPLETADA |
 | 4 | Crear migracion de proyecciones y restricciones | COMPLETADA |
-| 5 | Implementar captura unica de diez dominios | EN_PROGRESO |
+| 5 | Implementar captura unica de diez dominios | COMPLETADA |
 | 6 | Poblar detalles, payloads, hashes y totales | PENDIENTE |
 | 7 | Fortalecer retenciones V3 por identidad/hash | PENDIENTE |
 | 8 | Activar dual-write y conciliacion | PENDIENTE |
@@ -607,5 +607,6 @@ Compilar no es evidencia suficiente para marcar una fase como completada.
 | 2026-08-25 | 3 | COMPLETADA | `3641588` | `SNAPSHOT_QUINQUENIO_PRECEDENCE_TESTS_OK`; `APORTACIONES_PHASE4_TESTS_OK`; `DATABASE_ENVIRONMENTS_OK`; calculo oficial, contratos de Liquidacion QNA, build y `git diff --check` aprobados | Precedencia implementada y documentada; iniciar fase 4 |
 | 2026-08-25 | 4 | COMPLETADA | `612d791` | `QNA_OFFICIAL_PROJECTIONS_DESARROLLO_MIGRATION_OK` en aplicacion y reaplicacion; `QNA_OFFICIAL_PROJECTIONS_DESARROLLO_VERIFY_OK`; revision sin bloqueos; build y contratos afectados OK | Esquema V5 aplicado en Desarrollo; iniciar fase 5 |
 | 2026-08-25 | 5 | EN_PROGRESO | Pendiente | `APORTACIONES_SINGLE_FUND_SOURCE_TESTS_OK`; `LIQUIDACION_QNA_SINGLE_CAPTURE_TESTS_OK`; orquestacion, contratos, calculo oficial y build OK; revision sin bloqueos | Confirmar politica HIP y ejecutar captura read-only en Desarrollo |
+| 2026-08-26 | 5 | COMPLETADA | `3970da8`, `6327e70` | `DATABASE_ENVIRONMENTS_OK`; `QNA_TEN_DOMAIN_CAPTURE_DESARROLLO_READONLY_OK`; build y `git diff --check` aprobados; 169 filas por fondo, 91 PCP y 22 PMP; cero snapshots creados | Politica HIP `1526,1626` confirmada; fuentes vacias permanecen `EMPTY`; iniciar fase 6 |
 
 Actualizar esta tabla despues de cada cambio relevante. No marcar una fase como completada sin evidencia y referencia al commit correspondiente.

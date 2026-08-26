@@ -43,7 +43,7 @@ Para cada QNA nueva aplicada, reproducir sin fuentes vivas los diez dominios con
 | 2 | Invariantes transaccionales de promocion | COMPLETADA | Fase 1 |
 | 3 | Precedencia correcta de quinquenio | COMPLETADA | Fase 2 |
 | 4 | Migracion idempotente de proyecciones y restricciones | COMPLETADA | Fase 3 |
-| 5 | Captura unica en memoria de diez dominios | EN_PROGRESO | Fase 4 |
+| 5 | Captura unica en memoria de diez dominios | COMPLETADA | Fase 4 |
 | 6 | Detalles, payloads, hashes y totales persistidos | PENDIENTE | Fase 5 |
 | 7 | Retenciones V3 completas por identidad y hash | PENDIENTE | Fase 6 |
 | 8 | Dual-write y conciliacion automatizada | PENDIENTE | Fase 7 |
@@ -54,9 +54,9 @@ Para cada QNA nueva aplicada, reproducir sin fuentes vivas los diez dominios con
 | 13 | Retiro autorizado de escritura legacy para QNA nuevas | PENDIENTE | Fase 12 y aprobacion operativa |
 | 14 | Migracion y liberacion controlada en Produccion | PENDIENTE | Fase 13 |
 
-## Fase Actual: 5
+## Fase Actual: 6
 
-Objetivo: capturar una sola vez y mantener en memoria los diez dominios que formaran el Snapshot oficial.
+Objetivo: persistir desde el mismo agregado los detalles, payloads, hashes y totales del Snapshot oficial V5 y su Snapshot V2 asociado.
 
 ## Evidencia de la Fase 5
 
@@ -70,9 +70,9 @@ Objetivo: capturar una sola vez y mantener en memoria los diez dominios que form
 - [x] Dejar fuentes vacias como `EMPTY` sin aprobacion automatica.
 - [x] Retirar la seleccion HIP del contrato HTTP y validar estrictamente su configuracion.
 - [x] Aprobar build, pruebas puras, orquestacion y revision sin bloqueos.
-- [ ] Confirmar el valor operativo de `QNA_HIP_LEGACY_PERIODS`.
-- [ ] Ejecutar una captura read-only en Desarrollo.
-- [ ] Registrar el commit de cierre.
+- [x] Confirmar `QNA_HIP_LEGACY_PERIODS=1526,1626` como valor operativo.
+- [x] Ejecutar una captura read-only en Desarrollo con cero snapshots creados.
+- [x] Registrar los commits `3970da8` y `6327e70`.
 
 ## Evidencia de la Fase 4
 
@@ -202,7 +202,7 @@ No deben incluirse, revertirse ni ajustarse como parte de esta fase. Requieren u
 
 | Riesgo | Control requerido | Estado |
 |---|---|---|
-| Lecturas repetidas producen evidencias distintas | Captura unica de diez dominios | ABIERTO |
+| Lecturas repetidas producen evidencias distintas | Captura unica de diez dominios | CONTROLADO |
 | SQL Server y Firebird no comparten transaccion | Saga recuperable e idempotente | ABIERTO |
 | Acceso cruzado entre dependencias | Politica central de ambito | CONTROLADO |
 | Campos historicos no verificables | `null`, advertencias y fuente discriminada | ABIERTO |
@@ -225,6 +225,7 @@ No deben incluirse, revertirse ni ajustarse como parte de esta fase. Requieren u
 | 2026-08-25 | 4 | EN_PROGRESO | Migracion aplicada y reaplicada; `QNA_OFFICIAL_PROJECTIONS_DESARROLLO_VERIFY_OK`; cero filas modificadas | Revisar diff y registrar commit funcional |
 | 2026-08-25 | 4 | COMPLETADA | Commit `612d791`; esquema V5 verificado e idempotente en Desarrollo; revision sin bloqueos | Iniciar fase 5 |
 | 2026-08-25 | 5 | EN_PROGRESO | Captura unica, payload V1, identidad por interno e inmutabilidad probados; revision sin bloqueos | Confirmar politica HIP y validar captura read-only en Desarrollo |
+| 2026-08-26 | 5 | COMPLETADA | Commits `3970da8` y `6327e70`; `QNA_TEN_DOMAIN_CAPTURE_DESARROLLO_READONLY_OK`; politica HIP `1526,1626`; Snapshot antes/despues en cero | Iniciar fase 6 |
 
 ## Regla de Actualizacion
 
