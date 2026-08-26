@@ -16,6 +16,7 @@ Este tablero no sustituye el plan tecnico ni autoriza migraciones, reprocesos, c
 
 ```text
 FASE_1_COMPLETADA
+FASE_2_EN_PROGRESO
 ```
 
 Ultima actualizacion: 2026-08-25.
@@ -39,7 +40,7 @@ Para cada QNA nueva aplicada, reproducir sin fuentes vivas los diez dominios con
 |---:|---|---|---|
 | 0 | Decisiones, ADR, tablero y linea base documental | COMPLETADA | Prerrequisitos completados |
 | 1 | Politica central de autorizacion y ambito | COMPLETADA | Fase 0 |
-| 2 | Invariantes transaccionales de promocion | PENDIENTE | Fase 1 |
+| 2 | Invariantes transaccionales de promocion | EN_PROGRESO | Fase 1 |
 | 3 | Precedencia correcta de quinquenio | PENDIENTE | Fase 2 |
 | 4 | Migracion idempotente de proyecciones y restricciones | PENDIENTE | Fase 3 |
 | 5 | Captura unica en memoria de diez dominios | PENDIENTE | Fase 4 |
@@ -56,6 +57,21 @@ Para cada QNA nueva aplicada, reproducir sin fuentes vivas los diez dominios con
 ## Fase Actual: 2
 
 Objetivo: validar carga, formula y enlaces dentro de la transaccion de promocion.
+
+### Alcance Confirmado
+
+- [x] Mapear creacion, aprobacion y promocion actuales.
+- [x] Confirmar que las diez fuentes y la decision se revalidan dentro de la transaccion.
+- [x] Detectar que carga, formula y Snapshot V2 no se revalidan durante la promocion.
+- [x] Detectar ausencia de `QNA_NOMINA_CARGA_DESACTUALIZADA`.
+- [x] Detectar ausencia de un application lock comun por ambito.
+- [ ] Adquirir `sp_getapplock` transaccional por periodo y organicas.
+- [ ] Comparar periodo, ambito y ambiente entre snapshots.
+- [ ] Exigir la misma carga nominal y formula.
+- [ ] Exigir carga `TXT`, `APLICADA` y `EsVigente = 1`.
+- [ ] Revalidar conteos, hashes y totales persistidos.
+- [ ] Emitir `QNA_NOMINA_CARGA_DESACTUALIZADA` ante sustitucion.
+- [ ] Probar promociones y sustituciones concurrentes.
 
 ## Fases Cerradas
 
@@ -159,6 +175,7 @@ No deben incluirse, revertirse ni ajustarse como parte de esta fase. Requieren u
 | 2026-08-21 | Linea base | COMPLETADO | Commit `3f51713` | Crear ADR y tablero |
 | 2026-08-25 | 0 | COMPLETADA | Commit `e7a3327`; ADR y tablero creados; scripts clasificados; `git diff --check` aprobado | Iniciar fase 1 |
 | 2026-08-25 | 1 | COMPLETADA | Commit `08bfae1`; `ORGANICA_SCOPE_POLICY_TESTS_OK`; build y contratos aprobados | Iniciar fase 2 |
+| 2026-08-25 | 2 | EN_PROGRESO | Flujo de promocion e invariantes auditados | Implementar validacion final y lock transaccional |
 
 ## Regla de Actualizacion
 
