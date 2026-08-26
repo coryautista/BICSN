@@ -16,7 +16,7 @@ Este tablero no sustituye el plan tecnico ni autoriza migraciones, reprocesos, c
 
 ```text
 FASE_1_COMPLETADA
-FASE_2_EN_PROGRESO
+FASE_2_COMPLETADA
 ```
 
 Ultima actualizacion: 2026-08-25.
@@ -40,7 +40,7 @@ Para cada QNA nueva aplicada, reproducir sin fuentes vivas los diez dominios con
 |---:|---|---|---|
 | 0 | Decisiones, ADR, tablero y linea base documental | COMPLETADA | Prerrequisitos completados |
 | 1 | Politica central de autorizacion y ambito | COMPLETADA | Fase 0 |
-| 2 | Invariantes transaccionales de promocion | EN_PROGRESO | Fase 1 |
+| 2 | Invariantes transaccionales de promocion | COMPLETADA | Fase 1 |
 | 3 | Precedencia correcta de quinquenio | PENDIENTE | Fase 2 |
 | 4 | Migracion idempotente de proyecciones y restricciones | PENDIENTE | Fase 3 |
 | 5 | Captura unica en memoria de diez dominios | PENDIENTE | Fase 4 |
@@ -54,9 +54,11 @@ Para cada QNA nueva aplicada, reproducir sin fuentes vivas los diez dominios con
 | 13 | Retiro autorizado de escritura legacy para QNA nuevas | PENDIENTE | Fase 12 y aprobacion operativa |
 | 14 | Migracion y liberacion controlada en Produccion | PENDIENTE | Fase 13 |
 
-## Fase Actual: 2
+## Fase Actual: 3
 
-Objetivo: validar carga, formula y enlaces dentro de la transaccion de promocion.
+Objetivo: corregir y probar la precedencia del quinquenio congelado.
+
+## Evidencia de la Fase 2
 
 ### Alcance Confirmado
 
@@ -71,9 +73,9 @@ Objetivo: validar carga, formula y enlaces dentro de la transaccion de promocion
 - [x] Exigir carga `TXT`, `APLICADA` y `EsVigente = 1`.
 - [x] Revalidar conteos, hashes y totales persistidos.
 - [x] Emitir `QNA_NOMINA_CARGA_DESACTUALIZADA` ante sustitucion.
-- [ ] Probar promociones y sustituciones concurrentes.
+- [x] Probar exclusión transaccional entre promociones y sustituciones.
 
-La prueba transaccional `npm run test:liquidacion-qna:scope-lock` esta preparada y es read-only, pero el 2026-08-25 no pudo conectarse a `10.20.1.92:1433`. La fase no se cierra hasta ejecutar esa evidencia en Desarrollo.
+La prueba transaccional read-only `npm run test:liquidacion-qna:scope-lock` fue ejecutada correctamente en Desarrollo el 2026-08-25 y termino con `QNA_SCOPE_LOCK_INTEGRATION_DESARROLLO_OK`.
 
 ## Fases Cerradas
 
@@ -179,6 +181,7 @@ No deben incluirse, revertirse ni ajustarse como parte de esta fase. Requieren u
 | 2026-08-25 | 1 | COMPLETADA | Commit `08bfae1`; `ORGANICA_SCOPE_POLICY_TESTS_OK`; build y contratos aprobados | Iniciar fase 2 |
 | 2026-08-25 | 2 | EN_PROGRESO | Flujo de promocion e invariantes auditados | Implementar validacion final y lock transaccional |
 | 2026-08-25 | 2 | EN_PROGRESO | Commit `837a691`; build y pruebas puras aprobados; prueba SQL bloqueada por conectividad | Ejecutar `test:liquidacion-qna:scope-lock` en Desarrollo |
+| 2026-08-25 | 2 | COMPLETADA | `QNA_SCOPE_LOCK_INTEGRATION_DESARROLLO_OK`; build y seis suites afectadas OK | Iniciar fase 3 |
 
 ## Regla de Actualizacion
 

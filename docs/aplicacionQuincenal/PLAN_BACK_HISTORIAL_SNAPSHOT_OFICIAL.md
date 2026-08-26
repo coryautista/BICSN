@@ -2,7 +2,7 @@
 
 ## Estado
 
-FASES 0 Y 1 COMPLETADAS. FASE 2 EN PROGRESO.
+FASES 0, 1 Y 2 COMPLETADAS. FASE 3 PENDIENTE.
 
 Este documento es la fuente de seguimiento del backend para conservar y consultar la informacion exacta capturada al confirmar la aplicacion de una QNA.
 
@@ -466,7 +466,7 @@ No eliminar tablas legacy al retirar su escritura.
 |---:|---|---|
 | 0 | Confirmar decisiones y actualizar documentos | COMPLETADA |
 | 1 | Centralizar autorizacion y ambito | COMPLETADA |
-| 2 | Validar carga, formula y enlaces dentro de promocion | EN_PROGRESO |
+| 2 | Validar carga, formula y enlaces dentro de promocion | COMPLETADA |
 | 3 | Corregir precedencia de quinquenio | PENDIENTE |
 | 4 | Crear migracion de proyecciones y restricciones | PENDIENTE |
 | 5 | Implementar captura unica de diez dominios | PENDIENTE |
@@ -595,5 +595,6 @@ Compilar no es evidencia suficiente para marcar una fase como completada.
 | 2026-08-25 | 0 | COMPLETADA | `e7a3327` | ADR y tablero ejecutivo creados; scripts operativos clasificados; `git diff --check` aprobado | Fase documental cerrada; iniciar autorizacion y ambito |
 | 2026-08-25 | 1 | COMPLETADA | `08bfae1` | `ORGANICA_SCOPE_POLICY_TESTS_OK`; build; contratos de aportaciones y liquidacion OK | Ambito externo requiere `admin`; entidades usan exclusivamente organicas del token; clasificacion independiente del orden de roles |
 | 2026-08-25 | 2 | EN_PROGRESO | `837a691` | Application lock compartido; vigencia de carga, formula, enlaces, conteos, hashes y totales validados; build y pruebas puras OK | Prueba SQL de concurrencia preparada; bloqueada por conectividad a Desarrollo |
+| 2026-08-25 | 2 | COMPLETADA | `837a691` | `QNA_SCOPE_LOCK_INTEGRATION_DESARROLLO_OK`; build; contratos de liquidacion, aportaciones, autorizacion, movimientos y REVISA OK | Validacion transaccional y concurrencia verificadas en Desarrollo |
 
 Actualizar esta tabla despues de cada cambio relevante. No marcar una fase como completada sin evidencia y referencia al commit correspondiente.
