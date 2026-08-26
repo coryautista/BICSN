@@ -417,7 +417,7 @@ IDs, formula, carga, politica, revision y hash son obligatorios.
 
 ### `SNAPSHOT_OFICIAL_RECONSTRUIDO`
 
-IDs oficiales obligatorios, estrategia y advertencias obligatorias. Solo para snapshots previos sin proyeccion completa.
+Estrategia y advertencias obligatorias. Los IDs que el esquema historico no acredito son `null`. Si existe Snapshot V2 valido, los cuatro fondos se reconstruyen desde su detalle congelado; si no existe, esos detalles permanecen no disponibles. Solo aplica a snapshots previos sin proyeccion completa.
 
 ### `HISTORICO_LEGACY`
 
@@ -437,7 +437,7 @@ precisionPolicy
 revision
 hashContenido
 fechaCreacion
-warnings
+advertencias
 reconstructionStrategy
 ```
 
@@ -482,7 +482,7 @@ No eliminar tablas legacy al retirar su escritura.
 | 7 | Fortalecer retenciones V3 por identidad/hash | COMPLETADA |
 | 8 | Activar dual-write y conciliacion | COMPLETADA |
 | 9 | Implementar endpoints de lectura aplicada | COMPLETADA |
-| 10 | Implementar fallback legacy identificado | PENDIENTE |
+| 10 | Implementar fallback legacy identificado | COMPLETADA |
 | 11 | Probar saga, recuperacion e idempotencia | PENDIENTE |
 | 12 | Validar en Calidad y entregar contrato frontend | PENDIENTE |
 | 13 | Retirar dual-write para QNA nuevas | PENDIENTE |
@@ -584,7 +584,7 @@ Compilar no es evidencia suficiente para marcar una fase como completada.
 - Los diez dominios pueden reproducirse sin consultar fuentes vivas.
 - El nombre coincide con el mostrado al congelar.
 - Dias, bases, formula y carga estan congelados.
-- Totales coinciden con `QnaSnapshotTotal`.
+- Totales V5 coinciden con `QnaSnapshotTotal`; reconstruidos y legacy declaran su estrategia persistida, derivada o no disponible.
 - No se recalculan totales oficiales desde una pagina.
 - No se mezcla una revision con datos de otra carga.
 - El historial legacy queda identificado.
@@ -612,5 +612,6 @@ Compilar no es evidencia suficiente para marcar una fase como completada.
 | 2026-08-26 | 7 | COMPLETADA | `2e61284` | `RETENCIONES_V3_PROJECTION_DESARROLLO_MIGRATION_OK` en aplicacion y reaplicacion; `RETENCIONES_V3_PROJECTION_DESARROLLO_VERIFY_OK`; `RETENCIONES_V3_PROJECTION_INTEGRATION_DESARROLLO_ROLLBACK_OK`; revision sin bloqueos | PCP, PMP e HIP proyectados desde evidencia V5 por `Interno`, payload y hashes; iniciar fase 8 |
 | 2026-08-26 | 8 | COMPLETADA | `2d70bdc` | `QNA_PHASE8_LEGACY_DESARROLLO_MIGRATION_OK` en aplicacion y reaplicacion; `QNA_PHASE8_LEGACY_DESARROLLO_VERIFY_OK`; `QNA_PHASE8_LEGACY_INTEGRATION_DESARROLLO_ROLLBACK_OK`; revision sin bloqueos | Dual-write exacto a 12 almacenes legacy, WARNING no bloqueante, colision y reemplazo verificados; iniciar fase 9 |
 | 2026-08-26 | 9 | COMPLETADA | `1078beb` | `QNA_PHASE9_APPLIED_READ_MIGRATION_OK` en aplicacion y reaplicacion; `QNA_PHASE9_APPLIED_READ_VERIFY_OK`; `QNA_PHASE9_APPLIED_PLAN_OK`; contratos, HTTP e integracion rollback aprobados | Tres endpoints V5 aplicados, Swagger, scope, paginacion, busqueda e integridad verificados; iniciar fase 10 |
+| 2026-08-26 | 10 | COMPLETADA | `0f97dce`, `0282e74` | `QNA_PHASE10_APPLIED_CONTRACTS_OK`; `QNA_PHASE10_APPLIED_INTEGRATION_DESARROLLO_ROLLBACK_OK`; `QNA_PHASE10_APPLIED_READ_VERIFIER_DESARROLLO_OK`; `QNA_PHASE10_APPLIED_PLAN_DESARROLLO_OK`; build, HTTP, fase 9 y revision independiente aprobados | Union discriminada V5/V3-V4/legacy, precedencia real por scope sin ocultar corrupcion, nullability, ausencia legacy, totales exactos, colisiones, auditoria admin y pagina mixta verificadas; no requirio migracion; iniciar fase 11 |
 
 Actualizar esta tabla despues de cada cambio relevante. No marcar una fase como completada sin evidencia y referencia al commit correspondiente.

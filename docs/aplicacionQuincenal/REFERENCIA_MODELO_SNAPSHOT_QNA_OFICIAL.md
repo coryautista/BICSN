@@ -225,9 +225,9 @@ Los historicos legacy usan una clave reducida. Si otro scope V5 comparte `(Org0,
 
 Los modulos firmados y roles dedicados restringen proyeccion y reparacion para principales de privilegio minimo. En Desarrollo, `usrISSSSPEA` es `db_owner`; se acepta y reporta `DB_OWNER_EXCEPTION_SQL_ISOLATION_NOT_ENFORCEABLE`, por lo que esa cuenta puede eludir controles de objeto.
 
-## Lectura Oficial Aplicada
+## Lectura Aplicada Discriminada
 
-Fase 9 publica:
+Los endpoints publicados son:
 
 ```http
 GET /v1/liquidaciones-qna/aplicadas
@@ -235,13 +235,21 @@ GET /v1/liquidaciones-qna/aplicada/resumen
 GET /v1/liquidaciones-qna/aplicada/detalles/:dominio
 ```
 
-La evidencia se selecciona por la ultima transicion `QnaProcesoTransicion.EstadoDestino='TERMINADO'` vinculada al snapshot V5. No usa `QnaSnapshotOficialActual`, Firebird, nomina vigente ni historicos legacy como prueba de aplicacion.
+La respuesta es una union discriminada con precedencia `SNAPSHOT_OFICIAL` V5, `SNAPSHOT_OFICIAL_RECONSTRUIDO` V3/V4 y `HISTORICO_LEGACY`. No usa `QnaSnapshotOficialActual`, Firebird, nomina vigente, formulas vigentes ni catalogos vivos.
+
+La ultima transicion `QnaProcesoTransicion.EstadoDestino='TERMINADO'` se inspecciona antes de unir el snapshot. Una referencia nula, inexistente, no soportada o de otro scope devuelve error de integridad y nunca permite seleccionar una transicion anterior ni caer a legacy. V5 corrupto tampoco se reconstruye ni se oculta.
+
+V3/V4 revalida cabecera, hash de contenido, diez fuentes y totales. Cuando existe enlace a Snapshot V2, tambien revalida su scope, hash y conteo, y lee los cuatro fondos exclusivamente de `aportaciones.SnapshotCalculoV2Detalle`; columnas de identidad o presentacion no acreditadas permanecen `null`. Sin V2, los fondos declarados no se fabrican y se advierte `QNA_RECONSTRUIDA_FONDOS_SIN_V2`. Los detalles auxiliares se exponen solo cuando su evidencia persistida supera hashes y conteos.
+
+Legacy requiere una unica evidencia `AFILIADOS/TERMINADO`, `OrgNivel=3` y `Resultado='OK'` para el scope completo. Se rechazan colisiones de scope reducido y filas con ownership V5. Como las filas historicas no estan enlazadas al evento por lote, la respuesta incluye `LEGACY_REDUCED_ROWS_UNLINKED`. Cero filas se representa como `ABSENT_UNVERIFIED`, total `null` y estrategia `UNAVAILABLE`, nunca como cero ni `NOT_APPLICABLE`; un agregado sin detalle se ignora con `QNA_LEGACY_AGREGADO_SIN_DETALLE_IGNORADO`.
+
+El resumen entrega `totales` y `totalStrategies`; el detalle entrega `totalDominioA2` y `totalStrategy`. Cada total declara `PERSISTED`, `PERSISTED_CAIR_CONTROL_FALLBACK`, `DERIVED_DETAIL` o `UNAVAILABLE`. Las derivaciones legacy se ejecutan con aritmetica decimal SQL y truncamiento A2; los totales combinados no usan `Number`. Las advertencias HTTP se publican en `advertencias`, con codigos como `QNA_LEGACY_ABSENT_UNVERIFIED`, `DERIVED_DETAIL` y `QNA_RECONSTRUIDA_*`.
 
 Lista y detalle usan `page=1`, `pageSize=100`, maximo `500`; el detalle acepta `buscar` con coincidencia literal, sin distincion de mayusculas o acentos, y orden canonico del snapshot. Los totales A2 permanecen sin filtrar y no se recalculan desde la pagina.
 
-Administradores pueden listar globalmente o enviar scope completo. Otros usuarios leen exclusivamente el scope completo resuelto desde su token. Warnings estructurados son visibles a todos; identificadores completos, hashes, aprobador y evidencia son auditoria administrativa. Los payloads auxiliares V1 se devuelven completos con nulls explicitos.
+Administradores pueden listar globalmente o enviar scope completo. Otros usuarios leen exclusivamente el scope completo resuelto desde su token. Las lecturas administrativas se registran con actor, request ID, endpoint, modo, scope, resultado y conteo, sin payload, PII ni texto de busqueda. Warnings estructurados son visibles a todos; identificadores completos, hashes, aprobador y evidencia son auditoria administrativa.
 
-Fase 9 expone exclusivamente `SNAPSHOT_OFICIAL`. Snapshots V3/V4 y fallback se reservan para fase 10. Un V5 aplicado con integridad rota devuelve error; no se oculta ni reconstruye.
+El listado valida ambiguedad, colisiones, ownership e integridad estructural sobre el filtro completo antes de contar y paginar. La integridad semantica de filas y hashes se valida para cada pagina solicitada. Los lotes usan un parametro JSON y las fuentes mixtas se consultan secuencialmente dentro de la misma transaccion.
 
 ## Inmutabilidad
 

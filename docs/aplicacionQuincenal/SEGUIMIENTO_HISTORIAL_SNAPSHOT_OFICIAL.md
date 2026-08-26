@@ -15,8 +15,8 @@ Este tablero no sustituye el plan tecnico ni autoriza migraciones, reprocesos, c
 ## Estado General
 
 ```text
-FASES_0_A_9_COMPLETADAS
-FASE_10_PENDIENTE
+FASES_0_A_10_COMPLETADAS
+FASE_11_PENDIENTE
 ```
 
 Ultima actualizacion: 2026-08-26.
@@ -48,15 +48,30 @@ Para cada QNA nueva aplicada, reproducir sin fuentes vivas los diez dominios con
 | 7 | Retenciones V3 completas por identidad y hash | COMPLETADA | Fase 6 |
 | 8 | Dual-write y conciliacion automatizada | COMPLETADA | Fase 7 |
 | 9 | Endpoints oficiales de periodos, resumen y detalle | COMPLETADA | Fase 8 |
-| 10 | Fuentes discriminadas y fallback legacy | PENDIENTE | Fase 9 |
+| 10 | Fuentes discriminadas y fallback legacy | COMPLETADA | Fase 9 |
 | 11 | Saga, recuperacion e idempotencia verificadas | PENDIENTE | Fase 10 |
 | 12 | Evidencia integral en Calidad y contrato frontend | PENDIENTE | Fase 11 |
 | 13 | Retiro autorizado de escritura legacy para QNA nuevas | PENDIENTE | Fase 12 y aprobacion operativa |
 | 14 | Migracion y liberacion controlada en Produccion | PENDIENTE | Fase 13 |
 
-## Fase Actual: 10
+## Fase Actual: 11
 
-Objetivo: implementar fuentes discriminadas y fallback legacy identificado sin consultar fuentes vivas para V5.
+Objetivo: probar saga, recuperacion e idempotencia de extremo a extremo.
+
+## Evidencia de la Fase 10
+
+- [x] Publicar la union discriminada `SNAPSHOT_OFICIAL`, `SNAPSHOT_OFICIAL_RECONSTRUIDO` e `HISTORICO_LEGACY` en los tres endpoints.
+- [x] Aplicar precedencia V5 sobre V3/V4 y legacy sin ocultar una transicion `TERMINADO` corrupta, nula, no soportada o de otro scope.
+- [x] Reconstruir V3/V4 desde evidencia persistida; usar exclusivamente el detalle matematico V2 validado cuando exista y dejar fondos no disponibles cuando falte.
+- [x] Conservar campos no verificables como `null` y emitir estrategias y advertencias estructuradas.
+- [x] Exigir evidencia legacy `TERMINADO`, `OrgNivel=3`, resultado exitoso, scope inequivoco y ausencia de ownership V5.
+- [x] Marcar historicos reducidos no enlazados al lote y dominios sin filas como `ABSENT_UNVERIFIED`.
+- [x] Distinguir totales `PERSISTED`, `PERSISTED_CAIR_CONTROL_FALLBACK`, `DERIVED_DETAIL` y `UNAVAILABLE` sin aritmetica monetaria binaria.
+- [x] Validar colisiones y ambiguedad sobre el filtro completo antes de paginar; validar hashes y semantica en la pagina solicitada.
+- [x] Usar `OPENJSON` para lotes de hasta 500 elementos y ejecutar lecturas mixtas secuencialmente dentro de una sola transaccion SQL Server.
+- [x] Auditar lecturas administrativas globales o exactas sin registrar payload, PII ni texto de busqueda.
+- [x] Aprobar contratos, HTTP, integraciones rollback de fases 9 y 10, verificador, planes reales y pagina mixta V5/V4/legacy.
+- [x] Confirmar que no fue necesaria una migracion adicional y registrar los commits funcionales `0f97dce` y `0282e74`.
 
 ## Evidencia de la Fase 9
 
@@ -259,6 +274,7 @@ No deben incluirse, revertirse ni ajustarse como parte de esta fase. Requieren u
 - Swagger estable.
 - Totales, paginacion y union discriminada documentados.
 - Una QNA de Calidad consultable sin fuentes vivas.
+- Saga, recuperacion e idempotencia de fase 11 aprobadas.
 - Pruebas backend obligatorias aprobadas.
 
 ## Riesgos Activos
@@ -268,7 +284,7 @@ No deben incluirse, revertirse ni ajustarse como parte de esta fase. Requieren u
 | Lecturas repetidas producen evidencias distintas | Captura unica de diez dominios | CONTROLADO |
 | SQL Server y Firebird no comparten transaccion | Saga recuperable e idempotente | ABIERTO |
 | Acceso cruzado entre dependencias | Politica central de ambito | CONTROLADO |
-| Campos historicos no verificables | `null`, advertencias y fuente discriminada | ABIERTO |
+| Campos historicos no verificables | `null`, advertencias y fuente discriminada | CONTROLADO |
 | Diferencias entre snapshot oficial y legacy | Dual-write y conciliacion con WARNING | CONTROLADO |
 | Principal runtime con `db_owner` puede eludir aislamiento SQL | Migrar a principal de privilegio minimo | ACEPTADO |
 | Cambios locales ajenos mezclados con la fase | Commit selectivo y revision de diff | CONTROLADO |
@@ -294,6 +310,7 @@ No deben incluirse, revertirse ni ajustarse como parte de esta fase. Requieren u
 | 2026-08-26 | 7 | COMPLETADA | Commit `2e61284`; migracion idempotente, verificador fuerte e integracion rollback de retenciones V3 aprobados; cero filas modificadas o retenidas | Iniciar fase 8 |
 | 2026-08-26 | 8 | COMPLETADA | Commit `2d70bdc`; dual-write y conciliacion exacta aplicados y reaplicados en Desarrollo; colision, reemplazo, HIP legacy, normalizacion y seguridad verificados | Iniciar fase 9 |
 | 2026-08-26 | 9 | COMPLETADA | Commit `1078beb`; endpoints aplicados V5, Swagger, autorizacion, integridad, indice y plan verificados; integracion rollback sin fuentes vivas | Iniciar fase 10 |
+| 2026-08-26 | 10 | COMPLETADA | Commits `0f97dce` y `0282e74`; union discriminada, precedencia V5/V3-V4/legacy por scope, ausencia legacy, precision exacta, auditoria admin, plan global y pagina mixta aprobados en Desarrollo | Iniciar fase 11 |
 
 ## Regla de Actualizacion
 

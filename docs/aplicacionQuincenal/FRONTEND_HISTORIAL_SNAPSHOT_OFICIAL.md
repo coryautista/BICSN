@@ -2,9 +2,9 @@
 
 ## Estado
 
-BLOQUEADO POR CONTRATO Y ENDPOINTS BACKEND.
+BLOQUEADO POR VALIDACION INTEGRAL EN CALIDAD.
 
-No implementar el consumo oficial hasta que las fases backend de proyeccion, lectura y validacion en Calidad esten terminadas.
+El contrato y los endpoints backend de lectura estan estables en Desarrollo desde la fase 10. No implementar el consumo oficial hasta completar saga e idempotencia de fase 11 y la validacion integral en Calidad de fase 12.
 
 Fuente de seguimiento backend:
 
@@ -108,11 +108,15 @@ El detalle auxiliar devuelve `payloadCanonico` V1 completo. Hashes, identificado
 
 ### Snapshot reconstruido
 
-Debe exigir IDs oficiales, estrategia de reconstruccion y advertencias.
+Usa `reconstructionStrategy: SNAPSHOT_V3_V4_PERSISTED_V2_FUNDS`. `snapshotCalculoV2Id`, `nominaCargaId` y `formulaCalculoVersionId` pueden ser `null`. Cuando existe V2, los cuatro fondos provienen de su detalle persistido y validado; sin V2, el backend entrega los fondos no disponibles y `QNA_RECONSTRUIDA_FONDOS_SIN_V2`. Identidad, RFC, nombre, interno y otros campos no acreditados pueden ser `null`. Detalles V3/V4 no validados no enriquecen la respuesta. La UI debe mostrar `advertencias` y no completar nulls desde fuentes actuales.
 
 ### Historico legacy
 
-Debe permitir IDs nulos y campos no verificables nulos. No interpretar ausencia como cero.
+Usa `reconstructionStrategy: LEGACY_EXACT_FULL_SCOPE`. Debe permitir IDs nulos, payload nullable y campos no verificables nulos. La advertencia `LEGACY_REDUCED_ROWS_UNLINKED` indica que las filas historicas usan clave reducida y no tienen enlace de lote al evento `TERMINADO`.
+
+Una fuente legacy sin filas usa estado `ABSENT_UNVERIFIED`, estrategia de total `UNAVAILABLE` y total `null`, aunque exista un agregado historico. El backend informa `QNA_LEGACY_ABSENT_UNVERIFIED` y, cuando aplica, `QNA_LEGACY_AGREGADO_SIN_DETALLE_IGNORADO`. No interpretar ausencia como cero, conjunto vacio verificado ni `NOT_APPLICABLE`.
+
+El resumen incluye objetos paralelos `totales` y `totalStrategies`; el detalle incluye `totalDominioA2` y `totalStrategy`. Las estrategias son `PERSISTED`, `PERSISTED_CAIR_CONTROL_FALLBACK`, `DERIVED_DETAIL` o `UNAVAILABLE`. La UI muestra el valor recibido y su procedencia; no deriva un total cuando backend entrega `null`.
 
 ## Reglas Monetarias
 
@@ -300,6 +304,7 @@ Agregar pruebas automatizadas para schema, servicio, hook y UI antes de marcar l
 - Contrato Swagger estable.
 - Union discriminada y nullability documentadas.
 - Totales y paginacion definidos.
+- Saga, recuperacion e idempotencia de fase 11 aprobadas.
 - Pruebas backend aprobadas.
 - Evidencia de una QNA de Calidad consultable sin fuentes vivas.
 
@@ -321,5 +326,6 @@ Agregar pruebas automatizadas para schema, servicio, hook y UI antes de marcar l
 | Fecha | Estado | Commit | Cambio | Pruebas | Notas |
 |---|---|---|---|---|---|
 | 2026-08-21 | BLOQUEADO | - | Contrato esperado actualizado despues de tercera revision backend | - | Esperar endpoints y Swagger estables |
+| 2026-08-26 | BLOQUEADO_CALIDAD | `0f97dce`, `0282e74` | Contrato backend discriminado estabilizado en Desarrollo para V5, V3/V4 y legacy | Contratos, HTTP, integraciones rollback, verificador y planes aprobados | Esperar fases backend 11 y 12; no crear adaptadores temporales |
 
 Actualizar esta tabla al completar cada fase. No iniciar adaptadores temporales contra contratos backend no estabilizados.
