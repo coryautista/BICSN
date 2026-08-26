@@ -1,5 +1,6 @@
 import { FastifyInstance } from 'fastify';
 import { requireAuth, requireRole } from '../auth/auth.middleware.js';
+import { resolveOrganicaScope } from '../auth/domain/policies/OrganicaScopePolicy.js';
 import {
   AportacionesIndividualesSchema,
   AportacionesCompletasSchema,
@@ -11,7 +12,6 @@ import {
   SnapshotCalculoV2OfficialSchema
 } from './aportacionesFondos.schemas.js';
 import { ok, fail, unauthorized } from '../../utils/http.js';
-import { normalizeClaveOrganica } from '../../utils/organica.js';
 import { GetAportacionesIndividualesQuery } from './application/queries/GetAportacionesIndividualesQuery.js';
 import { GetAportacionesCompletasQuery } from './application/queries/GetAportacionesCompletasQuery.js';
 import { GetPrestamosQuery } from './application/queries/GetPrestamosQuery.js';
@@ -386,21 +386,20 @@ export default async function aportacionesFondosRoutes(app: FastifyInstance) {
         return reply.send(unauthorized('Usuario no autenticado'));
       }
 
-      // Extract user organica keys and entity status (normalized to 2 digits)
-      const userClave0 = normalizeClaveOrganica((user as any).idOrganica0) || '';
-      const userClave1 = normalizeClaveOrganica((user as any).idOrganica1) || '';
-      const entidades = (user as any).entidades || [false];
-      const isEntidad = entidades[0] === true; // Check first role's isEntidad status
+      const scope = resolveOrganicaScope(user, {
+        organica0: parsed.data.clave_organica_0,
+        organica1: parsed.data.clave_organica_1,
+      }, 2);
 
       const getAportacionesIndividualesQuery = req.diScope.resolve<GetAportacionesIndividualesQuery>('getAportacionesIndividualesQuery');
       
       const result = await getAportacionesIndividualesQuery.execute(
         parsed.data.tipo as any,
-        userClave0,
-        userClave1,
-        isEntidad,
-        parsed.data.clave_organica_0,
-        parsed.data.clave_organica_1,
+        scope.organica0,
+        scope.organica1,
+        true,
+        undefined,
+        undefined,
         user.sub?.toString(),
         String((req.query as any)?.usarDiasLaboradosNomina || '') === '1',
         (req.query as any)?.periodo
@@ -504,20 +503,19 @@ export default async function aportacionesFondosRoutes(app: FastifyInstance) {
         return reply.send(unauthorized('Usuario no autenticado'));
       }
 
-      // Extract user organica keys and entity status (normalized to 2 digits)
-      const userClave0 = normalizeClaveOrganica((user as any).idOrganica0) || '';
-      const userClave1 = normalizeClaveOrganica((user as any).idOrganica1) || '';
-      const entidades = (user as any).entidades || [false];
-      const isEntidad = entidades[0] === true; // Check first role's isEntidad status
+      const scope = resolveOrganicaScope(user, {
+        organica0: parsed.data.clave_organica_0,
+        organica1: parsed.data.clave_organica_1,
+      }, 2);
 
       const getAportacionesCompletasQuery = req.diScope.resolve<GetAportacionesCompletasQuery>('getAportacionesCompletasQuery');
       
       const result = await getAportacionesCompletasQuery.execute(
-        userClave0,
-        userClave1,
-        isEntidad,
-        parsed.data.clave_organica_0,
-        parsed.data.clave_organica_1,
+        scope.organica0,
+        scope.organica1,
+        true,
+        undefined,
+        undefined,
         user.sub?.toString()
       );
 
@@ -642,28 +640,27 @@ export default async function aportacionesFondosRoutes(app: FastifyInstance) {
         return reply.send(unauthorized('Usuario no autenticado'));
       }
 
-      // Extract user organica keys and entity status (normalized to 2 digits)
-      const userClave0 = normalizeClaveOrganica((user as any).idOrganica0) || '';
-      const userClave1 = normalizeClaveOrganica((user as any).idOrganica1) || '';
-      const entidades = (user as any).entidades || [false];
-      const isEntidad = entidades[0] === true; // Check first role's isEntidad status
+      const scope = resolveOrganicaScope(user, {
+        organica0: (req.query as any)?.clave_organica_0,
+        organica1: (req.query as any)?.clave_organica_1,
+      }, 2);
 
       console.log(`[APORTACIONES_FONDOS] [ROUTE] [${requestId}] Usuario autenticado`, {
         userId: user.sub,
-        userClave0,
-        userClave1,
-        isEntidad,
+        userClave0: scope.organica0,
+        userClave1: scope.organica1,
+        accesoExterno: user.roles.some(role => role.toLowerCase() === 'admin'),
         queryParams: req.query
       });
 
       const getPrestamosQuery = req.diScope.resolve<GetPrestamosQuery>('getPrestamosQuery');
       
       const result = await getPrestamosQuery.execute(
-        userClave0,
-        userClave1,
-        isEntidad,
-        (req.query as any)?.clave_organica_0,
-        (req.query as any)?.clave_organica_1,
+        scope.organica0,
+        scope.organica1,
+        true,
+        undefined,
+        undefined,
         user.sub?.toString(),
         (req.query as any)?.periodo
       );
@@ -814,28 +811,27 @@ export default async function aportacionesFondosRoutes(app: FastifyInstance) {
         return reply.send(unauthorized('Usuario no autenticado'));
       }
 
-      // Extract user organica keys and entity status (normalized to 2 digits)
-      const userClave0 = normalizeClaveOrganica((user as any).idOrganica0) || '';
-      const userClave1 = normalizeClaveOrganica((user as any).idOrganica1) || '';
-      const entidades = (user as any).entidades || [false];
-      const isEntidad = entidades[0] === true; // Check first role's isEntidad status
+      const scope = resolveOrganicaScope(user, {
+        organica0: (req.query as any)?.clave_organica_0,
+        organica1: (req.query as any)?.clave_organica_1,
+      }, 2);
 
       console.log(`[APORTACIONES_FONDOS] [ROUTE] [${requestId}] Usuario autenticado`, {
         userId: user.sub,
-        userClave0,
-        userClave1,
-        isEntidad,
+        userClave0: scope.organica0,
+        userClave1: scope.organica1,
+        accesoExterno: user.roles.some(role => role.toLowerCase() === 'admin'),
         queryParams: req.query
       });
 
       const getPrestamosMedianoPlazoQuery = req.diScope.resolve<GetPrestamosMedianoPlazoQuery>('getPrestamosMedianoPlazoQuery');
       
       const result = await getPrestamosMedianoPlazoQuery.execute(
-        userClave0,
-        userClave1,
-        isEntidad,
-        (req.query as any)?.clave_organica_0,
-        (req.query as any)?.clave_organica_1,
+        scope.organica0,
+        scope.organica1,
+        true,
+        undefined,
+        undefined,
         user.sub?.toString(),
         (req.query as any)?.periodo
       );
@@ -995,11 +991,10 @@ export default async function aportacionesFondosRoutes(app: FastifyInstance) {
         return reply.send(unauthorized('Usuario no autenticado'));
       }
 
-      // Extract user organica keys and entity status (normalized to 2 digits)
-      const userClave0 = normalizeClaveOrganica((user as any).idOrganica0) || '';
-      const userClave1 = normalizeClaveOrganica((user as any).idOrganica1) || '';
-      const entidades = (user as any).entidades || [false];
-      const isEntidad = entidades[0] === true; // Check first role's isEntidad status
+      const scope = resolveOrganicaScope(user, {
+        organica0: (req.query as any)?.clave_organica_0,
+        organica1: (req.query as any)?.clave_organica_1,
+      }, 2);
 
       // Get computadoraAntigua parameter (default: false)
       const computadoraAntiguaParam = (req.query as any)?.computadora_antigua;
@@ -1020,9 +1015,9 @@ export default async function aportacionesFondosRoutes(app: FastifyInstance) {
 
       console.log(`[APORTACIONES_FONDOS] [ROUTE] [${requestId}] Usuario autenticado`, {
         userId: user.sub,
-        userClave0,
-        userClave1,
-        isEntidad,
+        userClave0: scope.organica0,
+        userClave1: scope.organica1,
+        accesoExterno: user.roles.some(role => role.toLowerCase() === 'admin'),
         computadoraAntigua,
         queryParams: req.query
       });
@@ -1030,12 +1025,12 @@ export default async function aportacionesFondosRoutes(app: FastifyInstance) {
       const getPrestamosHipotecariosQuery = req.diScope.resolve<GetPrestamosHipotecariosQuery>('getPrestamosHipotecariosQuery');
       
       const result = await getPrestamosHipotecariosQuery.execute(
-        userClave0,
-        userClave1,
-        isEntidad,
+        scope.organica0,
+        scope.organica1,
+        true,
         computadoraAntigua,
-        (req.query as any)?.clave_organica_0,
-        (req.query as any)?.clave_organica_1,
+        undefined,
+        undefined,
         user.sub?.toString(),
         (req.query as any)?.periodo
       );
@@ -1177,28 +1172,27 @@ export default async function aportacionesFondosRoutes(app: FastifyInstance) {
         return reply.send(unauthorized('Usuario no autenticado'));
       }
 
-      // Extract user organica keys and entity status (normalized to 2 digits)
-      const userClave0 = normalizeClaveOrganica((user as any).idOrganica0) || '';
-      const userClave1 = normalizeClaveOrganica((user as any).idOrganica1) || '';
-      const entidades = (user as any).entidades || [false];
-      const isEntidad = entidades[0] === true; // Check first role's isEntidad status
+      const scope = resolveOrganicaScope(user, {
+        organica0: (req.query as any)?.clave_organica_0,
+        organica1: (req.query as any)?.clave_organica_1,
+      }, 2);
 
       console.log(`[APORTACIONES_FONDOS] [ROUTE] [${requestId}] Usuario autenticado`, {
         userId: user.sub,
-        userClave0,
-        userClave1,
-        isEntidad,
+        userClave0: scope.organica0,
+        userClave1: scope.organica1,
+        accesoExterno: user.roles.some(role => role.toLowerCase() === 'admin'),
         queryParams: req.query
       });
 
       const getAportacionGuarderiasQuery = req.diScope.resolve<GetAportacionGuarderiasQuery>('getAportacionGuarderiasQuery');
       
       const result = await getAportacionGuarderiasQuery.execute(
-        userClave0,
-        userClave1,
-        isEntidad,
-        (req.query as any)?.clave_organica_0,
-        (req.query as any)?.clave_organica_1,
+        scope.organica0,
+        scope.organica1,
+        true,
+        undefined,
+        undefined,
         user.sub?.toString(),
         String((req.query as any)?.usarDiasLaboradosNomina || '') === '1',
         (req.query as any)?.periodo
@@ -1370,28 +1364,27 @@ export default async function aportacionesFondosRoutes(app: FastifyInstance) {
         return reply.send(unauthorized('Usuario no autenticado'));
       }
 
-      // Extract user organica keys and entity status (normalized to 2 digits)
-      const userClave0 = normalizeClaveOrganica((user as any).idOrganica0) || '';
-      const userClave1 = normalizeClaveOrganica((user as any).idOrganica1) || '';
-      const entidades = (user as any).entidades || [false];
-      const isEntidad = entidades[0] === true; // Check first role's isEntidad status
+      const scope = resolveOrganicaScope(user, {
+        organica0: (req.query as any)?.clave_organica_0,
+        organica1: (req.query as any)?.clave_organica_1,
+      }, 2);
 
       console.log(`[APORTACIONES_FONDOS] [ROUTE] [${requestId}] Usuario autenticado`, {
         userId: user.sub,
-        userClave0,
-        userClave1,
-        isEntidad,
+        userClave0: scope.organica0,
+        userClave1: scope.organica1,
+        accesoExterno: user.roles.some(role => role.toLowerCase() === 'admin'),
         queryParams: req.query
       });
 
       const getPensionNominaTransitorioQuery = req.diScope.resolve<GetPensionNominaTransitorioQuery>('getPensionNominaTransitorioQuery');
       
       const result = await getPensionNominaTransitorioQuery.execute(
-        userClave0,
-        userClave1,
-        isEntidad,
-        (req.query as any)?.clave_organica_0,
-        (req.query as any)?.clave_organica_1,
+        scope.organica0,
+        scope.organica1,
+        true,
+        undefined,
+        undefined,
         user.sub?.toString(),
         String((req.query as any)?.usarDiasLaboradosNomina || '') === '1',
         (req.query as any)?.periodo
@@ -1541,28 +1534,27 @@ export default async function aportacionesFondosRoutes(app: FastifyInstance) {
         return reply.send(unauthorized('Usuario no autenticado'));
       }
 
-      // Extract user organica keys and entity status (normalized to 2 digits)
-      const userClave0 = normalizeClaveOrganica((user as any).idOrganica0) || '';
-      const userClave1 = normalizeClaveOrganica((user as any).idOrganica1) || '';
-      const entidades = (user as any).entidades || [false];
-      const isEntidad = entidades[0] === true; // Check first role's isEntidad status
+      const scope = resolveOrganicaScope(user, {
+        organica0: (req.query as any)?.clave_organica_0,
+        organica1: (req.query as any)?.clave_organica_1,
+      }, 2);
 
       console.log(`[APORTACIONES_FONDOS] [ROUTE] [${requestId}] Usuario autenticado`, {
         userId: user.sub,
-        userClave0,
-        userClave1,
-        isEntidad,
+        userClave0: scope.organica0,
+        userClave1: scope.organica1,
+        accesoExterno: user.roles.some(role => role.toLowerCase() === 'admin'),
         queryParams: req.query
       });
 
       const getAguinaldoQuery = req.diScope.resolve<GetAguinaldoQuery>('getAguinaldoQuery');
       
       const result = await getAguinaldoQuery.execute(
-        userClave0,
-        userClave1,
-        isEntidad,
-        (req.query as any)?.clave_organica_0,
-        (req.query as any)?.clave_organica_1,
+        scope.organica0,
+        scope.organica1,
+        true,
+        undefined,
+        undefined,
         user.sub?.toString(),
         String((req.query as any)?.usarDiasLaboradosNomina || '') === '1',
         (req.query as any)?.periodo

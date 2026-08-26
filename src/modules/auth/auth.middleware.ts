@@ -29,15 +29,14 @@ export async function requireAuth(req: FastifyRequest, reply: FastifyReply) {
       });
     }
     
-    // Usar valores del token si están disponibles, sino usar los de la BD
     req.user = {
       sub: payload.sub,
-      roles: payload.roles,
-      entidades: payload.entidades,
-      idOrganica0: payload.idOrganica0 ?? userInfo?.idOrganica0,
-      idOrganica1: payload.idOrganica1 ?? userInfo?.idOrganica1,
-      idOrganica2: payload.idOrganica2 ?? userInfo?.idOrganica2,
-      idOrganica3: payload.idOrganica3 ?? userInfo?.idOrganica3,
+      roles: Array.isArray(payload.roles) ? payload.roles : [],
+      entidades: Array.isArray(payload.entidades) ? payload.entidades : [],
+      idOrganica0: payload.idOrganica0,
+      idOrganica1: payload.idOrganica1,
+      idOrganica2: payload.idOrganica2,
+      idOrganica3: payload.idOrganica3,
       jti: payload.jti,
       iat: payload.iat,
       exp: payload.exp

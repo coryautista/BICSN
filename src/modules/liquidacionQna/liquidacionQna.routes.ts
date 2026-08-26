@@ -10,6 +10,7 @@ import type { ListQnaSnapshotsQuery } from './application/queries/ListQnaSnapsho
 import type { ResolveOfficialQnaSnapshotQuery } from './application/queries/ResolveOfficialQnaSnapshotQuery.js';
 import type { CreateAndPromoteQnaCandidateCommand } from './application/commands/CreateAndPromoteQnaCandidateCommand.js';
 import { handleLiquidacionQnaError } from './infrastructure/errorHandler.js';
+import { resolveOrganicaScope } from '../auth/domain/policies/OrganicaScopePolicy.js';
 import {
   CreateQnaCandidateSchema, QnaDecisionSchema, QnaIdParamsSchema, QnaListSchema, QnaPromoteSchema,
 } from './liquidacionQna.schemas.js';
@@ -73,16 +74,17 @@ export default async function liquidacionQnaRoutes(app: FastifyInstance) {
   }, async (request, reply) => {
     try {
       const body = request.body as Partial<Omit<Parameters<CreateAndPromoteQnaCandidateCommand['execute']>[0], 'usuarioId'>> & { anio: number; quincena: number };
-      const isEntidad = request.user?.entidades?.[0] === true;
-      const organica0 = isEntidad ? request.user?.idOrganica0 : body.organica0 ?? request.user?.idOrganica0;
-      const organica1 = isEntidad ? request.user?.idOrganica1 : body.organica1 ?? request.user?.idOrganica1;
-      const organica2 = isEntidad ? request.user?.idOrganica2 ?? '01' : body.organica2 ?? request.user?.idOrganica2 ?? '01';
-      const organica3 = isEntidad ? request.user?.idOrganica3 ?? '01' : body.organica3 ?? request.user?.idOrganica3 ?? '01';
-      if (!organica0 || !organica1) return reply.code(400).send(fail('Orgánicas no disponibles', 'QNA_ORGANICA_REQUERIDA'));
+      const scope = resolveOrganicaScope(request.user!, {
+        entidadId: body.entidadId,
+        organica0: body.organica0,
+        organica1: body.organica1,
+        organica2: body.organica2,
+        organica3: body.organica3,
+      });
       const command = request.diScope.resolve<CreateAndPromoteQnaCandidateCommand>('createAndPromoteQnaCandidateCommand');
       return reply.send(ok(await command.execute({
-        entidadId: isEntidad ? 1 : body.entidadId ?? 1, anio: body.anio, quincena: body.quincena,
-        organica0: String(organica0), organica1: String(organica1), organica2: String(organica2), organica3: String(organica3),
+        entidadId: scope.entidadId, anio: body.anio, quincena: body.quincena,
+        organica0: scope.organica0, organica1: scope.organica1, organica2: scope.organica2!, organica3: scope.organica3!,
         computadoraAntiguaHip: body.computadoraAntiguaHip, usuarioId: String(request.user!.sub),
       })));
     } catch (error) { return handleLiquidacionQnaError(error, request, reply); }
@@ -98,15 +100,16 @@ export default async function liquidacionQnaRoutes(app: FastifyInstance) {
   }, async (request, reply) => {
     try {
       const query = request.query as Record<string, string>;
-      const isEntidad = request.user?.entidades?.[0] === true;
-      const organica0 = isEntidad ? request.user?.idOrganica0 : query.organica0 ?? request.user?.idOrganica0;
-      const organica1 = isEntidad ? request.user?.idOrganica1 : query.organica1 ?? request.user?.idOrganica1;
-      const organica2 = isEntidad ? request.user?.idOrganica2 ?? '01' : query.organica2 ?? request.user?.idOrganica2 ?? '01';
-      const organica3 = isEntidad ? request.user?.idOrganica3 ?? '01' : query.organica3 ?? request.user?.idOrganica3 ?? '01';
-      if (!organica0 || !organica1) return reply.code(400).send(fail('Orgánicas no disponibles', 'QNA_ORGANICA_REQUERIDA'));
+      const scope = resolveOrganicaScope(request.user!, {
+        entidadId: query.entidadId,
+        organica0: query.organica0,
+        organica1: query.organica1,
+        organica2: query.organica2,
+        organica3: query.organica3,
+      });
       const resolver = request.diScope.resolve<ResolveOfficialQnaSnapshotQuery>('resolveOfficialQnaSnapshotQuery');
-      const snapshot = await resolver.executeByScope({ entidadId: isEntidad ? 1 : Number(query.entidadId ?? 1), anio: Number(query.anio), quincena: Number(query.quincena),
-        organica0: String(organica0).padStart(2, '0'), organica1: String(organica1).padStart(2, '0'), organica2: String(organica2).padStart(2, '0'), organica3: String(organica3).padStart(2, '0') });
+      const snapshot = await resolver.executeByScope({ entidadId: scope.entidadId, anio: Number(query.anio), quincena: Number(query.quincena),
+        organica0: scope.organica0, organica1: scope.organica1, organica2: scope.organica2!, organica3: scope.organica3! });
       if (!snapshot) return reply.code(404).send(fail('Snapshot oficial no encontrado', 'QNA_SNAPSHOT_NO_ENCONTRADO'));
       return reply.send(ok({ liquidacionSnapshotId: snapshot.liquidacionSnapshotId }));
     } catch (error) { return handleLiquidacionQnaError(error, request, reply); }

@@ -19,7 +19,8 @@
     "test:revision:estado:ftp:opcional": "tsx scripts/test-revision-estado-ftp-opcional.ts",
     "test:movimiento:fechas": "tsx scripts/test-movimiento-fechas.ts",
     "test:liquidacion-qna": "tsx scripts/test-liquidacion-qna-contracts.ts",
-    "test:liquidacion-qna:auto": "tsx scripts/test-liquidacion-qna-auto-orchestration.ts"
+    "test:liquidacion-qna:auto": "tsx scripts/test-liquidacion-qna-auto-orchestration.ts",
+    "test:auth:organica-scope": "tsx scripts/test-organica-scope-policy.ts"
   },
   "engines": {
     "node": ">=20.0.0"

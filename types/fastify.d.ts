@@ -1,4 +1,5 @@
 import 'fastify';
+import type { AuthenticatedUser } from '../src/modules/auth/domain/policies/OrganicaScopePolicy.js';
 
 declare module 'fastify' {
   interface FastifyInstance {
@@ -11,18 +12,7 @@ declare module 'fastify' {
   }
 
   interface FastifyRequest {
-    user?: {
-      sub: string;
-      roles: string[];
-      entidades: boolean[];
-      idOrganica0?: string;
-      idOrganica1?: string;
-      idOrganica2?: string;
-      idOrganica3?: string;
-      jti: string;
-      iat?: number;
-      exp?: number;
-    };
+    user?: AuthenticatedUser;
     diScope?: {
       resolve<T>(name: string): T;
     };

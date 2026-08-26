@@ -1,9 +1,17 @@
 import { FastifyReply } from 'fastify';
 import { AportacionFondoDomainError } from '../domain/errors.js';
+import { OrganicaScopePolicyError } from '../../auth/domain/policies/OrganicaScopePolicy.js';
 
 export function handleAportacionesFondosError(error: any, reply: FastifyReply): FastifyReply {
   // Log del error con contexto
   console.error('[APORTACIONES_FONDOS] Error:', error);
+
+  if (error instanceof OrganicaScopePolicyError) {
+    return reply.code(error.statusCode).send({
+      ok: false,
+      error: { code: error.code, message: error.message, timestamp: new Date().toISOString() }
+    });
+  }
 
   // Si es un error del dominio aportaciones fondos, manejarlo específicamente
   if (error instanceof AportacionFondoDomainError) {
