@@ -15,7 +15,7 @@ Este tablero no sustituye el plan tecnico ni autoriza migraciones, reprocesos, c
 ## Estado General
 
 ```text
-FASE_0_COMPLETADA
+FASE_1_COMPLETADA
 ```
 
 Ultima actualizacion: 2026-08-25.
@@ -38,7 +38,7 @@ Para cada QNA nueva aplicada, reproducir sin fuentes vivas los diez dominios con
 | Fase | Entregable verificable | Estado | Dependencia |
 |---:|---|---|---|
 | 0 | Decisiones, ADR, tablero y linea base documental | COMPLETADA | Prerrequisitos completados |
-| 1 | Politica central de autorizacion y ambito | PENDIENTE | Fase 0 |
+| 1 | Politica central de autorizacion y ambito | COMPLETADA | Fase 0 |
 | 2 | Invariantes transaccionales de promocion | PENDIENTE | Fase 1 |
 | 3 | Precedencia correcta de quinquenio | PENDIENTE | Fase 2 |
 | 4 | Migracion idempotente de proyecciones y restricciones | PENDIENTE | Fase 3 |
@@ -53,7 +53,25 @@ Para cada QNA nueva aplicada, reproducir sin fuentes vivas los diez dominios con
 | 13 | Retiro autorizado de escritura legacy para QNA nuevas | PENDIENTE | Fase 12 y aprobacion operativa |
 | 14 | Migracion y liberacion controlada en Produccion | PENDIENTE | Fase 13 |
 
-## Fase Actual: 0
+## Fase Actual: 2
+
+Objetivo: validar carga, formula y enlaces dentro de la transaccion de promocion.
+
+## Fases Cerradas
+
+### Fase 1: Autorizacion y Ambito
+
+- [x] Politica central `OrganicaScopePolicy`.
+- [x] Clasificacion de entidad independiente del orden de roles.
+- [x] Organicas de entidad obtenidas exclusivamente del token.
+- [x] Ambito externo restringido al rol `admin`.
+- [x] Liquidacion QNA protegida por la politica central.
+- [x] Ocho consultas operativas de aportaciones protegidas por la politica central.
+- [x] Errores `401` y `403` comprobados.
+- [x] Build y contratos de aportaciones y liquidacion aprobados.
+- [x] Commit funcional `08bfae1`.
+
+### Fase 0: Linea Base Documental
 
 Objetivo: establecer una linea base documental y operativa revisable antes de modificar el flujo financiero.
 
@@ -103,7 +121,7 @@ deploy_bicsn.template.sh
 
 No deben incluirse, revertirse ni ajustarse como parte de esta fase. Requieren una revision y entrega separadas de configuracion/despliegue.
 
-## Puerta para Iniciar la Fase 1
+## Evidencia de la Fase 0
 
 - Fase 0 marcada `COMPLETADA` en este tablero y en el plan principal.
 - ADR aceptado y versionado.
@@ -128,7 +146,7 @@ No deben incluirse, revertirse ni ajustarse como parte de esta fase. Requieren u
 |---|---|---|
 | Lecturas repetidas producen evidencias distintas | Captura unica de diez dominios | ABIERTO |
 | SQL Server y Firebird no comparten transaccion | Saga recuperable e idempotente | ABIERTO |
-| Acceso cruzado entre dependencias | Politica central de ambito | ABIERTO |
+| Acceso cruzado entre dependencias | Politica central de ambito | CONTROLADO |
 | Campos historicos no verificables | `null`, advertencias y fuente discriminada | ABIERTO |
 | Diferencias entre snapshot oficial y legacy | Dual-write y conciliacion | ABIERTO |
 | Cambios locales ajenos mezclados con la fase | Commit selectivo y revision de diff | CONTROLADO |
@@ -140,6 +158,7 @@ No deben incluirse, revertirse ni ajustarse como parte de esta fase. Requieren u
 | 2026-08-21 | Prerrequisito | COMPLETADO | Desarrollo y Calidad alineados; publicaciones saludables | Establecer fase 0 |
 | 2026-08-21 | Linea base | COMPLETADO | Commit `3f51713` | Crear ADR y tablero |
 | 2026-08-25 | 0 | COMPLETADA | Commit `e7a3327`; ADR y tablero creados; scripts clasificados; `git diff --check` aprobado | Iniciar fase 1 |
+| 2026-08-25 | 1 | COMPLETADA | Commit `08bfae1`; `ORGANICA_SCOPE_POLICY_TESTS_OK`; build y contratos aprobados | Iniciar fase 2 |
 
 ## Regla de Actualizacion
 
