@@ -203,6 +203,16 @@ Una fuente `EMPTY` solo puede convertirse a `NOT_APPLICABLE` mediante aprobacion
 
 La aprobacion automatica inicial del Snapshot V2 se registra una sola vez. Una aprobacion vigente bajo la politica actual se reutiliza; una decision `OBSERVADO` o una aprobacion bajo una politica desactualizada exige una nueva aprobacion explicita.
 
+## Proyeccion de Retenciones V3
+
+PCP, PMP e HIP se proyectan despues de seleccionar el Snapshot V5 oficial y dentro de la misma transaccion SQL Server. El procedimiento `retenciones.spProyectarRetencionesV3DesdeSnapshotV5` consume exclusivamente `QnaSnapshotFuente`, `QnaSnapshotFuenteDetalle` y `QnaSnapshotTotal`; no consulta Firebird ni acepta filas del cliente.
+
+`retenciones.RetencionHistoricoLoteV3` registra un lote por snapshot y dominio, incluso cuando la fuente esta vacia. Cada fila V3 conserva `Interno`, nombre, payload V1, `ClaveFilaHash`, `HashFila`, fuente, escala, orden y vinculo opcional a `QnaSnapshotDetalle`. Una retencion cuyo `Interno` no pertenece al conjunto de fondos se conserva con marca huerfana.
+
+Las claves y componentes nullable permanecen `null`. Los valores no nulos se validan contra su tipo SQL final antes de proyectar. PCP y PMP usan `total_d6`; HIP usa `cantidad_d6` como importe oficial. Los duplicados se conservan por orden y una reejecucion compara el lote completo antes de responder idempotentemente.
+
+Los procedimientos legacy basados en TVP/body rechazan snapshots V5. Permanecen disponibles solo para `VersionEsquema < 5`.
+
 ## Inmutabilidad
 
 Los triggers siguientes bloquean `UPDATE` y `DELETE`:
@@ -221,6 +231,8 @@ Archivos oficiales:
 ```text
 database/migrations/20260825_09_add_qna_official_snapshot_projections.sql
 database/migrations/20260825_10_verify_qna_official_snapshot_projections.sql
+database/migrations/20260826_11_strengthen_retenciones_v3_projection.sql
+database/migrations/20260826_12_verify_retenciones_v3_projection.sql
 scripts/migrate-qna-official-projections-desarrollo.ts
 scripts/verify-qna-official-projections-desarrollo.ts
 ```

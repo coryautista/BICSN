@@ -45,7 +45,7 @@ Para cada QNA nueva aplicada, reproducir sin fuentes vivas los diez dominios con
 | 4 | Migracion idempotente de proyecciones y restricciones | COMPLETADA | Fase 3 |
 | 5 | Captura unica en memoria de diez dominios | COMPLETADA | Fase 4 |
 | 6 | Detalles, payloads, hashes y totales persistidos | COMPLETADA | Fase 5 |
-| 7 | Retenciones V3 completas por identidad y hash | PENDIENTE | Fase 6 |
+| 7 | Retenciones V3 completas por identidad y hash | COMPLETADA | Fase 6 |
 | 8 | Dual-write y conciliacion automatizada | PENDIENTE | Fase 7 |
 | 9 | Endpoints oficiales de periodos, resumen y detalle | PENDIENTE | Fase 8 |
 | 10 | Fuentes discriminadas y fallback legacy | PENDIENTE | Fase 9 |
@@ -54,9 +54,25 @@ Para cada QNA nueva aplicada, reproducir sin fuentes vivas los diez dominios con
 | 13 | Retiro autorizado de escritura legacy para QNA nuevas | PENDIENTE | Fase 12 y aprobacion operativa |
 | 14 | Migracion y liberacion controlada en Produccion | PENDIENTE | Fase 13 |
 
-## Fase Actual: 7
+## Fase Actual: 8
 
-Objetivo: fortalecer las retenciones V3 por identidad y hash sin perder multiplicidad ni trazabilidad.
+Objetivo: activar dual-write y conciliacion automatizada sin releer fuentes vivas.
+
+## Evidencia de la Fase 7
+
+- [x] Proyectar PCP, PMP e HIP desde `QnaSnapshotFuenteDetalle`, sin relectura Firebird.
+- [x] Usar `Interno` como identidad y conservar numero de empleado solo dentro del payload.
+- [x] Persistir payload V1, clave, hash, fuente, escala y ocurrencia exacta.
+- [x] Preservar duplicados por `Orden` y permitir `ClaveFilaHash` repetido.
+- [x] Conservar claves y componentes nullable sin sustituirlos por cero.
+- [x] Validar rangos `INT`, `SMALLINT` y `DECIMAL(19,6)` antes de proyectar.
+- [x] Registrar lotes compartidos, incluidos dominios vacios.
+- [x] Conservar retenciones fuera del conjunto de fondos con marca huerfana.
+- [x] Mantener `cantidad_d6` como importe oficial HIP y validar el procedimiento configurado.
+- [x] Restringir la escritura basada en body a snapshots legacy en TypeScript y SQL.
+- [x] Verificar reintentos exactos, incluso por otro administrador, y rollback total.
+- [x] Aplicar y reaplicar la migracion exclusivamente en Desarrollo sin modificar filas.
+- [x] Registrar el commit funcional `2e61284`.
 
 ## Evidencia de la Fase 6
 
@@ -241,6 +257,7 @@ No deben incluirse, revertirse ni ajustarse como parte de esta fase. Requieren u
 | 2026-08-25 | 5 | EN_PROGRESO | Captura unica, payload V1, identidad por interno e inmutabilidad probados; revision sin bloqueos | Confirmar politica HIP y validar captura read-only en Desarrollo |
 | 2026-08-26 | 5 | COMPLETADA | Commits `3970da8` y `6327e70`; `QNA_TEN_DOMAIN_CAPTURE_DESARROLLO_READONLY_OK`; politica HIP `1526,1626`; Snapshot antes/despues en cero | Iniciar fase 6 |
 | 2026-08-26 | 6 | COMPLETADA | Commit `1b484ed`; `QNA_V5_WRITER_INTEGRATION_DESARROLLO_ROLLBACK_OK`; 169 proyecciones, reintento idempotente y rollback completo; revision sin bloqueos altos | Iniciar fase 7 |
+| 2026-08-26 | 7 | COMPLETADA | Commit `2e61284`; migracion idempotente, verificador fuerte e integracion rollback de retenciones V3 aprobados; cero filas modificadas o retenidas | Iniciar fase 8 |
 
 ## Regla de Actualizacion
 
