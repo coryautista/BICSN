@@ -2059,7 +2059,7 @@ export class AplicacionQuincenalRepository implements IAplicacionQuincenalReposi
     header: PrestamosCortoPlazoHeader,
     detalle: PrestamosCortoPlazoDetalle[]
   ): Promise<void> {
-    await this.assertRetencionSnapshotScope(tx, header);
+    await this.assertLegacyRetencionSnapshotScope(tx, header);
     const headerTable = new sql.Table('retenciones.TVP_RetencionPCPHeader_V3');
     headerTable.columns.add('LiquidacionSnapshotId', sql.BigInt);
     headerTable.columns.add('SourceScale', sql.TinyInt);
@@ -2114,7 +2114,7 @@ export class AplicacionQuincenalRepository implements IAplicacionQuincenalReposi
     header: PrestamosMedianoPlazoHeader,
     detalle: PrestamosMedianoPlazoDetalle[]
   ): Promise<void> {
-    await this.assertRetencionSnapshotScope(tx, header);
+    await this.assertLegacyRetencionSnapshotScope(tx, header);
     const headerTable = new sql.Table('retenciones.TVP_RetencionPMPHeader_V3');
     headerTable.columns.add('LiquidacionSnapshotId', sql.BigInt);
     headerTable.columns.add('SourceScale', sql.TinyInt);
@@ -2169,7 +2169,7 @@ export class AplicacionQuincenalRepository implements IAplicacionQuincenalReposi
     header: PrestamosHipotecariosHeader,
     detalle: PrestamosHipotecariosDetalle[]
   ): Promise<void> {
-    await this.assertRetencionSnapshotScope(tx, header);
+    await this.assertLegacyRetencionSnapshotScope(tx, header);
     const headerTable = new sql.Table('retenciones.TVP_RetencionHIPHeader_V3');
     headerTable.columns.add('LiquidacionSnapshotId', sql.BigInt);
     headerTable.columns.add('SourceScale', sql.TinyInt);
@@ -2483,7 +2483,7 @@ export class AplicacionQuincenalRepository implements IAplicacionQuincenalReposi
     }
   }
 
-  private async assertRetencionSnapshotScope(tx: sql.Transaction, header: {
+  private async assertLegacyRetencionSnapshotScope(tx: sql.Transaction, header: {
     liquidacion_snapshot_id: number;
     clave_organica_0: string;
     clave_organica_1: string;
@@ -2502,11 +2502,11 @@ export class AplicacionQuincenalRepository implements IAplicacionQuincenalReposi
         WHERE LiquidacionSnapshotId=@LiquidacionSnapshotId
           AND Organica0=@Organica0 AND Organica1=@Organica1
           AND Quincena=@Quincena AND Anio=@Anio
-          AND Estado='COMPLETO'
+          AND Estado='COMPLETO' AND VersionEsquema<5
       `);
     if (result.recordset.length === 0) {
       throw new AplicacionQuincenalError(
-        'El snapshot no corresponde al ámbito de las retenciones',
+        'El escritor body-driven de retenciones solo admite snapshots legacy VersionEsquema < 5',
         AplicacionQuincenalErrorCode.VALIDATION_ERROR
       );
     }

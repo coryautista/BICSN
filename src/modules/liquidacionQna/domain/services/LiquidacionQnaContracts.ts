@@ -10,6 +10,8 @@ import {
   type QnaTotals,
 } from '../entities/LiquidacionQna.js';
 import { qnaFail } from '../errors.js';
+import { QNA_AUXILIARY_PAYLOAD_V1_FIELDS } from './QnaAuxiliaryPayloadV1.js';
+import { env } from '../../../../config/env.js';
 
 export const MONEY_A2_PATTERN = /^-?(0|[1-9]\d*)\.\d{2}$/;
 export const MONEY_D6_PATTERN = /^-?(0|[1-9]\d*)\.\d{6}$/;
@@ -129,6 +131,10 @@ export function validateQnaCandidate(input: CreateQnaCandidateInput): { completa
       }
     }
     validateQnaAuxiliaryEmployeeProjection(input.detalles, input.detallesEmpleado);
+    validateQnaRetentionSemantics(input.detalles, input.fuentes, {
+      ambiente: input.ambiente, anio: input.anio, quincena: input.quincena,
+      organica0: input.organica0, organica1: input.organica1,
+    }, env.qna.hipLegacyPeriods);
   }
   for (const [domain, totalName] of Object.entries(detailTotalNames)) {
     const source = input.fuentes.find(item => item.dominio === domain)!;
@@ -147,6 +153,86 @@ export function validateQnaCandidate(input: CreateQnaCandidateInput): { completa
     }
   }
   return { completas, hashContenido: calculateQnaHash(input) };
+}
+
+export type QnaRetentionProvenanceContext = Pick<CreateQnaCandidateInput,
+  'ambiente' | 'anio' | 'quincena' | 'organica0' | 'organica1'>;
+
+export function validateQnaRetentionSemantics(
+  details: QnaSourceDetail[],
+  sources: QnaSource[],
+  context: QnaRetentionProvenanceContext,
+  hipLegacyPeriods: string[] | null,
+): void {
+  const sqlInt = { min: -2147483648, max: 2147483647 } as const;
+  const sqlSmallInt = { min: -32768, max: 32767 } as const;
+  const definitions = {
+    PCP: { procedure: 'AP_S_PCP', key: ['interno', 'prestamo', 'letra'], amount: 'total_d6',
+      components: ['capital_d6', 'interes_d6', 'monto_d6', 'moratorios_d6'],
+      integers: [['prestamo', sqlInt], ['letra', sqlInt], ['plazo', sqlInt]] },
+    PMP: { procedure: 'AP_S_VIV', key: ['interno', 'prestamo', 'letra', 'folio'], amount: 'total_d6',
+      components: ['capital_d6', 'moratorios_d6', 'interes_d6', 'seguro_d6'],
+      integers: [['prestamo', sqlInt], ['letra', sqlInt], ['plazo', sqlInt], ['folio', sqlInt]] },
+    HIP: { procedure: null, key: ['interno', 'pno_solicitud', 'pano'], amount: 'cantidad_d6',
+      components: ['descto_d6', 'capital_pagar_d6', 'interes_pagar_d6', 'interes_diferido_pagar_d6', 'seguro_pagar_d6', 'moratorio_pagar_d6'],
+      integers: [['pno_solicitud', sqlInt], ['pano', sqlSmallInt], ['plazo', sqlInt]] },
+  } as const;
+  if (hipLegacyPeriods === null) qnaFail('Politica HIP no configurada', 'QNA_HIP_POLICY_NOT_CONFIGURED', 500);
+  const periodo = `${String(context.quincena).padStart(2, '0')}${String(context.anio).slice(-2)}`;
+  for (const [domain, definition] of Object.entries(definitions)) {
+    const source = sources.find((item) => item.dominio === domain);
+    if (!source) qnaFail(`Fuente ${domain} faltante`, 'QNA_RETENCION_SEMANTICA_INVALIDA', 400);
+    if (source.sourceScale !== 2 || source.tipoFuente !== 'FIREBIRD') {
+      qnaFail(`Fuente ${domain} incompatible`, 'QNA_RETENCION_SEMANTICA_INVALIDA', 400);
+    }
+    const procedure = domain === 'HIP'
+      ? (hipLegacyPeriods.includes(periodo) ? 'AP_S_COMP_QNA' : 'AP_S_HIP_QNA')
+      : definition.procedure;
+    const expectedIdentifier = `FIREBIRD:${procedure}:${context.ambiente}:${periodo}:${context.organica0}:${context.organica1}`;
+    if (source.identificadorFuente !== expectedIdentifier) {
+      qnaFail(`Procedencia ${domain} inconsistente`, domain === 'HIP'
+        ? 'QNA_RETENCION_HIP_PROCEDIMIENTO_INVALIDO' : 'QNA_RETENCION_PROCEDENCIA_INVALIDA', 400);
+    }
+    const expectedFields = [...QNA_AUXILIARY_PAYLOAD_V1_FIELDS[domain as keyof typeof definitions]].sort();
+    for (const detail of details.filter((item) => item.dominio === domain)) {
+      const payload = detail.payloadCanonico;
+      if (detail.payloadVersion !== 1 || detail.sourceScale !== 2
+          || Object.keys(payload).sort().join('|') !== expectedFields.join('|')) {
+        qnaFail(`Payload V1 ${domain} incompatible`, 'QNA_RETENCION_PAYLOAD_INVALIDO', 400);
+      }
+      const interno = payload.interno;
+      if (!isSqlInteger(interno, sqlInt) || Number(interno) <= 0 || detail.empleadoClave !== String(interno)
+          || detail.nombre !== payload.nombre || (detail.rfc ?? null) !== (payload.rfc ?? null)) {
+        qnaFail(`Identidad ${domain} inconsistente`, 'QNA_RETENCION_IDENTIDAD_INVALIDA', 400);
+      }
+      for (const [field, range] of definition.integers) {
+        const value = payload[field];
+        if (value !== null && !isSqlInteger(value, range)) {
+          qnaFail(`Entero ${domain}.${field} fuera del tipo SQL destino`, 'QNA_RETENCION_ENTERO_SQL_INVALIDO', 400);
+        }
+      }
+      const key = definition.key.map((field) => payload[field]);
+      if (definition.key.slice(1).some((field) => payload[field] !== null && !Number.isInteger(payload[field]))) {
+        qnaFail(`Clave ${domain} invalida`, 'QNA_RETENCION_CLAVE_INVALIDA', 400);
+      }
+      if (detail.claveFilaHash !== calculateCanonicalHash(key)) {
+        qnaFail(`Clave ${domain} inconsistente`, 'QNA_RETENCION_CLAVE_INVALIDA', 400);
+      }
+      if (detail.importeOficialD6 !== payload[definition.amount]) {
+        qnaFail(`Importe ${domain} inconsistente`, 'QNA_RETENCION_IMPORTE_INVALIDO', 400);
+      }
+      for (const component of definition.components) {
+        const value = payload[component];
+        if (value !== null && (typeof value !== 'string' || !MONEY_D6_PATTERN.test(value))) {
+          qnaFail(`Componente ${domain}.${component} invalido`, 'QNA_RETENCION_COMPONENTE_INVALIDO', 400);
+        }
+      }
+    }
+  }
+}
+
+function isSqlInteger(value: unknown, range: { readonly min: number; readonly max: number }): value is number {
+  return typeof value === 'number' && Number.isInteger(value) && value >= range.min && value <= range.max;
 }
 
 export function calculateQnaEmployeeDetailHash(detail: import('../entities/LiquidacionQna.js').QnaEmployeeDetail): string {

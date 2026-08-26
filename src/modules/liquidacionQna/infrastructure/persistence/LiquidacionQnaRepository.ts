@@ -320,6 +320,7 @@ export class LiquidacionQnaRepository implements ILiquidacionQnaRepository {
       const current = sets[0][0];
       const priorState = sets[1][0]?.EstadoDestino as string | undefined;
       if (current && String(current.LiquidacionSnapshotId) === id) {
+        await this.projectV5Retentions(transaction, id, Number(snapshot.VersionEsquema), usuarioId);
         await transaction.commit();
         return { liquidacionSnapshotId: id, qnaProcesoId: processId,
           qnaSnapshotSeleccionEventoId: String(current.QnaSnapshotSeleccionEventoId), tipoEvento: current.TipoEvento, idempotente: true };
@@ -343,6 +344,7 @@ export class LiquidacionQnaRepository implements ILiquidacionQnaRepository {
       } else {
         await this.insertTransition(transaction, processId, id, priorState ?? null, 'OFICIAL', motivo, usuarioId);
       }
+      await this.projectV5Retentions(transaction, id, Number(snapshot.VersionEsquema), usuarioId);
       await transaction.commit();
       return { liquidacionSnapshotId: id, qnaProcesoId: processId, qnaSnapshotSeleccionEventoId: eventId, tipoEvento: type, idempotente: false };
     } catch (error) {
@@ -639,6 +641,14 @@ export class LiquidacionQnaRepository implements ILiquidacionQnaRepository {
       .input('Motivo', sql.NVarChar(500), motivo).input('UsuarioId', sql.NVarChar(100), usuarioId)
       .query(`INSERT INTO liquidacion.QnaProcesoTransicion (QnaProcesoId,LiquidacionSnapshotId,EstadoOrigen,EstadoDestino,Motivo,UsuarioId)
         VALUES (@ProcesoId,@Id,@Origen,@Destino,@Motivo,@UsuarioId)`);
+  }
+
+  private async projectV5Retentions(transaction: Transaction, snapshotId: string, version: number, usuarioId: string): Promise<void> {
+    if (version < 5) return;
+    await new sql.Request(transaction)
+      .input('LiquidacionSnapshotId', sql.BigInt, snapshotId)
+      .input('UsuarioId', sql.NVarChar(100), usuarioId)
+      .execute('retenciones.spProyectarRetencionesV3DesdeSnapshotV5');
   }
 
   private mapSnapshot(row: Record<string, any>, sourceRows: Array<Record<string, any>>, detailRows: Array<Record<string, any>>, decision: Record<string, any> | null): QnaSnapshot {

@@ -29,7 +29,11 @@
     "verify:qna:official-projections:desarrollo": "tsx scripts/verify-qna-official-projections-desarrollo.ts",
     "test:liquidacion-qna:scope-lock": "tsx scripts/test-qna-scope-lock-integration-desarrollo.ts",
     "verify:liquidacion-qna:capture:desarrollo": "tsx scripts/verify-qna-ten-domain-capture-desarrollo.ts",
-    "test:liquidacion-qna:v5-writer:desarrollo": "tsx scripts/test-qna-v5-writer-integration-desarrollo.ts"
+    "test:liquidacion-qna:v5-writer:desarrollo": "tsx scripts/test-qna-v5-writer-integration-desarrollo.ts",
+    "test:liquidacion-qna:retention-semantics": "tsx scripts/test-qna-retention-semantics.ts",
+    "migrate:retenciones:v3-projection:desarrollo": "tsx scripts/migrate-retenciones-v3-projection-desarrollo.ts",
+    "verify:retenciones:v3-projection:desarrollo": "tsx scripts/verify-retenciones-v3-projection-desarrollo.ts",
+    "test:retenciones:v3-projection:desarrollo": "tsx scripts/test-retenciones-v3-projection-integration-desarrollo.ts"
   },
   "engines": {
     "node": ">=20.0.0"
