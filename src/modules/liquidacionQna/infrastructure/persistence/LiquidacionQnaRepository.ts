@@ -223,10 +223,13 @@ export class LiquidacionQnaRepository implements ILiquidacionQnaRepository {
     const request = this.appliedRequest(filter, transaction).input('Anio',sql.SmallInt,filter.anio??null).input('Quincena',sql.TinyInt,filter.quincena??null)
       .input('Busqueda',sql.NVarChar(206),searchPattern(filter.buscar)).input('Offset',sql.Int,(filter.page-1)*filter.pageSize).input('Tamanio',sql.Int,filter.pageSize);
     const result = await request.query(`${appliedAllSourcesCte()}
+      SELECT TOP(1) a.IntegrityCode FROM Evidencias a WHERE ${this.appliedScopeWhere()} AND (@Anio IS NULL OR a.Anio=@Anio) AND (@Quincena IS NULL OR a.Quincena=@Quincena)
+        AND a.ProcessRank=1 AND a.IntegrityCode IS NOT NULL ORDER BY a.Anio DESC,a.Quincena DESC,a.OrdenTie DESC;
+      ${appliedAllSourcesCte()}
       SELECT TOP(1) COALESCE(a.IntegrityCode,CASE WHEN a.Fuente='HISTORICO_LEGACY' THEN 'QNA_APLICADA_LEGACY_OWNERSHIP_CONFLICT' ELSE 'QNA_APLICADA_INTEGRIDAD_INVALIDA' END) IntegrityCode
-      FROM Elegibles a WHERE ${this.appliedScopeWhere()} AND (@Anio IS NULL OR a.Anio=@Anio) AND (@Quincena IS NULL OR a.Quincena=@Quincena)
-        AND ${appliedAllSourcesSearch()} AND (a.IntegrityCode IS NOT NULL OR (a.Fuente='HISTORICO_LEGACY' AND ${legacyOwnershipConflictSql('a')})
-          OR (a.Fuente<>'HISTORICO_LEGACY' AND ${appliedStructuralConflictSql('a')})) ORDER BY a.Anio DESC,a.Quincena DESC,a.OrdenTie DESC;
+      FROM Elegibles a WHERE ${this.appliedScopeWhere()} AND (@Anio IS NULL OR a.Anio=@Anio) AND (@Quincena IS NULL OR a.Quincena=@Quincena) AND ${appliedAllSourcesSearch()}
+        AND (a.IntegrityCode IS NOT NULL OR (a.Fuente='HISTORICO_LEGACY' AND ${legacyOwnershipConflictSql('a')}) OR (a.Fuente<>'HISTORICO_LEGACY' AND ${appliedStructuralConflictSql('a')}))
+      ORDER BY a.Anio DESC,a.Quincena DESC,a.OrdenTie DESC;
       ${appliedAllSourcesCte()}
       SELECT COUNT(*) Total FROM Elegibles a WHERE ${this.appliedScopeWhere()} AND (@Anio IS NULL OR a.Anio=@Anio) AND (@Quincena IS NULL OR a.Quincena=@Quincena) AND ${appliedAllSourcesSearch()};
       ${appliedAllSourcesCte()}
@@ -234,12 +237,13 @@ export class LiquidacionQnaRepository implements ILiquidacionQnaRepository {
       ORDER BY a.Anio DESC,a.Quincena DESC,a.EntidadId,a.Organica0,a.Organica1,a.Organica2,a.Organica3,a.FechaAplicacion DESC,a.OrdenTie DESC
       OFFSET @Offset ROWS FETCH NEXT @Tamanio ROWS ONLY;`);
     const sets=result.recordsets as Array<Array<Record<string,any>>>;
-    if(sets[0].length>0){const code=String(sets[0][0].IntegrityCode??'QNA_APLICADA_LEGACY_OWNERSHIP_CONFLICT');
+    const structuralProblem=sets[0][0]??sets[1][0];
+    if(structuralProblem){const code=String(structuralProblem.IntegrityCode??'QNA_APLICADA_LEGACY_OWNERSHIP_CONFLICT');
       qnaFail(code==='QNA_APLICADA_LEGACY_AMBIGUA'?'La evidencia historica aplicada es ambigua':'La evidencia aplicada no cumple integridad',code,code.includes('AMBIGUA')||code.includes('CONFLICT')?409:500);}
     const mapSelection=(row:Record<string,any>):AppliedSelectionRecord=>row.Fuente==='HISTORICO_LEGACY'
       ? {id:null,processId:null,appliedAt:new Date(row.FechaAplicacion),version:0 as const,scope:{entidadId:Number(row.EntidadId),anio:Number(row.Anio),quincena:Number(row.Quincena),organica0:String(row.Organica0),organica1:String(row.Organica1),organica2:String(row.Organica2),organica3:String(row.Organica3)}}
       : {id:String(row.LiquidacionSnapshotId),processId:String(row.QnaProcesoId),appliedAt:new Date(row.FechaAplicacion),version:Number(row.VersionEsquema) as 3|4|5};
-    const selections=sets[2].map(mapSelection);
+    const selections=sets[3].map(mapSelection);
     const v5=selections.filter(item=>item.version===5) as Array<{id:string;processId:string;appliedAt:Date;version:5}>;
     const reconstructed=selections.filter(item=>item.version===3||item.version===4) as Array<{id:string;processId:string;appliedAt:Date;version:3|4}>;
     const legacy=selections.filter((item):item is Extract<AppliedSelectionRecord,{version:0}>=>item.version===0);
@@ -250,7 +254,7 @@ export class LiquidacionQnaRepository implements ILiquidacionQnaRepository {
     const resolvedV5=isDeferredRead(v5Items)?v5Items.resolveAfterCommit():v5Items;
     for(const item of [...resolvedV5,...reconstructedItems,...legacyItems]) keyed.set(appliedItemKey(item),item);
     const items=selections.map(item=>keyed.get(selectionKey(item))!).filter(Boolean);
-    const resultMetadata = { page: filter.page, pageSize: filter.pageSize, total: Number(sets[1][0].Total) };
+    const resultMetadata = { page: filter.page, pageSize: filter.pageSize, total: Number(sets[2][0].Total) };
     return { items, ...resultMetadata };
   }
 
@@ -649,7 +653,9 @@ export class LiquidacionQnaRepository implements ILiquidacionQnaRepository {
     }
     for (const row of domainRows) {
       const domain = row.Dominio as QnaDomain; const key = totalKeyByDomain[domain]; const persisted = endpoint[domain] ? summaries.get(endpoint[domain]!) : undefined;
-      if (persisted) {
+      if(Number(row.Registros)===0){totals[key]=null;strategies[key]='UNAVAILABLE';
+        if(persisted)warnings.push({code:'QNA_LEGACY_AGREGADO_SIN_DETALLE_IGNORADO',message:`El agregado historico de ${domain} no prueba detalle persistido y fue ignorado.`,dominio:domain});
+      }else if (persisted) {
         if(persisted.total_empleados!=null&&Number(persisted.total_empleados)!==Number(row.Registros))qnaFail(`Resumen ${domain} contradictorio`,'QNA_APLICADA_LEGACY_RESUMEN_INCONSISTENTE',409);
         totals[key] = persisted.total_contribucion==null?null:String(persisted.total_contribucion); strategies[key] = totals[key]==null?'UNAVAILABLE':'PERSISTED';
       }
@@ -753,23 +759,26 @@ export class LiquidacionQnaRepository implements ILiquidacionQnaRepository {
         FROM liquidacion.QnaProcesoTransicion tr WHERE tr.EstadoDestino='TERMINADO'
       ), Aplicadas AS (
         SELECT p.QnaProcesoId,p.EntidadId,p.Anio,p.Quincena,p.Organica0,p.Organica1,p.Organica2,p.Organica3,t.LiquidacionSnapshotId,
-          t.FechaCreacion FechaAplicacion,t.QnaProcesoTransicionId,s.VersionEsquema,s.LiquidacionSnapshotId SnapshotEncontrado,
+          t.FechaCreacion FechaAplicacion,t.QnaProcesoTransicionId,t.rn ProcessRank,s.VersionEsquema,s.LiquidacionSnapshotId SnapshotEncontrado,
           s.EntidadId SnapshotEntidadId,s.Anio SnapshotAnio,s.Quincena SnapshotQuincena,s.Organica0 SnapshotOrganica0,s.Organica1 SnapshotOrganica1,s.Organica2 SnapshotOrganica2,s.Organica3 SnapshotOrganica3
         FROM Terminadas t JOIN liquidacion.QnaProceso p ON p.QnaProcesoId=t.QnaProcesoId
-        LEFT JOIN liquidacion.QnaSnapshot s ON s.LiquidacionSnapshotId=t.LiquidacionSnapshotId WHERE t.rn=1
+        LEFT JOIN liquidacion.QnaSnapshot s ON s.LiquidacionSnapshotId=t.LiquidacionSnapshotId
       )
       SELECT CONVERT(VARCHAR(30),a.QnaProcesoId) QnaProcesoId,CONVERT(VARCHAR(30),a.LiquidacionSnapshotId) LiquidacionSnapshotId,
-        a.FechaAplicacion,a.VersionEsquema,a.SnapshotEncontrado,a.SnapshotEntidadId,a.SnapshotAnio,a.SnapshotQuincena,a.SnapshotOrganica0,a.SnapshotOrganica1,a.SnapshotOrganica2,a.SnapshotOrganica3,
+        a.FechaAplicacion,a.QnaProcesoTransicionId,a.ProcessRank,a.VersionEsquema,a.SnapshotEncontrado,a.SnapshotEntidadId,a.SnapshotAnio,a.SnapshotQuincena,a.SnapshotOrganica0,a.SnapshotOrganica1,a.SnapshotOrganica2,a.SnapshotOrganica3,
         a.EntidadId,a.Anio,a.Quincena,a.Organica0,a.Organica1,a.Organica2,a.Organica3
       FROM Aplicadas a WHERE a.Anio=@Anio AND a.Quincena=@Quincena AND ${this.appliedScopeWhere()}
-      ORDER BY a.FechaAplicacion DESC,a.QnaProcesoTransicionId DESC;`);
+      ORDER BY CASE WHEN a.VersionEsquema=5 THEN 0 ELSE 1 END,a.FechaAplicacion DESC,a.QnaProcesoTransicionId DESC,a.QnaProcesoId DESC;`);
     if (result.recordset.length === 0) return this.selectLegacyApplied(filter, transaction);
-    if (result.recordset.length > 1) qnaFail('La liquidacion aplicada es ambigua; especifique el ambito completo', 'QNA_APLICADA_OFICIAL_AMBIGUA', 409);
-    const row=result.recordset[0];
-    const sameScope=row.SnapshotEncontrado!=null&&Number(row.SnapshotEntidadId)===Number(row.EntidadId)&&Number(row.SnapshotAnio)===Number(row.Anio)
-      &&Number(row.SnapshotQuincena)===Number(row.Quincena)&&['0','1','2','3'].every(level=>String(row[`SnapshotOrganica${level}`])===String(row[`Organica${level}`]));
-    if(row.LiquidacionSnapshotId==null||row.SnapshotEncontrado==null||![3,4,5].includes(Number(row.VersionEsquema))||!sameScope)
-      qnaFail('La ultima evidencia TERMINADO no referencia un snapshot compatible','QNA_APLICADA_TRANSICION_INTEGRIDAD_INVALIDA',500);
+    for(const evidence of result.recordset.filter(row=>Number(row.ProcessRank)===1)){const sameScope=evidence.SnapshotEncontrado!=null&&Number(evidence.SnapshotEntidadId)===Number(evidence.EntidadId)&&Number(evidence.SnapshotAnio)===Number(evidence.Anio)
+      &&Number(evidence.SnapshotQuincena)===Number(evidence.Quincena)&&['0','1','2','3'].every(level=>String(evidence[`SnapshotOrganica${level}`])===String(evidence[`Organica${level}`]));
+      if(evidence.LiquidacionSnapshotId==null||evidence.SnapshotEncontrado==null||![3,4,5].includes(Number(evidence.VersionEsquema))||!sameScope)
+        qnaFail('La ultima evidencia TERMINADO no referencia un snapshot compatible','QNA_APLICADA_TRANSICION_INTEGRIDAD_INVALIDA',500);}
+    const eligible=result.recordset.filter(evidence=>evidence.SnapshotEncontrado!=null&&[3,4,5].includes(Number(evidence.VersionEsquema))&&Number(evidence.SnapshotEntidadId)===Number(evidence.EntidadId)
+      &&Number(evidence.SnapshotAnio)===Number(evidence.Anio)&&Number(evidence.SnapshotQuincena)===Number(evidence.Quincena)&&['0','1','2','3'].every(level=>String(evidence[`SnapshotOrganica${level}`])===String(evidence[`Organica${level}`])));
+    const scopes=new Set(eligible.map(row=>`${row.EntidadId}:${row.Anio}:${row.Quincena}:${row.Organica0}:${row.Organica1}:${row.Organica2}:${row.Organica3}`));
+    if(scopes.size>1)qnaFail('La liquidacion aplicada es ambigua; especifique el ambito completo','QNA_APLICADA_OFICIAL_AMBIGUA',409);
+    const row=eligible.sort(compareAppliedEvidencePrecedence)[0];
     return { id: String(row.LiquidacionSnapshotId), processId: String(row.QnaProcesoId),appliedAt:new Date(row.FechaAplicacion),version:Number(row.VersionEsquema) as 3|4|5 };
   }
 
@@ -1587,6 +1596,12 @@ function addA2Exact(values:string[]):string{
 function groupRows(rows:Array<Record<string,any>>,keyOf:(row:Record<string,any>)=>string):Map<string,Array<Record<string,any>>>{
   const grouped=new Map<string,Array<Record<string,any>>>();for(const row of rows){const key=keyOf(row);const values=grouped.get(key);if(values)values.push(row);else grouped.set(key,[row]);}return grouped;
 }
+export function compareAppliedEvidencePrecedence(left:Record<string,any>,right:Record<string,any>):number{
+  const tier=(row:Record<string,any>)=>Number(row.VersionEsquema)===5?0:1;const tierDifference=tier(left)-tier(right);if(tierDifference!==0)return tierDifference;
+  const dateDifference=new Date(right.FechaAplicacion).getTime()-new Date(left.FechaAplicacion).getTime();if(dateDifference!==0)return dateDifference;
+  const leftTransition=BigInt(String(left.QnaProcesoTransicionId));const rightTransition=BigInt(String(right.QnaProcesoTransicionId));if(leftTransition!==rightTransition)return leftTransition>rightTransition?-1:1;
+  const leftProcess=BigInt(String(left.QnaProcesoId));const rightProcess=BigInt(String(right.QnaProcesoId));return leftProcess===rightProcess?0:leftProcess>rightProcess?-1:1;
+}
 
 export function snapshotSelectionJsonCte():string{return `WITH X(LiquidacionSnapshotId) AS(
   SELECT LiquidacionSnapshotId FROM OPENJSON(@SelectionJson) WITH(LiquidacionSnapshotId BIGINT '$.id'))`;}
@@ -1599,20 +1614,23 @@ export function legacySelectionJsonCte():string{return `WITH X(EntidadId,Anio,Qu
 export function appliedAllSourcesCte():string{return `WITH Terminadas AS(
   SELECT tr.*,ROW_NUMBER() OVER(PARTITION BY tr.QnaProcesoId ORDER BY tr.FechaCreacion DESC,tr.QnaProcesoTransicionId DESC) rn
   FROM liquidacion.QnaProcesoTransicion tr WHERE tr.EstadoDestino='TERMINADO'),
-Snapshots AS(SELECT p.QnaProcesoId,p.EntidadId,p.Anio,p.Quincena,p.Organica0,p.Organica1,p.Organica2,p.Organica3,t.LiquidacionSnapshotId,
-  t.FechaCreacion FechaAplicacion,t.QnaProcesoTransicionId,s.VersionEsquema,
+Evidencias AS(SELECT p.QnaProcesoId,p.EntidadId,p.Anio,p.Quincena,p.Organica0,p.Organica1,p.Organica2,p.Organica3,t.LiquidacionSnapshotId,
+  t.FechaCreacion FechaAplicacion,t.QnaProcesoTransicionId OrdenTie,t.rn ProcessRank,s.VersionEsquema,
   CAST(CASE WHEN s.VersionEsquema=5 THEN 'SNAPSHOT_OFICIAL' ELSE 'SNAPSHOT_OFICIAL_RECONSTRUIDO' END AS VARCHAR(40)) Fuente,
   CAST(NULL AS INT) ExactEvidenceCount,CAST(NULL AS INT) ReducedScopeCount,
   CAST(CASE WHEN t.LiquidacionSnapshotId IS NULL OR s.LiquidacionSnapshotId IS NULL OR s.VersionEsquema NOT IN(3,4,5) THEN 'QNA_APLICADA_TRANSICION_INTEGRIDAD_INVALIDA'
     WHEN s.EntidadId<>p.EntidadId OR s.Anio<>p.Anio OR s.Quincena<>p.Quincena OR s.Organica0<>p.Organica0 OR s.Organica1<>p.Organica1 OR s.Organica2<>p.Organica2 OR s.Organica3<>p.Organica3
       THEN 'QNA_APLICADA_TRANSICION_INTEGRIDAD_INVALIDA' END AS VARCHAR(80)) IntegrityCode
-  FROM Terminadas t JOIN liquidacion.QnaProceso p ON p.QnaProcesoId=t.QnaProcesoId LEFT JOIN liquidacion.QnaSnapshot s ON s.LiquidacionSnapshotId=t.LiquidacionSnapshotId WHERE t.rn=1),
+  FROM Terminadas t JOIN liquidacion.QnaProceso p ON p.QnaProcesoId=t.QnaProcesoId LEFT JOIN liquidacion.QnaSnapshot s ON s.LiquidacionSnapshotId=t.LiquidacionSnapshotId),
+SnapshotsRanked AS(SELECT e.*,ROW_NUMBER() OVER(PARTITION BY e.EntidadId,e.Anio,e.Quincena,e.Organica0,e.Organica1,e.Organica2,e.Organica3
+  ORDER BY CASE WHEN e.VersionEsquema=5 THEN 0 ELSE 1 END,e.FechaAplicacion DESC,e.OrdenTie DESC,e.QnaProcesoId DESC) ScopeRank FROM Evidencias e WHERE e.IntegrityCode IS NULL),
+Snapshots AS(SELECT * FROM SnapshotsRanked WHERE ScopeRank=1),
 LegacyGrouped AS(SELECT TRY_CONVERT(INT,b.EntidadId) EntidadId,b.Anio,b.Quincena,b.Org0 Organica0,b.Org1 Organica1,b.Org2 Organica2,b.Org3 Organica3,MAX(b.CreatedAt) FechaAplicacion,
   MAX(b.AfectacionId) OrdenTie,COUNT(*) ExactEvidenceCount FROM afec.BitacoraAfectacionOrg b WHERE b.Entidad='AFILIADOS' AND b.Accion='TERMINADO'
   AND b.OrgNivel=3 AND b.Resultado='OK' AND TRY_CONVERT(INT,b.EntidadId) IS NOT NULL GROUP BY TRY_CONVERT(INT,b.EntidadId),b.Anio,b.Quincena,b.Org0,b.Org1,b.Org2,b.Org3),
 Legacy AS(SELECT l.*, (SELECT COUNT(*) FROM LegacyGrouped r WHERE r.Anio=l.Anio AND r.Quincena=l.Quincena AND r.Organica0=l.Organica0 AND r.Organica1=l.Organica1) ReducedScopeCount
-  FROM LegacyGrouped l WHERE NOT EXISTS(SELECT 1 FROM Snapshots s WHERE s.EntidadId=l.EntidadId AND s.Anio=l.Anio AND s.Quincena=l.Quincena AND s.Organica0=l.Organica0 AND s.Organica1=l.Organica1 AND s.Organica2=l.Organica2 AND s.Organica3=l.Organica3)),
-Elegibles AS(SELECT EntidadId,Anio,Quincena,Organica0,Organica1,Organica2,Organica3,LiquidacionSnapshotId,QnaProcesoId,FechaAplicacion,QnaProcesoTransicionId OrdenTie,VersionEsquema,Fuente,ExactEvidenceCount,ReducedScopeCount,IntegrityCode FROM Snapshots
+  FROM LegacyGrouped l WHERE NOT EXISTS(SELECT 1 FROM Evidencias s WHERE s.EntidadId=l.EntidadId AND s.Anio=l.Anio AND s.Quincena=l.Quincena AND s.Organica0=l.Organica0 AND s.Organica1=l.Organica1 AND s.Organica2=l.Organica2 AND s.Organica3=l.Organica3)),
+Elegibles AS(SELECT EntidadId,Anio,Quincena,Organica0,Organica1,Organica2,Organica3,LiquidacionSnapshotId,QnaProcesoId,FechaAplicacion,OrdenTie,VersionEsquema,Fuente,ExactEvidenceCount,ReducedScopeCount,IntegrityCode FROM Snapshots
   UNION ALL SELECT EntidadId,Anio,Quincena,Organica0,Organica1,Organica2,Organica3,NULL,NULL,FechaAplicacion,OrdenTie,0,'HISTORICO_LEGACY',ExactEvidenceCount,ReducedScopeCount,
     CASE WHEN ExactEvidenceCount<>1 OR ReducedScopeCount<>1 THEN 'QNA_APLICADA_LEGACY_AMBIGUA' END FROM Legacy)`;}
 

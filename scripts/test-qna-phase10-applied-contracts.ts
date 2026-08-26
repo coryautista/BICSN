@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
-import {LiquidacionQnaRepository,legacySelectionJsonCte,officialSelectionJsonCte,snapshotSelectionJsonCte} from '../src/modules/liquidacionQna/infrastructure/persistence/LiquidacionQnaRepository.js';
+import {compareAppliedEvidencePrecedence,LiquidacionQnaRepository,legacySelectionJsonCte,officialSelectionJsonCte,snapshotSelectionJsonCte} from '../src/modules/liquidacionQna/infrastructure/persistence/LiquidacionQnaRepository.js';
 import {qnaAppliedDetailResponses,qnaAppliedListResponses,qnaAppliedSummaryResponses} from '../src/modules/liquidacionQna/liquidacionQna.applied.openapi.js';
 
 const repository=new LiquidacionQnaRepository({} as any) as any;
@@ -30,10 +30,19 @@ const listApplied=source.slice(source.indexOf('private async listAppliedInTransa
 assert.doesNotMatch(listApplied,/Promise\.all/,'Una Transaction mssql no debe compartir requests concurrentes');
 assert.match(source,/ROW_NUMBER\(\) OVER\(PARTITION BY tr\.QnaProcesoId ORDER BY tr\.FechaCreacion DESC,tr\.QnaProcesoTransicionId DESC\)/);
 assert.match(source,/CASE WHEN s\.VersionEsquema=5 THEN 'SNAPSHOT_OFICIAL' ELSE 'SNAPSHOT_OFICIAL_RECONSTRUIDO' END/);
+assert.match(source,/ORDER BY CASE WHEN e\.VersionEsquema=5 THEN 0 ELSE 1 END/);
+assert.match(source,/PARTITION BY e\.EntidadId,e\.Anio,e\.Quincena,e\.Organica0,e\.Organica1,e\.Organica2,e\.Organica3/);
 assert.match(applied,/QNA_APLICADA_LEGACY_OWNERSHIP_CONFLICT/);
 assert.match(applied,/PERSISTED_CAIR_CONTROL_FALLBACK/);
+assert.match(applied,/QNA_LEGACY_AGREGADO_SIN_DETALLE_IGNORADO/);
 for(const cte of [legacySelectionJsonCte(),officialSelectionJsonCte(),snapshotSelectionJsonCte()]){assert.match(cte,/OPENJSON\(@SelectionJson\)/);assert.doesNotMatch(cte,/@(?:Id|Proceso|LE|LA|LQ|L0)\d+/);}
 assert.doesNotMatch(applied,/input\(`(?:Id|Proceso|RId|LE|LA|LQ|L0|L1|L2|L3)\$\{index\}`/,'Los bundles de pagina no deben crecer parametros por fila');
+const separateProcesses=[
+  {VersionEsquema:4,FechaAplicacion:'2026-08-26T12:00:00Z',QnaProcesoTransicionId:'30',QnaProcesoId:'2'},
+  {VersionEsquema:5,FechaAplicacion:'2026-08-26T11:00:00Z',QnaProcesoTransicionId:'20',QnaProcesoId:'1'},
+  {VersionEsquema:5,FechaAplicacion:'2026-08-26T13:00:00Z',QnaProcesoTransicionId:'40',QnaProcesoId:'3'},
+].sort(compareAppliedEvidencePrecedence);
+assert.deepEqual(separateProcesses.map(item=>item.QnaProcesoId),['3','1','2'],'La precedencia debe ser independiente del proceso y luego determinista por evidencia');
 assert.match(applied,/LIKE @Busqueda ESCAPE '~'/);
 assert.doesNotMatch(applied,/firebird|AP_S_|FormulaCalculoParametro|NominaAplicacionQnalDetalle/i);
 console.log('QNA_PHASE10_APPLIED_CONTRACTS_OK');

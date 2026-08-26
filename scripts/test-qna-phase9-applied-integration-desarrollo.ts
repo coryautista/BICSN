@@ -163,21 +163,28 @@ try {
     const literal = await repository.listApplied({ page: 1, pageSize: 100, ...scope, buscar, esAdmin: false }, transaction);
     assert.equal(literal.total, 0, `Busqueda literal insegura: ${buscar}`);
   }
-  const linkedV4:any=structuredClone(persistedCandidate);linkedV4.versionEsquema=4;delete linkedV4.detallesEmpleado;
+  const reconstructionScope={entidadId:1,anio:2093,quincena:19,organica0:'50',organica1:'50',organica2:'50',organica3:'50'};
+  const v2Only:any=official('V2-ONLY');Object.assign(v2Only.snapshotV2,reconstructionScope);Object.assign(v2Only.candidate,reconstructionScope);
+  for(const source of v2Only.candidate.fuentes)if(source.identificadorFuente.includes(':2498:97:97'))source.identificadorFuente=source.identificadorFuente.replace(':2498:97:97',':1993:50:50');
+  const v2OnlyCreated=await repository.createOfficialV5EnTransaccion(transaction,v2Only);
+  const isolatedV2Id=String((await new sql.Request(transaction).input('Id',sql.BigInt,v2OnlyCreated.liquidacionSnapshotId).query('SELECT SnapshotCalculoV2Id FROM liquidacion.QnaSnapshot WHERE LiquidacionSnapshotId=@Id')).recordset[0].SnapshotCalculoV2Id);
+  const linkedV4:any=structuredClone(v2Only.candidate);Object.assign(linkedV4,{versionEsquema:4,snapshotCalculoV2Id:isolatedV2Id});delete linkedV4.detallesEmpleado;
   const linkedV4Created=await (repository as any).insertCandidate(transaction,linkedV4);
   const poisonEmployee:any=structuredClone(employee);Object.assign(poisonEmployee,{empleadoClave:'LEAK-ME',interno:999999,rfc:'LEAKRFC',nombre:'LEAK NAME'});
   poisonEmployee.hashFila=calculateQnaEmployeeDetailHash(poisonEmployee);
   await (repository as any).insertEmployeeDetail(transaction,linkedV4Created.liquidacionSnapshotId,linkedV4.snapshotCalculoV2Id,poisonEmployee);
-  await transition(linkedV4Created.liquidacionSnapshotId);
-  const reconstructedFund=await repository.getAppliedDetails({...scope,dominio:'AHORRO',page:1,pageSize:10,esAdmin:true},transaction);
+  const linkedV4Process=await new sql.Request(transaction).query(`INSERT liquidacion.QnaProceso(EntidadId,Anio,Quincena,Organica0,Organica1,Organica2,Organica3,UsuarioId)
+    OUTPUT INSERTED.QnaProcesoId VALUES(1,2093,19,'50','50','50','50','phase10-v4-v2')`);
+  await new sql.Request(transaction).input('Proceso',sql.BigInt,linkedV4Process.recordset[0].QnaProcesoId).input('Snapshot',sql.BigInt,linkedV4Created.liquidacionSnapshotId).query(`INSERT liquidacion.QnaProcesoTransicion
+    (QnaProcesoId,LiquidacionSnapshotId,EstadoOrigen,EstadoDestino,Motivo,UsuarioId) VALUES(@Proceso,@Snapshot,NULL,'TERMINADO','v4 v2 only','phase10')`);
+  const reconstructedFund=await repository.getAppliedDetails({...reconstructionScope,dominio:'AHORRO',page:1,pageSize:10,esAdmin:true},transaction);
   assert(reconstructedFund);assert.equal(reconstructedFund.fuente,'SNAPSHOT_OFICIAL_RECONSTRUIDO');assert.equal(reconstructedFund.detalles.length,1);
   assert.equal(reconstructedFund.detalles[0].empleadoClave,null);assert.equal(reconstructedFund.detalles[0].rfc,null);assert.equal(reconstructedFund.detalles[0].nombre,null);
   assert.equal(JSON.stringify(reconstructedFund).includes('LEAK-ME'),false,'QnaSnapshotDetalle pre-V5 no debe filtrarse a la respuesta');
-  const poisonSearch=await repository.listApplied({page:1,pageSize:10,...scope,buscar:'LEAK-ME',esAdmin:true},transaction);
+  const poisonSearch=await repository.listApplied({page:1,pageSize:10,...reconstructionScope,buscar:'LEAK-ME',esAdmin:true},transaction);
   assert.equal(poisonSearch.total,0,'QnaSnapshotDetalle pre-V5 tampoco debe influir en busqueda');
   assert(reconstructedFund.advertencias.some(item=>item.code==='QNA_RECONSTRUIDA_FONDOS_DESDE_V2_SIN_IDENTIDAD'));
   assert(reconstructedFund.advertencias.some(item=>item.code==='QNA_RECONSTRUIDA_DETALLE_PREV5_IGNORADO'));
-  await transition(second.LiquidacionSnapshotId);
   assert.equal(await repository.getAppliedSummary({ ...scope, anio: 2097, esAdmin: true }, transaction), null);
 
   const tierV5:any=official('TIER-V5');Object.assign(tierV5.snapshotV2,{anio:2095,quincena:21,organica0:'10',organica1:'10',organica2:'10',organica3:'10'});
@@ -207,6 +214,35 @@ try {
   const tierPageTwo=await repository.listApplied({page:2,pageSize:2,entidadId:1,anio:2095,quincena:21,esAdmin:true},transaction);
   assert.equal(tierPageOne.total,3);assert.equal(tierPageTwo.total,3);assert.deepEqual([...tierPageOne.items,...tierPageTwo.items].map(item=>item.organica0),['10','20','30']);
 
+  const precedenceScope={entidadId:1,anio:2094,quincena:20,organica0:'40',organica1:'40',organica2:'40',organica3:'40'};
+  const precedenceProcess=await new sql.Request(transaction).query(`INSERT liquidacion.QnaProceso(EntidadId,Anio,Quincena,Organica0,Organica1,Organica2,Organica3,UsuarioId)
+    OUTPUT INSERTED.QnaProcesoId VALUES(1,2094,20,'40','40','40','40','phase10-precedence')`);
+  const addPrecedenceEvidence=async(snapshotId:string|null,motivo:string)=>new sql.Request(transaction).input('Proceso',sql.BigInt,precedenceProcess.recordset[0].QnaProcesoId)
+    .input('Snapshot',sql.BigInt,snapshotId).input('Motivo',sql.NVarChar(100),motivo).query(`INSERT liquidacion.QnaProcesoTransicion
+      (QnaProcesoId,LiquidacionSnapshotId,EstadoOrigen,EstadoDestino,Motivo,UsuarioId) VALUES(@Proceso,@Snapshot,NULL,'TERMINADO',@Motivo,'phase10')`);
+  const oldV5:any=official('PRECEDENCE-OLD-V5');Object.assign(oldV5.snapshotV2,precedenceScope);Object.assign(oldV5.candidate,precedenceScope);
+  for(const source of oldV5.candidate.fuentes)if(source.identificadorFuente.includes(':2498:97:97'))source.identificadorFuente=source.identificadorFuente.replace(':2498:97:97',':2094:40:40');
+  const oldV5Created=await repository.createOfficialV5EnTransaccion(transaction,oldV5);await addPrecedenceEvidence(oldV5Created.liquidacionSnapshotId,'older v5');
+  const laterV4:any=official('PRECEDENCE-LATER-V4').candidate;Object.assign(laterV4,{...precedenceScope,versionEsquema:4,snapshotCalculoV2Id:null});delete laterV4.detallesEmpleado;
+  for(const source of laterV4.fuentes)if(source.identificadorFuente.includes(':2498:97:97'))source.identificadorFuente=source.identificadorFuente.replace(':2498:97:97',':2094:40:40');
+  const laterV4Created=await (repository as any).insertCandidate(transaction,laterV4);await addPrecedenceEvidence(laterV4Created.liquidacionSnapshotId,'later v4');
+  const v5BeatsLaterV4=await repository.getAppliedSummary({...precedenceScope,esAdmin:true},transaction);
+  assert.equal(v5BeatsLaterV4?.liquidacionSnapshotId,oldV5Created.liquidacionSnapshotId,'V5 debe prevalecer aunque V4 sea posterior y pertenezca a otro proceso');
+  const newestV5:any=official('PRECEDENCE-NEWEST-V5');Object.assign(newestV5.snapshotV2,precedenceScope);Object.assign(newestV5.candidate,precedenceScope);
+  for(const source of newestV5.candidate.fuentes)if(source.identificadorFuente.includes(':2498:97:97'))source.identificadorFuente=source.identificadorFuente.replace(':2498:97:97',':2094:40:40');
+  const newestV5Created=await repository.createOfficialV5EnTransaccion(transaction,newestV5);await addPrecedenceEvidence(newestV5Created.liquidacionSnapshotId,'newest v5');
+  const deterministicV5=await repository.getAppliedSummary({...precedenceScope,esAdmin:true},transaction);
+  assert.equal(deterministicV5?.liquidacionSnapshotId,newestV5Created.liquidacionSnapshotId,'Entre V5 debe ganar la evidencia TERMINADO deterministamente mas nueva');
+  const deduplicatedScope=await repository.listApplied({page:1,pageSize:100,...precedenceScope,esAdmin:true},transaction);
+  assert.equal(deduplicatedScope.total,1);assert.equal(deduplicatedScope.items[0].liquidacionSnapshotId,newestV5Created.liquidacionSnapshotId);
+  const globalDeduplicated=await repository.listApplied({page:1,pageSize:100,entidadId:1,anio:2094,quincena:20,esAdmin:true},transaction);
+  assert.equal(globalDeduplicated.total,1,'La lista global debe exponer un solo ganador por alcance completo');
+  await addPrecedenceEvidence(null,'corrupt latest process evidence');
+  await assert.rejects(repository.getAppliedSummary({...precedenceScope,esAdmin:true},transaction),
+    (error:unknown)=>error instanceof LiquidacionQnaError&&error.code==='QNA_APLICADA_TRANSICION_INTEGRIDAD_INVALIDA');
+  await assert.rejects(repository.listApplied({page:1,pageSize:100,...precedenceScope,esAdmin:true},transaction),
+    (error:unknown)=>error instanceof LiquidacionQnaError&&error.code==='QNA_APLICADA_TRANSICION_INTEGRIDAD_INVALIDA');
+
   const mismatchProcess = await new sql.Request(transaction).input('Anio', sql.SmallInt, scope.anio).input('Quincena', sql.TinyInt, scope.quincena).query(`
     INSERT liquidacion.QnaProceso(EntidadId,Anio,Quincena,Organica0,Organica1,Organica2,Organica3,UsuarioId)
     OUTPUT INSERTED.QnaProcesoId VALUES(1,@Anio,@Quincena,'98','98','98','98','phase9-fixture')`);
@@ -217,7 +253,7 @@ try {
     organica0: '98', organica1: '98', organica2: '98', organica3: '98', esAdmin: true }, transaction),
   (error: unknown) => error instanceof LiquidacionQnaError && error.code === 'QNA_APLICADA_TRANSICION_INTEGRIDAD_INVALIDA');
   await assert.rejects(repository.getAppliedSummary({ anio: scope.anio, quincena: scope.quincena, esAdmin: true }, transaction),
-    (error: unknown) => error instanceof LiquidacionQnaError && error.code === 'QNA_APLICADA_OFICIAL_AMBIGUA');
+    (error: unknown) => error instanceof LiquidacionQnaError && error.code === 'QNA_APLICADA_TRANSICION_INTEGRIDAD_INVALIDA');
 
   const incompleteOfficial: any = official('INCOMPLETE');
   Object.assign(incompleteOfficial.snapshotV2, { organica0: '96', organica1: '96', organica2: '96', organica3: '96' });

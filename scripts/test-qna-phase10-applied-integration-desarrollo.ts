@@ -22,7 +22,8 @@ try{
     INSERT retenciones.PrestamosCortoPlazoHistorico(clave_organica_0,clave_organica_1,quincena,anio,periodo,interno,rfc,nombre,total,usuario_id)
       VALUES('95','95',22,2097,'2297',700001,'LEGACYRFC',N'Duplicado Uno',2.34,'phase10'),('95','95',22,2097,'2297',700001,'LEGACYRFC',N'Duplicado Dos',3.45,'phase10');
     INSERT aportaciones.ResumenHistorico(tipo_endpoint,clave_organica_0,clave_organica_1,quincena,anio,total_empleados,total_contribucion,total_sueldo_base,usuario_id)
-      VALUES(N'individuales/ahorro','95','95',22,2097,1,9.99,4,'phase10');
+      VALUES(N'individuales/ahorro','95','95',22,2097,1,9.99,4,'phase10'),
+            (N'individuales/vivienda','95','95',22,2097,0,7.77,0,'phase10');
     INSERT conciliacion.RevisionAplicacionHistorico(Organica0,Organica1,Organica2,Organica3,Periodo,CAIR,FRA,FRE,FH,FV,FAA,FAE,FAT,FAI,RegistrosOrigen,UsuarioId)
       VALUES('95','95','95','95','2297',1.01,1.02,1.03,1.04,1.05,1.06,1.07,2.13,1.08,1,'00000000-0000-0000-0000-000000000010');`);
   const repository=new LiquidacionQnaRepository(pool);
@@ -33,6 +34,7 @@ try{
   assert.equal(summary.totales.retencionPcpA2,'5.79');assert.equal(summary.totalStrategies.retencionPcpA2,'DERIVED_DETAIL');
   assert.equal(summary.totales.viviendaA2,null);assert.equal(summary.totalStrategies.viviendaA2,'UNAVAILABLE');
   assert(summary.advertencias.some(item=>item.code==='DERIVED_DETAIL'&&item.dominio==='PCP'));
+  assert(summary.advertencias.some(item=>item.code==='QNA_LEGACY_AGREGADO_SIN_DETALLE_IGNORADO'&&item.dominio==='VIVIENDA'));
   assert(summary.fuentes.some(item=>item.dominio==='VIVIENDA'&&item.estado==='ABSENT_UNVERIFIED'));
   assert.equal('identificadorFuente' in summary.fuentes[0],false);
   const details=await repository.getAppliedDetails({...scope,dominio:'PCP',page:1,pageSize:100,esAdmin:false},transaction);
@@ -42,6 +44,13 @@ try{
   assert.equal(searched?.total,1);
   const list=await repository.listApplied({page:1,pageSize:100,...scope,buscar:'arbol',esAdmin:false},transaction);
   assert.equal(list.total,1);assert.equal(list.items[0].fuente,'HISTORICO_LEGACY');
+  await new sql.Request(transaction).query(`INSERT afec.BitacoraAfectacionOrg(OrgNivel,Org0,Org1,Org2,Org3,Entidad,EntidadId,Anio,Quincena,Accion,Resultado,Usuario,AppName)
+      VALUES(3,'94','94','94','94','AFILIADOS','1',2097,23,'TERMINADO','OK','phase10-zero-summary','phase10');
+    INSERT aportaciones.ResumenHistorico(tipo_endpoint,clave_organica_0,clave_organica_1,quincena,anio,total_empleados,total_contribucion,total_sueldo_base,usuario_id)
+      VALUES(N'individuales/ahorro','94','94',23,2097,0,0.00,0,'phase10');`);
+  const zeroSummary=await repository.getAppliedSummary({entidadId:1,anio:2097,quincena:23,organica0:'94',organica1:'94',organica2:'94',organica3:'94',esAdmin:true},transaction);
+  assert(zeroSummary);assert.equal(zeroSummary.totales.ahorroA2,null);assert.equal(zeroSummary.totalStrategies.ahorroA2,'UNAVAILABLE');
+  assert(zeroSummary.fuentes.some(item=>item.dominio==='AHORRO'&&item.estado==='ABSENT_UNVERIFIED'));
   const syntheticSelections=Array.from({length:301},(_,index)=>({id:null,processId:null,version:0 as const,appliedAt:new Date('2097-01-01T00:00:00Z'),scope:{
     entidadId:1,anio:1600+index,quincena:1,organica0:'01',organica1:'01',organica2:String(Math.floor(index/100)).padStart(2,'0'),organica3:String(index%100).padStart(2,'0')}}));
   const syntheticBundles=await (repository as any).getLegacyListBundles(syntheticSelections,false,transaction);
