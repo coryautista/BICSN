@@ -15,8 +15,8 @@ Este tablero no sustituye el plan tecnico ni autoriza migraciones, reprocesos, c
 ## Estado General
 
 ```text
-FASES_0_A_10_COMPLETADAS
-FASE_11_PENDIENTE
+FASES_0_A_11_COMPLETADAS
+FASE_12_PENDIENTE
 ```
 
 Ultima actualizacion: 2026-08-26.
@@ -49,14 +49,30 @@ Para cada QNA nueva aplicada, reproducir sin fuentes vivas los diez dominios con
 | 8 | Dual-write y conciliacion automatizada | COMPLETADA | Fase 7 |
 | 9 | Endpoints oficiales de periodos, resumen y detalle | COMPLETADA | Fase 8 |
 | 10 | Fuentes discriminadas y fallback legacy | COMPLETADA | Fase 9 |
-| 11 | Saga, recuperacion e idempotencia verificadas | PENDIENTE | Fase 10 |
+| 11 | Saga, recuperacion e idempotencia verificadas | COMPLETADA | Fase 10 |
 | 12 | Evidencia integral en Calidad y contrato frontend | PENDIENTE | Fase 11 |
 | 13 | Retiro autorizado de escritura legacy para QNA nuevas | PENDIENTE | Fase 12 y aprobacion operativa |
 | 14 | Migracion y liberacion controlada en Produccion | PENDIENTE | Fase 13 |
 
-## Fase Actual: 11
+## Fase Actual: 12
 
-Objetivo: probar saga, recuperacion e idempotencia de extremo a extremo.
+Objetivo: validar la evidencia integral en Calidad y entregar el contrato frontend.
+
+## Evidencia de la Fase 11
+
+- [x] Revalidar snapshot, carga vigente, formula, V2, fuentes, hashes, conteos, totales y bitacora exacta antes de iniciar Firebird y bajo el lock del scope completo.
+- [x] Persistir intentos, eventos, claims, leases y resoluciones en un ledger SQL Server vinculado al snapshot, proceso y `AfectacionId` exacto.
+- [x] Clasificar la transaccion Firebird como commit confirmado, rollback confirmado, resultado incierto o no iniciada, sin inferencias por texto de error.
+- [x] Renovar claims Firebird y de recuperacion con reloj SQL Server y bloquear ejecuciones concurrentes.
+- [x] Reanudar idempotentemente desde `FIREBIRD_CONFIRMADO`, `LINEA_CONFIRMADA`, `REVISA_PROGRAMADA` y `TERMINADO` sin consultar ni reejecutar Firebird.
+- [x] Separar Linea de Pago y REVISA para persistir cada estado inmediatamente despues de su efecto.
+- [x] Resolver `APLICACION_INCIERTA` solo mediante administrador, `intentoUuid`, scope completo, motivo y evidencia; no usar marcadores ni DDL Firebird.
+- [x] Mantener la decision administrativa confirmada aunque la recuperacion SQL posterior quede pendiente.
+- [x] Aplicar autorizacion de cuatro niveles al endpoint de aplicacion y al de resolucion manual.
+- [x] Integrar `POST /linea-captura-periodo` con la misma saga, sin transiciones directas ni creacion automatica de la siguiente QNA.
+- [x] Aplicar y reaplicar la migracion `20260826_17` exclusivamente en Desarrollo; probar dry-run transaccional y reparacion de esquema parcial.
+- [x] Aprobar build, pruebas puras con Firebird fake, HTTP, integracion SQL rollback-only, verificador fuerte, plan y regresiones de fases 8 a 10.
+- [x] Confirmar cero procedimientos C/F/EBI reales ejecutados durante las pruebas y registrar los commits funcionales `ff40203` y `c666210`.
 
 ## Evidencia de la Fase 10
 
@@ -282,7 +298,7 @@ No deben incluirse, revertirse ni ajustarse como parte de esta fase. Requieren u
 | Riesgo | Control requerido | Estado |
 |---|---|---|
 | Lecturas repetidas producen evidencias distintas | Captura unica de diez dominios | CONTROLADO |
-| SQL Server y Firebird no comparten transaccion | Saga recuperable e idempotente | ABIERTO |
+| SQL Server y Firebird no comparten transaccion | Saga recuperable, ledger SQL y resolucion manual con evidencia | CONTROLADO |
 | Acceso cruzado entre dependencias | Politica central de ambito | CONTROLADO |
 | Campos historicos no verificables | `null`, advertencias y fuente discriminada | CONTROLADO |
 | Diferencias entre snapshot oficial y legacy | Dual-write y conciliacion con WARNING | CONTROLADO |
@@ -311,6 +327,7 @@ No deben incluirse, revertirse ni ajustarse como parte de esta fase. Requieren u
 | 2026-08-26 | 8 | COMPLETADA | Commit `2d70bdc`; dual-write y conciliacion exacta aplicados y reaplicados en Desarrollo; colision, reemplazo, HIP legacy, normalizacion y seguridad verificados | Iniciar fase 9 |
 | 2026-08-26 | 9 | COMPLETADA | Commit `1078beb`; endpoints aplicados V5, Swagger, autorizacion, integridad, indice y plan verificados; integracion rollback sin fuentes vivas | Iniciar fase 10 |
 | 2026-08-26 | 10 | COMPLETADA | Commits `0f97dce` y `0282e74`; union discriminada, precedencia V5/V3-V4/legacy por scope, ausencia legacy, precision exacta, auditoria admin, plan global y pagina mixta aprobados en Desarrollo | Iniciar fase 11 |
+| 2026-08-27 | 11 | COMPLETADA | Commits `ff40203` y `c666210`; ledger SQL, claims, resultado Firebird tipado, recuperacion resumible, resolucion manual, ruta de Linea unificada, migracion idempotente e integracion rollback aprobados | Iniciar fase 12 en Calidad con autorizacion independiente |
 
 ## Regla de Actualizacion
 

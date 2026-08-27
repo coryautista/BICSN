@@ -251,6 +251,30 @@ Administradores pueden listar globalmente o enviar scope completo. Otros usuario
 
 El listado valida ambiguedad, colisiones, ownership e integridad estructural sobre el filtro completo antes de contar y paginar. La integridad semantica de filas y hashes se valida para cada pagina solicitada. Los lotes usan un parametro JSON y las fuentes mixtas se consultan secuencialmente dentro de la misma transaccion.
 
+## Ledger de Aplicacion y Recuperacion
+
+La fase 11 conserva la coordinacion de la saga exclusivamente en SQL Server:
+
+- `liquidacion.QnaAplicacionIntento` vincula el intento con proceso, snapshot y `AfectacionId` exacto. Guarda fase, estado, claim y lease actual.
+- `liquidacion.QnaAplicacionIntentoEvento` registra eventos append-only, incluidas adquisiciones, renovaciones, resultados Firebird y avances SQL.
+- `liquidacion.QnaAplicacionResolucion` conserva una unica resolucion administrativa inmutable por intento, con motivo normalizado, evidencia, hash, actor y fecha.
+
+Los claims usan reloj SQL Server, scope lock y leases renovables. Un claim Firebird activo impide resolucion manual; un claim de recuperacion activo impide que dos solicitudes creen o avancen simultaneamente Linea, REVISA o bitacora. Las restricciones e indices filtrados evitan mas de un intento o claim activo por proceso.
+
+El endpoint administrativo es:
+
+```http
+POST /v1/liquidaciones-qna/:id/resolver-aplicacion-incierta
+```
+
+Requiere `intentoUuid`, `CONFIRMADA` o `REVERTIDA`, motivo, evidencia y scope completo. No consulta ni modifica Firebird. Un replay identico es idempotente; otra evidencia o resolucion devuelve conflicto. Una confirmacion administrativa permanece confirmada aunque la recuperacion SQL inmediata falle y quede marcada como pendiente.
+
+La aplicacion normal revalida dentro de la transaccion SQL serializable el snapshot oficial, carga TXT vigente, formula, V2, fuentes, hashes, conteos, totales y la unica bitacora elegible. Firebird ejecuta C, F y EBI en una transaccion unica. El resultado tipado distingue `COMMIT_CONFIRMADO`, `ROLLBACK_CONFIRMADO`, `RESULTADO_INCIERTO` y `NO_INICIADA`; el resultado conocido prevalece sobre el estado del heartbeat.
+
+Despues de un commit confirmado, Linea, REVISA, bitacora y `TERMINADO` se recuperan por separado y sin volver a ejecutar Firebird. Un proceso ya `TERMINADO` responde idempotentemente sin consultar Firebird. SFTP es trazabilidad best effort y no cambia el resultado financiero.
+
+`POST /v1/linea-captura-periodo` usa el mismo comando resumible cuando recibe `liquidacionSnapshotId`; no agrega transiciones directamente ni registra la siguiente QNA. Para un proceso terminado, solo devuelve la Linea ya vinculada al snapshot y considera su ausencia una inconsistencia.
+
 ## Inmutabilidad
 
 Los triggers siguientes bloquean `UPDATE` y `DELETE`:
@@ -275,8 +299,11 @@ database/migrations/20260826_13_add_qna_phase8_legacy_dual_write.sql
 database/migrations/20260826_14_verify_qna_phase8_legacy_dual_write.sql
 database/migrations/20260826_15_add_qna_phase9_applied_read_index.sql
 database/migrations/20260826_16_verify_qna_phase9_applied_read_index.sql
+database/migrations/20260826_17_create_qna_phase11_attempt_ledger.sql
 scripts/migrate-qna-official-projections-desarrollo.ts
 scripts/verify-qna-official-projections-desarrollo.ts
+scripts/migrate-qna-phase11-attempt-ledger-desarrollo.ts
+scripts/verify-qna-phase11-state-desarrollo.ts
 ```
 
 La migracion es aditiva, idempotente y no modifica filas. Su primera aplicacion se limita a Desarrollo conforme a la matriz obligatoria de bases.

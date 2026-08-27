@@ -4,7 +4,7 @@
 
 BLOQUEADO POR VALIDACION INTEGRAL EN CALIDAD.
 
-El contrato y los endpoints backend de lectura estan estables en Desarrollo desde la fase 10. No implementar el consumo oficial hasta completar saga e idempotencia de fase 11 y la validacion integral en Calidad de fase 12.
+El contrato, los endpoints de lectura y la saga recuperable estan estables en Desarrollo desde la fase 11. No implementar el consumo oficial hasta completar la validacion integral en Calidad de fase 12.
 
 Fuente de seguimiento backend:
 
@@ -327,5 +327,6 @@ Agregar pruebas automatizadas para schema, servicio, hook y UI antes de marcar l
 |---|---|---|---|---|---|
 | 2026-08-21 | BLOQUEADO | - | Contrato esperado actualizado despues de tercera revision backend | - | Esperar endpoints y Swagger estables |
 | 2026-08-26 | BLOQUEADO_CALIDAD | `0f97dce`, `0282e74` | Contrato backend discriminado estabilizado en Desarrollo para V5, V3/V4 y legacy | Contratos, HTTP, integraciones rollback, verificador y planes aprobados | Esperar fases backend 11 y 12; no crear adaptadores temporales |
+| 2026-08-27 | BLOQUEADO_CALIDAD | `ff40203`, `c666210` | Saga, recuperacion, idempotencia, Linea y resolucion administrativa estabilizadas en Desarrollo | Firebird fake, HTTP, migracion, SQL rollback, verificador, plan y regresiones aprobados | Esperar validacion integral de fase 12 en Calidad |
 
 Actualizar esta tabla al completar cada fase. No iniciar adaptadores temporales contra contratos backend no estabilizados.

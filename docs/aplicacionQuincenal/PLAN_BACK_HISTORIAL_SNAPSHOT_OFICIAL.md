@@ -2,7 +2,7 @@
 
 ## Estado
 
-FASES 0 A 9 COMPLETADAS. FASE 10 PENDIENTE.
+FASES 0 A 11 COMPLETADAS. FASE 12 PENDIENTE.
 
 Este documento es la fuente de seguimiento del backend para conservar y consultar la informacion exacta capturada al confirmar la aplicacion de una QNA.
 
@@ -349,6 +349,10 @@ Ante fallo:
 - Usar `APLICACION_INCIERTA` cuando no pueda confirmarse el resultado Firebird.
 - Registrar transiciones y motivo.
 
+La fase 11 agrega un ledger durable exclusivamente en SQL Server. Cada intento vincula snapshot, proceso y `AfectacionId` exacto; claims renovables con lease serializan la ejecucion Firebird y la recuperacion SQL. Un resultado `APLICACION_INCIERTA` nunca se reconcilia consultando o modificando Firebird: requiere resolucion administrativa por `intentoUuid`, scope completo, motivo y evidencia. `CONFIRMADA` reanuda Linea, REVISA y bitacora; `REVERTIDA` habilita un nuevo intento.
+
+El resultado transaccional tipado tiene precedencia sobre el heartbeat: commit confirmado, rollback confirmado, resultado incierto o transaccion no iniciada. Una falla posterior al commit no vuelve a ejecutar C, F ni EBI. La Linea de Pago, REVISA y la bitacora exacta avanzan por estados independientes e idempotentes.
+
 ## Endpoints Planeados
 
 ### Periodos aplicados disponibles
@@ -483,7 +487,7 @@ No eliminar tablas legacy al retirar su escritura.
 | 8 | Activar dual-write y conciliacion | COMPLETADA |
 | 9 | Implementar endpoints de lectura aplicada | COMPLETADA |
 | 10 | Implementar fallback legacy identificado | COMPLETADA |
-| 11 | Probar saga, recuperacion e idempotencia | PENDIENTE |
+| 11 | Probar saga, recuperacion e idempotencia | COMPLETADA |
 | 12 | Validar en Calidad y entregar contrato frontend | PENDIENTE |
 | 13 | Retirar dual-write para QNA nuevas | PENDIENTE |
 | 14 | Liberar en Produccion | PENDIENTE |
@@ -613,5 +617,6 @@ Compilar no es evidencia suficiente para marcar una fase como completada.
 | 2026-08-26 | 8 | COMPLETADA | `2d70bdc` | `QNA_PHASE8_LEGACY_DESARROLLO_MIGRATION_OK` en aplicacion y reaplicacion; `QNA_PHASE8_LEGACY_DESARROLLO_VERIFY_OK`; `QNA_PHASE8_LEGACY_INTEGRATION_DESARROLLO_ROLLBACK_OK`; revision sin bloqueos | Dual-write exacto a 12 almacenes legacy, WARNING no bloqueante, colision y reemplazo verificados; iniciar fase 9 |
 | 2026-08-26 | 9 | COMPLETADA | `1078beb` | `QNA_PHASE9_APPLIED_READ_MIGRATION_OK` en aplicacion y reaplicacion; `QNA_PHASE9_APPLIED_READ_VERIFY_OK`; `QNA_PHASE9_APPLIED_PLAN_OK`; contratos, HTTP e integracion rollback aprobados | Tres endpoints V5 aplicados, Swagger, scope, paginacion, busqueda e integridad verificados; iniciar fase 10 |
 | 2026-08-26 | 10 | COMPLETADA | `0f97dce`, `0282e74` | `QNA_PHASE10_APPLIED_CONTRACTS_OK`; `QNA_PHASE10_APPLIED_INTEGRATION_DESARROLLO_ROLLBACK_OK`; `QNA_PHASE10_APPLIED_READ_VERIFIER_DESARROLLO_OK`; `QNA_PHASE10_APPLIED_PLAN_DESARROLLO_OK`; build, HTTP, fase 9 y revision independiente aprobados | Union discriminada V5/V3-V4/legacy, precedencia real por scope sin ocultar corrupcion, nullability, ausencia legacy, totales exactos, colisiones, auditoria admin y pagina mixta verificadas; no requirio migracion; iniciar fase 11 |
+| 2026-08-27 | 11 | COMPLETADA | `ff40203`, `c666210` | `QNA_PHASE11_ATTEMPT_LEDGER_MIGRATION_OK` en aplicacion y reaplicacion; dry-run rollback; `QNA_PHASE11_SAGA_OK`; `QNA_PHASE11_HTTP_OK`; `QNA_PHASE11_LINEA_ROUTE_OK`; `QNA_PHASE11_INTEGRATION_DESARROLLO_OK`; reparacion parcial, verificador, plan y regresiones aprobados | Ledger SQL, claims renovables, resultado Firebird tipado, bitacora exacta, recuperacion resumible, endpoint de Linea unificado y resolucion manual sin gestionar Firebird; pruebas Firebird con fakes y SQL rollback-only; iniciar fase 12 |
 
 Actualizar esta tabla despues de cada cambio relevante. No marcar una fase como completada sin evidencia y referencia al commit correspondiente.
