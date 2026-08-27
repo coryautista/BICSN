@@ -1,4 +1,4 @@
-import { createContainer, asClass, asFunction, InjectionMode } from 'awilix';
+import { createContainer, asClass, asFunction, asValue, InjectionMode } from 'awilix';
 import { getPool as getMssqlPool } from '../db/mssql.js';
 import { getFirebirdDb } from '../db/firebird.js';
 
@@ -66,7 +66,7 @@ import { DeleteAfiliadoCommand } from '../modules/afiliado/application/commands/
 import { CreateCompleteAfiliadoCommand } from '../modules/afiliado/application/commands/CreateCompleteAfiliadoCommand.js';
 import { AplicarBDIsspeaIndividualCommand } from '../modules/afiliado/application/commands/AplicarBDIsspeaIndividualCommand.js';
 import { AplicarBDIsspeaLoteCommand } from '../modules/afiliado/application/commands/AplicarBDIsspeaLoteCommand.js';
-import { AplicarBDIssspeaQNACommand } from '../modules/afiliado/application/commands/AplicarBDIssspeaQNACommand.js';
+import { AplicarBDIssspeaQNACommand, aplicarQnaDependencies } from '../modules/afiliado/application/commands/AplicarBDIssspeaQNACommand.js';
 import { UpdateBitacoraAfectacionOrgTerminadoCommand } from '../modules/afiliado/application/commands/UpdateBitacoraAfectacionOrgTerminadoCommand.js';
 import { CargarSemanasExtemporaneasLoteCommand } from '../modules/afiliado/application/commands/CargarSemanasExtemporaneasLoteCommand.js';
 import { FormatoExtemporaneaRepository } from '../modules/afiliado/infrastructure/persistence/FormatoExtemporaneaRepository.js';
@@ -215,6 +215,7 @@ import { GetQnaSnapshotQuery } from '../modules/liquidacionQna/application/queri
 import { ListQnaSnapshotsQuery } from '../modules/liquidacionQna/application/queries/ListQnaSnapshotsQuery.js';
 import { ResolveOfficialQnaSnapshotQuery } from '../modules/liquidacionQna/application/queries/ResolveOfficialQnaSnapshotQuery.js';
 import { CreateAndPromoteQnaCandidateCommand } from '../modules/liquidacionQna/application/commands/CreateAndPromoteQnaCandidateCommand.js';
+import { ResolveUncertainQnaApplicationCommand } from '../modules/liquidacionQna/application/commands/ResolveUncertainQnaApplicationCommand.js';
 import { CaptureQnaTenDomainsQuery } from '../modules/liquidacionQna/application/queries/CaptureQnaTenDomainsQuery.js';
 import { ListAppliedQnaQuery } from '../modules/liquidacionQna/application/queries/ListAppliedQnaQuery.js';
 import { GetAppliedQnaSummaryQuery } from '../modules/liquidacionQna/application/queries/GetAppliedQnaSummaryQuery.js';
@@ -648,6 +649,7 @@ container.register({
   aplicarBDIsspeaIndividualCommand: asClass(AplicarBDIsspeaIndividualCommand).scoped(),
   aplicarBDIsspeaLoteCommand: asClass(AplicarBDIsspeaLoteCommand).scoped(),
   aplicarBDIssspeaQNACommand: asClass(AplicarBDIssspeaQNACommand).scoped(),
+  aplicarQnaDependencies: asValue(aplicarQnaDependencies),
   updateBitacoraAfectacionOrgTerminadoCommand: asClass(UpdateBitacoraAfectacionOrgTerminadoCommand).scoped(),
   cargarSemanasExtemporaneasLoteCommand: asClass(CargarSemanasExtemporaneasLoteCommand).scoped(),
   
@@ -1348,6 +1350,7 @@ container.register({
   listQnaSnapshotsQuery: asClass(ListQnaSnapshotsQuery).scoped(),
   resolveOfficialQnaSnapshotQuery: asClass(ResolveOfficialQnaSnapshotQuery).scoped(),
   createAndPromoteQnaCandidateCommand: asClass(CreateAndPromoteQnaCandidateCommand).scoped(),
+  resolveUncertainQnaApplicationCommand: asClass(ResolveUncertainQnaApplicationCommand).scoped(),
   captureQnaTenDomainsQuery: asClass(CaptureQnaTenDomainsQuery).scoped(),
   listAppliedQnaQuery: asClass(ListAppliedQnaQuery).scoped(),
   getAppliedQnaSummaryQuery: asClass(GetAppliedQnaSummaryQuery).scoped(),

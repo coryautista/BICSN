@@ -12,11 +12,12 @@ import type { CreateAndPromoteQnaCandidateCommand } from './application/commands
 import type { ListAppliedQnaQuery } from './application/queries/ListAppliedQnaQuery.js';
 import type { GetAppliedQnaSummaryQuery } from './application/queries/GetAppliedQnaSummaryQuery.js';
 import type { GetAppliedQnaDetailsQuery } from './application/queries/GetAppliedQnaDetailsQuery.js';
+import type { ResolveUncertainQnaApplicationCommand } from './application/commands/ResolveUncertainQnaApplicationCommand.js';
 import { handleLiquidacionQnaError } from './infrastructure/errorHandler.js';
 import { resolveOrganicaScope } from '../auth/domain/policies/OrganicaScopePolicy.js';
 import {
   CreateQnaCandidateSchema, QnaAppliedDetailSchema, QnaAppliedDomainParamsSchema, QnaAppliedListSchema,
-  QnaAppliedSelectionSchema, QnaDecisionSchema, QnaIdParamsSchema, QnaListSchema, QnaPromoteSchema,
+  QnaAppliedSelectionSchema, QnaDecisionSchema, QnaIdParamsSchema, QnaListSchema, QnaManualResolutionSchema, QnaPromoteSchema,
 } from './liquidacionQna.schemas.js';
 import { qnaAppliedDetailResponses, qnaAppliedListResponses, qnaAppliedSummaryResponses } from './liquidacionQna.applied.openapi.js';
 
@@ -82,7 +83,7 @@ const candidateBody = {
   },
 };
 
-export async function registerLiquidacionQnaRoutes(app: FastifyInstance, appliedReadAuth = requireAuth) {
+export async function registerLiquidacionQnaRoutes(app: FastifyInstance, appliedReadAuth = requireAuth, writeAuth = requireAuth) {
   app.get('/liquidaciones-qna/aplicadas', {
     onRequest: [rejectLegacySearch],
     preHandler: [appliedReadAuth],
@@ -245,6 +246,31 @@ export async function registerLiquidacionQnaRoutes(app: FastifyInstance, applied
       if (!params.success || !body.success) return reply.code(400).send(fail('Promocion QNA invalida', 'QNA_PARAMETRO_INVALIDO'));
       const command = request.diScope.resolve<PromoteQnaSnapshotCommand>('promoteQnaSnapshotCommand');
       return reply.send(ok(await command.execute(params.data.id, body.data.motivo, String(request.user!.sub))));
+    } catch (error) { return handleLiquidacionQnaError(error, request, reply); }
+  });
+
+  app.post('/liquidaciones-qna/:id/resolver-aplicacion-incierta', {
+    preHandler: [writeAuth, requireRole('admin')],
+    schema: {
+      description: '[SQL SERVER] Resuelve administrativamente un resultado Firebird incierto con evidencia. No consulta ni modifica Firebird.',
+      tags: ['liquidacionQna', 'sql-server', 'admin'], security, params: idParams,
+      body: { type: 'object', additionalProperties: false,
+        required: ['intentoUuid','resolution','motivo','evidencia','entidadId','anio','quincena','organica0','organica1','organica2','organica3'],
+        properties: { intentoUuid: { type: 'string', format: 'uuid' }, resolution: { type: 'string', enum: ['CONFIRMADA','REVERTIDA'] },
+          motivo: { type: 'string', minLength: 1, maxLength: 150 }, evidencia: { type: 'string', minLength: 1, maxLength: 150 },
+          entidadId: { type: 'integer', minimum: 1 }, anio: { type: 'integer', minimum: 2000, maximum: 9999 },
+          quincena: { type: 'integer', minimum: 1, maximum: 24 }, organica0: { type: 'string', pattern: '^\\d{2}$' },
+          organica1: { type: 'string', pattern: '^\\d{2}$' }, organica2: { type: 'string', pattern: '^\\d{2}$' }, organica3: { type: 'string', pattern: '^\\d{2}$' } } },
+      response: Object.fromEntries([200,400,401,403,404,409,500].map(status => [status, { type: 'object', additionalProperties: true }])),
+    },
+  }, async (request, reply) => {
+    try {
+      const params = QnaIdParamsSchema.safeParse(request.params);
+      const body = QnaManualResolutionSchema.safeParse(request.body);
+      if (!params.success || !body.success) return reply.code(400).send(fail('Resolucion manual QNA invalida', 'QNA_PARAMETRO_INVALIDO'));
+      const scope = resolveOrganicaScope(request.user!, body.data, 4);
+      const command = request.diScope.resolve<ResolveUncertainQnaApplicationCommand>('resolveUncertainQnaApplicationCommand');
+      return reply.send(ok(await command.execute({ liquidacionSnapshotId: params.data.id, ...body.data, ...scope, usuarioId: String(request.user!.sub) })));
     } catch (error) { return handleLiquidacionQnaError(error, request, reply); }
   });
 

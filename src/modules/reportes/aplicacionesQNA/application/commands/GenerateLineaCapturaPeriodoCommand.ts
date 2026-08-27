@@ -19,6 +19,9 @@ export interface GenerateLineaCapturaPeriodoResult extends LineaCapturaPeriodoRe
 
 export interface GenerateLineaCapturaPeriodoFromSnapshotParams extends GenerateLineaCapturaPeriodoParams {
   liquidacionSnapshotId: string;
+  entidadId?: number;
+  organica2?: string;
+  organica3?: string;
 }
 
 export class GenerateLineaCapturaPeriodoCommand {
@@ -30,6 +33,12 @@ export class GenerateLineaCapturaPeriodoCommand {
   ) {}
 
   async executeFromSnapshot(params: GenerateLineaCapturaPeriodoFromSnapshotParams): Promise<GenerateLineaCapturaPeriodoResult> {
+    const result=await this.createOrReuseFromSnapshot(params);
+    await this.scheduleRevisionFromSnapshot(params);
+    return result;
+  }
+
+  async createOrReuseFromSnapshot(params: GenerateLineaCapturaPeriodoFromSnapshotParams): Promise<GenerateLineaCapturaPeriodoResult> {
     const periodoInfo = parsePeriodo(params.periodo);
     const estado = params.omitirValidacionEstado
       ? null
@@ -42,7 +51,10 @@ export class GenerateLineaCapturaPeriodoCommand {
     if (!snapshot) throw new Error('QNA_SNAPSHOT_NOT_OFFICIAL_COMPLETE');
     if (snapshot.periodo !== params.periodo
       || snapshot.organica0.trim() !== params.org0.trim()
-      || snapshot.organica1.trim() !== params.org1.trim()) {
+      || snapshot.organica1.trim() !== params.org1.trim()
+      || (params.entidadId !== undefined && snapshot.entidadId !== params.entidadId)
+      || (params.organica2 !== undefined && snapshot.organica2.trim() !== params.organica2.trim())
+      || (params.organica3 !== undefined && snapshot.organica3.trim() !== params.organica3.trim())) {
       throw new Error('QNA_SNAPSHOT_SCOPE_MISMATCH');
     }
 
@@ -54,7 +66,6 @@ export class GenerateLineaCapturaPeriodoCommand {
     const existing = await this.lineaCapturaPeriodoRepo.findVigenteBySnapshotId(params.liquidacionSnapshotId);
     if (existing) {
       this.assertSnapshotLine(existing, params, importeA2);
-      await this.finalizarYProgramar(params, estado);
       return { ...existing, reutilizada: true };
     }
 
@@ -99,13 +110,11 @@ export class GenerateLineaCapturaPeriodoCommand {
         digitoVerificador: lineaCaptura.substring(13, 15),
         usuarioId: params.usuarioId
       });
-      await this.finalizarYProgramar(params, estado);
       return { ...created, reutilizada: false };
     } catch (error) {
       const duplicate = await this.lineaCapturaPeriodoRepo.findVigenteBySnapshotId(params.liquidacionSnapshotId);
       if (duplicate) {
         this.assertSnapshotLine(duplicate, params, importeA2);
-        await this.finalizarYProgramar(params, estado);
         return { ...duplicate, reutilizada: true };
       }
       const conflicting = await this.lineaCapturaPeriodoRepo.findVigente(params.org0, params.org1, params.periodo);
@@ -113,6 +122,8 @@ export class GenerateLineaCapturaPeriodoCommand {
       throw error;
     }
   }
+
+  async scheduleRevisionFromSnapshot(params:GenerateLineaCapturaPeriodoFromSnapshotParams):Promise<void>{await this.programarRevision(params);}
 
   async execute(params: GenerateLineaCapturaPeriodoParams): Promise<GenerateLineaCapturaPeriodoResult> {
     const periodoInfo = parsePeriodo(params.periodo);
@@ -222,7 +233,9 @@ export class GenerateLineaCapturaPeriodoCommand {
       org1: params.org1,
       periodo: params.periodo,
       usuarioId: params.usuarioId,
-      liquidacionSnapshotId: 'liquidacionSnapshotId' in params ? params.liquidacionSnapshotId : undefined
+      liquidacionSnapshotId: 'liquidacionSnapshotId' in params ? params.liquidacionSnapshotId : undefined,
+      org2: 'organica2' in params ? params.organica2 : undefined,
+      org3: 'organica3' in params ? params.organica3 : undefined,
     });
   }
 

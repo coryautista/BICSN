@@ -164,34 +164,42 @@ export async function verificarAplicacionMovimientosFinalizada(
   org0: string,
   org1: string,
   quincena: number,
-  anio: number
-): Promise<{ finalizada: boolean; afectacionId: number | null; resultado: string | null }> {
+  anio: number,
+  exactScope?: { entidadId: number; org2: string; org3: string }
+): Promise<{ finalizada: boolean; afectacionId: number | null; resultado: string | null; accion: string | null }> {
   const p = await getPool();
   const result = await p.request()
     .input('org0', sql.VarChar(30), org0)
     .input('org1', sql.VarChar(30), org1)
     .input('quincena', sql.Int, quincena)
     .input('anio', sql.Int, anio)
+    .input('entidadId', sql.NVarChar(50), exactScope ? String(exactScope.entidadId) : null)
+    .input('org2', sql.VarChar(30), exactScope?.org2 ?? null)
+    .input('org3', sql.VarChar(30), exactScope?.org3 ?? null)
     .query(`
-      SELECT TOP 1 AfectacionId, AplicacionMovimientosFinalizada, Resultado
+      SELECT TOP 1 AfectacionId, AplicacionMovimientosFinalizada, Resultado, Accion
       FROM afec.BitacoraAfectacionOrg
       WHERE Org0 = @org0
         AND Org1 = @org1
         AND Entidad = 'AFILIADOS'
         AND Quincena = @quincena
         AND Anio = @anio
+        AND (@entidadId IS NULL OR EntidadId = @entidadId)
+        AND (@org2 IS NULL OR Org2 = @org2)
+        AND (@org3 IS NULL OR Org3 = @org3)
       ORDER BY ModifiedAt DESC, CreatedAt DESC
     `);
 
   const row = result.recordset[0];
   if (!row) {
-    return { finalizada: false, afectacionId: null, resultado: null };
+    return { finalizada: false, afectacionId: null, resultado: null, accion: null };
   }
 
   return {
     finalizada: row.AplicacionMovimientosFinalizada === true || row.AplicacionMovimientosFinalizada === 1,
     afectacionId: Number(row.AfectacionId),
-    resultado: row.Resultado ? String(row.Resultado) : null
+    resultado: row.Resultado ? String(row.Resultado) : null,
+    accion: row.Accion ? String(row.Accion) : null
   };
 }
 
@@ -301,7 +309,7 @@ export async function actualizarBitacoraAfectacionOrgTerminadoPorAfectacionId(
   const checkResult = await p.request()
     .input('afectacionId', sql.BigInt, afectacionId)
     .query(`
-      SELECT AfectacionId, Accion
+      SELECT AfectacionId, Accion, Resultado
       FROM afec.BitacoraAfectacionOrg
       WHERE AfectacionId = @afectacionId
     `);
@@ -311,6 +319,7 @@ export async function actualizarBitacoraAfectacionOrgTerminadoPorAfectacionId(
     console.log(`[BITACORA] ⚠️  No se encontró registro con AfectacionId=${afectacionId}`);
     return { actualizado: false, registrosAfectados: 0 };
   }
+  if(checkResult.recordset[0].Accion==='TERMINADO'&&checkResult.recordset[0].Resultado==='OK')return {actualizado:true,registrosAfectados:0};
 
   const updateResult = await p.request()
     .input('afectacionId', sql.BigInt, afectacionId)

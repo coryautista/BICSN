@@ -7,6 +7,28 @@ import type {
   QnaAppliedDetailFilter, QnaAppliedDetailResult, QnaAppliedListFilter, QnaAppliedListResult,
   QnaAppliedSelection, QnaAppliedSummary,
 } from '../entities/QnaAppliedRead.js';
+import type { QnaApplicationAction, QnaApplicationClaimType, QnaManualResolution } from '../services/QnaApplicationSagaPolicy.js';
+
+export interface QnaApplicationSnapshot {
+  liquidacionSnapshotId: string;
+  estadoProceso: QnaProcessState;
+  action: QnaApplicationAction;
+  scope: QnaScope;
+  periodo: string;
+  idempotente: boolean;
+  intentoUuid: string;
+  afectacionId: number;
+  claimToken: string | null;
+}
+
+export interface QnaManualResolutionResult {
+  intentoUuid: string;
+  liquidacionSnapshotId: string;
+  estadoProceso: Extract<QnaProcessState, 'FIREBIRD_CONFIRMADO' | 'FIREBIRD_REVERTIDO'>;
+  resolution: QnaManualResolution;
+  idempotente: boolean;
+  action: 'REANUDAR_SQL' | 'REINTENTAR_FIREBIRD';
+}
 
 export type CreateQnaOfficialV5Input = {
   snapshotV2: SnapshotCalculoV2Input;
@@ -24,6 +46,12 @@ export interface ILiquidacionQnaRepository {
   resolveOfficialById(id: string): Promise<QnaSnapshot | null>;
   resolveOfficialByScope(scope: QnaScope): Promise<QnaSnapshot | null>;
   appendProcessTransition(id: string, destination: QnaProcessState, motivo: string | null, usuarioId: string, allowSame?: boolean): Promise<void>;
+  beginOrResumeApplication(id: string, scope: QnaScope, usuarioId: string): Promise<QnaApplicationSnapshot>;
+  resolveUncertainApplication(id: string, intentoUuid: string, scope: QnaScope, resolution: QnaManualResolution, motivo: string, evidencia: string, usuarioId: string): Promise<QnaManualResolutionResult>;
+  renewApplicationClaim(intentoUuid: string, claimToken: string, claimType: QnaApplicationClaimType, usuarioId: string): Promise<void>;
+  completeFirebirdAttempt(intentoUuid: string, claimToken: string, destination: Extract<QnaProcessState,'FIREBIRD_CONFIRMADO'|'FIREBIRD_REVERTIDO'|'APLICACION_INCIERTA'>, motivo: string, usuarioId: string): Promise<void>;
+  advanceRecoveryAttempt(intentoUuid: string, claimToken: string, destination: Extract<QnaProcessState,'LINEA_CONFIRMADA'|'REVISA_PROGRAMADA'|'TERMINADO'>, motivo: string, usuarioId: string): Promise<void>;
+  releaseRecoveryClaim(intentoUuid: string, claimToken: string, motivo: string, usuarioId: string): Promise<void>;
   listApplied(filter: QnaAppliedListFilter): Promise<QnaAppliedListResult>;
   getAppliedSummary(filter: QnaAppliedSelection): Promise<QnaAppliedSummary | null>;
   getAppliedDetails(filter: QnaAppliedDetailFilter): Promise<QnaAppliedDetailResult | null>;

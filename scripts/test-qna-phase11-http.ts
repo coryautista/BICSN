@@ -1,0 +1,32 @@
+import assert from 'node:assert/strict';
+import Fastify from 'fastify';
+import swagger from '@fastify/swagger';
+import { registerLiquidacionQnaRoutes } from '../src/modules/liquidacionQna/liquidacionQna.routes.js';
+import { LiquidacionQnaError } from '../src/modules/liquidacionQna/domain/errors.js';
+
+const app=Fastify();
+await app.register(swagger,{openapi:{info:{title:'phase11',version:'1'},components:{securitySchemes:{bearerAuth:{type:'http',scheme:'bearer'}}}}});
+let captured:any;let mode:'ok'|'conflict'|'missing'='ok';
+const testAuth=async(request:any,reply:any)=>{
+  const profile=request.headers['x-test-user'];if(!profile)return reply.code(401).send({ok:false,error:{code:'UNAUTHORIZED'}});
+  request.user={sub:String(profile),roles:profile==='admin'?['admin']:['capturista'],entidades:[],idOrganica0:'04',idOrganica1:'24',idOrganica2:'01',idOrganica3:'02',jti:'test'};
+  (request as any).diScope={resolve:(name:string)=>name==='resolveUncertainQnaApplicationCommand'?{execute:async(input:any)=>{captured=input;
+    if(mode==='conflict')throw new LiquidacionQnaError('Conflicto','QNA_RESOLUCION_MANUAL_CONFLICTO',409);
+    if(mode==='missing')throw new LiquidacionQnaError('No encontrado','QNA_SNAPSHOT_NO_ENCONTRADO',404);
+    return {intentoUuid:input.intentoUuid,liquidacionSnapshotId:'1',estadoProceso:input.resolution==='CONFIRMADA'?'FIREBIRD_CONFIRMADO':'FIREBIRD_REVERTIDO',resolution:input.resolution,idempotente:false,resolutionCommitted:true,recuperacionPendiente:true};}}:{execute:async()=>null}};
+};
+await registerLiquidacionQnaRoutes(app,testAuth,testAuth);
+await app.ready();
+const url='/liquidaciones-qna/1/resolver-aplicacion-incierta';
+const valid={intentoUuid:'11111111-1111-4111-8111-111111111111',resolution:'CONFIRMADA',motivo:'confirmacion operativa',evidencia:'ticket INC-11',entidadId:2,anio:2026,quincena:15,organica0:'08',organica1:'09',organica2:'10',organica3:'11'};
+let response=await app.inject({method:'POST',url,payload:valid});assert.equal(response.statusCode,401);
+response=await app.inject({method:'POST',url,headers:{'x-test-user':'user'},payload:valid});assert.equal(response.statusCode,403,response.body);
+response=await app.inject({method:'POST',url,headers:{'x-test-user':'admin'},payload:{...valid,evidencia:'   '}});assert.equal(response.statusCode,400,response.body);
+response=await app.inject({method:'POST',url,headers:{'x-test-user':'admin'},payload:{...valid,intentoUuid:undefined}});assert.equal(response.statusCode,400,response.body);
+response=await app.inject({method:'POST',url,headers:{'x-test-user':'admin'},payload:valid});assert.equal(response.statusCode,200,response.body);assert.equal(captured.entidadId,2);assert.equal(captured.organica3,'11');assert.equal(captured.usuarioId,'admin');assert.equal(captured.intentoUuid,valid.intentoUuid);assert.equal(response.json().data.resolutionCommitted,true);assert.equal(response.json().data.recuperacionPendiente,true);
+mode='conflict';response=await app.inject({method:'POST',url,headers:{'x-test-user':'admin'},payload:valid});assert.equal(response.statusCode,409);assert.equal(response.json().error.code,'QNA_RESOLUCION_MANUAL_CONFLICTO');
+mode='missing';response=await app.inject({method:'POST',url,headers:{'x-test-user':'admin'},payload:valid});assert.equal(response.statusCode,404);
+const operation=(app.swagger() as any).paths['/liquidaciones-qna/{id}/resolver-aplicacion-incierta'].post;
+for(const status of ['200','400','401','403','404','409','500'])assert(operation.responses[status],`Falta Swagger ${status}`);
+assert.equal(operation.security[0].bearerAuth.length,0);assert.match(operation.description,/No consulta ni modifica Firebird/);
+await app.close();console.log('QNA_PHASE11_HTTP_OK');

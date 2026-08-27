@@ -1,5 +1,5 @@
 import sql, { ConnectionPool, Request, Transaction } from 'mssql';
-import type { CreateQnaOfficialV5Input, ILiquidacionQnaRepository } from '../../domain/repositories/ILiquidacionQnaRepository.js';
+import type { CreateQnaOfficialV5Input, ILiquidacionQnaRepository, QnaApplicationSnapshot, QnaManualResolutionResult } from '../../domain/repositories/ILiquidacionQnaRepository.js';
 import {
   PRECISION_POLICY,
   type CreateQnaCandidateInput,
@@ -33,6 +33,11 @@ import { QNA_AUXILIARY_PAYLOAD_V1_FIELDS } from '../../domain/services/QnaAuxili
 import { validateAppliedQnaCandidate } from '../../domain/services/QnaAppliedIntegrity.js';
 import { calcularSnapshotCalculoV2Hash } from '../../../aportacionesFondos/domain/services/SnapshotCalculoV2Hasher.js';
 import type { SnapshotCalculoV2Input } from '../../../aportacionesFondos/domain/entities/SnapshotCalculoV2.js';
+import { createHash, randomUUID } from 'node:crypto';
+import {
+  assertManualResolutionAllowed, decideQnaApplicationAction, manualResolutionDestination,
+  qnaApplicationLeaseMs, qnaApplicationRuntimeConfig, type QnaApplicationClaimType, type QnaManualResolution,
+} from '../../domain/services/QnaApplicationSagaPolicy.js';
 
 const TOTAL_COLUMNS: Record<Exclude<keyof QnaTotals, 'registros'>, string> = {
   cairA2: 'CAIRA2', fraA2: 'FRAA2', freA2: 'FREA2', fhA2: 'FHA2', fvA2: 'FVA2',
@@ -1245,6 +1250,286 @@ export class LiquidacionQnaRepository implements ILiquidacionQnaRepository {
     const id = result.recordset[0]?.LiquidacionSnapshotId;
     return id ? this.resolveOfficialById(String(id)) : null;
   }
+
+  async beginOrResumeApplication(id: string, requestedScope: QnaScope, usuarioId: string,ambientTransaction?:Transaction): Promise<QnaApplicationSnapshot> {
+    const runtimeConfig=qnaApplicationRuntimeConfig();
+    const transaction = ambientTransaction??new sql.Transaction(this.mssqlPool);const owns=!ambientTransaction;
+    if(owns)await transaction.begin(sql.ISOLATION_LEVEL.SERIALIZABLE);
+    try {
+      const headerResult = await new sql.Request(transaction).input('Id', sql.BigInt, id).query(`
+        SELECT EntidadId,Anio,Quincena,Periodo,Organica0,Organica1,Organica2,Organica3
+        FROM liquidacion.QnaSnapshot WITH (NOLOCK) WHERE LiquidacionSnapshotId=@Id`);
+      let header = headerResult.recordset[0];
+      if (!header) qnaFail('Snapshot no encontrado', 'QNA_SNAPSHOT_NO_ENCONTRADO', 404);
+      const scope = this.applicationScope(header);
+      this.assertExactApplicationScope(scope, requestedScope);
+      await acquireQnaScopeLock(transaction, scope);
+      header=(await new sql.Request(transaction).input('Id',sql.BigInt,id).query(`SELECT EntidadId,Anio,Quincena,Periodo,Organica0,Organica1,Organica2,Organica3
+        FROM liquidacion.QnaSnapshot WITH(UPDLOCK,HOLDLOCK) WHERE LiquidacionSnapshotId=@Id`)).recordset[0];
+      if(!header)qnaFail('Snapshot no encontrado','QNA_SNAPSHOT_NO_ENCONTRADO',404);this.assertExactApplicationScope(this.applicationScope(header),requestedScope);
+
+      const processResult = await this.scope(new sql.Request(transaction), scope).input('Id', sql.BigInt, id).query(`
+        SELECT p.QnaProcesoId,o.LiquidacionSnapshotId,
+          (SELECT TOP (1) EstadoDestino FROM liquidacion.QnaProcesoTransicion WITH (UPDLOCK,HOLDLOCK)
+           WHERE QnaProcesoId=p.QnaProcesoId ORDER BY FechaCreacion DESC,QnaProcesoTransicionId DESC) AS EstadoActual
+        FROM liquidacion.QnaProceso p WITH (UPDLOCK,HOLDLOCK)
+        JOIN liquidacion.QnaSnapshotOficialActual o WITH (UPDLOCK,HOLDLOCK) ON o.QnaProcesoId=p.QnaProcesoId
+        WHERE p.EntidadId=@EntidadId AND p.Anio=@Anio AND p.Quincena=@Quincena
+          AND p.Organica0=@Organica0 AND p.Organica1=@Organica1 AND p.Organica2=@Organica2 AND p.Organica3=@Organica3
+          AND o.LiquidacionSnapshotId=@Id`);
+      const process = processResult.recordset[0];
+      if (!process) qnaFail('El snapshot no es el oficial actual del ambito', 'QNA_SNAPSHOT_NO_OFICIAL', 409);
+      const state = String(process.EstadoActual ?? 'OFICIAL') as QnaProcessState;
+      const action = decideQnaApplicationAction(state);
+      const processId = String(process.QnaProcesoId);
+      const leaseMs = runtimeConfig.leaseMs;
+      let attempt = (await new sql.Request(transaction).input('ProcesoId',sql.BigInt,processId).query(`SELECT TOP(1)*,CAST(CASE WHEN LeaseExpiraEn>SYSUTCDATETIME() THEN 1 ELSE 0 END AS bit) LeaseActiva FROM liquidacion.QnaAplicacionIntento WITH(UPDLOCK,HOLDLOCK)
+        WHERE QnaProcesoId=@ProcesoId ORDER BY QnaAplicacionIntentoId DESC`)).recordset[0];
+      let returnedState = state;
+      let claimToken: string|null = null;
+      if (action === 'EJECUTAR_FIREBIRD') {
+        await this.promote(id, null, usuarioId, transaction);
+        const afectacion = await this.requireExactBitacora(transaction,scope,null,'INICIO');
+        const attemptUuid=randomUUID();claimToken=randomUUID();
+        const inserted=await new sql.Request(transaction).input('Uuid',sql.UniqueIdentifier,attemptUuid).input('ProcesoId',sql.BigInt,processId)
+          .input('Id',sql.BigInt,id).input('AfectacionId',sql.BigInt,afectacion.AfectacionId).input('Claim',sql.UniqueIdentifier,claimToken)
+          .input('LeaseMs',sql.Int,leaseMs).input('Actor',sql.NVarChar(100),usuarioId).query(`
+            DECLARE @Numero INT=(SELECT ISNULL(MAX(NumeroIntento),0)+1 FROM liquidacion.QnaAplicacionIntento WITH(UPDLOCK,HOLDLOCK) WHERE QnaProcesoId=@ProcesoId);
+            INSERT liquidacion.QnaAplicacionIntento(IntentoUuid,QnaProcesoId,LiquidacionSnapshotId,AfectacionId,NumeroIntento,Estado,Fase,Activo,ClaimToken,ClaimTipo,LeaseExpiraEn,Actor)
+            OUTPUT INSERTED.* VALUES(@Uuid,@ProcesoId,@Id,@AfectacionId,@Numero,'ACTIVO','FIREBIRD',1,@Claim,'FIREBIRD',DATEADD(MILLISECOND,@LeaseMs,SYSUTCDATETIME()),@Actor)`);
+        attempt=inserted.recordset[0];
+        await this.insertAttemptEvent(transaction,attempt.QnaAplicacionIntentoId,'CREADO','ACTIVO','FIREBIRD',claimToken,'Intento Firebird creado',null,usuarioId);
+        await this.insertTransition(transaction, processId, id, state, 'APLICANDO_FIREBIRD', 'Inicio de aplicacion QNA en Firebird', usuarioId);
+        returnedState = 'APLICANDO_FIREBIRD';
+      } else {
+        if(!attempt){
+          const afectacion=await this.requireExactBitacora(transaction,scope,null,state==='TERMINADO'?'TERMINADO':'RECUPERACION');
+          const attemptUuid=randomUUID();const legacyState=state==='TERMINADO'?'TERMINADO':state==='APLICANDO_FIREBIRD'||state==='APLICACION_INCIERTA'?'INCIERTO':'CONFIRMADO';
+          const legacyPhase=state==='TERMINADO'?'TERMINADO':state==='APLICANDO_FIREBIRD'||state==='APLICACION_INCIERTA'?'FIREBIRD':state==='LINEA_CONFIRMADA'?'REVISA':state==='REVISA_PROGRAMADA'?'BITACORA':'LINEA';
+          const inserted=await new sql.Request(transaction).input('Uuid',sql.UniqueIdentifier,attemptUuid).input('ProcesoId',sql.BigInt,processId).input('Id',sql.BigInt,id)
+            .input('AfectacionId',sql.BigInt,afectacion.AfectacionId).input('Actor',sql.NVarChar(100),usuarioId).input('Estado',sql.VarChar(30),legacyState)
+            .input('Fase',sql.VarChar(30),legacyPhase).query(`
+              DECLARE @Numero INT=(SELECT ISNULL(MAX(NumeroIntento),0)+1 FROM liquidacion.QnaAplicacionIntento WITH(UPDLOCK,HOLDLOCK) WHERE QnaProcesoId=@ProcesoId);
+              INSERT liquidacion.QnaAplicacionIntento(IntentoUuid,QnaProcesoId,LiquidacionSnapshotId,AfectacionId,NumeroIntento,Estado,Fase,Activo,Actor)
+              OUTPUT INSERTED.* VALUES(@Uuid,@ProcesoId,@Id,@AfectacionId,@Numero,@Estado,@Fase,IIF(@Estado='TERMINADO',0,1),@Actor)`);
+          attempt=inserted.recordset[0];
+          await this.insertAttemptEvent(transaction,attempt.QnaAplicacionIntentoId,'CREADO',attempt.Estado,attempt.Fase,null,'Intento legado ligado a bitacora',null,usuarioId);
+          if(state==='APLICANDO_FIREBIRD'){
+            await this.insertTransition(transaction,processId,id,state,'APLICACION_INCIERTA','Claim legado abandonado',usuarioId);
+            returnedState='APLICACION_INCIERTA';
+          }
+        }
+        await this.requireExactBitacora(transaction,scope,Number(attempt.AfectacionId),state==='TERMINADO'?'TERMINADO':'RECUPERACION');
+        if(returnedState==='APLICANDO_FIREBIRD'){
+          if(attempt.ClaimToken&&attempt.LeaseActiva)qnaFail('La aplicacion Firebird conserva un claim activo','QNA_APLICACION_CLAIM_ACTIVO',409);
+          const expired=await new sql.Request(transaction).input('AttemptId',sql.BigInt,attempt.QnaAplicacionIntentoId).input('Claim',sql.UniqueIdentifier,attempt.ClaimToken).query(`UPDATE liquidacion.QnaAplicacionIntento SET Estado='INCIERTO',ClaimToken=NULL,ClaimTipo=NULL,LeaseExpiraEn=NULL,FechaActualizacion=SYSUTCDATETIME()
+            WHERE QnaAplicacionIntentoId=@AttemptId AND Estado='ACTIVO' AND Fase='FIREBIRD' AND ClaimTipo='FIREBIRD' AND ClaimToken=@Claim AND LeaseExpiraEn<=SYSUTCDATETIME()`);
+          if(expired.rowsAffected[0]!==1)qnaFail('El claim Firebird no puede marcarse expirado','QNA_APLICACION_CLAIM_CONFLICTO',409);
+          await this.insertAttemptEvent(transaction,attempt.QnaAplicacionIntentoId,'CLAIM_EXPIRADO','INCIERTO','FIREBIRD',null,'Lease Firebird expirado',null,usuarioId);
+          await this.insertTransition(transaction,processId,id,state,'APLICACION_INCIERTA','Lease Firebird expirado',usuarioId);returnedState='APLICACION_INCIERTA';
+        }else if(['FIREBIRD_CONFIRMADO','LINEA_CONFIRMADA','REVISA_PROGRAMADA'].includes(returnedState)){
+          if(attempt.ClaimToken&&attempt.LeaseActiva)qnaFail('La recuperacion SQL ya esta en curso','QNA_RECUPERACION_CLAIM_ACTIVO',409);
+          if(attempt.ClaimToken)await this.insertAttemptEvent(transaction,attempt.QnaAplicacionIntentoId,'CLAIM_EXPIRADO',attempt.Estado,attempt.Fase,null,'Lease de recuperacion expirado',null,usuarioId);
+          claimToken=randomUUID();
+          const acquired=await new sql.Request(transaction).input('AttemptId',sql.BigInt,attempt.QnaAplicacionIntentoId).input('Claim',sql.UniqueIdentifier,claimToken).input('LeaseMs',sql.Int,leaseMs)
+            .query(`UPDATE liquidacion.QnaAplicacionIntento SET ClaimToken=@Claim,ClaimTipo='RECUPERACION',LeaseExpiraEn=DATEADD(MILLISECOND,@LeaseMs,SYSUTCDATETIME()),FechaActualizacion=SYSUTCDATETIME()
+              WHERE QnaAplicacionIntentoId=@AttemptId AND Estado='CONFIRMADO' AND Activo=1 AND (ClaimToken IS NULL OR LeaseExpiraEn<=SYSUTCDATETIME())`);
+          if(acquired.rowsAffected[0]!==1)qnaFail('La recuperacion SQL ya esta en curso','QNA_RECUPERACION_CLAIM_ACTIVO',409);
+          await this.insertAttemptEvent(transaction,attempt.QnaAplicacionIntentoId,'CLAIM_ADQUIRIDO',attempt.Estado,attempt.Fase,claimToken,'Claim de recuperacion SQL',null,usuarioId);
+        }
+      }
+      if(owns)await transaction.commit();
+      return {
+        liquidacionSnapshotId: id,
+        estadoProceso: returnedState,
+        action,
+        scope,
+        periodo: String(header.Periodo),
+        idempotente: action !== 'EJECUTAR_FIREBIRD',
+        intentoUuid:String(attempt.IntentoUuid),afectacionId:Number(attempt.AfectacionId),claimToken,
+      };
+    } catch (error) {
+      if(owns)await transaction.rollback().catch(() => undefined);
+      throw error;
+    }
+  }
+
+  async resolveUncertainApplication(
+    id: string,
+    intentoUuid: string,
+    requestedScope: QnaScope,
+    resolution: QnaManualResolution,
+    motivo: string,
+    evidencia: string,
+    usuarioId: string,ambientTransaction?:Transaction
+  ): Promise<QnaManualResolutionResult> {
+    const transaction = ambientTransaction??new sql.Transaction(this.mssqlPool);const owns=!ambientTransaction;
+    if(owns)await transaction.begin(sql.ISOLATION_LEVEL.SERIALIZABLE);
+    try {
+      const headerResult = await new sql.Request(transaction).input('Id', sql.BigInt, id).query(`
+        SELECT EntidadId,Anio,Quincena,Organica0,Organica1,Organica2,Organica3
+        FROM liquidacion.QnaSnapshot WITH (NOLOCK) WHERE LiquidacionSnapshotId=@Id`);
+      let header = headerResult.recordset[0];
+      if (!header) qnaFail('Snapshot no encontrado', 'QNA_SNAPSHOT_NO_ENCONTRADO', 404);
+      const scope = this.applicationScope(header);
+      this.assertExactApplicationScope(scope, requestedScope);
+      await acquireQnaScopeLock(transaction, scope);
+      header=(await new sql.Request(transaction).input('Id',sql.BigInt,id).query(`SELECT EntidadId,Anio,Quincena,Organica0,Organica1,Organica2,Organica3
+        FROM liquidacion.QnaSnapshot WITH(UPDLOCK,HOLDLOCK) WHERE LiquidacionSnapshotId=@Id`)).recordset[0];
+      if(!header)qnaFail('Snapshot no encontrado','QNA_SNAPSHOT_NO_ENCONTRADO',404);this.assertExactApplicationScope(this.applicationScope(header),requestedScope);
+      const processResult = await this.scope(new sql.Request(transaction), scope).input('Id', sql.BigInt, id).query(`
+        SELECT p.QnaProcesoId,o.LiquidacionSnapshotId,t.EstadoDestino,t.Motivo
+        FROM liquidacion.QnaProceso p WITH (UPDLOCK,HOLDLOCK)
+        JOIN liquidacion.QnaSnapshotOficialActual o WITH (UPDLOCK,HOLDLOCK) ON o.QnaProcesoId=p.QnaProcesoId
+        OUTER APPLY (SELECT TOP (1) EstadoDestino,Motivo FROM liquidacion.QnaProcesoTransicion WITH (UPDLOCK,HOLDLOCK)
+          WHERE QnaProcesoId=p.QnaProcesoId ORDER BY FechaCreacion DESC,QnaProcesoTransicionId DESC) t
+        WHERE p.EntidadId=@EntidadId AND p.Anio=@Anio AND p.Quincena=@Quincena
+          AND p.Organica0=@Organica0 AND p.Organica1=@Organica1 AND p.Organica2=@Organica2 AND p.Organica3=@Organica3
+          AND o.LiquidacionSnapshotId=@Id`);
+      const process = processResult.recordset[0];
+      if (!process) qnaFail('El snapshot no es el oficial actual del ambito', 'QNA_SNAPSHOT_NO_OFICIAL', 409);
+      const destination = manualResolutionDestination(resolution);
+      const attempt=(await new sql.Request(transaction).input('ProcesoId',sql.BigInt,process.QnaProcesoId).input('Id',sql.BigInt,id).input('Uuid',sql.UniqueIdentifier,intentoUuid).query(`
+        SELECT *,CAST(CASE WHEN LeaseExpiraEn>SYSUTCDATETIME() THEN 1 ELSE 0 END AS bit) LeaseActiva FROM liquidacion.QnaAplicacionIntento WITH(UPDLOCK,HOLDLOCK)
+        WHERE IntentoUuid=@Uuid AND QnaProcesoId=@ProcesoId AND LiquidacionSnapshotId=@Id`)).recordset[0];
+      if(!attempt)qnaFail('No existe intento de aplicacion para resolver','QNA_INTENTO_NO_ENCONTRADO',409);
+      const normalizedMotivo=motivo.trim().replace(/\s+/g,' ');const normalizedEvidence=evidencia.trim();
+      const evidenceHash=createHash('sha256').update(normalizedEvidence,'utf8').digest('hex').toUpperCase();
+      const prior=(await new sql.Request(transaction).input('AttemptId',sql.BigInt,attempt.QnaAplicacionIntentoId).query(`SELECT * FROM liquidacion.QnaAplicacionResolucion WHERE QnaAplicacionIntentoId=@AttemptId`)).recordset[0];
+      if(prior){
+        if(prior.Resolucion!==resolution||prior.MotivoNormalizado!==normalizedMotivo||prior.EvidenciaHash!==evidenceHash)qnaFail('La resolucion manual previa no coincide','QNA_RESOLUCION_MANUAL_CONFLICTO',409);
+        if(owns)await transaction.commit();
+        return { intentoUuid,liquidacionSnapshotId:id,estadoProceso:destination,resolution,idempotente:true,action:resolution==='CONFIRMADA'?'REANUDAR_SQL':'REINTENTAR_FIREBIRD' };
+      }
+      if(!attempt.Activo||!['ACTIVO','INCIERTO'].includes(String(attempt.Estado)))qnaFail('El intento indicado ya no admite resolucion manual','QNA_RESOLUCION_MANUAL_CONFLICTO',409);
+      let origin=String(process.EstadoDestino??'OFICIAL') as QnaProcessState;
+      if(attempt.ClaimToken&&attempt.LeaseActiva)qnaFail('La aplicacion Firebird conserva un claim activo','QNA_APLICACION_CLAIM_ACTIVO',409);
+      if(origin==='APLICANDO_FIREBIRD'){
+        const expired=await new sql.Request(transaction).input('AttemptId',sql.BigInt,attempt.QnaAplicacionIntentoId).input('Uuid',sql.UniqueIdentifier,intentoUuid).query(`UPDATE liquidacion.QnaAplicacionIntento SET Estado='INCIERTO',ClaimToken=NULL,ClaimTipo=NULL,LeaseExpiraEn=NULL,FechaActualizacion=SYSUTCDATETIME()
+          WHERE QnaAplicacionIntentoId=@AttemptId AND IntentoUuid=@Uuid AND Estado='ACTIVO' AND Fase='FIREBIRD' AND ClaimTipo='FIREBIRD' AND LeaseExpiraEn<=SYSUTCDATETIME()`);
+        if(expired.rowsAffected[0]!==1)qnaFail('El claim Firebird no puede marcarse expirado','QNA_APLICACION_CLAIM_CONFLICTO',409);
+        await this.insertAttemptEvent(transaction,attempt.QnaAplicacionIntentoId,'CLAIM_EXPIRADO','INCIERTO','FIREBIRD',null,'Claim abandonado marcado incierto',null,usuarioId);
+        await this.insertTransition(transaction,String(process.QnaProcesoId),id,origin,'APLICACION_INCIERTA','Claim abandonado marcado incierto',usuarioId);origin='APLICACION_INCIERTA';
+      }
+      assertManualResolutionAllowed(origin);
+      await new sql.Request(transaction).input('AttemptId',sql.BigInt,attempt.QnaAplicacionIntentoId).input('Resolution',sql.VarChar(20),resolution)
+        .input('Motivo',sql.NVarChar(150),normalizedMotivo).input('Evidencia',sql.NVarChar(150),normalizedEvidence).input('Hash',sql.Char(64),evidenceHash).input('Actor',sql.NVarChar(100),usuarioId)
+        .query(`INSERT liquidacion.QnaAplicacionResolucion(QnaAplicacionIntentoId,Resolucion,MotivoNormalizado,Evidencia,EvidenciaHash,Actor) VALUES(@AttemptId,@Resolution,@Motivo,@Evidencia,@Hash,@Actor);
+          UPDATE liquidacion.QnaAplicacionIntento SET Estado=IIF(@Resolution='CONFIRMADA','CONFIRMADO','REVERTIDO'),Fase=IIF(@Resolution='CONFIRMADA','LINEA','FIREBIRD'),Activo=IIF(@Resolution='CONFIRMADA',1,0),ClaimToken=NULL,ClaimTipo=NULL,LeaseExpiraEn=NULL,FechaActualizacion=SYSUTCDATETIME() WHERE QnaAplicacionIntentoId=@AttemptId`);
+      await this.insertAttemptEvent(transaction,attempt.QnaAplicacionIntentoId,'RESOLUCION_MANUAL',resolution==='CONFIRMADA'?'CONFIRMADO':'REVERTIDO',resolution==='CONFIRMADA'?'LINEA':'FIREBIRD',null,normalizedMotivo,evidenceHash,usuarioId);
+      const audit = JSON.stringify({ type:'QNA_FIREBIRD_MANUAL_V2',resolution,evidenceHash,actor:usuarioId });
+      await this.insertTransition(transaction, String(process.QnaProcesoId), id, origin, destination, audit, usuarioId);
+      if(owns)await transaction.commit();
+      return { intentoUuid,liquidacionSnapshotId:id,estadoProceso:destination,resolution,idempotente:false,action:resolution==='CONFIRMADA'?'REANUDAR_SQL':'REINTENTAR_FIREBIRD' };
+    } catch (error) {
+      if(owns)await transaction.rollback().catch(() => undefined);
+      throw error;
+    }
+  }
+
+  private applicationScope(row: Record<string, any>): QnaScope {
+    return { entidadId: Number(row.EntidadId), anio: Number(row.Anio), quincena: Number(row.Quincena),
+      organica0: String(row.Organica0), organica1: String(row.Organica1), organica2: String(row.Organica2), organica3: String(row.Organica3) };
+  }
+
+  private assertExactApplicationScope(actual: QnaScope, requested: QnaScope): void {
+    if (actual.entidadId !== requested.entidadId || actual.anio !== requested.anio || actual.quincena !== requested.quincena
+      || actual.organica0 !== requested.organica0 || actual.organica1 !== requested.organica1
+      || actual.organica2 !== requested.organica2 || actual.organica3 !== requested.organica3) {
+      qnaFail('El ambito o periodo no coincide con el snapshot oficial', 'QNA_SNAPSHOT_SCOPE_MISMATCH', 403);
+    }
+  }
+
+  async renewApplicationClaim(intentoUuid:string,claimToken:string,claimType:QnaApplicationClaimType,usuarioId:string,ambientTransaction?:Transaction):Promise<void>{
+    const transaction=ambientTransaction??new sql.Transaction(this.mssqlPool);const owns=!ambientTransaction;if(owns)await transaction.begin(sql.ISOLATION_LEVEL.SERIALIZABLE);
+    try{const attempt=await this.lockAttemptInScope(transaction,intentoUuid);
+      const renewed=await new sql.Request(transaction).input('AttemptId',sql.BigInt,attempt.QnaAplicacionIntentoId).input('Claim',sql.UniqueIdentifier,claimToken)
+        .input('ClaimType',sql.VarChar(20),claimType).input('LeaseMs',sql.Int,qnaApplicationLeaseMs()).query(`UPDATE liquidacion.QnaAplicacionIntento
+          SET LeaseExpiraEn=DATEADD(MILLISECOND,@LeaseMs,SYSUTCDATETIME()),FechaActualizacion=SYSUTCDATETIME()
+          WHERE QnaAplicacionIntentoId=@AttemptId AND Activo=1 AND ClaimToken=@Claim AND ClaimTipo=@ClaimType
+            AND LeaseExpiraEn>SYSUTCDATETIME()
+            AND ((@ClaimType='FIREBIRD' AND Estado='ACTIVO' AND Fase='FIREBIRD') OR (@ClaimType='RECUPERACION' AND Estado='CONFIRMADO' AND Fase IN('LINEA','REVISA','BITACORA')))`);
+      if(renewed.rowsAffected[0]!==1)qnaFail('El claim ya no pertenece al ejecutor','QNA_APLICACION_CLAIM_CONFLICTO',409);
+      await this.insertAttemptEvent(transaction,attempt.QnaAplicacionIntentoId,'CLAIM_RENOVADO',attempt.Estado,attempt.Fase,claimToken,`Claim ${claimType} renovado`,null,usuarioId);
+      if(owns)await transaction.commit();}catch(error){if(owns)await transaction.rollback().catch(()=>undefined);throw error;}}
+
+  async completeFirebirdAttempt(intentoUuid:string,claimToken:string,destination:Extract<QnaProcessState,'FIREBIRD_CONFIRMADO'|'FIREBIRD_REVERTIDO'|'APLICACION_INCIERTA'>,motivo:string,usuarioId:string,ambientTransaction?:Transaction):Promise<void>{
+    const transaction=ambientTransaction??new sql.Transaction(this.mssqlPool);const owns=!ambientTransaction;if(owns)await transaction.begin(sql.ISOLATION_LEVEL.SERIALIZABLE);
+    try{const attempt=await this.lockAttemptInScope(transaction,intentoUuid);
+      const authority=await new sql.Request(transaction).input('AttemptId',sql.BigInt,attempt.QnaAplicacionIntentoId).query(`
+        SELECT Resolucion FROM liquidacion.QnaAplicacionResolucion WITH(UPDLOCK,HOLDLOCK) WHERE QnaAplicacionIntentoId=@AttemptId;
+        SELECT TipoEvento FROM liquidacion.QnaAplicacionIntentoEvento WITH(UPDLOCK,HOLDLOCK) WHERE QnaAplicacionIntentoId=@AttemptId AND TipoEvento IN('FIREBIRD_CONFIRMADO','FIREBIRD_REVERTIDO','APLICACION_INCIERTA');`);
+      const authoritySets=authority.recordsets as Array<Array<Record<string,any>>>;
+      if(authoritySets[0].length)qnaFail('Una resolucion manual ya es autoritativa para el intento','QNA_RESULTADO_FIREBIRD_CONFLICTO_RESOLUCION',409);
+      const priorOutcomes=authoritySets[1].map(row=>String(row.TipoEvento));
+      if(priorOutcomes.includes(destination)){if(owns)await transaction.commit();return;}
+      if(priorOutcomes.length)qnaFail('El intento ya tiene un resultado Firebird autoritativo distinto','QNA_RESULTADO_FIREBIRD_CONFLICTO',409);
+      if(String(attempt.ClaimToken).toLowerCase()!==claimToken.toLowerCase()||attempt.ClaimTipo!=='FIREBIRD')qnaFail('El claim Firebird ya no pertenece al ejecutor','QNA_APLICACION_CLAIM_CONFLICTO',409);
+      const current=await this.currentProcessState(transaction,String(attempt.QnaProcesoId));
+      const confirmed=destination==='FIREBIRD_CONFIRMADO';const active=confirmed||destination==='APLICACION_INCIERTA';
+      const completed=await new sql.Request(transaction).input('AttemptId',sql.BigInt,attempt.QnaAplicacionIntentoId).input('OwnerClaim',sql.UniqueIdentifier,claimToken).input('Claim',sql.UniqueIdentifier,confirmed?claimToken:null)
+        .input('LeaseMs',sql.Int,qnaApplicationLeaseMs()).input('Estado',sql.VarChar(30),confirmed?'CONFIRMADO':destination==='FIREBIRD_REVERTIDO'?'REVERTIDO':'INCIERTO')
+        .input('Fase',sql.VarChar(30),confirmed?'LINEA':'FIREBIRD').input('Activo',sql.Bit,active).query(`UPDATE liquidacion.QnaAplicacionIntento SET Estado=@Estado,Fase=@Fase,Activo=@Activo,
+          ClaimToken=@Claim,ClaimTipo=IIF(@Claim IS NULL,NULL,'RECUPERACION'),LeaseExpiraEn=IIF(@Claim IS NULL,NULL,DATEADD(MILLISECOND,@LeaseMs,SYSUTCDATETIME())),FechaActualizacion=SYSUTCDATETIME()
+          WHERE QnaAplicacionIntentoId=@AttemptId AND Estado='ACTIVO' AND Fase='FIREBIRD' AND Activo=1 AND ClaimToken=@OwnerClaim AND ClaimTipo='FIREBIRD'`);
+      if(completed.rowsAffected[0]!==1)qnaFail('El claim Firebird cambio de propietario o ya fue resuelto','QNA_APLICACION_CLAIM_CONFLICTO',409);
+      await this.insertAttemptEvent(transaction,attempt.QnaAplicacionIntentoId,destination,confirmed?'CONFIRMADO':destination==='FIREBIRD_REVERTIDO'?'REVERTIDO':'INCIERTO',confirmed?'LINEA':'FIREBIRD',confirmed?claimToken:null,motivo,null,usuarioId);
+      await this.insertTransition(transaction,String(attempt.QnaProcesoId),String(attempt.LiquidacionSnapshotId),current,destination,motivo,usuarioId);if(owns)await transaction.commit();
+    }catch(error){if(owns)await transaction.rollback().catch(()=>undefined);throw error;}}
+
+  async advanceRecoveryAttempt(intentoUuid:string,claimToken:string,destination:Extract<QnaProcessState,'LINEA_CONFIRMADA'|'REVISA_PROGRAMADA'|'TERMINADO'>,motivo:string,usuarioId:string,ambientTransaction?:Transaction):Promise<void>{
+    const transaction=ambientTransaction??new sql.Transaction(this.mssqlPool);const owns=!ambientTransaction;if(owns)await transaction.begin(sql.ISOLATION_LEVEL.SERIALIZABLE);
+    try{const attempt=await this.lockAttemptInScope(transaction,intentoUuid);
+      if(String(attempt.ClaimToken).toLowerCase()!==claimToken.toLowerCase()||attempt.ClaimTipo!=='RECUPERACION')qnaFail('El claim de recuperacion ya no pertenece al ejecutor','QNA_RECUPERACION_CLAIM_CONFLICTO',409);
+      const current=await this.currentProcessState(transaction,String(attempt.QnaProcesoId));
+      const terminal=destination==='TERMINADO';const phase=destination==='LINEA_CONFIRMADA'?'REVISA':destination==='REVISA_PROGRAMADA'?'BITACORA':'TERMINADO';
+      const advanced=await new sql.Request(transaction).input('AttemptId',sql.BigInt,attempt.QnaAplicacionIntentoId).input('OwnerClaim',sql.UniqueIdentifier,claimToken).input('Fase',sql.VarChar(30),phase).input('Terminal',sql.Bit,terminal)
+        .input('LeaseMs',sql.Int,qnaApplicationLeaseMs()).query(`UPDATE liquidacion.QnaAplicacionIntento SET Estado=IIF(@Terminal=1,'TERMINADO','CONFIRMADO'),Fase=@Fase,Activo=IIF(@Terminal=1,0,1),
+          ClaimToken=IIF(@Terminal=1,NULL,ClaimToken),ClaimTipo=IIF(@Terminal=1,NULL,ClaimTipo),LeaseExpiraEn=IIF(@Terminal=1,NULL,DATEADD(MILLISECOND,@LeaseMs,SYSUTCDATETIME())),FechaActualizacion=SYSUTCDATETIME()
+          WHERE QnaAplicacionIntentoId=@AttemptId AND Estado='CONFIRMADO' AND Activo=1 AND ClaimToken=@OwnerClaim AND ClaimTipo='RECUPERACION' AND LeaseExpiraEn>SYSUTCDATETIME()`);
+      if(advanced.rowsAffected[0]!==1)qnaFail('El claim de recuperacion expiro o cambio de propietario','QNA_RECUPERACION_CLAIM_CONFLICTO',409);
+      await this.insertAttemptEvent(transaction,attempt.QnaAplicacionIntentoId,destination,terminal?'TERMINADO':'CONFIRMADO',phase,terminal?null:claimToken,motivo,null,usuarioId);
+      await this.insertTransition(transaction,String(attempt.QnaProcesoId),String(attempt.LiquidacionSnapshotId),current,destination,motivo,usuarioId);if(owns)await transaction.commit();
+    }catch(error){if(owns)await transaction.rollback().catch(()=>undefined);throw error;}}
+
+  async releaseRecoveryClaim(intentoUuid:string,claimToken:string,motivo:string,usuarioId:string,ambientTransaction?:Transaction):Promise<void>{
+    const transaction=ambientTransaction??new sql.Transaction(this.mssqlPool);const owns=!ambientTransaction;if(owns)await transaction.begin(sql.ISOLATION_LEVEL.SERIALIZABLE);
+    try{const attempt=await this.lockAttemptInScope(transaction,intentoUuid);
+      if(String(attempt.ClaimToken).toLowerCase()===claimToken.toLowerCase()&&attempt.ClaimTipo==='RECUPERACION'){
+        await new sql.Request(transaction).input('AttemptId',sql.BigInt,attempt.QnaAplicacionIntentoId).query(`UPDATE liquidacion.QnaAplicacionIntento SET ClaimToken=NULL,ClaimTipo=NULL,LeaseExpiraEn=NULL,FechaActualizacion=SYSUTCDATETIME() WHERE QnaAplicacionIntentoId=@AttemptId`);
+        await this.insertAttemptEvent(transaction,attempt.QnaAplicacionIntentoId,'CLAIM_LIBERADO',attempt.Estado,attempt.Fase,null,motivo,null,usuarioId);
+      }if(owns)await transaction.commit();
+    }catch(error){if(owns)await transaction.rollback().catch(()=>undefined);throw error;}}
+
+  private async lockAttempt(transaction:Transaction,intentoUuid:string):Promise<Record<string,any>>{
+    const row=(await new sql.Request(transaction).input('Uuid',sql.UniqueIdentifier,intentoUuid).query(`SELECT i.*,s.EntidadId,s.Anio,s.Quincena,s.Organica0,s.Organica1,s.Organica2,s.Organica3
+      FROM liquidacion.QnaAplicacionIntento i WITH(UPDLOCK,HOLDLOCK) JOIN liquidacion.QnaSnapshot s ON s.LiquidacionSnapshotId=i.LiquidacionSnapshotId WHERE i.IntentoUuid=@Uuid`)).recordset[0];
+    if(!row)qnaFail('Intento de aplicacion no encontrado','QNA_INTENTO_NO_ENCONTRADO',409);return row;}
+
+  private async lockAttemptInScope(transaction:Transaction,intentoUuid:string):Promise<Record<string,any>>{
+    const hint=(await new sql.Request(transaction).input('Uuid',sql.UniqueIdentifier,intentoUuid).query(`SELECT s.EntidadId,s.Anio,s.Quincena,s.Organica0,s.Organica1,s.Organica2,s.Organica3
+      FROM liquidacion.QnaAplicacionIntento i WITH(NOLOCK) JOIN liquidacion.QnaSnapshot s WITH(NOLOCK) ON s.LiquidacionSnapshotId=i.LiquidacionSnapshotId WHERE i.IntentoUuid=@Uuid`)).recordset[0];
+    if(!hint)qnaFail('Intento de aplicacion no encontrado','QNA_INTENTO_NO_ENCONTRADO',409);
+    await acquireQnaScopeLock(transaction,this.applicationScope(hint));return this.lockAttempt(transaction,intentoUuid);
+  }
+
+  private async currentProcessState(transaction:Transaction,processId:string):Promise<QnaProcessState>{const row=(await new sql.Request(transaction).input('ProcesoId',sql.BigInt,processId).query(`SELECT TOP(1)EstadoDestino FROM liquidacion.QnaProcesoTransicion WITH(UPDLOCK,HOLDLOCK) WHERE QnaProcesoId=@ProcesoId ORDER BY FechaCreacion DESC,QnaProcesoTransicionId DESC`)).recordset[0];return String(row?.EstadoDestino??'OFICIAL') as QnaProcessState;}
+
+  private async requireExactBitacora(transaction:Transaction,scope:QnaScope,afectacionId:number|null,mode:'INICIO'|'RECUPERACION'|'TERMINADO'):Promise<Record<string,any>>{
+    const result=await this.scope(new sql.Request(transaction),scope).input('AfectacionId',sql.BigInt,afectacionId).input('EntidadTexto',sql.NVarChar(50),String(scope.entidadId)).input('Mode',sql.VarChar(20),mode).query(`
+      SELECT AfectacionId,Accion,Resultado,AplicacionMovimientosFinalizada FROM afec.BitacoraAfectacionOrg WITH(UPDLOCK,HOLDLOCK)
+      WHERE Entidad='AFILIADOS' AND EntidadId=@EntidadTexto AND Anio=@Anio AND Quincena=@Quincena AND Org0=@Organica0 AND Org1=@Organica1 AND Org2=@Organica2 AND Org3=@Organica3
+        AND (@AfectacionId IS NULL OR AfectacionId=@AfectacionId)
+        AND ((@Mode='INICIO' AND AplicacionMovimientosFinalizada=1 AND Accion='APLICAR' AND Resultado='OK')
+          OR (@Mode='RECUPERACION' AND AplicacionMovimientosFinalizada=1 AND ((Accion='APLICAR' AND Resultado IN('OK','PENDIENTE')) OR (Accion='TERMINADO' AND Resultado='OK')))
+          OR (@Mode='TERMINADO' AND Accion='TERMINADO' AND Resultado='OK'))`);
+    if(result.recordset.length!==1)qnaFail(result.recordset.length>1?'La bitacora exacta es ambigua':'No existe bitacora exacta elegible',result.recordset.length>1?'QNA_BITACORA_AMBIGUA':'QNA_BITACORA_PRERREQUISITO_INVALIDO',409);
+    return result.recordset[0];}
+
+  private async insertAttemptEvent(transaction:Transaction,attemptId:unknown,type:string,state:string,phase:string,claim:string|null,motivo:string|null,evidenceHash:string|null,actor:string):Promise<void>{await new sql.Request(transaction)
+    .input('AttemptId',sql.BigInt,String(attemptId)).input('Type',sql.VarChar(30),type).input('State',sql.VarChar(30),state).input('Phase',sql.VarChar(30),phase)
+    .input('Claim',sql.UniqueIdentifier,claim).input('Motivo',sql.NVarChar(500),motivo?.slice(0,500)??null).input('Hash',sql.Char(64),evidenceHash).input('Actor',sql.NVarChar(100),actor)
+    .query(`INSERT liquidacion.QnaAplicacionIntentoEvento(QnaAplicacionIntentoId,TipoEvento,Estado,Fase,ClaimToken,Motivo,EvidenciaHash,Actor) VALUES(@AttemptId,@Type,@State,@Phase,@Claim,@Motivo,@Hash,@Actor)`);}
 
   async appendProcessTransition(id: string, destination: QnaProcessState, motivo: string | null, usuarioId: string, allowSame = true): Promise<void> {
     const transaction = new sql.Transaction(this.mssqlPool);

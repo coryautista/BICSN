@@ -57,6 +57,8 @@ import { getPool } from "../../db/mssql.js";
 import sql from "mssql";
 import pino from "pino";
 import { parsePeriodoMovimiento } from "./domain/services/MovimientoFechaPolicy.js";
+import { resolveOrganicaScope } from "../auth/domain/policies/OrganicaScopePolicy.js";
+import { handleLiquidacionQnaError } from "../liquidacionQna/infrastructure/errorHandler.js";
 
 const logger = pino({
   name: "afiliado-routes",
@@ -6383,30 +6385,28 @@ export default async function afiliadoRoutes(app: FastifyInstance) {
       preHandler: [requireAuth],
       schema: {
         description:
-          "Aplica la QNA en una transacción única de Firebird: AP_P_APLICAR(C), AP_P_APLICAR(F) y EBI2_RECIBOS_AP cuando corresponda. Ante cualquier fallo revierte Firebird, conserva la bitácora en APLICAR y guarda trazabilidad SFTP. Solo después del COMMIT actualiza SQL Server a TERMINADO.",
+          "Aplica o reanuda la QNA. Un rollback confirmado permite reintento; un resultado Firebird incierto exige resolución administrativa con evidencia. La recuperación posterior usa el snapshot persistido.",
         tags: ["afiliado", "firebird"],
         security: [{ bearerAuth: [] }],
         body: {
           type: "object",
-          required: ["liquidacionSnapshotId"],
+          required: ["liquidacionSnapshotId", "anio", "quincena"],
           additionalProperties: false,
           properties: {
             liquidacionSnapshotId: { type: "string", pattern: "^[0-9]+$" },
+            entidadId: { type: "integer", minimum: 1 },
+            anio: { type: "integer", minimum: 2000, maximum: 9999 },
+            quincena: { type: "integer", minimum: 1, maximum: 24 },
+            organica0: { type: "string", pattern: "^\\d{2}$" },
+            organica1: { type: "string", pattern: "^\\d{2}$" },
+            organica2: { type: "string", pattern: "^\\d{2}$" },
+            organica3: { type: "string", pattern: "^\\d{2}$" },
           },
         },
         querystring: {
           type: "object",
+          additionalProperties: false,
           properties: {
-            org0: {
-              type: "string",
-              description:
-                "Orgánica nivel 0 (opcional, se usa del token si no se proporciona)",
-            },
-            org1: {
-              type: "string",
-              description:
-                "Orgánica nivel 1 (opcional, se usa del token si no se proporciona)",
-            },
           },
         },
         response: {
@@ -6496,7 +6496,7 @@ export default async function afiliadoRoutes(app: FastifyInstance) {
                   bitacoraActualizada: { type: "boolean" },
                   firebirdTransaction: {
                     type: "string",
-                    enum: ["NO_INICIADA", "COMMIT", "ROLLBACK"],
+                    enum: ["NO_INICIADA", "COMMIT", "ROLLBACK", "INCIERTA"],
                   },
                   pasoFallido: { type: "string", nullable: true },
                   lineaPago: {
@@ -6509,40 +6509,33 @@ export default async function afiliadoRoutes(app: FastifyInstance) {
                   mensaje: { type: "string" },
                   tiempoTotalMs: { type: "number" },
                   liquidacionSnapshotId: { type: "string" },
+                  estadoProceso: { type: "string" },
+                  idempotente: { type: "boolean" },
+                  requiereResolucionManual: { type: "boolean" },
+                  intentoUuid: { type: "string", format: "uuid" },
+                  afectacionId: { type: "number" },
                 },
               },
             },
           },
           400: { type: "object" },
+          401: { type: "object" },
+          403: { type: "object" },
+          409: { type: "object" },
           500: { type: "object" },
         },
       },
     },
     async (req, reply) => {
       try {
-        // Obtener orgánica del usuario autenticado o de query params
-        const query = req.query as { org0?: string; org1?: string };
-        const body = req.body as { liquidacionSnapshotId: string };
-        let userOrg0 = query.org0 || req.user?.idOrganica0 || "";
-        let userOrg1 = query.org1 || req.user?.idOrganica1 || "";
-
-        // Normalizar orgánicas (padding a 2 dígitos)
-        if (userOrg0) {
-          userOrg0 = String(userOrg0).padStart(2, "0");
-        }
-        if (userOrg1) {
-          userOrg1 = String(userOrg1).padStart(2, "0");
-        }
-
-        if (!userOrg0 || !userOrg1) {
-          return reply
-            .code(400)
-            .send(
-              fail(
-                "USER_ORGANICA_NOT_FOUND: Usuario no tiene orgánica configurada y no se proporcionó en query params",
-              ),
-            );
-        }
+        const body = req.body as { liquidacionSnapshotId: string; entidadId?: number; anio: number; quincena: number;
+          organica0?: string; organica1?: string; organica2?: string; organica3?: string };
+        const scopeKeys = ["entidadId", "organica0", "organica1", "organica2", "organica3"] as const;
+        const suppliedScope = scopeKeys.filter(key => body[key] !== undefined).length;
+        const isAdmin = req.user!.roles.some(role => role.trim().toLowerCase() === "admin");
+        if (!isAdmin && suppliedScope > 0) return reply.code(403).send(fail("El usuario no puede enviar un ámbito externo.", "ORGANICA_SCOPE_FORBIDDEN"));
+        if (isAdmin && suppliedScope !== 0 && suppliedScope !== scopeKeys.length) return reply.code(400).send(fail("El ámbito administrativo debe enviarse completo.", "ORGANICA_SCOPE_REQUIRED"));
+        const scope = resolveOrganicaScope(req.user!, isAdmin ? body : {}, 4);
 
         // Resolver Command desde DI
         const aplicarBDIssspeaQNACommand =
@@ -6552,8 +6545,10 @@ export default async function afiliadoRoutes(app: FastifyInstance) {
 
         // Ejecutar Command
         const resultado = await aplicarBDIssspeaQNACommand.execute({
-          org0: userOrg0,
-          org1: userOrg1,
+          entidadId: scope.entidadId, organica0: scope.organica0, organica1: scope.organica1,
+          organica2: scope.organica2!, organica3: scope.organica3!,
+          anio: body.anio,
+          quincena: body.quincena,
           usuarioId: req.user?.sub || "unknown",
           liquidacionSnapshotId: body.liquidacionSnapshotId,
         });
@@ -6562,19 +6557,7 @@ export default async function afiliadoRoutes(app: FastifyInstance) {
         // Si no fue exitoso, el código de estado será 200 pero el cliente puede verificar resultado.exito
         return reply.send(ok(resultado));
       } catch (error: any) {
-        if (error.message?.includes("APLICACION_MOVIMIENTOS_NO_FINALIZADA")) {
-          return reply
-            .code(400)
-            .send(
-              fail(
-                "APLICACION_MOVIMIENTOS_NO_FINALIZADA: Primero debe finalizar Aplicar movimientos para habilitar Aplicacion QNA.",
-              ),
-            );
-        }
-        return handleAfiliadoError(error, reply, {
-          operation: "aplicarBDIssspeaQNA",
-          user: req.user?.sub,
-        });
+        return handleLiquidacionQnaError(error, req, reply);
       }
     },
   );

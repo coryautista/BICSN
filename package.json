@@ -50,7 +50,17 @@
     "test:qna:phase10:applied:desarrollo": "tsx scripts/test-qna-phase10-applied-integration-desarrollo.ts",
     "verify:qna:phase10:applied-read:desarrollo": "tsx scripts/verify-qna-phase10-applied-read-desarrollo.ts",
     "check:qna:phase10:applied-plan:desarrollo": "tsx scripts/check-qna-phase10-applied-plan-desarrollo.ts",
-    "test:qna:phase10:applied": "tsx scripts/test-qna-phase10-applied-contracts.ts"
+    "test:qna:phase10:applied": "tsx scripts/test-qna-phase10-applied-contracts.ts",
+    "test:qna:phase11": "npm run test:qna:phase11:firebird && npm run test:qna:phase11:http",
+    "test:qna:phase11:firebird": "tsx scripts/test-qna-phase11-saga.ts",
+    "test:qna:phase11:http": "tsx scripts/test-qna-phase11-http.ts",
+    "test:qna:phase11:desarrollo": "tsx scripts/test-qna-phase11-integration-desarrollo.ts && tsx scripts/test-qna-phase11-migration-repair-desarrollo.ts",
+    "test:qna:phase11:migration-repair:desarrollo": "tsx scripts/test-qna-phase11-migration-repair-desarrollo.ts",
+    "verify:qna:phase11:desarrollo": "tsx scripts/verify-qna-phase11-state-desarrollo.ts",
+    "check:qna:phase11:plan:desarrollo": "tsx scripts/check-qna-phase11-plan-desarrollo.ts",
+    "migrate:qna:phase11:attempt-ledger:desarrollo": "tsx scripts/migrate-qna-phase11-attempt-ledger-desarrollo.ts",
+    "apply:qna:phase11:attempt-ledger:desarrollo": "tsx scripts/migrate-qna-phase11-attempt-ledger-desarrollo.ts --execute --confirm-development=SII-ISSSSPEA-DES",
+    "test:qna:phase11:regressions": "npm run test:liquidacion-qna && npm run test:liquidacion-qna:auto && npm run test:liquidacion-qna:capture && npm run test:qna:phase8:legacy && npm run test:qna:phase9:applied && npm run test:qna:phase9:applied:http && npm run test:qna:phase10:applied && npm run test:auth:organica-scope && tsx scripts/test-linea-pago-snapshot.ts"
   },
   "engines": {
     "node": ">=20.0.0"

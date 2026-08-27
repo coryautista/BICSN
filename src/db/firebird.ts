@@ -366,6 +366,84 @@ export async function executeProcedureInTransaction(
   return await executeQueryInTransaction(cn, sql, params);
 }
 
+export type FirebirdTransactionOutcome = 'COMMIT_CONFIRMADO' | 'ROLLBACK_CONFIRMADO' | 'RESULTADO_INCIERTO' | 'NO_INICIADA';
+
+export interface FirebirdTransactionExecution<T> {
+  outcome: FirebirdTransactionOutcome;
+  value?: T;
+  error?: unknown;
+}
+
+export interface FirebirdTransactionHandle<TContext> {
+  context: TContext;
+  commit(): Promise<void>;
+  rollback(): Promise<void>;
+  isValid(): boolean;
+}
+
+/** Purely injectable transaction boundary used by phase 11 and fake-only tests. */
+export async function executeTypedTransaction<TContext, T>(
+  start: () => Promise<FirebirdTransactionHandle<TContext>>,
+  fn: (context: TContext) => Promise<T>
+): Promise<FirebirdTransactionExecution<T>> {
+  let handle: FirebirdTransactionHandle<TContext>;
+  try {
+    handle = await start();
+  } catch (error) {
+    return { outcome: 'NO_INICIADA', error };
+  }
+  let value: T;
+  try {
+    value = await fn(handle.context);
+  } catch (error) {
+    if (!handle.isValid()) return { outcome: 'RESULTADO_INCIERTO', error };
+    try {
+      await handle.rollback();
+      return { outcome: 'ROLLBACK_CONFIRMADO', error };
+    } catch (rollbackError) {
+      return { outcome: 'RESULTADO_INCIERTO', error: rollbackError };
+    }
+  }
+  try {
+    await handle.commit();
+    return { outcome: 'COMMIT_CONFIRMADO', value };
+  } catch (error) {
+    // Un error de COMMIT nunca prueba que Firebird haya revertido.
+    return { outcome: 'RESULTADO_INCIERTO', error };
+  }
+}
+
+export async function executeInTransactionWithOutcome<T>(fn: (tx: any) => Promise<T>): Promise<FirebirdTransactionExecution<T>> {
+  return runSerialized(async () => executeTypedTransaction(async () => {
+    let att: Attachment;
+    try {
+      att = await getAttachment();
+    } catch (error) {
+      invalidateAttachment();
+      throw error;
+    }
+    let tx: Transaction;
+    try {
+      tx = await att.startTransaction();
+    } catch (error) {
+      invalidateAttachment();
+      throw error;
+    }
+    const compatTx = {
+      attachment: att,
+      transaction: tx,
+      query: (sqlText: string, params: any[] = []) => executeQueryOn(att, tx, sqlText, params),
+      execute: (sqlText: string, params: any[] = []) => executeQueryOn(att, tx, sqlText, params),
+    };
+    return {
+      context: compatTx,
+      commit: () => tx.commit(),
+      rollback: () => tx.rollback(),
+      isValid: () => tx.isValid,
+    };
+  }, fn));
+}
+
 export async function closeFirebirdPool(): Promise<void> {
   const current = attachment;
   attachment = null;

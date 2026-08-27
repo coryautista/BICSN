@@ -73,6 +73,16 @@ export const QnaDecisionSchema = z.object({
   }
 });
 export const QnaPromoteSchema = z.object({ motivo: z.string().trim().min(1).max(500).nullable().default(null) }).strict();
+export const QnaManualResolutionSchema = z.object({
+  intentoUuid: z.string().uuid(),
+  resolution: z.enum(['CONFIRMADA', 'REVERTIDA']),
+  motivo: z.string().trim().min(1).max(150),
+  evidencia: z.string().trim().min(1).max(150),
+  entidadId: z.coerce.number().int().positive(),
+  anio: z.coerce.number().int().min(2000).max(9999),
+  quincena: z.coerce.number().int().min(1).max(24),
+  organica0: organica, organica1: organica, organica2: organica, organica3: organica,
+}).strict();
 export const QnaListSchema = z.object({
   pagina: z.coerce.number().int().positive().default(1),
   tamanio: z.coerce.number().int().min(1).max(100).default(20),
