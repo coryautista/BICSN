@@ -5,9 +5,12 @@ import type { LineaCapturaPeriodoRecord } from '../src/modules/reportes/aplicaci
 
 const snapshot = (totalGeneralA2: string) => ({
   liquidacionSnapshotId: '9001',
+  entidadId: 1,
   periodo: '1426',
   organica0: '01',
   organica1: '02',
+  organica2: '03',
+  organica3: '04',
   totales: { totalGeneralA2 },
 }) as any;
 
@@ -26,7 +29,7 @@ const record = (importeA2: string): LineaCapturaPeriodoRecord => ({
 
 const params = {
   org0: '01', org1: '02', periodo: '1426', liquidacionSnapshotId: '9001',
-  usuarioId: 'test', omitirValidacionEstado: true,
+  entidadId:1,organica2:'03',organica3:'04',usuarioId: 'test', omitirValidacionEstado: true,
 };
 
 let historicalCalls = 0;
@@ -70,5 +73,8 @@ await assert.rejects(
   'an exact 0.01 mismatch must block reuse',
 );
 assert.equal(historicalCalls, 0, 'mismatch handling must remain on the snapshot path');
+
+stored=record('100.01');const terminalExisting=await command.getExistingFromSnapshot(params);assert.equal(terminalExisting.reutilizada,true);assert.equal(createCalls,1);
+stored=null;await assert.rejects(()=>command.getExistingFromSnapshot(params),(error:any)=>error?.message==='QNA_TERMINADO_LINEA_PAGO_INTEGRIDAD_INVALIDA');assert.equal(createCalls,1,'terminal lookup must never create');
 
 console.log('Linea de Pago snapshot contracts: OK');

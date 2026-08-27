@@ -47,21 +47,7 @@ export class GenerateLineaCapturaPeriodoCommand {
       throw new Error('APLICACION_QNA_NO_HABILITA_LINEA_PAGO');
     }
 
-    const snapshot = await this.liquidacionQnaRepo.resolveOfficialById(params.liquidacionSnapshotId);
-    if (!snapshot) throw new Error('QNA_SNAPSHOT_NOT_OFFICIAL_COMPLETE');
-    if (snapshot.periodo !== params.periodo
-      || snapshot.organica0.trim() !== params.org0.trim()
-      || snapshot.organica1.trim() !== params.org1.trim()
-      || (params.entidadId !== undefined && snapshot.entidadId !== params.entidadId)
-      || (params.organica2 !== undefined && snapshot.organica2.trim() !== params.organica2.trim())
-      || (params.organica3 !== undefined && snapshot.organica3.trim() !== params.organica3.trim())) {
-      throw new Error('QNA_SNAPSHOT_SCOPE_MISMATCH');
-    }
-
-    const importeA2 = snapshot.totales.totalGeneralA2;
-    if (!/^\d+\.\d{2}$/.test(importeA2) || BigInt(importeA2.replace('.', '')) <= 0n) {
-      throw new Error('QNA_SNAPSHOT_TOTAL_INVALID');
-    }
+    const importeA2 = await this.resolveSnapshotAmount(params);
 
     const existing = await this.lineaCapturaPeriodoRepo.findVigenteBySnapshotId(params.liquidacionSnapshotId);
     if (existing) {
@@ -124,6 +110,11 @@ export class GenerateLineaCapturaPeriodoCommand {
   }
 
   async scheduleRevisionFromSnapshot(params:GenerateLineaCapturaPeriodoFromSnapshotParams):Promise<void>{await this.programarRevision(params);}
+
+  async getExistingFromSnapshot(params:GenerateLineaCapturaPeriodoFromSnapshotParams):Promise<GenerateLineaCapturaPeriodoResult>{
+    const importeA2=await this.resolveSnapshotAmount(params);const existing=await this.lineaCapturaPeriodoRepo.findVigenteBySnapshotId(params.liquidacionSnapshotId);
+    if(!existing)throw new Error('QNA_TERMINADO_LINEA_PAGO_INTEGRIDAD_INVALIDA');this.assertSnapshotLine(existing,params,importeA2);return {...existing,reutilizada:true};
+  }
 
   async execute(params: GenerateLineaCapturaPeriodoParams): Promise<GenerateLineaCapturaPeriodoResult> {
     const periodoInfo = parsePeriodo(params.periodo);
@@ -237,6 +228,14 @@ export class GenerateLineaCapturaPeriodoCommand {
       org2: 'organica2' in params ? params.organica2 : undefined,
       org3: 'organica3' in params ? params.organica3 : undefined,
     });
+  }
+
+  private async resolveSnapshotAmount(params:GenerateLineaCapturaPeriodoFromSnapshotParams):Promise<string>{
+    const snapshot=await this.liquidacionQnaRepo.resolveOfficialById(params.liquidacionSnapshotId);if(!snapshot)throw new Error('QNA_SNAPSHOT_NOT_OFFICIAL_COMPLETE');
+    if(snapshot.periodo!==params.periodo||snapshot.organica0.trim()!==params.org0.trim()||snapshot.organica1.trim()!==params.org1.trim()
+      ||(params.entidadId!==undefined&&snapshot.entidadId!==params.entidadId)||(params.organica2!==undefined&&snapshot.organica2.trim()!==params.organica2.trim())
+      ||(params.organica3!==undefined&&snapshot.organica3.trim()!==params.organica3.trim()))throw new Error('QNA_SNAPSHOT_SCOPE_MISMATCH');
+    const importeA2=snapshot.totales.totalGeneralA2;if(!/^\d+\.\d{2}$/.test(importeA2)||BigInt(importeA2.replace('.',''))<=0n)throw new Error('QNA_SNAPSHOT_TOTAL_INVALID');return importeA2;
   }
 
   private assertSnapshotLine(record: LineaCapturaPeriodoRecord, params: GenerateLineaCapturaPeriodoFromSnapshotParams, importeA2: string): void {

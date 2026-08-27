@@ -53,7 +53,7 @@
     "test:qna:phase10:applied": "tsx scripts/test-qna-phase10-applied-contracts.ts",
     "test:qna:phase11": "npm run test:qna:phase11:firebird && npm run test:qna:phase11:http",
     "test:qna:phase11:firebird": "tsx scripts/test-qna-phase11-saga.ts",
-    "test:qna:phase11:http": "tsx scripts/test-qna-phase11-http.ts",
+    "test:qna:phase11:http": "tsx scripts/test-qna-phase11-http.ts && tsx scripts/test-qna-phase11-linea-route.ts",
     "test:qna:phase11:desarrollo": "tsx scripts/test-qna-phase11-integration-desarrollo.ts && tsx scripts/test-qna-phase11-migration-repair-desarrollo.ts",
     "test:qna:phase11:migration-repair:desarrollo": "tsx scripts/test-qna-phase11-migration-repair-desarrollo.ts",
     "verify:qna:phase11:desarrollo": "tsx scripts/verify-qna-phase11-state-desarrollo.ts",

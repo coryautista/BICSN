@@ -58,9 +58,12 @@ export const LineaCapturaParamsSchema = z.object({
 export const LineaCapturaPeriodoBodySchema = z.object({
   periodo: z.string().regex(/^\d{4}$/, 'Periodo debe tener formato QQAA, ejemplo 1026'),
   liquidacionSnapshotId: z.string().regex(/^[1-9]\d*$/, 'liquidacionSnapshotId debe ser un entero positivo'),
-  idOrg0: z.string().regex(/^[A-Za-z0-9]{1,2}$/).optional().describe('Clave orgánica nivel 0 (solo admin puede enviarla)'),
-  idOrg1: z.string().regex(/^[A-Za-z0-9]{1,2}$/).optional().describe('Clave orgánica nivel 1 (solo admin puede enviarla)')
-});
+  entidadId: z.coerce.number().int().positive().optional(),
+  idOrg0: z.string().regex(/^\d{2}$/).optional().describe('Clave orgánica nivel 0 (solo admin puede enviarla)'),
+  idOrg1: z.string().regex(/^\d{2}$/).optional().describe('Clave orgánica nivel 1 (solo admin puede enviarla)'),
+  idOrg2: z.string().regex(/^\d{2}$/).optional().describe('Clave orgánica nivel 2 (solo admin puede enviarla)'),
+  idOrg3: z.string().regex(/^\d{2}$/).optional().describe('Clave orgánica nivel 3 (solo admin puede enviarla)')
+}).strict();
 
 // Schema para consultar línea de captura guardada por período
 export const LineaCapturaPeriodoQuerySchema = z.object({

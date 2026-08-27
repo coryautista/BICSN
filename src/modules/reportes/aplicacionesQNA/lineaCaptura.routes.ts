@@ -2,12 +2,13 @@ import { FastifyInstance } from 'fastify';
 import { requireAuth } from '../../auth/auth.middleware.js';
 import { handleAplicacionesQNAError } from './infrastructure/errorHandler.js';
 import { LineaCapturaParamsSchema, LineaCapturaPeriodoBodySchema, LineaCapturaPeriodoQuerySchema } from './aplicacionesQNA.schemas.js';
-import type { ILiquidacionQnaRepository } from '../../liquidacionQna/domain/repositories/ILiquidacionQnaRepository.js';
 import { GenerateLineaCapturaPeriodoCommand } from './application/commands/GenerateLineaCapturaPeriodoCommand.js';
+import { AplicarBDIssspeaQNACommand } from '../../afiliado/application/commands/AplicarBDIssspeaQNACommand.js';
 import { GenerateLineaCapturaQuery } from './application/queries/GenerateLineaCapturaQuery.js';
 import { GetLineaCapturaPeriodoQuery } from './application/queries/GetLineaCapturaPeriodoQuery.js';
 import { normalizeClaveOrganica } from '../../../utils/organica.js';
-import { registrarSiguienteQnaSiDisponible } from '../../afiliado/infrastructure/services/AfiliadoBdiSspeaService.js';
+import { resolveOrganicaScope, OrganicaScopePolicyError } from '../../auth/domain/policies/OrganicaScopePolicy.js';
+import { LiquidacionQnaError } from '../../liquidacionQna/domain/errors.js';
 
 function isAdmin(user: any): boolean {
   return Array.isArray(user?.roles) && user.roles.some((role: any) => String(role).toLowerCase() === 'admin');
@@ -58,22 +59,24 @@ function lineaCapturaPeriodoResponseSchema() {
   };
 }
 
-export async function lineaCapturaRoutes(fastify: FastifyInstance) {
+export async function registerLineaCapturaRoutes(fastify: FastifyInstance,auth= requireAuth) {
   fastify.post('/linea-captura-periodo', {
-    preHandler: [requireAuth],
+    preHandler: [auth],
     schema: {
-      description: 'Genera o recupera una Línea de Pago. Con liquidacionSnapshotId exige el snapshot oficial COMPLETO y usa exactamente TotalGeneralA2; sin ID conserva el cálculo histórico legacy.',
+      description: 'Reanuda la saga de aplicación QNA para generar o recuperar la Línea de Pago del snapshot oficial.',
       summary: 'Recuperar Línea de Pago pendiente',
       tags: ['reportes', 'aplicaciones-qna'],
       security: [{ bearerAuth: [] }],
       body: {
         type: 'object',
-        required: ['periodo'],
+        additionalProperties: false,
+        required: ['periodo','liquidacionSnapshotId'],
         properties: {
           periodo: { type: 'string', pattern: '^\\d{4}$', description: 'Periodo QQAA, ejemplo 1026' },
           liquidacionSnapshotId: { type: 'string', pattern: '^[1-9]\\d*$', description: 'Snapshot oficial COMPLETO de liquidación QNA' },
-          idOrg0: { type: 'string', pattern: '^[A-Za-z0-9]{1,2}$' },
-          idOrg1: { type: 'string', pattern: '^[A-Za-z0-9]{1,2}$' }
+          entidadId: { type: 'integer', minimum: 1 },
+          idOrg0: { type: 'string', pattern: '^\\d{2}$' }, idOrg1: { type: 'string', pattern: '^\\d{2}$' },
+          idOrg2: { type: 'string', pattern: '^\\d{2}$' }, idOrg3: { type: 'string', pattern: '^\\d{2}$' }
         }
       },
       response: {
@@ -93,11 +96,12 @@ export async function lineaCapturaRoutes(fastify: FastifyInstance) {
             timestamp: { type: 'string' }
           }
         },
-        400: { type: 'object' },
-        401: { type: 'object' },
-        403: { type: 'object' },
-        409: { type: 'object' },
-        500: { type: 'object' }
+        400: { type: 'object', additionalProperties: true },
+        401: { type: 'object', additionalProperties: true },
+        403: { type: 'object', additionalProperties: true },
+        404: { type: 'object', additionalProperties: true },
+        409: { type: 'object', additionalProperties: true },
+        500: { type: 'object', additionalProperties: true }
       }
     }
   }, async (request, reply) => {
@@ -116,45 +120,30 @@ export async function lineaCapturaRoutes(fastify: FastifyInstance) {
         });
       }
 
-      const org = resolveOrgKeys(user, parsed.data.idOrg0, parsed.data.idOrg1);
-      if (org.forbidden) {
+      const admin=isAdmin(user);const scopeValues=[parsed.data.entidadId,parsed.data.idOrg0,parsed.data.idOrg1,parsed.data.idOrg2,parsed.data.idOrg3];
+      const suppliedScope=scopeValues.filter(value=>value!==undefined).length;
+      if (!admin&&suppliedScope>0) {
         return reply.code(403).send({
           success: false,
-          error: { code: 'FORBIDDEN_ORGANICA_QUERY', message: 'Solo usuarios admin pueden enviar orgánicas en la solicitud.', timestamp: new Date().toISOString() }
+          error: { code: 'ORGANICA_SCOPE_FORBIDDEN', message: 'El usuario no puede enviar un ámbito externo.', timestamp: new Date().toISOString() }
         });
       }
-      if (!org.org0 || !org.org1) {
-        return reply.code(400).send({
+      if(admin&&suppliedScope!==5)return reply.code(400).send({
           success: false,
-          error: { code: 'MISSING_ORGANICA_KEYS', message: 'No fue posible resolver org0/org1 desde el token o la solicitud.', timestamp: new Date().toISOString() }
-        });
-      }
-
-      const command = request.diScope.resolve<GenerateLineaCapturaPeriodoCommand>('generateLineaCapturaPeriodoCommand');
-      const commandParams = {
-        org0: org.org0,
-        org1: org.org1,
-        periodo: parsed.data.periodo,
-        usuarioId: user?.sub?.toString() ?? user?.id?.toString(),
-        finalizarPendiente: true
+          error:{code:'ORGANICA_SCOPE_REQUIRED',message:'El administrador debe enviar entidadId e idOrg0..3.',timestamp:new Date().toISOString()}});
+      const scope=resolveOrganicaScope(user,admin?{entidadId:parsed.data.entidadId,organica0:parsed.data.idOrg0,organica1:parsed.data.idOrg1,
+        organica2:parsed.data.idOrg2,organica3:parsed.data.idOrg3}:{},4);
+      const quincena=Number(parsed.data.periodo.slice(0,2));if(quincena<1||quincena>24)return reply.code(400).send({success:false,
+        error:{code:'PERIODO_INVALIDO',message:'Periodo inválido. Use formato QQAA con quincena entre 01 y 24.',timestamp:new Date().toISOString()}});
+      const usuarioId=String(user?.sub??user?.id??'unknown');const saga=request.diScope.resolve<AplicarBDIssspeaQNACommand>('aplicarBDIssspeaQNACommand');
+      const sagaResult=await saga.execute({liquidacionSnapshotId:parsed.data.liquidacionSnapshotId,entidadId:scope.entidadId,anio:2000+Number(parsed.data.periodo.slice(2)),
+        quincena,organica0:scope.organica0,organica1:scope.organica1,organica2:scope.organica2!,organica3:scope.organica3!,usuarioId});
+      let result=sagaResult.lineaPago;
+      if(!result){if(sagaResult.estadoProceso!=='TERMINADO')throw new LiquidacionQnaError('La recuperación QNA no terminó','QNA_RECUPERACION_SQL_PENDIENTE',409);
+        const command=request.diScope.resolve<GenerateLineaCapturaPeriodoCommand>('generateLineaCapturaPeriodoCommand');result=await command.getExistingFromSnapshot({
+          liquidacionSnapshotId:parsed.data.liquidacionSnapshotId,entidadId:scope.entidadId,org0:scope.organica0,org1:scope.organica1,
+          organica2:scope.organica2!,organica3:scope.organica3!,periodo:parsed.data.periodo,usuarioId,omitirValidacionEstado:true});
       };
-      const result = await command.executeFromSnapshot({ ...commandParams, liquidacionSnapshotId: parsed.data.liquidacionSnapshotId });
-      const liquidacionQnaRepo = request.diScope.resolve<ILiquidacionQnaRepository>('liquidacionQnaRepo');
-      await liquidacionQnaRepo.appendProcessTransition(parsed.data.liquidacionSnapshotId, 'LINEA_CONFIRMADA', 'Línea de pago recuperada', commandParams.usuarioId!);
-      await liquidacionQnaRepo.appendProcessTransition(parsed.data.liquidacionSnapshotId, 'REVISA_PROGRAMADA', 'Tarea REVISA recuperada', commandParams.usuarioId!);
-      await liquidacionQnaRepo.appendProcessTransition(parsed.data.liquidacionSnapshotId, 'TERMINADO', 'Aplicación QNA recuperada', commandParams.usuarioId!);
-      try {
-        await registrarSiguienteQnaSiDisponible(
-          org.org0,
-          org.org1,
-          parsed.data.periodo,
-          user?.sub?.toString() ?? user?.id?.toString() ?? 'Sistema',
-          request.ip
-        );
-      } catch (error) {
-        request.log.error({ err: error, periodo: parsed.data.periodo }, 'No se pudo registrar la siguiente QNA después de recuperar la Línea de Pago');
-      }
-
       return reply.code(result.reutilizada ? 200 : 201).send({ success: true, data: result, timestamp: new Date().toISOString() });
     } catch (error: any) {
       if (error?.message === 'PAGO_EVENT_NOT_FOUND') {
@@ -205,6 +194,10 @@ export async function lineaCapturaRoutes(fastify: FastifyInstance) {
       if (error?.message === 'LINEA_CAPTURA_SNAPSHOT_CONFLICT') {
         return reply.code(409).send({ success: false, error: { code: error.message, message: 'Ya existe una Línea de Pago vigente para el periodo asociada a otro snapshot.', details: error.details, timestamp: new Date().toISOString() } });
       }
+      if(error?.message==='QNA_TERMINADO_LINEA_PAGO_INTEGRIDAD_INVALIDA')return reply.code(409).send({success:false,error:{code:error.message,
+        message:'El proceso está terminado pero no existe una Línea de Pago vigente ligada al snapshot.',timestamp:new Date().toISOString()}});
+      if(error instanceof OrganicaScopePolicyError)return reply.code(error.statusCode).send({success:false,error:{code:error.code,message:error.message,timestamp:new Date().toISOString()}});
+      if(error instanceof LiquidacionQnaError)return reply.code(error.statusCode as 400|403|404|409|500).send({success:false,error:{code:error.code,message:error.message,timestamp:new Date().toISOString()}});
       const errorMessage = String(error?.message || '');
       if (errorMessage.includes('Invalid object name') || errorMessage.includes('Invalid column name')) {
         return reply.code(500).send({
@@ -222,7 +215,7 @@ export async function lineaCapturaRoutes(fastify: FastifyInstance) {
   });
 
   fastify.get('/linea-captura-periodo', {
-    preHandler: [requireAuth],
+    preHandler: [auth],
     schema: {
       description: 'Consulta una línea de captura vigente guardada por período. Usuarios no admin usan orgánicas del token; admin debe enviar org0 y org1.',
       summary: 'Consultar línea de captura por período',
@@ -299,7 +292,7 @@ export async function lineaCapturaRoutes(fastify: FastifyInstance) {
 
   // POST /aplicaciones-qna/linea-captura - Genera referencia SPEI de 15 posiciones
   fastify.post('/linea-captura', {
-    preHandler: [requireAuth],
+    preHandler: [auth],
     schema: {
       description: 'Genera una referencia SPEI de 15 posiciones para línea de captura usando algoritmos de fecha condensada, monto condensado y dígito verificador Base 97. La referencia4 se genera automáticamente desde idOrg0 e idOrg1 (opcionales en body, o del token). La fechaLimite se calcula automáticamente como fecha actual + 5 días.',
       summary: 'Generar línea de captura',
@@ -453,4 +446,6 @@ export async function lineaCapturaRoutes(fastify: FastifyInstance) {
     }
   });
 }
+
+export async function lineaCapturaRoutes(fastify:FastifyInstance){await registerLineaCapturaRoutes(fastify,requireAuth);}
 
