@@ -11,3 +11,10 @@ export class NominaCargaBloqueadaError extends Error {
     this.name = 'NominaCargaBloqueadaError';
   }
 }
+
+export class NominaTxtSyncError extends Error {
+  constructor(public readonly code: string, public readonly statusCode: 409 | 503 | 500, message = code) {
+    super(message);
+    this.name = 'NominaTxtSyncError';
+  }
+}

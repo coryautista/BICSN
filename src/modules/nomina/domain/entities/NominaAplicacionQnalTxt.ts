@@ -34,7 +34,7 @@ export interface NominaAplicacionQnalRegistroParsed {
   cairVoluntario: number | null;
   fechaRegistro: Date;
   diasLaborados: number | null;
-  layoutVersion: '20' | '35';
+  layoutVersion: '20';
   lineaOriginal: string;
 }
 
@@ -44,6 +44,12 @@ export interface NominaAplicacionQnalUploadResult {
   totalRegistros: number;
   totalErrores: number;
   errores: Array<{ numeroLinea: number; campo?: string; mensaje: string }>;
+}
+
+export interface NominaAplicacionQnalSyncPrepared {
+  sincronizacionId: number;
+  intentoUuid: string;
+  alreadyTerminated?: NominaAplicacionQnalUploadResult;
 }
 
 export interface NominaAplicacionQnalScope {

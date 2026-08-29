@@ -5,16 +5,18 @@ export interface NominaAplicacionQnalParseResult {
   errores: Array<{ numeroLinea: number; campo?: string; mensaje: string }>;
 }
 
-const DETAIL_FIELD_COUNTS = new Set([20, 35]);
+const DETAIL_FIELD_COUNT = 20;
+const MONEY_FIELD_MAX = 9_999_999_999.99;
 
 export function parseNominaAplicacionQnalTxt(buffer: Buffer): NominaAplicacionQnalParseResult {
   const text = buffer.toString('latin1').replace(/^\uFEFF/, '');
-  const lines = text.split(/\r?\n/).filter((line) => line.trim().length > 0);
+  const lines = text.split(/\r?\n/);
   const registros: NominaAplicacionQnalRegistroParsed[] = [];
   const errores: Array<{ numeroLinea: number; campo?: string; mensaje: string }> = [];
 
   lines.forEach((line, index) => {
     const numeroLinea = index + 1;
+    if (line.trim().length === 0) return;
     const fields = normalizeFields(line.split('@'));
     const tipoRegistro = fields[1]?.trim();
 
@@ -25,12 +27,12 @@ export function parseNominaAplicacionQnalTxt(buffer: Buffer): NominaAplicacionQn
       return;
     }
 
-    if (!DETAIL_FIELD_COUNTS.has(fields.length)) {
-      errores.push({ numeroLinea, mensaje: `Layout inválido: se esperaban 20 o 35 campos y se recibieron ${fields.length}.` });
+    if (fields.length !== DETAIL_FIELD_COUNT) {
+      errores.push({ numeroLinea, campo: 'Layout', mensaje: `Layout inválido: se esperaban 20 campos y se recibieron ${fields.length}.` });
       return;
     }
 
-    const registro = mapDetailLine(fields, numeroLinea, line, fields.length === 35 ? '35' : '20');
+    const registro = mapDetailLine(fields, numeroLinea, line, errores);
     validateRequired(registro, errores);
     registros.push(registro);
   });
@@ -42,9 +44,19 @@ export function parseNominaAplicacionQnalTxt(buffer: Buffer): NominaAplicacionQn
   return { registros, errores };
 }
 
-function mapDetailLine(fields: string[], numeroLinea: number, lineaOriginal: string, layoutVersion: '20' | '35'): NominaAplicacionQnalRegistroParsed {
-  const sueldoMensual = parseMoney(fields[11]);
-  const baseCotizacionSueldo = parseMoney(fields[9]);
+function mapDetailLine(
+  fields: string[],
+  numeroLinea: number,
+  lineaOriginal: string,
+  errores: Array<{ numeroLinea: number; campo?: string; mensaje: string }>
+): NominaAplicacionQnalRegistroParsed {
+  const money = (index: number, campo: string) => parseMoney(fields[index], numeroLinea, campo, errores);
+  const sueldoMensual = money(11, 'SueldoMensual');
+  const baseCotizacionSueldo = money(9, 'BaseCotizacionSueldo');
+
+  for (const index of [15, 17, 18, 19]) {
+    validateUncertifiedMoney(fields[index], numeroLinea, index + 1, errores);
+  }
 
   return {
     numeroLinea,
@@ -53,23 +65,23 @@ function mapDetailLine(fields: string[], numeroLinea: number, lineaOriginal: str
     clavePersonal: clean(fields[2]),
     rfc: clean(fields[3]),
     nombreAfiliado: clean(fields[4]),
-    aportacionAfiliadoFondoAhorro: parseMoney(fields[5]),
-    aportacionEntidadFondoAhorro: parseMoney(fields[6]),
-    aportacionAfiliadoEBI: parseMoney(fields[7]),
-    aportacionEntidadEBI: parseMoney(fields[8]),
+    aportacionAfiliadoFondoAhorro: money(5, 'AportacionAfiliadoFondoAhorro'),
+    aportacionEntidadFondoAhorro: money(6, 'AportacionEntidadFondoAhorro'),
+    aportacionAfiliadoEBI: money(7, 'AportacionAfiliadoEBI'),
+    aportacionEntidadEBI: money(8, 'AportacionEntidadEBI'),
     baseCotizacionSueldo,
-    baseCotizacionQuinquenios: parseMoney(fields[10]),
+    baseCotizacionQuinquenios: money(10, 'BaseCotizacionQuinquenios'),
     sueldoMensual,
-    descuentoPrestamoCortoPlazo: parseMoney(fields[12]),
-    descuentoPrestamoHipotecario: parseMoney(fields[13]),
-    fechaMovimiento: parseDate(fields[14]),
-    descuentoPrestamoMedianoPlazo: parseMoney(fields[15]),
-    descuentosOtros: parseMoney(fields[16]),
-    cair: parseMoney(fields[17]),
-    cairVoluntario: parseMoney(fields[18]),
+    descuentoPrestamoCortoPlazo: money(12, 'DescuentoPrestamoCortoPlazo'),
+    descuentoPrestamoHipotecario: money(13, 'DescuentoPrestamoHipotecario'),
+    fechaMovimiento: parseDate(fields[14], numeroLinea, 'FechaMovimiento', errores),
+    descuentoPrestamoMedianoPlazo: null,
+    descuentosOtros: null,
+    cair: money(16, 'CAIR'),
+    cairVoluntario: null,
     fechaRegistro: new Date(),
     diasLaborados: calculateDiasLaborados(baseCotizacionSueldo, sueldoMensual),
-    layoutVersion,
+    layoutVersion: '20',
     lineaOriginal
   };
 }
@@ -92,25 +104,64 @@ function clean(value: string | undefined): string {
   return (value ?? '').trim();
 }
 
-function parseMoney(value: string | undefined): number | null {
-  const cleanValue = clean(value).replace(/,/g, '');
-  if (!cleanValue) return null;
-  const parsed = Number(cleanValue);
-  return Number.isFinite(parsed) ? parsed : null;
-}
-
-function parseDate(value: string | undefined): Date | null {
+function parseMoney(
+  value: string | undefined,
+  numeroLinea: number,
+  campo: string,
+  errores: Array<{ numeroLinea: number; campo?: string; mensaje: string }>
+): number | null {
   const cleanValue = clean(value);
   if (!cleanValue) return null;
-  if (/^\d{8}$/.test(cleanValue)) {
-    const year = Number(cleanValue.slice(0, 4));
-    const month = Number(cleanValue.slice(4, 6)) - 1;
-    const day = Number(cleanValue.slice(6, 8));
-    const date = new Date(year, month, day);
-    return Number.isNaN(date.getTime()) ? null : date;
+  if (!/^-?\d+(?:\.\d{1,2})?$/.test(cleanValue)) {
+    errores.push({ numeroLinea, campo, mensaje: `${campo} debe ser un importe con máximo dos decimales.` });
+    return null;
   }
-  const parsed = new Date(cleanValue);
-  return Number.isNaN(parsed.getTime()) ? null : parsed;
+  const parsed = Number(cleanValue);
+  if (!Number.isFinite(parsed) || Math.abs(parsed) > MONEY_FIELD_MAX) {
+    errores.push({ numeroLinea, campo, mensaje: `${campo} excede el rango NUMERIC(12,2).` });
+    return null;
+  }
+  return parsed;
+}
+
+function validateUncertifiedMoney(
+  value: string | undefined,
+  numeroLinea: number,
+  fieldNumber: number,
+  errores: Array<{ numeroLinea: number; campo?: string; mensaje: string }>
+): void {
+  const cleanValue = clean(value);
+  if (!cleanValue) return;
+  if (!/^-?\d+(?:\.\d{1,2})?$/.test(cleanValue) || Number(cleanValue) !== 0) {
+    errores.push({
+      numeroLinea,
+      campo: `Campo${fieldNumber}`,
+      mensaje: `El campo ${fieldNumber} no está certificado y sólo admite vacío o cero.`
+    });
+  }
+}
+
+function parseDate(
+  value: string | undefined,
+  numeroLinea: number,
+  campo: string,
+  errores: Array<{ numeroLinea: number; campo?: string; mensaje: string }>
+): Date | null {
+  const cleanValue = clean(value);
+  if (!cleanValue) return null;
+  if (!/^\d{8}$/.test(cleanValue)) {
+    errores.push({ numeroLinea, campo, mensaje: `${campo} debe usar el formato AAAAMMDD.` });
+    return null;
+  }
+  const year = Number(cleanValue.slice(0, 4));
+  const month = Number(cleanValue.slice(4, 6));
+  const day = Number(cleanValue.slice(6, 8));
+  const parsed = new Date(Date.UTC(year, month - 1, day));
+  if (parsed.getUTCFullYear() !== year || parsed.getUTCMonth() + 1 !== month || parsed.getUTCDate() !== day) {
+    errores.push({ numeroLinea, campo, mensaje: `${campo} no es una fecha válida.` });
+    return null;
+  }
+  return parsed;
 }
 
 function calculateDiasLaborados(baseCotizacionSueldo: number | null, sueldoMensual: number | null): number | null {

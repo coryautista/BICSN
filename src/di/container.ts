@@ -335,6 +335,7 @@ import { NominaAplicacionQnalTxtRepository } from '../modules/nomina/infrastruct
 import { CargarNominaAplicacionQnalTxtCommand } from '../modules/nomina/application/commands/CargarNominaAplicacionQnalTxtCommand.js';
 import { GetNominaAplicacionQnalTxtRegistrosQuery } from '../modules/nomina/application/queries/GetNominaAplicacionQnalTxtRegistrosQuery.js';
 import { GetNominaAplicacionQnalCargaVigenteQuery } from '../modules/nomina/application/queries/GetNominaAplicacionQnalCargaVigenteQuery.js';
+import { NominaLayout20FirebirdSyncService } from '../modules/nomina/infrastructure/firebird/NominaLayout20FirebirdSyncService.js';
 
 // HistoricosQuincenales Module
 import { HistoricosQuincenalesRepository } from '../modules/historicosQuincenales/infrastructure/persistence/HistoricosQuincenalesRepository.js';
@@ -937,6 +938,7 @@ container.register({
   // ============================================================================
 
   nominaAplicacionQnalTxtRepo: asClass(NominaAplicacionQnalTxtRepository).scoped(),
+  nominaLayout20FirebirdSyncService: asClass(NominaLayout20FirebirdSyncService).scoped(),
   cargarNominaAplicacionQnalTxtCommand: asClass(CargarNominaAplicacionQnalTxtCommand).scoped(),
   getNominaAplicacionQnalTxtRegistrosQuery: asClass(GetNominaAplicacionQnalTxtRegistrosQuery).scoped(),
   getNominaAplicacionQnalCargaVigenteQuery: asClass(GetNominaAplicacionQnalCargaVigenteQuery).scoped(),

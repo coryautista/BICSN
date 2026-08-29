@@ -3,7 +3,8 @@ import { requireAuth } from '../auth/auth.middleware.js';
 import { CargarNominaAplicacionQnalTxtCommand } from './application/commands/CargarNominaAplicacionQnalTxtCommand.js';
 import { GetNominaAplicacionQnalTxtRegistrosQuery } from './application/queries/GetNominaAplicacionQnalTxtRegistrosQuery.js';
 import { GetNominaAplicacionQnalCargaVigenteQuery } from './application/queries/GetNominaAplicacionQnalCargaVigenteQuery.js';
-import { NominaCargaBloqueadaError, NominaCargaInconsistenteError } from './domain/errors.js';
+import { NominaCargaBloqueadaError, NominaCargaInconsistenteError, NominaTxtSyncError } from './domain/errors.js';
+import { NominaLayout20FirebirdSyncError } from './domain/services/NominaLayout20FirebirdSync.js';
 import { CargarNominaAplicacionQnalTxtFieldsSchema, GetNominaAplicacionQnalCargaVigenteSchema, GetNominaAplicacionQnalTxtRegistrosSchema } from './nomina.schemas.js';
 import { QnaScopeLockError } from '../../db/qnaScopeLock.js';
 
@@ -62,6 +63,13 @@ export default async function nominaRoutes(app: FastifyInstance) {
         });
       }
       if (error instanceof QnaScopeLockError) {
+        return reply.code(error.statusCode).send({ ok: false, error: { code: error.code, message: error.message } });
+      }
+      if (error instanceof NominaLayout20FirebirdSyncError) {
+        const status = ['NOMINA_FIREBIRD_SCOPE_EXISTENTE', 'NOMINA_FIREBIRD_ORGANICA_NO_CERTIFICADA'].includes(error.code) ? 409 : 503;
+        return reply.code(status).send({ ok: false, error: { code: error.code, message: error.message } });
+      }
+      if (error instanceof NominaTxtSyncError) {
         return reply.code(error.statusCode).send({ ok: false, error: { code: error.code, message: error.message } });
       }
       throw error;

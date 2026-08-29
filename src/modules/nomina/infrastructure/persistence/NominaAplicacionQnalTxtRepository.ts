@@ -12,6 +12,11 @@ import {
 import { NominaCargaBloqueadaError, NominaCargaInconsistenteError } from '../../domain/errors.js';
 import { INominaAplicacionQnalTxtRepository } from '../../domain/repositories/INominaAplicacionQnalTxtRepository.js';
 import { acquireQnaScopeLock } from '../../../../db/qnaScopeLock.js';
+import { createHash } from 'node:crypto';
+import type { FirebirdTransactionOutcome } from '../../../../db/firebird.js';
+import type { NominaLayout20FirebirdSyncEvidence } from '../../domain/services/NominaLayout20FirebirdSync.js';
+import { NominaTxtSyncError } from '../../domain/errors.js';
+import type { NominaAplicacionQnalSyncPrepared } from '../../domain/entities/NominaAplicacionQnalTxt.js';
 
 export class NominaAplicacionQnalTxtRepository implements INominaAplicacionQnalTxtRepository {
   constructor(private mssqlPool: ConnectionPool) {}
@@ -82,7 +87,7 @@ export class NominaAplicacionQnalTxtRepository implements INominaAplicacionQnalT
         FROM dbo.NominaAplicacionQnalDetalle d
         WHERE d.EntidadId = @EntidadId AND d.Anio = @Anio AND d.Quincena = @Quincena
           AND d.Organica0 = @Organica0 AND d.Organica1 = @Organica1 AND d.Organica2 = @Organica2 AND d.Organica3 = @Organica3
-          AND EXISTS (SELECT 1 FROM dbo.NominaAplicacionQnalCarga c WHERE c.Id=d.CargaId AND c.TipoCarga='TXT')
+          AND EXISTS (SELECT 1 FROM dbo.NominaAplicacionQnalCarga c WHERE c.Id=d.CargaId AND c.TipoCarga IN ('TXT','MOVIMIENTO'))
       `);
 
       await this.applyScopeInputs(new sql.Request(transaction), input).query(`
@@ -91,7 +96,7 @@ export class NominaAplicacionQnalTxtRepository implements INominaAplicacionQnalT
         INNER JOIN dbo.NominaAplicacionQnalCarga c ON c.Id=d.CargaId
         WHERE d.EntidadId = @EntidadId AND d.Anio = @Anio AND d.Quincena = @Quincena
           AND d.Organica0 = @Organica0 AND d.Organica1 = @Organica1 AND d.Organica2 = @Organica2 AND d.Organica3 = @Organica3
-          AND c.TipoCarga='TXT'
+          AND c.TipoCarga IN ('TXT','MOVIMIENTO')
       `);
 
       for (const registro of registros) {
@@ -104,6 +109,109 @@ export class NominaAplicacionQnalTxtRepository implements INominaAplicacionQnalT
       await transaction.rollback();
       throw error;
     }
+  }
+
+  async prepararSincronizacion(input: NominaAplicacionQnalUploadInput, registros: NominaAplicacionQnalRegistroParsed[], archivoHash: string, intentoUuid: string): Promise<NominaAplicacionQnalSyncPrepared> {
+    if (!input.usuarioId?.trim()) throw new NominaTxtSyncError('NOMINA_TXT_USUARIO_REQUERIDO', 500);
+    const transaction = new sql.Transaction(this.mssqlPool);
+    await transaction.begin(sql.ISOLATION_LEVEL.SERIALIZABLE);
+    try {
+      await acquireQnaScopeLock(transaction, input);
+      const existing = await this.applyScopeInputs(new sql.Request(transaction), input)
+        .input('ArchivoHash', sql.Char(64), archivoHash)
+        .query(`SELECT SincronizacionId, IntentoUuid, Estado, CargaId, TotalDetalles FROM dbo.NominaAplicacionQnalSincronizacion WITH (UPDLOCK,HOLDLOCK)
+          WHERE EntidadId=@EntidadId AND Anio=@Anio AND Quincena=@Quincena AND Organica0=@Organica0 AND Organica1=@Organica1 AND Organica2=@Organica2 AND Organica3=@Organica3 AND ArchivoHash=@ArchivoHash`);
+      const row = existing.recordset[0];
+      if (row?.Estado === 'TERMINADO') {
+        await transaction.commit();
+        return { sincronizacionId: Number(row.SincronizacionId), intentoUuid: String(row.IntentoUuid), alreadyTerminated: { cargaId: Number(row.CargaId), estado: 'ACEPTADA', totalRegistros: Number(row.TotalDetalles), totalErrores: 0, errores: [] } };
+      }
+      await this.assertCargaMutable(transaction, input);
+      if (row?.Estado === 'FIREBIRD_REVERTIDO') {
+        const resumed = await new sql.Request(transaction)
+          .input('Id', sql.BigInt, row.SincronizacionId)
+          .query(`UPDATE dbo.NominaAplicacionQnalSincronizacion
+            SET Estado='PREPARADA', ResultadoFirebird=NULL, EvidenciaHash=NULL,
+                ConteoFirebirdP=NULL, ConteoResumen=NULL, ErrorCodigo=NULL,
+                ErrorPaso=NULL, ErrorNormalizado=NULL, FechaActualizacion=SYSUTCDATETIME()
+            WHERE SincronizacionId=@Id AND Estado='FIREBIRD_REVERTIDO'`);
+        if (resumed.rowsAffected[0] !== 1) throw new NominaTxtSyncError('NOMINA_TXT_REANUDACION_RECHAZADA', 409);
+        await transaction.commit();
+        return { sincronizacionId: Number(row.SincronizacionId), intentoUuid: String(row.IntentoUuid) };
+      }
+      if (row) throw new NominaTxtSyncError('NOMINA_TXT_SINCRONIZACION_EXISTENTE', 409);
+      const active = await this.applyScopeInputs(new sql.Request(transaction), input).query(`SELECT TOP (1) SincronizacionId FROM dbo.NominaAplicacionQnalSincronizacion WITH (UPDLOCK,HOLDLOCK)
+        WHERE EntidadId=@EntidadId AND Anio=@Anio AND Quincena=@Quincena AND Organica0=@Organica0 AND Organica1=@Organica1 AND Organica2=@Organica2 AND Organica3=@Organica3 AND Activo=1`);
+      if (active.recordset.length > 0) throw new NominaTxtSyncError('NOMINA_TXT_SINCRONIZACION_EXISTENTE', 409);
+
+      const inserted = await this.applyScopeInputs(new sql.Request(transaction), input)
+        .input('IntentoUuid', sql.UniqueIdentifier, intentoUuid).input('ArchivoNombre', sql.NVarChar(255), input.archivoNombre)
+        .input('ArchivoHash', sql.Char(64), archivoHash).input('Total', sql.Int, registros.length)
+        .input('Usuario', sql.NVarChar(100), input.usuarioId.trim()).query(`
+          INSERT dbo.NominaAplicacionQnalSincronizacion (IntentoUuid,EntidadId,Anio,Quincena,Organica0,Organica1,Organica2,Organica3,ArchivoNombre,ArchivoHash,LayoutVersion,TotalLineas,TotalDetalles,Estado,UsuarioRegistro)
+          OUTPUT INSERTED.SincronizacionId VALUES (@IntentoUuid,@EntidadId,@Anio,@Quincena,@Organica0,@Organica1,@Organica2,@Organica3,@ArchivoNombre,@ArchivoHash,20,@Total,@Total,'PREPARADA',@Usuario)`);
+      const sincronizacionId = Number(inserted.recordset[0].SincronizacionId);
+      await new sql.Request(transaction).input('Id', sql.BigInt, sincronizacionId).input('Lote', sql.NVarChar(50), registros[0]?.lote ?? null)
+        .query('INSERT dbo.NominaAplicacionQnalStagingCarga (SincronizacionId,Lote) VALUES (@Id,@Lote)');
+      for (const r of registros) {
+        await new sql.Request(transaction).input('Id',sql.BigInt,sincronizacionId).input('LineaNumero',sql.Int,r.numeroLinea).input('LineaOriginal',sql.NVarChar(sql.MAX),r.lineaOriginal)
+          .input('Lote',sql.NVarChar(50),r.lote).input('TipoRegistro',sql.VarChar(1),r.tipoRegistro).input('ClavePersonal',sql.NVarChar(50),r.clavePersonal)
+          .input('RFC',sql.NVarChar(20),r.rfc).input('Nombre',sql.NVarChar(250),r.nombreAfiliado).input('AAF',sql.Decimal(12,2),r.aportacionAfiliadoFondoAhorro)
+          .input('AEF',sql.Decimal(12,2),r.aportacionEntidadFondoAhorro).input('AAE',sql.Decimal(12,2),r.aportacionAfiliadoEBI).input('AEE',sql.Decimal(12,2),r.aportacionEntidadEBI)
+          .input('BCS',sql.Decimal(12,2),r.baseCotizacionSueldo).input('BCQ',sql.Decimal(12,2),r.baseCotizacionQuinquenios).input('Sueldo',sql.Decimal(12,2),r.sueldoMensual)
+          .input('DCP',sql.Decimal(12,2),r.descuentoPrestamoCortoPlazo).input('DHP',sql.Decimal(12,2),r.descuentoPrestamoHipotecario).input('Fecha',sql.Date,r.fechaMovimiento)
+          .input('CAIR',sql.Decimal(12,2),r.cair).input('Dias',sql.Decimal(5,2),r.diasLaborados).query(`INSERT dbo.NominaAplicacionQnalStagingDetalle
+          (SincronizacionId,LineaNumero,LineaOriginal,Lote,TipoRegistro,ClavePersonal,RFC,NombreAfiliado,AportacionAfiliadoFondoAhorro,AportacionEntidadFondoAhorro,AportacionAfiliadoEBI,AportacionEntidadEBI,BaseCotizacionSueldo,BaseCotizacionQuinquenios,SueldoMensual,DescuentoPrestamoCortoPlazo,DescuentoPrestamoHipotecario,FechaMovimiento,CAIR,DiasLaborados)
+          VALUES (@Id,@LineaNumero,@LineaOriginal,@Lote,@TipoRegistro,@ClavePersonal,@RFC,@Nombre,@AAF,@AEF,@AAE,@AEE,@BCS,@BCQ,@Sueldo,@DCP,@DHP,@Fecha,@CAIR,@Dias)`);
+      }
+      await transaction.commit();
+      return { sincronizacionId, intentoUuid };
+    } catch (error) { await transaction.rollback().catch(() => undefined); throw error; }
+  }
+
+  async iniciarSincronizacion(sincronizacionId: number, intentoUuid: string, claimToken: string): Promise<void> {
+    const result = await this.mssqlPool.request().input('Id',sql.BigInt,sincronizacionId).input('Uuid',sql.UniqueIdentifier,intentoUuid).input('Claim',sql.UniqueIdentifier,claimToken)
+      .query(`UPDATE dbo.NominaAplicacionQnalSincronizacion SET Estado='FIREBIRD_EN_PROGRESO',ClaimToken=@Claim,LeaseExpiraEn=DATEADD(MINUTE,10,SYSUTCDATETIME()),FechaActualizacion=SYSUTCDATETIME()
+        WHERE SincronizacionId=@Id AND IntentoUuid=@Uuid AND Estado='PREPARADA'`);
+    if (result.rowsAffected[0] !== 1) throw new NominaTxtSyncError('NOMINA_TXT_CLAIM_RECHAZADO', 409);
+  }
+
+  async registrarResultadoFirebird(sincronizacionId: number, intentoUuid: string, claimToken: string, outcome: FirebirdTransactionOutcome, evidence?: NominaLayout20FirebirdSyncEvidence, error?: unknown): Promise<void> {
+    const estado = outcome === 'COMMIT_CONFIRMADO' ? 'FIREBIRD_CONFIRMADO' : outcome === 'RESULTADO_INCIERTO' ? 'FIREBIRD_INCIERTO' : 'FIREBIRD_REVERTIDO';
+    const evidenceJson = evidence ? JSON.stringify({ ...evidence, totales: Object.fromEntries(Object.entries(evidence.totales).sort(([a], [b]) => a.localeCompare(b))) }) : undefined;
+    const evidenceHash = evidenceJson ? createHash('sha256').update(evidenceJson).digest('hex').toUpperCase() : null;
+    const message = error instanceof Error ? error.message : error == null ? null : String(error);
+    const result = await this.mssqlPool.request().input('Id',sql.BigInt,sincronizacionId).input('Uuid',sql.UniqueIdentifier,intentoUuid).input('Claim',sql.UniqueIdentifier,claimToken)
+      .input('Estado',sql.VarChar(30),estado).input('Outcome',sql.VarChar(30),outcome).input('Hash',sql.Char(64),evidenceHash)
+      .input('P',sql.Int,evidence?.detallesP ?? null).input('Resumen',sql.Int,evidence?.resumenes ?? null).input('Codigo',sql.VarChar(100),error && typeof error === 'object' && 'code' in error ? String(error.code) : null)
+      .input('Error',sql.NVarChar(500),message?.slice(0,500) ?? null).query(`UPDATE dbo.NominaAplicacionQnalSincronizacion SET Estado=@Estado,ResultadoFirebird=@Outcome,EvidenciaHash=@Hash,ConteoFirebirdP=@P,ConteoResumen=@Resumen,ErrorCodigo=@Codigo,ErrorPaso='FIREBIRD',ErrorNormalizado=@Error,ClaimToken=NULL,LeaseExpiraEn=NULL,FechaActualizacion=SYSUTCDATETIME()
+        WHERE SincronizacionId=@Id AND IntentoUuid=@Uuid AND Estado='FIREBIRD_EN_PROGRESO' AND ClaimToken=@Claim`);
+    if (result.rowsAffected[0] !== 1) throw new NominaTxtSyncError('NOMINA_TXT_OUTCOME_RECHAZADO', 409);
+  }
+
+  async finalizarSincronizacion(sincronizacionId: number, intentoUuid: string): Promise<NominaAplicacionQnalUploadResult> {
+    const transaction = new sql.Transaction(this.mssqlPool); await transaction.begin(sql.ISOLATION_LEVEL.SERIALIZABLE);
+    try {
+      const selected = await new sql.Request(transaction).input('Id',sql.BigInt,sincronizacionId).input('Uuid',sql.UniqueIdentifier,intentoUuid).query('SELECT * FROM dbo.NominaAplicacionQnalSincronizacion WITH (UPDLOCK,HOLDLOCK) WHERE SincronizacionId=@Id AND IntentoUuid=@Uuid');
+      const row = selected.recordset[0];
+      if (!row) throw new NominaTxtSyncError('NOMINA_TXT_SINCRONIZACION_NO_EXISTE',409);
+      const scope = { entidadId:Number(row.EntidadId),anio:Number(row.Anio),quincena:Number(row.Quincena),organica0:String(row.Organica0).trim(),organica1:String(row.Organica1).trim(),organica2:String(row.Organica2).trim(),organica3:String(row.Organica3).trim() };
+      if (row.Estado === 'TERMINADO') { await transaction.commit(); return { cargaId:Number(row.CargaId),estado:'ACEPTADA',totalRegistros:Number(row.TotalDetalles),totalErrores:0,errores:[] }; }
+      await acquireQnaScopeLock(transaction, scope); await this.assertCargaMutable(transaction, { ...scope, archivoNombre:String(row.ArchivoNombre), archivoContenido:Buffer.alloc(0) });
+      if (row.Estado !== 'FIREBIRD_CONFIRMADO' || row.ResultadoFirebird !== 'COMMIT_CONFIRMADO') throw new NominaTxtSyncError('NOMINA_TXT_NO_CONFIRMADA_EN_FIREBIRD',409);
+      const input = { ...scope, archivoNombre:String(row.ArchivoNombre), archivoContenido:Buffer.alloc(0), usuarioId:String(row.UsuarioRegistro) };
+      await this.applyScopeInputs(new sql.Request(transaction),scope).query(`UPDATE dbo.NominaAplicacionQnalCarga SET EsVigente=0 WHERE EntidadId=@EntidadId AND Anio=@Anio AND Quincena=@Quincena AND Organica0=@Organica0 AND Organica1=@Organica1 AND Organica2=@Organica2 AND Organica3=@Organica3 AND TipoCarga='TXT' AND EsVigente=1`);
+      const cargaId = await this.insertCarga(transaction,input,'ACEPTADA',Number(row.TotalDetalles),0);
+      await this.applyScopeInputs(new sql.Request(transaction),scope).input('CargaId',sql.BigInt,cargaId).query(`INSERT dbo.NominaAplicacionQnalDetalleHistorial (DetalleIdOriginal,CargaId,CargaReemplazoId,EntidadId,Anio,Quincena,Organica0,Organica1,Organica2,Organica3,LineaNumero,LineaOriginal,Lote,TipoRegistro,OrganicaI,OrganicaII,OrganicaIII,RFC,ClavePersonal,NombreAfiliado,Movimiento,FechaMovimiento,SueldoMensual,AyudasMensuales,QuinqueniosMensual,BaseCotizacionSueldo,BaseCotizacionQuinquenios,DiasLaborados,AportacionAfiliadoFondoAhorro,AportacionEntidadFondoAhorro,AportacionAfiliadoEBI,AportacionEntidadEBI,DescuentoPrestamoCortoPlazo,DescuentoPrestamoHipotecario,DescuentoPrestamoMedianoPlazo,DescuentosOtros,Calle,Colonia,Ciudad,Estado,Municipio,CodigoPostal,Telefono,FechaNacimiento,Sexo,EstadoCivil,CAIR,CAIRVoluntario,FechaRegistroOriginal)
+        SELECT d.Id,d.CargaId,@CargaId,d.EntidadId,d.Anio,d.Quincena,d.Organica0,d.Organica1,d.Organica2,d.Organica3,d.LineaNumero,d.LineaOriginal,d.Lote,d.TipoRegistro,d.OrganicaI,d.OrganicaII,d.OrganicaIII,d.RFC,d.ClavePersonal,d.NombreAfiliado,d.Movimiento,d.FechaMovimiento,d.SueldoMensual,d.AyudasMensuales,d.QuinqueniosMensual,d.BaseCotizacionSueldo,d.BaseCotizacionQuinquenios,d.DiasLaborados,d.AportacionAfiliadoFondoAhorro,d.AportacionEntidadFondoAhorro,d.AportacionAfiliadoEBI,d.AportacionEntidadEBI,d.DescuentoPrestamoCortoPlazo,d.DescuentoPrestamoHipotecario,d.DescuentoPrestamoMedianoPlazo,d.DescuentosOtros,d.Calle,d.Colonia,d.Ciudad,d.Estado,d.Municipio,d.CodigoPostal,d.Telefono,d.FechaNacimiento,d.Sexo,d.EstadoCivil,d.CAIR,d.CAIRVoluntario,d.FechaRegistro FROM dbo.NominaAplicacionQnalDetalle d JOIN dbo.NominaAplicacionQnalCarga c ON c.Id=d.CargaId WHERE d.EntidadId=@EntidadId AND d.Anio=@Anio AND d.Quincena=@Quincena AND d.Organica0=@Organica0 AND d.Organica1=@Organica1 AND d.Organica2=@Organica2 AND d.Organica3=@Organica3 AND c.TipoCarga IN ('TXT','MOVIMIENTO');
+        DELETE d FROM dbo.NominaAplicacionQnalDetalle d JOIN dbo.NominaAplicacionQnalCarga c ON c.Id=d.CargaId WHERE d.EntidadId=@EntidadId AND d.Anio=@Anio AND d.Quincena=@Quincena AND d.Organica0=@Organica0 AND d.Organica1=@Organica1 AND d.Organica2=@Organica2 AND d.Organica3=@Organica3 AND c.TipoCarga IN ('TXT','MOVIMIENTO')`);
+      const insertedDetails = await this.applyScopeInputs(new sql.Request(transaction),scope).input('CargaId',sql.BigInt,cargaId).input('Id',sql.BigInt,sincronizacionId).query(`INSERT dbo.NominaAplicacionQnalDetalle (CargaId,EntidadId,Anio,Quincena,Organica0,Organica1,Organica2,Organica3,LineaNumero,LineaOriginal,Lote,TipoRegistro,ClavePersonal,RFC,NombreAfiliado,AportacionAfiliadoFondoAhorro,AportacionEntidadFondoAhorro,AportacionAfiliadoEBI,AportacionEntidadEBI,BaseCotizacionSueldo,BaseCotizacionQuinquenios,SueldoMensual,DescuentoPrestamoCortoPlazo,DescuentoPrestamoHipotecario,FechaMovimiento,CAIR,DiasLaborados)
+        SELECT @CargaId,@EntidadId,@Anio,@Quincena,@Organica0,@Organica1,@Organica2,@Organica3,LineaNumero,LineaOriginal,Lote,TipoRegistro,ClavePersonal,RFC,NombreAfiliado,AportacionAfiliadoFondoAhorro,AportacionEntidadFondoAhorro,AportacionAfiliadoEBI,AportacionEntidadEBI,BaseCotizacionSueldo,BaseCotizacionQuinquenios,SueldoMensual,DescuentoPrestamoCortoPlazo,DescuentoPrestamoHipotecario,FechaMovimiento,CAIR,DiasLaborados FROM dbo.NominaAplicacionQnalStagingDetalle WHERE SincronizacionId=@Id`);
+      if (insertedDetails.rowsAffected[0] !== Number(row.TotalDetalles)) throw new NominaTxtSyncError('NOMINA_TXT_STAGING_INCOMPLETO', 500);
+      const finalized = await new sql.Request(transaction).input('Id',sql.BigInt,sincronizacionId).input('Uuid',sql.UniqueIdentifier,intentoUuid).input('CargaId',sql.BigInt,cargaId).query(`UPDATE dbo.NominaAplicacionQnalSincronizacion SET Estado='TERMINADO',Activo=0,CargaId=@CargaId,FechaActualizacion=SYSUTCDATETIME() WHERE SincronizacionId=@Id AND IntentoUuid=@Uuid AND Estado='FIREBIRD_CONFIRMADO' AND ResultadoFirebird='COMMIT_CONFIRMADO'`);
+      if (finalized.rowsAffected[0] !== 1) throw new NominaTxtSyncError('NOMINA_TXT_FINALIZACION_RECHAZADA', 409);
+      await transaction.commit(); return { cargaId,estado:'ACEPTADA',totalRegistros:Number(row.TotalDetalles),totalErrores:0,errores:[] };
+    } catch(error) { await transaction.rollback().catch(()=>undefined); throw error; }
   }
 
   private async assertCargaMutable(transaction: Transaction, input: NominaAplicacionQnalUploadInput): Promise<void> {
