@@ -1,7 +1,7 @@
 import {
   actualizarBitacoraAfectacionOrgTerminadoPorAfectacionId,
 } from '../../infrastructure/services/AfiliadoBdiSspeaService.js';
-import { ejecutarAP_P_APLICAR, ejecutarEBI2_RECIBOS_AP } from '../../infrastructure/services/AfiliadoBdiSspeaFirebirdService.js';
+import { ejecutarAP_DN_APLICAR, ejecutarAP_P_APLICAR, ejecutarEBI2_RECIBOS_AP, verificarAP_DN_APLICAR } from '../../infrastructure/services/AfiliadoBdiSspeaFirebirdService.js';
 import { crearAplicacionQnaLogPayload, guardarAplicacionQnaLogFtp } from '../../infrastructure/services/AplicacionQnaLogFtpService.js';
 import { executeInTransactionWithOutcome, type FirebirdTransactionExecution } from '../../../../db/firebird.js';
 import { GenerateLineaCapturaPeriodoCommand, type GenerateLineaCapturaPeriodoResult } from '../../../reportes/aplicacionesQNA/application/commands/GenerateLineaCapturaPeriodoCommand.js';
@@ -26,8 +26,9 @@ export interface AplicarBDIssspeaQNAResult {
   anio: number;
   ejecuciones: {
     obtenerQuincena: Step;
-    aplicarC: Step;
-    aplicarF: Step;
+    aplicarDn?: Step;
+    aplicarC?: Step;
+    aplicarF?: Step;
     ebi2Recibos: Step & { idPeriodoFirebird?: number; mensaje?: string | null };
     lineaPago: Step;
     envioLayout: Step;
@@ -53,6 +54,8 @@ export interface AplicarBDIssspeaQNAResult {
 
 export interface AplicarQnaDependencies {
   executeFirebirdTransaction<T>(fn: (tx: any) => Promise<T>): Promise<FirebirdTransactionExecution<T>>;
+  verificarAP_DN_APLICAR: typeof verificarAP_DN_APLICAR;
+  ejecutarAP_DN_APLICAR: typeof ejecutarAP_DN_APLICAR;
   ejecutarAP_P_APLICAR: typeof ejecutarAP_P_APLICAR;
   ejecutarEBI2_RECIBOS_AP: typeof ejecutarEBI2_RECIBOS_AP;
   actualizarBitacora: typeof actualizarBitacoraAfectacionOrgTerminadoPorAfectacionId;
@@ -64,6 +67,8 @@ export interface AplicarQnaDependencies {
 
 export const aplicarQnaDependencies: AplicarQnaDependencies = {
   executeFirebirdTransaction: executeInTransactionWithOutcome,
+  verificarAP_DN_APLICAR,
+  ejecutarAP_DN_APLICAR,
   ejecutarAP_P_APLICAR,
   ejecutarEBI2_RECIBOS_AP,
   actualizarBitacora: actualizarBitacoraAfectacionOrgTerminadoPorAfectacionId,
@@ -80,8 +85,8 @@ export class AplicarBDIssspeaQNACommand {
   async execute(data: AplicarBDIssspeaQNAData): Promise<AplicarBDIssspeaQNAResult> {
     qnaApplicationRuntimeConfig();
     const startedAt = Date.now();
-    const ejecuciones = this.emptySteps();
     const decision = await this.liquidacionQnaRepo.beginOrResumeApplication(data.liquidacionSnapshotId, data, data.usuarioId);
+    const ejecuciones = this.emptySteps(decision.nominaCargaId !== null);
     if (decision.action === 'RESOLUCION_MANUAL') {
       qnaFail('La aplicacion Firebird requiere resolucion administrativa con evidencia', 'QNA_APLICACION_REQUIERE_RESOLUCION_MANUAL', 409);
     }
@@ -109,12 +114,21 @@ export class AplicarBDIssspeaQNACommand {
         await heartbeat.ensure();
         firebirdStarted=true;
         transaction = await this.aplicarQnaDependencies.executeFirebirdTransaction(async tx => {
-          await heartbeat.ensure();failedStep = 'AP_P_APLICAR_C';
-          await this.timed(ejecuciones.aplicarC, () => this.aplicarQnaDependencies.ejecutarAP_P_APLICAR(
-            decision.scope.organica0, decision.scope.organica1, periodo, periodo, 'C', tx));await heartbeat.ensure();
-          await heartbeat.ensure();failedStep = 'AP_P_APLICAR_F';
-          await this.timed(ejecuciones.aplicarF, () => this.aplicarQnaDependencies.ejecutarAP_P_APLICAR(
-            decision.scope.organica0, decision.scope.organica1, periodo, periodo, 'F', tx));await heartbeat.ensure();
+          if (decision.nominaCargaId !== null) {
+            await heartbeat.ensure();failedStep = 'PRECHECK_AP_DN_APLICAR';
+            await this.aplicarQnaDependencies.verificarAP_DN_APLICAR(
+              periodo, decision.scope.organica0, decision.scope.organica1, decision.scope.organica2, decision.scope.organica3, tx);
+            await heartbeat.ensure();failedStep = 'AP_DN_APLICAR';
+            await this.timed(ejecuciones.aplicarDn!, () => this.aplicarQnaDependencies.ejecutarAP_DN_APLICAR(
+              periodo, decision.scope.organica0, decision.scope.organica1, decision.scope.organica2, decision.scope.organica3, tx));await heartbeat.ensure();
+          } else {
+            await heartbeat.ensure();failedStep = 'AP_P_APLICAR_C';
+            await this.timed(ejecuciones.aplicarC!, () => this.aplicarQnaDependencies.ejecutarAP_P_APLICAR(
+              decision.scope.organica0, decision.scope.organica1, periodo, periodo, 'C', tx));await heartbeat.ensure();
+            await heartbeat.ensure();failedStep = 'AP_P_APLICAR_F';
+            await this.timed(ejecuciones.aplicarF!, () => this.aplicarQnaDependencies.ejecutarAP_P_APLICAR(
+              decision.scope.organica0, decision.scope.organica1, periodo, periodo, 'F', tx));await heartbeat.ensure();
+          }
           if (quincenaNumero % 2 === 0) {
             await heartbeat.ensure();failedStep = 'EBI2_RECIBOS_AP';
             await this.timed(ejecuciones.ebi2Recibos, async () => {
@@ -235,9 +249,11 @@ export class AplicarBDIssspeaQNACommand {
       stop:async()=>{clearTimer(timer);await pending.catch(error=>{failure=error;});}};
   }
 
-  private emptySteps(): AplicarBDIssspeaQNAResult['ejecuciones'] {
-    return { obtenerQuincena: { exito: false, duracionMs: 0 }, aplicarC: { exito: false, duracionMs: 0 },
-      aplicarF: { exito: false, duracionMs: 0 }, ebi2Recibos: { exito: false, duracionMs: 0 },
+  private emptySteps(conTxt: boolean): AplicarBDIssspeaQNAResult['ejecuciones'] {
+    return { obtenerQuincena: { exito: false, duracionMs: 0 },
+      ...(conTxt ? { aplicarDn: { exito: false, duracionMs: 0 } } : {
+        aplicarC: { exito: false, duracionMs: 0 }, aplicarF: { exito: false, duracionMs: 0 },
+      }), ebi2Recibos: { exito: false, duracionMs: 0 },
       lineaPago: { exito: false, duracionMs: 0 }, envioLayout: { exito: true, duracionMs: 0, error: 'OMITIDO' },
       actualizarBitacora: { exito: false, duracionMs: 0 }, guardarLogFtp: { exito: false, duracionMs: 0 } };
   }

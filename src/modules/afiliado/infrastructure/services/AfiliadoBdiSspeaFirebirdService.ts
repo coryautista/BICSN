@@ -12,6 +12,65 @@ const logger = pino({
   level: process.env.LOG_LEVEL || 'info'
 });
 
+export async function verificarAP_DN_APLICAR(
+  periodo: string,
+  org0: string,
+  org1: string,
+  org2: string,
+  org3: string,
+  tx: unknown
+): Promise<void> {
+  const details = await executeQueryInTransaction(tx, `
+    SELECT COUNT(*) AS TOTAL,
+      SUM(CASE WHEN STATUS = 'P' THEN 1 ELSE 0 END) AS PREPARADOS,
+      SUM(CASE WHEN STATUS = 'N' THEN 1 ELSE 0 END) AS NUEVOS,
+      SUM(CASE WHEN STATUS = 'A' THEN 1 ELSE 0 END) AS APLICADOS
+    FROM AP_D_ORIGEN_TODOS
+    WHERE QNA = ? AND ORG0 = ? AND ORG1 = ?`, [periodo, org0, org1]);
+  const summary = await executeQueryInTransaction(tx, `
+    SELECT COUNT(*) AS TOTAL
+    FROM AP_D_ORIGEN_RESUMEN
+    WHERE PERIODO = ? AND ORG0 = ? AND ORG1 = ?
+      AND ORG2 = ? AND ORG3 = ? AND TIPO = 'AN'`, [periodo, org0, org1, org2, org3]);
+  const row = details[0] ?? {};
+  const total = Number(row.TOTAL ?? row.total ?? 0);
+  const prepared = Number(row.PREPARADOS ?? row.preparados ?? 0);
+  const newRows = Number(row.NUEVOS ?? row.nuevos ?? 0);
+  const applied = Number(row.APLICADOS ?? row.aplicados ?? 0);
+  const summaries = Number(summary[0]?.TOTAL ?? summary[0]?.total ?? 0);
+  if (total === 0 || prepared !== total || newRows !== 0 || applied !== 0 || summaries !== 1) {
+    throw new Error('NOMINA_FIREBIRD_SCOPE_NO_PREPARADO');
+  }
+}
+
+export async function ejecutarAP_DN_APLICAR(
+  periodo: string,
+  org0: string,
+  org1: string,
+  org2: string,
+  org3: string,
+  tx?: unknown
+): Promise<void> {
+  for (const [nombre, valor] of Object.entries({ org0, org1, org2, org3 })) {
+    if (!/^\d{2}$/.test(valor)) throw new Error(`Parámetro inválido para ${nombre}: ${valor}`);
+  }
+  if (!/^\d{4}$/.test(periodo)) throw new Error(`Parámetro inválido para periodo: ${periodo}`);
+
+  const params = [periodo, org0, org1, org2, org3];
+  const logContext = { operation: 'ejecutarAP_DN_APLICAR', periodo, org0, org1, org2, org3 };
+  const startTime = Date.now();
+  logger.info(logContext, 'Iniciando ejecución de AP_DN_APLICAR');
+  try {
+    if (tx) await executeProcedureInTransaction(tx, 'AP_DN_APLICAR', params);
+    else await executeExecutableProcedure('AP_DN_APLICAR', params, { timeoutMs: FIREBIRD_TIMEOUTS.HEAVY_SP });
+    logger.info({ ...logContext, duracionMs: Date.now() - startTime }, 'AP_DN_APLICAR ejecutado exitosamente');
+  } catch (error: any) {
+    logger.error({ ...logContext, error: { message: error.message || String(error), code: error.code }, duracionMs: Date.now() - startTime },
+      'Error ejecutando AP_DN_APLICAR');
+    throw new Error(`Error al ejecutar AP_DN_APLICAR: ${error.message || String(error)}`);
+  }
+}
+
 export async function ejecutarAP_P_APLICAR(
   org0: string,
   org1: string,

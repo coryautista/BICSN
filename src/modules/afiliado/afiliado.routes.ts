@@ -6440,6 +6440,14 @@ export default async function afiliadoRoutes(app: FastifyInstance) {
                           error: { type: "string", nullable: true },
                         },
                       },
+                      aplicarDn: {
+                        type: "object",
+                        properties: {
+                          exito: { type: "boolean" },
+                          duracionMs: { type: "number" },
+                          error: { type: "string", nullable: true },
+                        },
+                      },
                       aplicarF: {
                         type: "object",
                         properties: {
