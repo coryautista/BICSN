@@ -510,6 +510,26 @@ Evidencia funcional de la carga 1526, scope `04/24/01/01`:
 
 La E2E confirma únicamente upload, sincronización Firebird y finalización SQL. No confirma Snapshot V2/V5 ni autoriza `AP_DN_APLICAR`; esos puntos permanecen abiertos en D5. Calidad, Producción y reproceso histórico continúan fuera de alcance.
 
+### Evidencia frontend Entidad
+
+El flujo de carga TXT del frontend Entidad fue ajustado para no ocultar errores detrás del modal de validación:
+
+- Sólo `201 + ok=true + ACEPTADA` cierra el modal y actualiza el estado de carga vigente.
+- `422 + RECHAZADA` mantiene el modal abierto y presenta conteos y errores por línea.
+- `409`, `503`, timeout y errores de contrato mantienen el modal abierto y muestran el mensaje operativo.
+- Una respuesta resuelta que no concilie código HTTP, `ok` y `estado` se rechaza y nunca se presenta como éxito.
+- Los textos funcionales existentes de validación, estados y acciones se conservaron.
+
+Archivos modificados:
+
+```text
+../../front/Entidad/ISS-F-Entidad/src/services/nomina/aplicacion-qnal-txt.api.ts
+../../front/Entidad/ISS-F-Entidad/src/features/archivo-nomina/useArchivoNomina.hooks.ts
+../../front/Entidad/ISS-F-Entidad/src/widgets/archivo-nomina/ArchivoNominaWidget.tsx
+```
+
+Validación local: `npm run typecheck`, `npm run lint` y `npm run build` correctos. Esta evidencia cubre únicamente el comportamiento frontend y no acredita la ejecución de `AP_DN_APLICAR`.
+
 ## Matriz mínima de pruebas
 
 | Caso | Resultado esperado |
@@ -582,6 +602,7 @@ La E2E confirma únicamente upload, sincronización Firebird y finalización SQL
 | 2026-08-28 | D6 | `CIERRE_TECNICO_LOCAL` | Ambientes, build, regresiones Nómina/QNA, migración rollback-only, Firebird rollback-only y SQL idempotente PASS | Ejecutar primera carga funcional sólo con archivo/scope autorizado |
 | 2026-08-29 | D3 | `CORRECCION_INSERT_DIRECTO` | Identificación read-only por RFC en `PERSONAL + ORG_PERSONAL`; `PLAZAORIGEN=PERSONAL.NOEMPLEADO`; eliminado `AP_D_IDENTIFICA_ARCHIVOTXT` del flujo | Validar carga real 1526 primero mediante rollback-only |
 | 2026-08-29 | D3/D4/D6 | `E2E_1526_CONFIRMADA_DESARROLLO` | Ledger 6 terminado, commit Firebird confirmado, carga 20 vigente, 167 detalles P y un resumen AN | Completar D5 con identidad V2/V5 y gate previo a `AP_DN_APLICAR` |
+| 2026-08-29 | Frontend Entidad | `ERRORES_MODAL_CORREGIDOS` | `201/ACEPTADA` es el único éxito; `422`, `409`, `503` y timeout permanecen visibles dentro del modal; typecheck, lint y build PASS | Mantener esta regresión al modificar la carga TXT |
 
 ## Alcance futuro no autorizado
 

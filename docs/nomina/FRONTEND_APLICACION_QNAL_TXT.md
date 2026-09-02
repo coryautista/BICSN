@@ -78,6 +78,23 @@ Respuesta rechazada por validacion: `422`
 }
 ```
 
+Errores operativos: `409` o `503`
+
+```json
+{
+  "ok": false,
+  "error": {
+    "code": "NOMINA_FIREBIRD_SCOPE_EXISTENTE",
+    "message": "NOMINA_FIREBIRD_SCOPE_EXISTENTE"
+  }
+}
+```
+
+- `409` representa un conflicto conocido, por ejemplo un scope Firebird ocupado o una liquidacion oficial que ya bloquea el reemplazo.
+- `503` representa una falla de sincronizacion con Firebird. No confirma la carga y nunca debe interpretarse como exito.
+- El frontend debe conservar y mostrar `error.message` cuando el backend lo proporcione.
+- Un timeout, una respuesta malformada o cualquier estado distinto de `201` y `422` se trata como error de envio.
+
 ### Consultar Registros Vigentes
 
 `GET /v1/nomina/aplicacion-qnal-txt/registros`
@@ -185,10 +202,22 @@ Notas de respuesta:
 - Pedir `organica0-3` solo para usuarios no entidad/admin cuando necesiten consultar una organica distinta a la de su token.
 - El usuario ejecutor no se manda desde frontend; el backend lo toma del token y lo guarda en `UsuarioRegistro` de `NominaAplicacionQnalCarga`.
 - El frontend no debe calcular ni inferir la quincena vigente; el backend la valida contra Firebird.
-- Mostrar errores de `data.errores` cuando el backend responda `422`.
+- El modal de validacion se cierra unicamente con `201`, `ok=true` y `data.estado=ACEPTADA`.
+- Mostrar `data.errores` dentro del modal cuando el backend responda `422`; el modal permanece abierto.
+- Mostrar dentro del mismo modal el mensaje operativo recibido con `409`, `503` o timeout; el modal permanece abierto y permite reintentar o cerrar.
+- El resultado aceptado se presenta fuera del modal después de confirmar la carga.
+- Una respuesta `201` o `422` cuyo cuerpo no coincida con su estado esperado se trata como error y no modifica el estado visual de carga vigente.
 - Una carga aceptada reemplaza los registros vigentes del mismo filtro.
 - Una carga rechazada no modifica registros vigentes.
 - El backend rellena organicas de 1 digito con cero a la izquierda.
+
+Implementacion vigente en Frontend Entidad:
+
+```text
+src/services/nomina/aplicacion-qnal-txt.api.ts
+src/features/archivo-nomina/useArchivoNomina.hooks.ts
+src/widgets/archivo-nomina/ArchivoNominaWidget.tsx
+```
 
 ## Prueba Real Ejecutada
 

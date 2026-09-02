@@ -4,6 +4,8 @@
 
 Consultar historicos ya guardados en SQL Server. Este modulo no consulta Firebird.
 
+Las pantallas Entidad `/dependencia/aportaciones-proceso-verificacion` y `/dependencia/retenciones-cobrar-verificacion` dejaron de consumir este modulo el 2026-08-29. Esas rutas usan exclusivamente `/v1/liquidaciones-qna/aplicadas`, `/v1/liquidaciones-qna/aplicada/resumen` y `/v1/liquidaciones-qna/aplicada/detalles/:dominio` para identificar de forma explicita snapshot oficial, reconstruido o historico legacy.
+
 Base URL backend:
 
 `/v1/historicos-quincenales`
@@ -169,3 +171,4 @@ Authorization: Bearer <token>
 - Usar `meta.total` para paginacion.
 - Mostrar `meta.tabla` solo en modo diagnostico o soporte.
 - No mezclar estos endpoints con `/reportes/aplicaciones-qna/*`, porque esos consultan Firebird.
+- No reutilizarlos como respaldo silencioso de las pantallas de verificacion QNA aplicada; el fallback legacy corresponde al backend de `/liquidaciones-qna/aplicada/*`.
