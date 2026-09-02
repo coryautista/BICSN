@@ -15,6 +15,7 @@ export interface QnaApplicationSnapshot {
   action: QnaApplicationAction;
   scope: QnaScope;
   periodo: string;
+  nominaCargaId: string | null;
   idempotente: boolean;
   intentoUuid: string;
   afectacionId: number;

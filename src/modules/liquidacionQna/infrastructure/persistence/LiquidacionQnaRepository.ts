@@ -24,7 +24,7 @@ import type {
   QnaAppliedSource, QnaAppliedSummary, QnaAppliedWarning,
 } from '../../domain/entities/QnaAppliedRead.js';
 import { qnaFail } from '../../domain/errors.js';
-import { calculateCanonicalHash, validateQnaCandidate } from '../../domain/services/LiquidacionQnaContracts.js';
+import { calculateCanonicalHash, calculateQnaHash, validateQnaCandidate } from '../../domain/services/LiquidacionQnaContracts.js';
 import { validateQnaPromotion } from '../../domain/services/QnaPromotionPolicy.js';
 import { fundProjection } from '../../domain/services/QnaOfficialSnapshotV5Factory.js';
 import { acquireQnaScopeLock } from '../../../../db/qnaScopeLock.js';
@@ -38,6 +38,7 @@ import {
   assertManualResolutionAllowed, decideQnaApplicationAction, manualResolutionDestination,
   qnaApplicationLeaseMs, qnaApplicationRuntimeConfig, type QnaApplicationClaimType, type QnaManualResolution,
 } from '../../domain/services/QnaApplicationSagaPolicy.js';
+import { env } from '../../../../config/env.js';
 
 const TOTAL_COLUMNS: Record<Exclude<keyof QnaTotals, 'registros'>, string> = {
   cairA2: 'CAIRA2', fraA2: 'FRAA2', freA2: 'FREA2', fhA2: 'FHA2', fvA2: 'FVA2',
@@ -330,8 +331,9 @@ export class LiquidacionQnaRepository implements ILiquidacionQnaRepository {
     const sets = result.recordsets as Array<Array<Record<string, any>>>;
     const resolve = (): QnaAppliedDetailResult => {
       const item = isDeferredRead(items) ? items.resolveAfterCommit()[0] : items[0];
+      const { fuentes: _fuentes, ...metadata } = item;
       const details = sets[1].map(row => this.mapAppliedDetail(filter.dominio, row, filter.esAdmin));
-      return { ...item, dominio: filter.dominio, totalDominioA2: String(totals[DOMAIN_TOTAL_KEYS[filter.dominio]]), totalStrategy: 'PERSISTED', detalles: details,
+      return { ...metadata, dominio: filter.dominio, totalDominioA2: String(totals[DOMAIN_TOTAL_KEYS[filter.dominio]]), totalStrategy: 'PERSISTED', detalles: details,
         page: filter.page, pageSize: filter.pageSize, total: Number(sets[0][0].Total) };
     };
     return deferMapping ? { resolveAfterCommit: resolve } : resolve();
@@ -487,7 +489,8 @@ export class LiquidacionQnaRepository implements ILiquidacionQnaRepository {
       ...(filter.esAdmin && row.ClaveFilaHash != null ? { claveFilaHash: String(row.ClaveFilaHash) } : {}),
       ...(filter.esAdmin && row.HashFila != null ? { hashFila: String(row.HashFila) } : {}) }));
     const totalKey = DOMAIN_TOTAL_KEYS[filter.dominio] as Exclude<keyof QnaTotals, 'registros'>;
-    return { ...summary, dominio: filter.dominio, totalDominioA2: summary.totales[totalKey] as string | null,
+    const { fuentes: _fuentes, totales: _totales, totalStrategies: _totalStrategies, ...metadata } = summary;
+    return { ...metadata, dominio: filter.dominio, totalDominioA2: summary.totales[totalKey] as string | null,
       totalStrategy: summary.totalStrategies[totalKey], detalles: details, page: filter.page, pageSize: filter.pageSize, total: Number(sets[0][0].Total) };
   }
 
@@ -510,7 +513,14 @@ export class LiquidacionQnaRepository implements ILiquidacionQnaRepository {
         nominaCargaId:header.NominaCargaId==null?null:String(header.NominaCargaId),formulaCalculoVersionId:header.FormulaCalculoVersionId==null?null:String(header.FormulaCalculoVersionId),
         fuentes:sources,totales:totals,detalles:details,usuarioId:header.UsuarioId==null?null:String(header.UsuarioId),versionEsquema:Number(header.VersionEsquema) as 3|4};
       const validated=validateQnaCandidate(persisted,{retentionProvenanceMode:'PERSISTED_HISTORICAL'});
-      if(validated.hashContenido!==String(header.HashContenido)||validated.completas!==Number(header.FuentesCompletas)||(validated.completas===10)!==(header.Estado==='COMPLETO'))throw new Error('content');
+      if(validated.hashContenido!==String(header.HashContenido)){
+        const expectedHash=String(header.HashContenido);
+        const matchesV3Hash=Number(header.VersionEsquema)===4&&calculateQnaHash({...persisted,versionEsquema:3})===expectedHash;
+        if(!matchesV3Hash)throw new Error('content:hash');
+        warnings.push({code:'QNA_RECONSTRUIDA_HASH_CANONICO_V3',message:'La cabecera V4 conserva el hash canonico V3 historico; el contenido fue validado sin modificar la evidencia.'});
+      }
+      if(validated.completas!==Number(header.FuentesCompletas))throw new Error('content:complete-sources');
+      if((validated.completas===10)!==(header.Estado==='COMPLETO'))throw new Error('content:state');
       if(v2Rows.length===1){const v2=this.mapPersistedV2(v2Rows[0],v2DetailRows);if(calcularSnapshotCalculoV2Hash(v2)!==String(v2Rows[0].HashContenido)||v2.detalles.length!==Number(v2Rows[0].Registros))throw new Error('v2hash');
         const expected:Record<string,string>={cairA2:v2.totalesA2.CAIR,cairFondoA2:v2.totalesA2.CAIR_FONDO,ahorroA2:v2.totalesA2.FAT,fraA2:v2.totalesA2.FRA,freA2:v2.totalesA2.FRE,
           prestacionesA2:v2.totalesA2.PRESTACIONES,fhA2:v2.totalesA2.FH,fvA2:v2.totalesA2.FV,viviendaA2:v2.totalesA2.VIVIENDA,faaA2:v2.totalesA2.FAA,faeA2:v2.totalesA2.FAE,fatA2:v2.totalesA2.FAT,faiA2:v2.totalesA2.FAI};
@@ -520,7 +530,7 @@ export class LiquidacionQnaRepository implements ILiquidacionQnaRepository {
       if(v2Rows.length===1)warnings.push({code:'QNA_RECONSTRUIDA_FONDOS_DESDE_V2_SIN_IDENTIDAD',message:'Los detalles de fondos se reconstruyen exclusivamente desde SnapshotCalculoV2Detalle; identidad, interno, RFC y nombre no estan disponibles.'});
       if(Number(header.LegacyFundDetailCount)>0)warnings.push({code:'QNA_RECONSTRUIDA_DETALLE_PREV5_IGNORADO',message:'QnaSnapshotDetalle pre-V5 no forma parte de la evidencia validada y fue ignorado.'});
       for(const source of sources)if(!['COMPLETE','NOT_APPLICABLE'].includes(source.estado))warnings.push({code:'QNA_RECONSTRUIDA_FUENTE_PARCIAL',message:`La fuente ${source.dominio} conserva estado ${source.estado}.`,dominio:source.dominio});
-    }catch{qnaFail('La evidencia V3/V4 aplicada no cumple integridad','QNA_APLICADA_INTEGRIDAD_INVALIDA',500);}
+    }catch(error){qnaFail('La evidencia V3/V4 aplicada no cumple integridad','QNA_APLICADA_INTEGRIDAD_INVALIDA',500,error);}
     for(const [field,code] of [['SnapshotCalculoV2Id','SNAPSHOT_V2'],['NominaCargaId','NOMINA'],['FormulaCalculoVersionId','FORMULA']] as const)
       if(header[field]==null)warnings.push({code:`QNA_RECONSTRUIDA_${code}_NO_PERSISTIDO`,message:`El metadato ${field} no esta disponible en la evidencia persistida.`});
     return warnings;
@@ -722,7 +732,8 @@ export class LiquidacionQnaRepository implements ILiquidacionQnaRepository {
       importeOficialD6:row.ImporteOficialD6 == null ? null : String(row.ImporteOficialD6), payloadVersion:null,
       payloadCanonico:Object.fromEntries(Object.entries(row).filter(([key]) => !common.has(key)).map(([key,value]) => [key,value instanceof Date ? value.toISOString() : value])) }));
     const key = DOMAIN_TOTAL_KEYS[filter.dominio] as Exclude<keyof QnaTotals,'registros'>;
-    return { ...summary, dominio:filter.dominio,totalDominioA2:summary.totales[key] as string|null,totalStrategy:summary.totalStrategies[key],
+    const { fuentes: _fuentes, totales: _totales, totalStrategies: _totalStrategies, ...metadata } = summary;
+    return { ...metadata, dominio:filter.dominio,totalDominioA2:summary.totales[key] as string|null,totalStrategy:summary.totalStrategies[key],
       detalles:details,page:filter.page,pageSize:filter.pageSize,total:Number(sets[0][0].Total) };
   }
 
@@ -738,9 +749,11 @@ export class LiquidacionQnaRepository implements ILiquidacionQnaRepository {
     await transaction.begin(sql.ISOLATION_LEVEL.SERIALIZABLE);
     try {
       const result = await operation(transaction);
+      await new sql.Request(transaction).query('SET TRANSACTION ISOLATION LEVEL READ COMMITTED');
       await transaction.commit();
       return isDeferredRead(result) ? result.resolveAfterCommit() : result;
     } catch (error) {
+      await new sql.Request(transaction).query('SET TRANSACTION ISOLATION LEVEL READ COMMITTED').catch(() => undefined);
       await transaction.rollback().catch(() => undefined);
       throw error;
     }
@@ -899,10 +912,12 @@ export class LiquidacionQnaRepository implements ILiquidacionQnaRepository {
       return expectedDomains.delete(String(source.Dominio)) && (complete || notApplicable)
         && Number(source.Registros) === (FUND_DOMAINS.has(source.Dominio) ? Number(header.EmployeeCount) : Number(source.DetailCount));
     });
+    const sameNominaLink = (header.V2NominaCargaId == null && header.NominaCargaId == null)
+      || (header.V2NominaCargaId != null && header.NominaCargaId != null && String(header.V2NominaCargaId) === String(header.NominaCargaId));
     if (Number(header.VersionEsquema) !== 5 || header.Estado !== 'COMPLETO' || header.SnapshotCalculoV2Id == null || !sameScope || !sameV2Scope
-      || header.NominaCargaId == null || header.FormulaCalculoVersionId == null || header.PrecisionPolicy !== PRECISION_POLICY
+      || header.FormulaCalculoVersionId == null || header.PrecisionPolicy !== PRECISION_POLICY
       || Number(header.V2VersionEsquema) !== 5 || header.V2Estado !== 'COMPLETO' || header.V2PrecisionPolicy !== PRECISION_POLICY
-      || header.V2Ambiente !== header.Ambiente || String(header.V2NominaCargaId) !== String(header.NominaCargaId)
+      || header.V2Ambiente !== header.Ambiente || !sameNominaLink
       || String(header.V2FormulaCalculoVersionId) !== String(header.FormulaCalculoVersionId)
       || Number(header.TotalCount) !== 1 || Number(header.SourceCount) !== 10 || Number(header.DomainCount) !== 10 || expectedDomains.size !== 0
       || Number(header.FuentesEsperadas) !== 10 || Number(header.FuentesCompletas) !== 10 || Number(header.EmployeeCount) !== Number(header.TotalRegistros)
@@ -916,7 +931,7 @@ export class LiquidacionQnaRepository implements ILiquidacionQnaRepository {
     auxiliaryRows: Array<Record<string, any>>, employeeRows: Array<Record<string, any>>
   ): void {
     try {
-      if (totalRows.length !== 1 || header.NominaCargaId == null || header.FormulaCalculoVersionId == null || header.SnapshotCalculoV2Id == null) throw new Error('links');
+      if (totalRows.length !== 1 || header.FormulaCalculoVersionId == null || header.SnapshotCalculoV2Id == null) throw new Error('links');
       const sources = sourceRows.map(row => ({
         dominio: row.Dominio, tipoFuente: row.TipoFuente, estado: row.Estado, requerida: Boolean(row.Requerida),
         identificadorFuente: String(row.IdentificadorFuente), hashFuente: row.HashFuente === null ? null : String(row.HashFuente), sourceScale: Number(row.SourceScale),
@@ -934,7 +949,7 @@ export class LiquidacionQnaRepository implements ILiquidacionQnaRepository {
       const persisted: CreateQnaCandidateInput = {
         entidadId: Number(header.EntidadId), anio: Number(header.Anio), quincena: Number(header.Quincena), organica0: String(header.Organica0),
         organica1: String(header.Organica1), organica2: String(header.Organica2), organica3: String(header.Organica3), ambiente: header.Ambiente,
-        snapshotCalculoV2Id: String(header.SnapshotCalculoV2Id), nominaCargaId: String(header.NominaCargaId), formulaCalculoVersionId: String(header.FormulaCalculoVersionId),
+        snapshotCalculoV2Id: String(header.SnapshotCalculoV2Id), nominaCargaId: header.NominaCargaId == null ? null : String(header.NominaCargaId), formulaCalculoVersionId: String(header.FormulaCalculoVersionId),
         fuentes: sources, totales: totals, detalles: details, usuarioId: header.UsuarioId === null ? null : String(header.UsuarioId), versionEsquema: 5, detallesEmpleado: employeeDetails,
       };
       validateAppliedQnaCandidate(persisted,String(header.HashContenido));
@@ -946,7 +961,7 @@ export class LiquidacionQnaRepository implements ILiquidacionQnaRepository {
   private mapAppliedMetadata(row: Record<string, any>, appliedAt: Date): QnaAppliedMetadata {
     return { liquidacionSnapshotId: String(row.LiquidacionSnapshotId), entidadId: Number(row.EntidadId), anio: Number(row.Anio), quincena: Number(row.Quincena),
       periodo: String(row.Periodo), organica0: String(row.Organica0), organica1: String(row.Organica1), organica2: String(row.Organica2), organica3: String(row.Organica3),
-      ambiente: row.Ambiente, revision: Number(row.Revision), snapshotCalculoV2Id: String(row.SnapshotCalculoV2Id), nominaCargaId: String(row.NominaCargaId),
+      ambiente: row.Ambiente, revision: Number(row.Revision), snapshotCalculoV2Id: String(row.SnapshotCalculoV2Id), nominaCargaId: row.NominaCargaId == null ? null : String(row.NominaCargaId),
       formulaCalculoVersionId: String(row.FormulaCalculoVersionId), precisionPolicy: String(row.PrecisionPolicy), hashContenido: String(row.HashContenido),
       fechaAplicacion: appliedAt.toISOString(), fechaCreacion: new Date(row.FechaCreacion).toISOString(),
       fuente: 'SNAPSHOT_OFICIAL', estadoProceso: 'TERMINADO', reconstructionStrategy: null };
@@ -1088,19 +1103,28 @@ export class LiquidacionQnaRepository implements ILiquidacionQnaRepository {
 
       const validationResult = await new sql.Request(transaction).input('Id', sql.BigInt, id).query(`
         SELECT
-          CASE WHEN c.Id = s.NominaCargaId AND c.TipoCarga = 'TXT' AND c.Estatus = 'APLICADA' AND c.EsVigente = 1
+          CASE WHEN (c.Id = s.NominaCargaId AND c.TipoCarga = 'TXT' AND c.Estatus = 'APLICADA' AND c.EsVigente = 1
+            AND sync.CargaId=c.Id AND sync.Estado='TERMINADO' AND sync.Activo=0
+            AND sync.ResultadoFirebird='COMMIT_CONFIRMADO'
+            AND sync.ConteoFirebirdP=c.TotalDetalles AND sync.ConteoResumen=1
             AND c.Id = (
               SELECT TOP (1) cv.Id FROM dbo.NominaAplicacionQnalCarga cv WITH (UPDLOCK,HOLDLOCK)
               WHERE cv.EntidadId=s.EntidadId AND cv.Anio=s.Anio AND cv.Quincena=s.Quincena
                 AND cv.Organica0=s.Organica0 AND cv.Organica1=s.Organica1 AND cv.Organica2=s.Organica2 AND cv.Organica3=s.Organica3
                 AND cv.TipoCarga='TXT' AND cv.Estatus='APLICADA' AND cv.EsVigente=1
               ORDER BY cv.Id DESC
-            ) THEN 1 ELSE 0 END AS CargaVigente,
+            )) OR (s.NominaCargaId IS NULL AND NOT EXISTS (
+              SELECT 1 FROM dbo.NominaAplicacionQnalCarga cv WITH (UPDLOCK,HOLDLOCK)
+              WHERE cv.EntidadId=s.EntidadId AND cv.Anio=s.Anio AND cv.Quincena=s.Quincena
+                AND cv.Organica0=s.Organica0 AND cv.Organica1=s.Organica1 AND cv.Organica2=s.Organica2 AND cv.Organica3=s.Organica3
+                AND cv.TipoCarga='TXT' AND cv.Estatus='APLICADA' AND cv.EsVigente=1
+            )) THEN 1 ELSE 0 END AS FuenteNominaVigente,
           CASE WHEN v.EntidadId=s.EntidadId AND v.Anio=s.Anio AND v.Quincena=s.Quincena AND v.Periodo=s.Periodo
             AND v.Organica0=s.Organica0 AND v.Organica1=s.Organica1 AND v.Organica2=s.Organica2 AND v.Organica3=s.Organica3
             AND v.Ambiente=s.Ambiente THEN 1 ELSE 0 END AS MismoAmbito,
-          CASE WHEN s.SnapshotCalculoV2Id IS NOT NULL AND s.NominaCargaId IS NOT NULL AND s.FormulaCalculoVersionId IS NOT NULL
-            AND v.NominaCargaId=s.NominaCargaId AND v.FormulaCalculoVersionId=s.FormulaCalculoVersionId
+          CASE WHEN s.SnapshotCalculoV2Id IS NOT NULL AND s.FormulaCalculoVersionId IS NOT NULL
+            AND ((v.NominaCargaId=s.NominaCargaId) OR (v.NominaCargaId IS NULL AND s.NominaCargaId IS NULL))
+            AND v.FormulaCalculoVersionId=s.FormulaCalculoVersionId
             AND formula.FormulaCalculoVersionId=s.FormulaCalculoVersionId
             AND formula.PrecisionPolicy=s.PrecisionPolicy AND formula.AnioVigencia=s.Anio
             AND s.Quincena BETWEEN formula.QuincenaDesde AND formula.QuincenaHasta THEN 1 ELSE 0 END AS MismosEnlaces,
@@ -1111,7 +1135,7 @@ export class LiquidacionQnaRepository implements ILiquidacionQnaRepository {
               WHERE vd.SnapshotId=v.SnapshotId ORDER BY vd.FechaCreacion DESC,vd.DecisionId DESC)=1
             THEN 1 ELSE 0 END AS SnapshotV2Valido,
           CASE WHEN v.Registros=(SELECT COUNT(*) FROM aportaciones.SnapshotCalculoV2Detalle vd WITH (UPDLOCK,HOLDLOCK) WHERE vd.SnapshotId=v.SnapshotId)
-            AND c.TotalDetalles=(SELECT COUNT(*) FROM dbo.NominaAplicacionQnalDetalle nd WITH (UPDLOCK,HOLDLOCK) WHERE nd.CargaId=c.Id)
+            AND (s.NominaCargaId IS NULL OR c.TotalDetalles=(SELECT COUNT(*) FROM dbo.NominaAplicacionQnalDetalle nd WITH (UPDLOCK,HOLDLOCK) WHERE nd.CargaId=c.Id))
             AND t.Registros=v.Registros
             AND (s.VersionEsquema<5 OR ((SELECT COUNT(*) FROM liquidacion.QnaSnapshotDetalle ed WITH (UPDLOCK,HOLDLOCK)
                   WHERE ed.LiquidacionSnapshotId=s.LiquidacionSnapshotId)=v.Registros
@@ -1149,6 +1173,7 @@ export class LiquidacionQnaRepository implements ILiquidacionQnaRepository {
         FROM liquidacion.QnaSnapshot s WITH (UPDLOCK,HOLDLOCK)
         LEFT JOIN aportaciones.SnapshotCalculoV2 v WITH (UPDLOCK,HOLDLOCK) ON v.SnapshotId=s.SnapshotCalculoV2Id
         LEFT JOIN dbo.NominaAplicacionQnalCarga c WITH (UPDLOCK,HOLDLOCK) ON c.Id=s.NominaCargaId
+        LEFT JOIN dbo.NominaAplicacionQnalSincronizacion sync WITH (UPDLOCK,HOLDLOCK) ON sync.CargaId=c.Id
         LEFT JOIN aportaciones.FormulaCalculoVersion formula WITH (UPDLOCK,HOLDLOCK)
           ON formula.FormulaCalculoVersionId=s.FormulaCalculoVersionId
         LEFT JOIN liquidacion.QnaSnapshotTotal t WITH (UPDLOCK,HOLDLOCK) ON t.LiquidacionSnapshotId=s.LiquidacionSnapshotId
@@ -1157,7 +1182,7 @@ export class LiquidacionQnaRepository implements ILiquidacionQnaRepository {
       const validation = validationResult.recordset[0];
       if (!validation) qnaFail('Snapshot no encontrado', 'QNA_SNAPSHOT_NO_ENCONTRADO', 404);
       validateQnaPromotion({
-        cargaVigente: Number(validation.CargaVigente) === 1,
+        fuenteNominaVigente: Number(validation.FuenteNominaVigente) === 1,
         mismoAmbito: Number(validation.MismoAmbito) === 1,
         mismosEnlaces: Number(validation.MismosEnlaces) === 1,
         snapshotV2Valido: Number(validation.SnapshotV2Valido) === 1,
@@ -1257,14 +1282,14 @@ export class LiquidacionQnaRepository implements ILiquidacionQnaRepository {
     if(owns)await transaction.begin(sql.ISOLATION_LEVEL.SERIALIZABLE);
     try {
       const headerResult = await new sql.Request(transaction).input('Id', sql.BigInt, id).query(`
-        SELECT EntidadId,Anio,Quincena,Periodo,Organica0,Organica1,Organica2,Organica3
+        SELECT EntidadId,Anio,Quincena,Periodo,Organica0,Organica1,Organica2,Organica3,NominaCargaId
         FROM liquidacion.QnaSnapshot WITH (NOLOCK) WHERE LiquidacionSnapshotId=@Id`);
       let header = headerResult.recordset[0];
       if (!header) qnaFail('Snapshot no encontrado', 'QNA_SNAPSHOT_NO_ENCONTRADO', 404);
       const scope = this.applicationScope(header);
       this.assertExactApplicationScope(scope, requestedScope);
       await acquireQnaScopeLock(transaction, scope);
-      header=(await new sql.Request(transaction).input('Id',sql.BigInt,id).query(`SELECT EntidadId,Anio,Quincena,Periodo,Organica0,Organica1,Organica2,Organica3
+      header=(await new sql.Request(transaction).input('Id',sql.BigInt,id).query(`SELECT EntidadId,Anio,Quincena,Periodo,Organica0,Organica1,Organica2,Organica3,NominaCargaId
         FROM liquidacion.QnaSnapshot WITH(UPDLOCK,HOLDLOCK) WHERE LiquidacionSnapshotId=@Id`)).recordset[0];
       if(!header)qnaFail('Snapshot no encontrado','QNA_SNAPSHOT_NO_ENCONTRADO',404);this.assertExactApplicationScope(this.applicationScope(header),requestedScope);
 
@@ -1345,6 +1370,7 @@ export class LiquidacionQnaRepository implements ILiquidacionQnaRepository {
         action,
         scope,
         periodo: String(header.Periodo),
+        nominaCargaId: header.NominaCargaId == null ? null : String(header.NominaCargaId),
         idempotente: action !== 'EJECUTAR_FIREBIRD',
         intentoUuid:String(attempt.IntentoUuid),afectacionId:Number(attempt.AfectacionId),claimToken,
       };
@@ -1518,7 +1544,8 @@ export class LiquidacionQnaRepository implements ILiquidacionQnaRepository {
   private async requireExactBitacora(transaction:Transaction,scope:QnaScope,afectacionId:number|null,mode:'INICIO'|'RECUPERACION'|'TERMINADO'):Promise<Record<string,any>>{
     const result=await this.scope(new sql.Request(transaction),scope).input('AfectacionId',sql.BigInt,afectacionId).input('EntidadTexto',sql.NVarChar(50),String(scope.entidadId)).input('Mode',sql.VarChar(20),mode).query(`
       SELECT AfectacionId,Accion,Resultado,AplicacionMovimientosFinalizada FROM afec.BitacoraAfectacionOrg WITH(UPDLOCK,HOLDLOCK)
-      WHERE Entidad='AFILIADOS' AND EntidadId=@EntidadTexto AND Anio=@Anio AND Quincena=@Quincena AND Org0=@Organica0 AND Org1=@Organica1 AND Org2=@Organica2 AND Org3=@Organica3
+       WHERE Entidad='AFILIADOS' AND COALESCE(NULLIF(LTRIM(RTRIM(EntidadId)),''),'1')=@EntidadTexto
+         AND Anio=@Anio AND Quincena=@Quincena AND Org0=@Organica0 AND Org1=@Organica1 AND Org2=@Organica2 AND Org3=@Organica3
         AND (@AfectacionId IS NULL OR AfectacionId=@AfectacionId)
         AND ((@Mode='INICIO' AND AplicacionMovimientosFinalizada=1 AND Accion='APLICAR' AND Resultado='OK')
           OR (@Mode='RECUPERACION' AND AplicacionMovimientosFinalizada=1 AND ((Accion='APLICAR' AND Resultado IN('OK','PENDIENTE')) OR (Accion='TERMINADO' AND Resultado='OK')))
@@ -1618,7 +1645,7 @@ export class LiquidacionQnaRepository implements ILiquidacionQnaRepository {
       entidadId: Number(header.EntidadId), anio: Number(header.Anio), quincena: Number(header.Quincena),
       organica0: String(header.Organica0), organica1: String(header.Organica1), organica2: String(header.Organica2), organica3: String(header.Organica3),
       ambiente: header.Ambiente, snapshotCalculoV2Id: String(header.SnapshotCalculoV2Id),
-      nominaCargaId: String(header.NominaCargaId), formulaCalculoVersionId: String(header.FormulaCalculoVersionId),
+      nominaCargaId: header.NominaCargaId == null ? null : String(header.NominaCargaId), formulaCalculoVersionId: String(header.FormulaCalculoVersionId),
       fuentes: sources, totales: totals, detalles: details, usuarioId: header.UsuarioId === null ? null : String(header.UsuarioId),
       versionEsquema: 5, detallesEmpleado: employeeDetails
     };
@@ -1804,10 +1831,13 @@ export class LiquidacionQnaRepository implements ILiquidacionQnaRepository {
   }
 
   private async projectV5Legacy(transaction: Transaction, snapshotId: string, version: number, usuarioId: string): Promise<{
-    status: 'COMPLETE' | 'WARNING' | 'ERROR' | undefined;
+    status: 'COMPLETE' | 'WARNING' | 'ERROR' | 'DISABLED' | undefined;
     details: string[];
   }> {
     if (version < 5) return { status: undefined, details: [] };
+    if (!env.qna.legacyDualWriteEnabled) {
+      return { status: 'DISABLED', details: ['QNA_LEGACY_DUAL_WRITE_DISABLED'] };
+    }
     const result = await new sql.Request(transaction)
       .input('LiquidacionSnapshotId', sql.BigInt, snapshotId)
       .input('UsuarioId', sql.NVarChar(100), usuarioId)
@@ -1945,7 +1975,7 @@ export function appliedStructuralConflictSql(alias:string):string{return `(EXIST
     OR f.Estado NOT IN('COMPLETE','NOT_APPLICABLE')))
   OR (SELECT COUNT(*) FROM liquidacion.QnaSnapshotTotal t WHERE t.LiquidacionSnapshotId=${alias}.LiquidacionSnapshotId)<>1
   OR (${alias}.VersionEsquema=5 AND (EXISTS(SELECT 1 FROM liquidacion.QnaSnapshot s WHERE s.LiquidacionSnapshotId=${alias}.LiquidacionSnapshotId AND
-      (s.SnapshotCalculoV2Id IS NULL OR s.NominaCargaId IS NULL OR s.FormulaCalculoVersionId IS NULL OR s.FuentesCompletas<>10 OR s.Estado<>'COMPLETO'))
+      (s.SnapshotCalculoV2Id IS NULL OR s.FormulaCalculoVersionId IS NULL OR s.FuentesCompletas<>10 OR s.Estado<>'COMPLETO'))
     OR EXISTS(SELECT 1 FROM liquidacion.QnaSnapshot s LEFT JOIN aportaciones.SnapshotCalculoV2 v ON v.SnapshotId=s.SnapshotCalculoV2Id
       WHERE s.LiquidacionSnapshotId=${alias}.LiquidacionSnapshotId AND (v.SnapshotId IS NULL OR v.EntidadId<>s.EntidadId OR v.Anio<>s.Anio OR v.Quincena<>s.Quincena OR v.Organica0<>s.Organica0 OR v.Organica1<>s.Organica1 OR v.Organica2<>s.Organica2 OR v.Organica3<>s.Organica3))
     OR EXISTS(SELECT 1 FROM liquidacion.QnaSnapshotFuente f WHERE f.LiquidacionSnapshotId=${alias}.LiquidacionSnapshotId AND f.Estado='COMPLETE' AND

@@ -27,7 +27,7 @@ export interface CreateAndPromoteQnaCandidateResult {
   idempotente: boolean;
   promovido: boolean;
   promoted: true;
-  legacyProjectionStatus?: 'COMPLETE' | 'WARNING' | 'ERROR';
+  legacyProjectionStatus?: 'COMPLETE' | 'WARNING' | 'ERROR' | 'DISABLED';
   legacyProjectionDetails?: string[];
 }
 

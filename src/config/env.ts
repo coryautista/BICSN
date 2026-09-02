@@ -1,4 +1,5 @@
 import 'dotenv/config';
+import { resolveSqlDatabaseEnvironment } from './databaseEnvironments.js';
 
 export function parseQnaHipLegacyPeriods(value: string | undefined): string[] | null {
   if (value === undefined) return null;
@@ -12,6 +13,33 @@ export function parseQnaHipLegacyPeriods(value: string | undefined): string[] | 
   return [...new Set(periods)];
 }
 
+export function parseQnaLegacyDualWriteEnabled(value: string | undefined): boolean {
+  if (value === undefined) return true;
+  const normalized = value.trim().toLowerCase();
+  if (normalized === 'true') return true;
+  if (normalized === 'false') return false;
+  throw new Error('QNA_LEGACY_DUAL_WRITE_ENABLED_INVALIDO');
+}
+
+export function assertQnaLegacyDualWriteConfiguration(
+  enabled: boolean,
+  sqlDatabase: string,
+  disableConfirmation: string | undefined
+): void {
+  if (enabled || resolveSqlDatabaseEnvironment(sqlDatabase) === 'DESARROLLO') return;
+  if (disableConfirmation?.trim() !== sqlDatabase) {
+    throw new Error(`QNA_LEGACY_DUAL_WRITE_DISABLE_CONFIRMATION_REQUIRED:${sqlDatabase}`);
+  }
+}
+
+const sqlDatabase = process.env.SQLSERVER_DB!;
+const legacyDualWriteEnabled = parseQnaLegacyDualWriteEnabled(process.env.QNA_LEGACY_DUAL_WRITE_ENABLED);
+assertQnaLegacyDualWriteConfiguration(
+  legacyDualWriteEnabled,
+  sqlDatabase,
+  process.env.QNA_LEGACY_DUAL_WRITE_DISABLE_CONFIRMATION
+);
+
 export const env = {
   host: process.env.HOST ?? '0.0.0.0',
   port: Number(process.env.PORT ?? 4000),
@@ -23,13 +51,14 @@ export const env = {
     snapshotCalculoV2OfficialReadEnabled: process.env.SNAPSHOT_CALCULO_V2_OFFICIAL_READ_ENABLED === 'true'
   },
   qna: {
-    hipLegacyPeriods: parseQnaHipLegacyPeriods(process.env.QNA_HIP_LEGACY_PERIODS)
+    hipLegacyPeriods: parseQnaHipLegacyPeriods(process.env.QNA_HIP_LEGACY_PERIODS),
+    legacyDualWriteEnabled
   },
   sql: {
     user: process.env.SQLSERVER_USER!,
     password: process.env.SQLSERVER_PASSWORD!,
     server: process.env.SQLSERVER_SERVER!,
-    database: process.env.SQLSERVER_DB!,
+    database: sqlDatabase,
     port: Number(process.env.SQLSERVER_PORT ?? 1433),
     options: {
       encrypt: process.env.SQLSERVER_ENCRYPT === 'true',

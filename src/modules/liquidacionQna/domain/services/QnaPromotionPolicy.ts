@@ -1,7 +1,7 @@
 import { qnaFail } from '../errors.js';
 
 export interface QnaPromotionValidation {
-  cargaVigente: boolean;
+  fuenteNominaVigente: boolean;
   mismoAmbito: boolean;
   mismosEnlaces: boolean;
   snapshotV2Valido: boolean;
@@ -11,9 +11,9 @@ export interface QnaPromotionValidation {
 }
 
 export function validateQnaPromotion(validation: QnaPromotionValidation): void {
-  if (!validation.cargaVigente) {
+  if (!validation.fuenteNominaVigente) {
     qnaFail(
-      'La carga nominal usada por el snapshot ya no es la carga TXT aplicada vigente.',
+      'La fuente nominal del snapshot ya no coincide con el TXT vigente o con su ausencia confirmada.',
       'QNA_NOMINA_CARGA_DESACTUALIZADA'
     );
   }

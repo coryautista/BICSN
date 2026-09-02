@@ -59,7 +59,7 @@ reordered.totales.totalGeneralA2 = '220.01';
 assert.notEqual(calculateQnaHash(first), calculateQnaHash(reordered));
 
 const validPromotion: QnaPromotionValidation = {
-  cargaVigente: true,
+  fuenteNominaVigente: true,
   mismoAmbito: true,
   mismosEnlaces: true,
   snapshotV2Valido: true,
@@ -69,7 +69,7 @@ const validPromotion: QnaPromotionValidation = {
 };
 assert.doesNotThrow(() => validateQnaPromotion(validPromotion));
 assert.throws(
-  () => validateQnaPromotion({ ...validPromotion, cargaVigente: false }),
+  () => validateQnaPromotion({ ...validPromotion, fuenteNominaVigente: false }),
   (error: unknown) => error instanceof LiquidacionQnaError && error.code === 'QNA_NOMINA_CARGA_DESACTUALIZADA'
 );
 for (const key of ['mismoAmbito', 'mismosEnlaces', 'snapshotV2Valido', 'conteosValidos', 'fuentesValidas', 'totalesValidos'] as const) {

@@ -40,7 +40,7 @@ export type QnaAppliedOfficialMetadata = QnaAppliedMetadataBase & {
   ambiente: QnaEnvironment;
   revision: number;
   snapshotCalculoV2Id: string;
-  nominaCargaId: string;
+  nominaCargaId: string | null;
   formulaCalculoVersionId: string;
   precisionPolicy: string;
   hashContenido: string;

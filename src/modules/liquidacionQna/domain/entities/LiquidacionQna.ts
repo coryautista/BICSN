@@ -198,6 +198,6 @@ export interface PromoteQnaResult {
   qnaSnapshotSeleccionEventoId: string;
   tipoEvento: 'SELECCIONADO' | 'REEMPLAZADO';
   idempotente: boolean;
-  legacyProjectionStatus?: 'COMPLETE' | 'WARNING' | 'ERROR';
+  legacyProjectionStatus?: 'COMPLETE' | 'WARNING' | 'ERROR' | 'DISABLED';
   legacyProjectionDetails?: string[];
 }
