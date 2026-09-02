@@ -11,6 +11,7 @@ export interface NominaLayout20FirebirdScope {
 export interface NominaLayout20FirebirdSyncInput {
   scope: NominaLayout20FirebirdScope;
   registros: NominaAplicacionQnalRegistroParsed[];
+  fechaResumen?: Date;
 }
 
 export interface NominaLayout20FirebirdSyncEvidence {

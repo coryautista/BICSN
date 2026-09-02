@@ -45,6 +45,7 @@ async function main(): Promise<void> {
       nombreAfiliado: String(row.NombreAfiliado ?? 'PRUEBA'), aportacionAfiliadoFondoAhorro: 1,
       aportacionEntidadFondoAhorro: 2, aportacionAfiliadoEBI: 3, aportacionEntidadEBI: 4,
       baseCotizacionSueldo: 5, baseCotizacionQuinquenios: 6, sueldoMensual: 7,
+      ayudasMensuales: null, quinqueniosMensual: 14,
       descuentoPrestamoCortoPlazo: 8, descuentoPrestamoHipotecario: 9, fechaMovimiento: null,
       descuentoPrestamoMedianoPlazo: 10, descuentosOtros: 11, cair: 12, cairVoluntario: 13,
       fechaRegistro: new Date(), diasLaborados: 15, layoutVersion: '20', lineaOriginal: 'PRUEBA_ROLLBACK',

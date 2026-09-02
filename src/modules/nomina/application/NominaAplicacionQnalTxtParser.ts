@@ -54,7 +54,7 @@ function mapDetailLine(
   const sueldoMensual = money(11, 'SueldoMensual');
   const baseCotizacionSueldo = money(9, 'BaseCotizacionSueldo');
 
-  for (const index of [15, 17, 18, 19]) {
+  for (const index of [12, 15, 17, 18, 19]) {
     validateUncertifiedMoney(fields[index], numeroLinea, index + 1, errores);
   }
 
@@ -67,13 +67,15 @@ function mapDetailLine(
     nombreAfiliado: clean(fields[4]),
     aportacionAfiliadoFondoAhorro: money(5, 'AportacionAfiliadoFondoAhorro'),
     aportacionEntidadFondoAhorro: money(6, 'AportacionEntidadFondoAhorro'),
-    aportacionAfiliadoEBI: money(7, 'AportacionAfiliadoEBI'),
-    aportacionEntidadEBI: money(8, 'AportacionEntidadEBI'),
+    aportacionAfiliadoEBI: null,
+    aportacionEntidadEBI: null,
     baseCotizacionSueldo,
     baseCotizacionQuinquenios: money(10, 'BaseCotizacionQuinquenios'),
     sueldoMensual,
-    descuentoPrestamoCortoPlazo: money(12, 'DescuentoPrestamoCortoPlazo'),
-    descuentoPrestamoHipotecario: money(13, 'DescuentoPrestamoHipotecario'),
+    ayudasMensuales: null,
+    quinqueniosMensual: money(13, 'QuinqueniosMensual'),
+    descuentoPrestamoCortoPlazo: money(7, 'DescuentoPrestamoCortoPlazo'),
+    descuentoPrestamoHipotecario: money(8, 'DescuentoPrestamoHipotecario'),
     fechaMovimiento: parseDate(fields[14], numeroLinea, 'FechaMovimiento', errores),
     descuentoPrestamoMedianoPlazo: null,
     descuentosOtros: null,

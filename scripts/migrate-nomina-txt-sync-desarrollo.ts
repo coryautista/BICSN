@@ -15,6 +15,8 @@ const pool = await connectDatabase();
 const files = [
   '../database/migrations/20260827_20_create_nomina_txt_sync_ledger_staging.sql',
   '../database/migrations/20260827_21_verify_nomina_txt_sync_ledger_staging.sql',
+  '../database/migrations/20260901_22_add_nomina_staging_layout20_semantics.sql',
+  '../database/migrations/20260901_23_verify_nomina_staging_layout20_semantics.sql',
 ];
 
 try {

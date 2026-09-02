@@ -16,9 +16,11 @@ let active = false;
 try {
   const source = await readFile(new URL('../database/migrations/20260827_20_create_nomina_txt_sync_ledger_staging.sql', import.meta.url), 'utf8');
   const verify = await readFile(new URL('../database/migrations/20260827_21_verify_nomina_txt_sync_ledger_staging.sql', import.meta.url), 'utf8');
+  const semantics = await readFile(new URL('../database/migrations/20260901_22_add_nomina_staging_layout20_semantics.sql', import.meta.url), 'utf8');
+  const verifySemantics = await readFile(new URL('../database/migrations/20260901_23_verify_nomina_staging_layout20_semantics.sql', import.meta.url), 'utf8');
   await transaction.begin(sql.ISOLATION_LEVEL.SERIALIZABLE);
   active = true;
-  for (const migration of [source, source, verify]) {
+  for (const migration of [source, source, semantics, semantics, verify, verifySemantics]) {
     for (const batch of migration.split(/^\s*GO\s*$/gim).map((value) => value.trim()).filter(Boolean)) {
       await new sql.Request(transaction).batch(batch);
     }
@@ -33,8 +35,8 @@ try {
   const id = inserted.recordset[0].SincronizacionId;
   await new sql.Request(transaction).input('Id',sql.BigInt,id).query(`
     INSERT dbo.NominaAplicacionQnalStagingCarga(SincronizacionId,LineaEncabezado,Lote) VALUES(@Id,1,'SINTETICO');
-    INSERT dbo.NominaAplicacionQnalStagingDetalle(SincronizacionId,LineaNumero,LineaOriginal,Lote,TipoRegistro,ClavePersonal,RFC,NombreAfiliado,CAIR)
-      VALUES(@Id,2,'SINTETICO', 'SINTETICO','2','SYN000001','SYNX000101T01','PERSONA SINTETICA',50.25);`);
+    INSERT dbo.NominaAplicacionQnalStagingDetalle(SincronizacionId,LineaNumero,LineaOriginal,Lote,TipoRegistro,ClavePersonal,RFC,NombreAfiliado,AyudasMensuales,QuinqueniosMensual,CAIR)
+      VALUES(@Id,2,'SINTETICO', 'SINTETICO','2','SYN000001','SYNX000101T01','PERSONA SINTETICA',0,100.50,50.25);`);
   const counts = await new sql.Request(transaction).input('Id',sql.BigInt,id).query(`SELECT
     (SELECT COUNT(*) FROM dbo.NominaAplicacionQnalStagingCarga WHERE SincronizacionId=@Id) cargas,
     (SELECT COUNT(*) FROM dbo.NominaAplicacionQnalStagingDetalle WHERE SincronizacionId=@Id) detalles`);

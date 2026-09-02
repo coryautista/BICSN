@@ -25,6 +25,8 @@ export interface NominaAplicacionQnalRegistroParsed {
   baseCotizacionSueldo: number | null;
   baseCotizacionQuinquenios: number | null;
   sueldoMensual: number | null;
+  ayudasMensuales: number | null;
+  quinqueniosMensual: number | null;
   descuentoPrestamoCortoPlazo: number | null;
   descuentoPrestamoHipotecario: number | null;
   fechaMovimiento: Date | null;

@@ -159,10 +159,11 @@ export class NominaAplicacionQnalTxtRepository implements INominaAplicacionQnalT
           .input('RFC',sql.NVarChar(20),r.rfc).input('Nombre',sql.NVarChar(250),r.nombreAfiliado).input('AAF',sql.Decimal(12,2),r.aportacionAfiliadoFondoAhorro)
           .input('AEF',sql.Decimal(12,2),r.aportacionEntidadFondoAhorro).input('AAE',sql.Decimal(12,2),r.aportacionAfiliadoEBI).input('AEE',sql.Decimal(12,2),r.aportacionEntidadEBI)
           .input('BCS',sql.Decimal(12,2),r.baseCotizacionSueldo).input('BCQ',sql.Decimal(12,2),r.baseCotizacionQuinquenios).input('Sueldo',sql.Decimal(12,2),r.sueldoMensual)
+          .input('Ayudas',sql.Decimal(12,2),r.ayudasMensuales).input('QuinqMen',sql.Decimal(12,2),r.quinqueniosMensual)
           .input('DCP',sql.Decimal(12,2),r.descuentoPrestamoCortoPlazo).input('DHP',sql.Decimal(12,2),r.descuentoPrestamoHipotecario).input('Fecha',sql.Date,r.fechaMovimiento)
           .input('CAIR',sql.Decimal(12,2),r.cair).input('Dias',sql.Decimal(5,2),r.diasLaborados).query(`INSERT dbo.NominaAplicacionQnalStagingDetalle
-          (SincronizacionId,LineaNumero,LineaOriginal,Lote,TipoRegistro,ClavePersonal,RFC,NombreAfiliado,AportacionAfiliadoFondoAhorro,AportacionEntidadFondoAhorro,AportacionAfiliadoEBI,AportacionEntidadEBI,BaseCotizacionSueldo,BaseCotizacionQuinquenios,SueldoMensual,DescuentoPrestamoCortoPlazo,DescuentoPrestamoHipotecario,FechaMovimiento,CAIR,DiasLaborados)
-          VALUES (@Id,@LineaNumero,@LineaOriginal,@Lote,@TipoRegistro,@ClavePersonal,@RFC,@Nombre,@AAF,@AEF,@AAE,@AEE,@BCS,@BCQ,@Sueldo,@DCP,@DHP,@Fecha,@CAIR,@Dias)`);
+          (SincronizacionId,LineaNumero,LineaOriginal,Lote,TipoRegistro,ClavePersonal,RFC,NombreAfiliado,AportacionAfiliadoFondoAhorro,AportacionEntidadFondoAhorro,AportacionAfiliadoEBI,AportacionEntidadEBI,BaseCotizacionSueldo,BaseCotizacionQuinquenios,SueldoMensual,AyudasMensuales,QuinqueniosMensual,DescuentoPrestamoCortoPlazo,DescuentoPrestamoHipotecario,FechaMovimiento,CAIR,DiasLaborados)
+          VALUES (@Id,@LineaNumero,@LineaOriginal,@Lote,@TipoRegistro,@ClavePersonal,@RFC,@Nombre,@AAF,@AEF,@AAE,@AEE,@BCS,@BCQ,@Sueldo,@Ayudas,@QuinqMen,@DCP,@DHP,@Fecha,@CAIR,@Dias)`);
       }
       await transaction.commit();
       return { sincronizacionId, intentoUuid };
@@ -205,8 +206,8 @@ export class NominaAplicacionQnalTxtRepository implements INominaAplicacionQnalT
       await this.applyScopeInputs(new sql.Request(transaction),scope).input('CargaId',sql.BigInt,cargaId).query(`INSERT dbo.NominaAplicacionQnalDetalleHistorial (DetalleIdOriginal,CargaId,CargaReemplazoId,EntidadId,Anio,Quincena,Organica0,Organica1,Organica2,Organica3,LineaNumero,LineaOriginal,Lote,TipoRegistro,OrganicaI,OrganicaII,OrganicaIII,RFC,ClavePersonal,NombreAfiliado,Movimiento,FechaMovimiento,SueldoMensual,AyudasMensuales,QuinqueniosMensual,BaseCotizacionSueldo,BaseCotizacionQuinquenios,DiasLaborados,AportacionAfiliadoFondoAhorro,AportacionEntidadFondoAhorro,AportacionAfiliadoEBI,AportacionEntidadEBI,DescuentoPrestamoCortoPlazo,DescuentoPrestamoHipotecario,DescuentoPrestamoMedianoPlazo,DescuentosOtros,Calle,Colonia,Ciudad,Estado,Municipio,CodigoPostal,Telefono,FechaNacimiento,Sexo,EstadoCivil,CAIR,CAIRVoluntario,FechaRegistroOriginal)
         SELECT d.Id,d.CargaId,@CargaId,d.EntidadId,d.Anio,d.Quincena,d.Organica0,d.Organica1,d.Organica2,d.Organica3,d.LineaNumero,d.LineaOriginal,d.Lote,d.TipoRegistro,d.OrganicaI,d.OrganicaII,d.OrganicaIII,d.RFC,d.ClavePersonal,d.NombreAfiliado,d.Movimiento,d.FechaMovimiento,d.SueldoMensual,d.AyudasMensuales,d.QuinqueniosMensual,d.BaseCotizacionSueldo,d.BaseCotizacionQuinquenios,d.DiasLaborados,d.AportacionAfiliadoFondoAhorro,d.AportacionEntidadFondoAhorro,d.AportacionAfiliadoEBI,d.AportacionEntidadEBI,d.DescuentoPrestamoCortoPlazo,d.DescuentoPrestamoHipotecario,d.DescuentoPrestamoMedianoPlazo,d.DescuentosOtros,d.Calle,d.Colonia,d.Ciudad,d.Estado,d.Municipio,d.CodigoPostal,d.Telefono,d.FechaNacimiento,d.Sexo,d.EstadoCivil,d.CAIR,d.CAIRVoluntario,d.FechaRegistro FROM dbo.NominaAplicacionQnalDetalle d JOIN dbo.NominaAplicacionQnalCarga c ON c.Id=d.CargaId WHERE d.EntidadId=@EntidadId AND d.Anio=@Anio AND d.Quincena=@Quincena AND d.Organica0=@Organica0 AND d.Organica1=@Organica1 AND d.Organica2=@Organica2 AND d.Organica3=@Organica3 AND c.TipoCarga IN ('TXT','MOVIMIENTO');
         DELETE d FROM dbo.NominaAplicacionQnalDetalle d JOIN dbo.NominaAplicacionQnalCarga c ON c.Id=d.CargaId WHERE d.EntidadId=@EntidadId AND d.Anio=@Anio AND d.Quincena=@Quincena AND d.Organica0=@Organica0 AND d.Organica1=@Organica1 AND d.Organica2=@Organica2 AND d.Organica3=@Organica3 AND c.TipoCarga IN ('TXT','MOVIMIENTO')`);
-      const insertedDetails = await this.applyScopeInputs(new sql.Request(transaction),scope).input('CargaId',sql.BigInt,cargaId).input('Id',sql.BigInt,sincronizacionId).query(`INSERT dbo.NominaAplicacionQnalDetalle (CargaId,EntidadId,Anio,Quincena,Organica0,Organica1,Organica2,Organica3,LineaNumero,LineaOriginal,Lote,TipoRegistro,ClavePersonal,RFC,NombreAfiliado,AportacionAfiliadoFondoAhorro,AportacionEntidadFondoAhorro,AportacionAfiliadoEBI,AportacionEntidadEBI,BaseCotizacionSueldo,BaseCotizacionQuinquenios,SueldoMensual,DescuentoPrestamoCortoPlazo,DescuentoPrestamoHipotecario,FechaMovimiento,CAIR,DiasLaborados)
-        SELECT @CargaId,@EntidadId,@Anio,@Quincena,@Organica0,@Organica1,@Organica2,@Organica3,LineaNumero,LineaOriginal,Lote,TipoRegistro,ClavePersonal,RFC,NombreAfiliado,AportacionAfiliadoFondoAhorro,AportacionEntidadFondoAhorro,AportacionAfiliadoEBI,AportacionEntidadEBI,BaseCotizacionSueldo,BaseCotizacionQuinquenios,SueldoMensual,DescuentoPrestamoCortoPlazo,DescuentoPrestamoHipotecario,FechaMovimiento,CAIR,DiasLaborados FROM dbo.NominaAplicacionQnalStagingDetalle WHERE SincronizacionId=@Id`);
+      const insertedDetails = await this.applyScopeInputs(new sql.Request(transaction),scope).input('CargaId',sql.BigInt,cargaId).input('Id',sql.BigInt,sincronizacionId).query(`INSERT dbo.NominaAplicacionQnalDetalle (CargaId,EntidadId,Anio,Quincena,Organica0,Organica1,Organica2,Organica3,LineaNumero,LineaOriginal,Lote,TipoRegistro,ClavePersonal,RFC,NombreAfiliado,AportacionAfiliadoFondoAhorro,AportacionEntidadFondoAhorro,AportacionAfiliadoEBI,AportacionEntidadEBI,BaseCotizacionSueldo,BaseCotizacionQuinquenios,SueldoMensual,AyudasMensuales,QuinqueniosMensual,DescuentoPrestamoCortoPlazo,DescuentoPrestamoHipotecario,FechaMovimiento,CAIR,DiasLaborados)
+        SELECT @CargaId,@EntidadId,@Anio,@Quincena,@Organica0,@Organica1,@Organica2,@Organica3,LineaNumero,LineaOriginal,Lote,TipoRegistro,ClavePersonal,RFC,NombreAfiliado,AportacionAfiliadoFondoAhorro,AportacionEntidadFondoAhorro,AportacionAfiliadoEBI,AportacionEntidadEBI,BaseCotizacionSueldo,BaseCotizacionQuinquenios,SueldoMensual,AyudasMensuales,QuinqueniosMensual,DescuentoPrestamoCortoPlazo,DescuentoPrestamoHipotecario,FechaMovimiento,CAIR,DiasLaborados FROM dbo.NominaAplicacionQnalStagingDetalle WHERE SincronizacionId=@Id`);
       if (insertedDetails.rowsAffected[0] !== Number(row.TotalDetalles)) throw new NominaTxtSyncError('NOMINA_TXT_STAGING_INCOMPLETO', 500);
       const finalized = await new sql.Request(transaction).input('Id',sql.BigInt,sincronizacionId).input('Uuid',sql.UniqueIdentifier,intentoUuid).input('CargaId',sql.BigInt,cargaId).query(`UPDATE dbo.NominaAplicacionQnalSincronizacion SET Estado='TERMINADO',Activo=0,CargaId=@CargaId,FechaActualizacion=SYSUTCDATETIME() WHERE SincronizacionId=@Id AND IntentoUuid=@Uuid AND Estado='FIREBIRD_CONFIRMADO' AND ResultadoFirebird='COMMIT_CONFIRMADO'`);
       if (finalized.rowsAffected[0] !== 1) throw new NominaTxtSyncError('NOMINA_TXT_FINALIZACION_RECHAZADA', 409);
@@ -430,6 +431,8 @@ export class NominaAplicacionQnalTxtRepository implements INominaAplicacionQnalT
       .input('BaseCotizacionSueldo', sql.Decimal(18, 2), registro.baseCotizacionSueldo)
       .input('BaseCotizacionQuinquenios', sql.Decimal(18, 2), registro.baseCotizacionQuinquenios)
       .input('SueldoMensual', sql.Decimal(18, 2), registro.sueldoMensual)
+      .input('AyudasMensuales', sql.Decimal(18, 2), registro.ayudasMensuales)
+      .input('QuinqueniosMensual', sql.Decimal(18, 2), registro.quinqueniosMensual)
       .input('DescuentoPrestamoCortoPlazo', sql.Decimal(18, 2), registro.descuentoPrestamoCortoPlazo)
       .input('DescuentoPrestamoHipotecario', sql.Decimal(18, 2), registro.descuentoPrestamoHipotecario)
       .input('FechaMovimiento', sql.Date, registro.fechaMovimiento)
@@ -477,7 +480,7 @@ export class NominaAplicacionQnalTxtRepository implements INominaAplicacionQnalT
               AportacionEntidadFondoAhorro=@AportacionEntidadFondoAhorro,
               AportacionAfiliadoEBI=@AportacionAfiliadoEBI, AportacionEntidadEBI=@AportacionEntidadEBI,
               BaseCotizacionSueldo=@BaseCotizacionSueldo, BaseCotizacionQuinquenios=@BaseCotizacionQuinquenios,
-              SueldoMensual=@SueldoMensual, AyudasMensuales=NULL, QuinqueniosMensual=NULL,
+               SueldoMensual=@SueldoMensual, AyudasMensuales=@AyudasMensuales, QuinqueniosMensual=@QuinqueniosMensual,
               DescuentoPrestamoCortoPlazo=@DescuentoPrestamoCortoPlazo,
               DescuentoPrestamoHipotecario=@DescuentoPrestamoHipotecario,
               FechaMovimiento=@FechaMovimiento, DescuentoPrestamoMedianoPlazo=@DescuentoPrestamoMedianoPlazo,
@@ -492,12 +495,12 @@ export class NominaAplicacionQnalTxtRepository implements INominaAplicacionQnalT
           INSERT INTO dbo.NominaAplicacionQnalDetalle
             (CargaId, EntidadId, Anio, Quincena, Organica0, Organica1, Organica2, Organica3, LineaNumero, LineaOriginal, Lote, TipoRegistro, ClavePersonal, RFC, NombreAfiliado,
              AportacionAfiliadoFondoAhorro, AportacionEntidadFondoAhorro, AportacionAfiliadoEBI, AportacionEntidadEBI, BaseCotizacionSueldo, BaseCotizacionQuinquenios,
-             SueldoMensual, DescuentoPrestamoCortoPlazo, DescuentoPrestamoHipotecario, FechaMovimiento, DescuentoPrestamoMedianoPlazo, DescuentosOtros, CAIR,
+              SueldoMensual, AyudasMensuales, QuinqueniosMensual, DescuentoPrestamoCortoPlazo, DescuentoPrestamoHipotecario, FechaMovimiento, DescuentoPrestamoMedianoPlazo, DescuentosOtros, CAIR,
              CAIRVoluntario, FechaRegistro, DiasLaborados)
           VALUES
             (@CargaId, @EntidadId, @Anio, @Quincena, @Organica0, @Organica1, @Organica2, @Organica3, @LineaNumero, @LineaOriginal, @Lote, @TipoRegistro, @ClavePersonal, @RFC, @NombreAfiliado,
              @AportacionAfiliadoFondoAhorro, @AportacionEntidadFondoAhorro, @AportacionAfiliadoEBI, @AportacionEntidadEBI, @BaseCotizacionSueldo, @BaseCotizacionQuinquenios,
-             @SueldoMensual, @DescuentoPrestamoCortoPlazo, @DescuentoPrestamoHipotecario, @FechaMovimiento, @DescuentoPrestamoMedianoPlazo, @DescuentosOtros, @CAIR,
+              @SueldoMensual, @AyudasMensuales, @QuinqueniosMensual, @DescuentoPrestamoCortoPlazo, @DescuentoPrestamoHipotecario, @FechaMovimiento, @DescuentoPrestamoMedianoPlazo, @DescuentosOtros, @CAIR,
              @CAIRVoluntario, @FechaRegistro, @DiasLaborados);
         END
       `);

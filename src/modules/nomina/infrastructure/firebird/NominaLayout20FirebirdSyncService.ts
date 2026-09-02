@@ -36,6 +36,9 @@ const SUMMARY_COLUMNS = [
   'ORG0','ORG1','ORG2','ORG3','PERIODO','TIPO','FA_SA','FO_AFIL','FO_SDO','FO_SDOB','FO_OP','FO_OPB','FO_Q','FO_QB','FO_SAR','FO_FRA','FO_FRE','FO_FHE','FO_FVE','FO_FAA','FO_FAE','FO_FAI','FM_AFIL','FM_SDO','FM_SAR','FM_FRA','FM_FRE','FM_FHE','FM_FVE','FM_FAA','FM_FAE','FR_AFIL','FR_SDO','FR_OP','FR_Q','FR_SAR','FR_FRA','FR_FRE','FR_FHE','FR_FVE','FR_FAA','FR_FAE','FA_PE','FA_FV','FA_SAR','FV_SAR','EBIA','EBIE','EBI_N','PCP_SA','PCP_N_COBRO','PCP_COBRO','PCP_COBRO_K','PCP_COBRO_I','PCP_COBRO_M','PCP_N_NUEVOS','PCP_NUEVOS','PCP_N_ALTAS','PCP_ALTAS','PCP_N_BAJAS','PCP_BAJAS','PCP_N_CANCELADO','PCP_CANCELADO','PCP_N_DIRECTOS','PCP_DIRECTOS','PPV_N_HIP','PPV_HIP_K','PPV_HIP_M','PPV_HIP_S','PPV_HIP_I','PPV_N_PC','PPV_PC_K','PPV_PC_M','PPV_PC_S','PPV_PC_I','PMP_N_EV','PMP_EV','PMP_EV_K','PMP_EV_M','PMP_EV_S','PMP_EV_I','PMP_N_GM','PMP_GM','PMP_GM_K','PMP_GM_M','PMP_GM_S','PMP_GM_I','PMP_N_AV','PMP_AV','PMP_AV_K','PMP_AV_M','PMP_AV_S','PMP_AV_I','PMP_N_ET','PMP_ET','PMP_ET_K','PMP_ET_M','PMP_ET_S','PMP_ET_I','PMP_N_CO','PMP_CO','PMP_CO_K','PMP_CO_M','PMP_CO_S','PMP_CO_I','FMOV_ALT'
 ] as const;
 
+const FECHANAC_DEFAULT = new Date(2050, 0, 1);
+const PAD2 = (value: string): string => value.trim().padStart(2, '0');
+
 export class NominaLayout20FirebirdSyncService {
   constructor(private readonly runTransaction: TransactionRunner = executeInTransactionWithOutcome) {}
 
@@ -49,12 +52,31 @@ export class NominaLayout20FirebirdSyncService {
     return this.runTransaction((tx) => this.sincronizarEnTransaccion(tx, input, lote));
   }
 
+  async corregirPendientesEnSitio(input: NominaLayout20FirebirdSyncInput): Promise<FirebirdTransactionExecution<NominaLayout20FirebirdSyncEvidence>> {
+    if (['01', '02'].includes(input.scope.organica0)) {
+      throw new NominaLayout20FirebirdSyncError('NOMINA_FIREBIRD_ORGANICA_NO_CERTIFICADA', 'ORG0 01/02 no está soportada: ORGANICA no está certificada.');
+    }
+    if (input.registros.length === 0) throw new NominaLayout20FirebirdSyncError('NOMINA_FIREBIRD_SIN_DETALLES');
+    const lote = parseLote(input.registros);
+    return this.runTransaction((tx) => this.corregirPendientesEnTransaccion(tx, input, lote));
+  }
+
   private async sincronizarEnTransaccion(tx: FirebirdTx, input: NominaLayout20FirebirdSyncInput, lote: Lote): Promise<NominaLayout20FirebirdSyncEvidence> {
     const scope = [lote.periodo, input.scope.organica0, input.scope.organica1];
+    const applied = await tx.query("SELECT COUNT(*) AS TOTAL FROM AP_D_ORIGEN_TODOS WHERE QNA = ? AND ORG0 = ? AND ORG1 = ? AND STATUS = 'A'", scope);
+    if (number(applied[0], 'TOTAL') !== 0) {
+      throw new NominaLayout20FirebirdSyncError('NOMINA_FIREBIRD_SCOPE_APLICADO', 'La quincena ya fue aplicada (STATUS A); no se puede recargar el TXT.');
+    }
     const detailPrecheck = await tx.query('SELECT COUNT(*) AS TOTAL FROM AP_D_ORIGEN_TODOS WHERE QNA = ? AND ORG0 = ? AND ORG1 = ?', scope);
     const summaryPrecheck = await tx.query('SELECT COUNT(*) AS TOTAL FROM AP_D_ORIGEN_RESUMEN WHERE PERIODO = ? AND ORG0 = ? AND ORG1 = ?', scope);
     if (number(detailPrecheck[0], 'TOTAL') !== 0 || number(summaryPrecheck[0], 'TOTAL') !== 0) {
-      throw new NominaLayout20FirebirdSyncError('NOMINA_FIREBIRD_SCOPE_EXISTENTE');
+      try {
+        await tx.execute('DELETE FROM AP_D_ORIGEN_TODOS WHERE QNA = ? AND ORG0 = ? AND ORG1 = ?', scope);
+        await tx.execute('DELETE FROM AP_D_ORIGEN_RESUMEN WHERE PERIODO = ? AND ORG0 = ? AND ORG1 = ?', scope);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        throw new NominaLayout20FirebirdSyncError('NOMINA_FIREBIRD_RECARGA_FALLIDA', message);
+      }
     }
 
     for (const registro of input.registros) await insertDetail(tx, input, lote, registro);
@@ -63,14 +85,42 @@ export class NominaLayout20FirebirdSyncService {
 
     await tx.execute("UPDATE AP_D_ORIGEN_TODOS SET STATUS = 'P' WHERE QNA = ? AND ORG0 = ? AND ORG1 = ? AND STATUS = 'N'", scope);
     const totals = await aggregateSummary(tx, input, lote);
-    await insertSummary(tx, input, lote, totals);
+    const fechaResumen = summaryDate(input);
+    await insertSummary(tx, input, lote, totals, fechaResumen);
 
     const final = await statusCounts(tx, scope);
-    const summary = await tx.query(`SELECT ${SUMMARY_NUMERIC_COLUMNS.join(', ')} FROM AP_D_ORIGEN_RESUMEN WHERE PERIODO = ? AND ORG0 = ? AND ORG1 = ? AND TIPO = ?`, [...scope, 'AN']);
+    const summary = await tx.query(`SELECT ${SUMMARY_NUMERIC_COLUMNS.join(', ')}, FMOV_ALT FROM AP_D_ORIGEN_RESUMEN WHERE PERIODO = ? AND ORG0 = ? AND ORG1 = ? AND TIPO = ?`, [...scope, 'AN']);
     if (final.n !== 0 || final.p !== input.registros.length || summary.length !== 1) throw new NominaLayout20FirebirdSyncError('NOMINA_FIREBIRD_CONCILIACION_FALLIDA');
     for (const key of SUMMARY_NUMERIC_COLUMNS) {
       if (money(number(summary[0], key)) !== money(totals[key] ?? 0)) throw new NominaLayout20FirebirdSyncError('NOMINA_FIREBIRD_TOTALES_INCONSISTENTES', `El campo ${key} no concilia.`);
     }
+    assertSummaryDate(summary[0], fechaResumen);
+    return { periodo: lote.periodo, detallesEsperados: input.registros.length, detallesP: final.p, resumenes: 1, totales: totals };
+  }
+
+  private async corregirPendientesEnTransaccion(tx: FirebirdTx, input: NominaLayout20FirebirdSyncInput, lote: Lote): Promise<NominaLayout20FirebirdSyncEvidence> {
+    const scope = [lote.periodo, input.scope.organica0, input.scope.organica1];
+    const counts = await tx.query("SELECT COUNT(*) AS TOTAL, SUM(CASE WHEN STATUS='A' THEN 1 ELSE 0 END) AS TOTAL_A, SUM(CASE WHEN STATUS='P' THEN 1 ELSE 0 END) AS TOTAL_P FROM AP_D_ORIGEN_TODOS WHERE QNA=? AND ORG0=? AND ORG1=?", scope);
+    if (number(counts[0], 'TOTAL_A') !== 0) throw new NominaLayout20FirebirdSyncError('NOMINA_FIREBIRD_SCOPE_APLICADO');
+    if (number(counts[0], 'TOTAL') !== input.registros.length || number(counts[0], 'TOTAL_P') !== input.registros.length) {
+      throw new NominaLayout20FirebirdSyncError('NOMINA_FIREBIRD_REPARACION_SCOPE_INCONSISTENTE');
+    }
+    const summaries = await tx.query('SELECT COUNT(*) AS TOTAL FROM AP_D_ORIGEN_RESUMEN WHERE PERIODO=? AND ORG0=? AND ORG1=?', scope);
+    if (number(summaries[0], 'TOTAL') !== 1) throw new NominaLayout20FirebirdSyncError('NOMINA_FIREBIRD_REPARACION_RESUMEN_INCONSISTENTE');
+
+    for (const registro of input.registros) await updateDetail(tx, input, lote, registro);
+    const totals = await aggregateSummary(tx, input, lote);
+    const fechaResumen = summaryDate(input);
+    const summaryParams = SUMMARY_NUMERIC_COLUMNS.map((column) => totals[column] ?? 0);
+    await tx.execute(`UPDATE AP_D_ORIGEN_RESUMEN SET ${SUMMARY_NUMERIC_COLUMNS.map((column) => `${column}=?`).join(', ')}, FMOV_ALT=? WHERE PERIODO=? AND ORG0=? AND ORG1=? AND TIPO='AN'`, [...summaryParams, fechaResumen, ...scope]);
+
+    const final = await statusCounts(tx, scope);
+    const summary = await tx.query(`SELECT ${SUMMARY_NUMERIC_COLUMNS.join(', ')}, FMOV_ALT FROM AP_D_ORIGEN_RESUMEN WHERE PERIODO=? AND ORG0=? AND ORG1=? AND TIPO='AN'`, scope);
+    if (final.n !== 0 || final.p !== input.registros.length || summary.length !== 1) throw new NominaLayout20FirebirdSyncError('NOMINA_FIREBIRD_CONCILIACION_FALLIDA');
+    for (const key of SUMMARY_NUMERIC_COLUMNS) {
+      if (money(number(summary[0], key)) !== money(totals[key] ?? 0)) throw new NominaLayout20FirebirdSyncError('NOMINA_FIREBIRD_TOTALES_INCONSISTENTES', `El campo ${key} no concilia.`);
+    }
+    assertSummaryDate(summary[0], fechaResumen);
     return { periodo: lote.periodo, detallesEsperados: input.registros.length, detallesP: final.p, resumenes: 1, totales: totals };
   }
 }
@@ -86,19 +136,8 @@ function parseLote(registros: NominaAplicacionQnalRegistroParsed[]): Lote {
 }
 
 async function insertDetail(tx: FirebirdTx, input: NominaLayout20FirebirdSyncInput, lote: Lote, row: NominaAplicacionQnalRegistroParsed): Promise<void> {
-  const s = input.scope;
-  const personal = await identifyPersonal(tx, s, row);
-  const params = [
-    lote.anio, lote.quincena, row.tipoRegistro, '', row.rfc, row.clavePersonal, row.nombreAfiliado,
-    '', row.fechaMovimiento, row.sueldoMensual, 0, 0, row.baseCotizacionSueldo, 0,
-    row.aportacionAfiliadoFondoAhorro, row.aportacionEntidadFondoAhorro,
-    row.aportacionAfiliadoEBI, row.aportacionEntidadEBI,
-    row.descuentoPrestamoCortoPlazo, row.descuentoPrestamoHipotecario, 0, 0,
-    '', '', '', '', '', '', '', null, '', '', row.cair, row.cairVoluntario ?? 0,
-    personal.interno, personal.plazaOrigen, personal.organica0, personal.organica1,
-    personal.organica2, personal.organica3, personal.activo, lote.periodo, 'S', 0,
-    s.organica0, s.organica1, 0, row.descuentosOtros ?? 0, 0, row.baseCotizacionQuinquenios,
-  ];
+  const personal = await identifyPersonal(tx, input.scope, row);
+  const params = detailValues(input, lote, row, personal);
   if (params.length !== DETAIL_COLUMNS.length) {
     throw new NominaLayout20FirebirdSyncError('NOMINA_FIREBIRD_INSERT_DETALLE_INVALIDO', `Se esperaban ${DETAIL_COLUMNS.length} valores y se construyeron ${params.length}.`);
   }
@@ -111,6 +150,35 @@ async function insertDetail(tx: FirebirdTx, input: NominaLayout20FirebirdSyncInp
     const message = error instanceof Error ? error.message : String(error);
     throw new NominaLayout20FirebirdSyncError('NOMINA_FIREBIRD_INSERT_DETALLE_FALLIDO', `Línea ${row.numeroLinea}: ${message}`);
   }
+}
+
+async function updateDetail(tx: FirebirdTx, input: NominaLayout20FirebirdSyncInput, lote: Lote, row: NominaAplicacionQnalRegistroParsed): Promise<void> {
+  const personal = await identifyPersonal(tx, input.scope, row);
+  const params = detailValues(input, lote, row, personal);
+  try {
+    await tx.execute(`UPDATE AP_D_ORIGEN_TODOS SET ${DETAIL_COLUMNS.map((column) => `${column}=?`).join(', ')} WHERE QNA=? AND ORG0=? AND ORG1=? AND UPPER(TRIM(RFC))=? AND STATUS='P'`, [
+      ...params, lote.periodo, input.scope.organica0, input.scope.organica1, row.rfc.trim().toUpperCase(),
+    ]);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    throw new NominaLayout20FirebirdSyncError('NOMINA_FIREBIRD_UPDATE_DETALLE_FALLIDO', `Línea ${row.numeroLinea}: ${message}`);
+  }
+}
+
+function detailValues(input: NominaLayout20FirebirdSyncInput, lote: Lote, row: NominaAplicacionQnalRegistroParsed, personal: IdentifiedPersonal): unknown[] {
+  const s = input.scope;
+  return [
+    lote.anio, lote.quincena, row.tipoRegistro, '', row.rfc, row.clavePersonal, row.nombreAfiliado,
+    '', row.fechaMovimiento, row.sueldoMensual, row.ayudasMensuales ?? 0, row.quinqueniosMensual ?? 0,
+    row.baseCotizacionSueldo, row.baseCotizacionQuinquenios ?? 0,
+    row.aportacionEntidadFondoAhorro ?? 0, 0, 0, 0,
+    row.descuentoPrestamoCortoPlazo ?? 0, row.descuentoPrestamoHipotecario ?? 0, 0, 0,
+    '.', '.', '.', '.', '.', '.', '.', FECHANAC_DEFAULT, '.', '.',
+    row.cair ?? 0, row.cairVoluntario ?? 0,
+    personal.interno, personal.plazaOrigen, PAD2(personal.organica0), PAD2(personal.organica1),
+    PAD2(personal.organica2), PAD2(personal.organica3), personal.activo, lote.periodo, 'S', 0,
+    s.organica0, s.organica1, row.aportacionAfiliadoFondoAhorro ?? 0, row.descuentosOtros ?? 0, 0, 0,
+  ];
 }
 
 async function identifyPersonal(
@@ -186,8 +254,8 @@ async function aggregateSummary(tx: FirebirdTx, input: NominaLayout20FirebirdSyn
   return totals;
 }
 
-async function insertSummary(tx: FirebirdTx, input: NominaLayout20FirebirdSyncInput, lote: Lote, totals: Record<string, number>) {
-  const identity: Record<string, unknown> = { ORG0: input.scope.organica0, ORG1: input.scope.organica1, ORG2: input.scope.organica2, ORG3: input.scope.organica3, PERIODO: lote.periodo, TIPO: 'AN', FMOV_ALT: null };
+async function insertSummary(tx: FirebirdTx, input: NominaLayout20FirebirdSyncInput, lote: Lote, totals: Record<string, number>, fechaResumen: Date) {
+  const identity: Record<string, unknown> = { ORG0: input.scope.organica0, ORG1: input.scope.organica1, ORG2: input.scope.organica2, ORG3: input.scope.organica3, PERIODO: lote.periodo, TIPO: 'AN', FMOV_ALT: fechaResumen };
   const params = SUMMARY_COLUMNS.map((column) => Object.hasOwn(identity, column) ? identity[column] : totals[column] ?? 0);
   await tx.execute(`INSERT INTO AP_D_ORIGEN_RESUMEN (${SUMMARY_COLUMNS.join(', ')}) VALUES (${params.map(() => '?').join(', ')})`, params);
 }
@@ -198,6 +266,17 @@ function value(row: Record<string, unknown> | undefined, key: string): unknown {
 }
 function number(row: Record<string, unknown> | undefined, key: string): number { return Number(value(row, key) ?? 0); }
 function money(value: number): number { return Math.round(value * 100); }
+function summaryDate(input: NominaLayout20FirebirdSyncInput): Date { return input.fechaResumen ?? new Date(); }
+function assertSummaryDate(row: Record<string, unknown>, expected: Date): void {
+  const actualValue = value(row, 'FMOV_ALT');
+  const actual = actualValue instanceof Date ? actualValue : new Date(String(actualValue ?? ''));
+  if (!Number.isFinite(actual.getTime()) || localDateTime(actual) !== localDateTime(expected)) {
+    throw new NominaLayout20FirebirdSyncError('NOMINA_FIREBIRD_FECHA_RESUMEN_INCONSISTENTE');
+  }
+}
+function localDateTime(date: Date): string {
+  return [date.getFullYear(), date.getMonth(), date.getDate(), date.getHours(), date.getMinutes(), date.getSeconds()].join('-');
+}
 async function aggregate(tx: FirebirdTx, name: string, sql: string, params: unknown[]) {
   try {
     return await tx.query(sql, params);

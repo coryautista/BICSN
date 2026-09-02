@@ -5,7 +5,7 @@ const detail = (overrides: Record<number, string> = {}) => {
   const fields = [
     '0126007', '2', 'SYN000001', 'SYNX000101T01', 'PERSONA SINTETICA',
     '10.00', '20.00', '30.00', '40.00', '1000.00',
-    '', '2000.00', '0.00', '0.00', '20260415',
+    '15.00', '2000.00', '0.00', '30.00', '20260415',
     '0.00', '50.25', '0.00', '0.00', '0.00'
   ];
   for (const [index, value] of Object.entries(overrides)) fields[Number(index) - 1] = value;
@@ -16,6 +16,17 @@ let result = parseNominaAplicacionQnalTxt(Buffer.from(detail(), 'latin1'));
 assert.deepEqual(result.errores, []);
 assert.equal(result.registros.length, 1);
 assert.equal(result.registros[0].layoutVersion, '20');
+assert.equal(result.registros[0].aportacionAfiliadoFondoAhorro, 10);
+assert.equal(result.registros[0].aportacionEntidadFondoAhorro, 20);
+assert.equal(result.registros[0].aportacionAfiliadoEBI, null);
+assert.equal(result.registros[0].aportacionEntidadEBI, null);
+assert.equal(result.registros[0].descuentoPrestamoCortoPlazo, 30);
+assert.equal(result.registros[0].descuentoPrestamoHipotecario, 40);
+assert.equal(result.registros[0].baseCotizacionSueldo, 1000);
+assert.equal(result.registros[0].baseCotizacionQuinquenios, 15);
+assert.equal(result.registros[0].sueldoMensual, 2000);
+assert.equal(result.registros[0].ayudasMensuales, null);
+assert.equal(result.registros[0].quinqueniosMensual, 30);
 assert.equal(result.registros[0].cair, 50.25);
 assert.equal(result.registros[0].descuentosOtros, null);
 assert.equal(result.registros[0].descuentoPrestamoMedianoPlazo, null);
@@ -35,7 +46,7 @@ for (const [field, value, expectedField] of [
   assert(result.errores.some((error) => error.campo === expectedField), `Debe rechazar campo ${field}=${value}`);
 }
 
-for (const field of [16, 18, 19, 20]) {
+for (const field of [13, 16, 18, 19, 20]) {
   result = parseNominaAplicacionQnalTxt(Buffer.from(detail({ [field]: '0.01' }), 'latin1'));
   assert(result.errores.some((error) => error.campo === `Campo${field}`), `Debe rechazar campo no certificado ${field}`);
   result = parseNominaAplicacionQnalTxt(Buffer.from(detail({ [field]: '' }), 'latin1'));
