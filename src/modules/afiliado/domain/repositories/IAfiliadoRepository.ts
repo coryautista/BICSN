@@ -15,13 +15,23 @@ export interface AplicarBDIsspeaLoteResult {
   afiliadosFallidos: number;
   afiliadosCompletos: number;
   bitacoraActualizada: number;
+  entidadId: number;
+  organica2: string;
+  organica3: string;
+  periodo: string;
+  aplicacionMovimientosFinalizada: boolean;
+  revisionMovimientos?: Array<{
+    numeroConcepto: 1 | 3 | 4 | 5;
+    operacion: 'INSERT' | 'UPDATE' | 'SIN_CAMBIOS';
+    idRevision: number;
+    idRevisionHistorico?: number;
+  }>;
   resumen: {
     totalEncontrados: number;
     procesadosExitosamente: number;
     procesadosConError: number;
     organica: string;
   };
-  periodo?: string;
   quincena?: number;
   anio?: number;
   quincenaId?: string;

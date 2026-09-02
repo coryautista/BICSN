@@ -4,6 +4,11 @@ import {
   AplicarBDIsspeaError,
   OrganicaNoConfiguradaError
 } from '../../domain/errors.js';
+import {
+  GenerarRevisionMovimientosService,
+  RevisionMovimientosGeneracionError,
+  RevisionMovimientosQnaNoDisponibleError
+} from '../../../reportes/revision/application/GenerarRevisionMovimientosService.js';
 
 const logger = pino({
   name: 'aplicarBDIsspeaLoteCommand',
@@ -21,7 +26,10 @@ export interface AplicarBDIsspeaLoteData {
 }
 
 export class AplicarBDIsspeaLoteCommand {
-  constructor(private afiliadoRepo: IAfiliadoRepository) {}
+  constructor(
+    private afiliadoRepo: IAfiliadoRepository,
+    private generarRevisionMovimientosService: GenerarRevisionMovimientosService
+  ) {}
 
   async execute(data: AplicarBDIsspeaLoteData): Promise<AplicarBDIsspeaLoteResult> {
     const logContext = {
@@ -52,6 +60,18 @@ export class AplicarBDIsspeaLoteCommand {
         data.userAgent
       );
 
+      if (resultado.aplicacionMovimientosFinalizada) {
+        resultado.revisionMovimientos = await this.generarRevisionMovimientosService.ejecutar({
+          entidadId: resultado.entidadId,
+          org0: data.org0,
+          org1: data.org1,
+          org2: resultado.organica2,
+          org3: resultado.organica3,
+          periodo: resultado.periodo,
+          usuarioId: data.usuarioId
+        });
+      }
+
       logger.info({
         ...logContext,
         afiliadosProcesados: resultado.afiliadosCambiadosEstado,
@@ -65,6 +85,8 @@ export class AplicarBDIsspeaLoteCommand {
       // Re-lanzar errores del dominio sin modificar
       if (
         error instanceof OrganicaNoConfiguradaError
+        || error instanceof RevisionMovimientosGeneracionError
+        || error instanceof RevisionMovimientosQnaNoDisponibleError
       ) {
         throw error;
       }

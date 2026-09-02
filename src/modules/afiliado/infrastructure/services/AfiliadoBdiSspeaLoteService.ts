@@ -5,10 +5,13 @@ import { getAfiliadoById } from './AfiliadoPersistenceService.js';
 
 interface BitacoraAplicarQna {
   afectacionId: number;
+  entidadId: number;
   quincena: number;
   anio: number;
   periodo: string;
   quincenaId: string;
+  organica2: string;
+  organica3: string;
   aplicacionMovimientosFinalizada: boolean;
 }
 
@@ -20,13 +23,21 @@ interface ResumenFinalizacionMovimientos {
   noPermitidos: number;
 }
 
+export function resolverEntidadIdBitacora(value: unknown): number {
+  const entidadId = value == null ? 1 : Number(value);
+  if (!Number.isInteger(entidadId) || entidadId <= 0) {
+    throw new Error('BITACORA_APLICAR_ENTIDAD_INVALIDA');
+  }
+  return entidadId;
+}
+
 async function getBitacoraAplicarQna(org0: string, org1: string): Promise<BitacoraAplicarQna> {
   const p = await getPool();
   const result = await p.request()
     .input('org0', sql.VarChar(30), org0)
     .input('org1', sql.VarChar(30), org1)
     .query(`
-      SELECT TOP 1 AfectacionId, Quincena, Anio, AplicacionMovimientosFinalizada
+      SELECT TOP 1 AfectacionId, EntidadId, Quincena, Anio, Org2, Org3, AplicacionMovimientosFinalizada
       FROM afec.BitacoraAfectacionOrg
       WHERE Org0 = @org0
         AND Org1 = @org1
@@ -42,6 +53,7 @@ async function getBitacoraAplicarQna(org0: string, org1: string): Promise<Bitaco
 
   const quincena = Number(row.Quincena);
   const anio = Number(row.Anio);
+  const entidadId = resolverEntidadIdBitacora(row.EntidadId);
   if (!quincena || !anio) {
     throw new Error('BITACORA_APLICAR_QNA_INVALIDA');
   }
@@ -49,10 +61,13 @@ async function getBitacoraAplicarQna(org0: string, org1: string): Promise<Bitaco
   const quincena2 = String(quincena).padStart(2, '0');
   return {
     afectacionId: Number(row.AfectacionId),
+    entidadId,
     quincena,
     anio,
     periodo: `${quincena2}${String(anio).slice(-2)}`,
     quincenaId: `${anio}-${quincena2}`,
+    organica2: String(row.Org2 ?? '01').trim() || '01',
+    organica3: String(row.Org3 ?? '01').trim() || '01',
     aplicacionMovimientosFinalizada: row.AplicacionMovimientosFinalizada === true || row.AplicacionMovimientosFinalizada === 1
   };
 }
@@ -342,7 +357,11 @@ async function finalizarBitacoraAplicacionMovimientosSinProcesar(params: {
         AND bao.Entidad = 'AFILIADOS'
     `);
 
-  return result.rowsAffected[0] || 0;
+  const registrosActualizados = result.rowsAffected[0] || 0;
+  if (registrosActualizados !== 1) {
+    throw new Error('BITACORA_APLICACION_MOVIMIENTOS_NO_ACTUALIZADA');
+  }
+  return registrosActualizados;
 }
 
 export async function aplicarBDIsspeaLote(
@@ -364,6 +383,10 @@ export async function aplicarBDIsspeaLote(
       afiliadosFallidos: 0,
       afiliadosCompletos: 0,
       bitacoraActualizada: 0,
+      entidadId: qna.entidadId,
+      organica2: qna.organica2,
+      organica3: qna.organica3,
+      aplicacionMovimientosFinalizada: true,
       movimientosMigrados: [],
       afiliadosConMigracionExitosa: 0,
       afiliadosConMigracionFallida: 0,
@@ -416,6 +439,10 @@ export async function aplicarBDIsspeaLote(
       afiliadosFallidos: 0,
       afiliadosCompletos: 0,
       bitacoraActualizada,
+      entidadId: qna.entidadId,
+      organica2: qna.organica2,
+      organica3: qna.organica3,
+      aplicacionMovimientosFinalizada: true,
       movimientosMigrados: [],
       afiliadosConMigracionExitosa: 0,
       afiliadosConMigracionFallida: 0,
@@ -591,19 +618,18 @@ export async function aplicarBDIsspeaLote(
   let bitacoraActualizada = 0;
 
   if (todosExitosos) {
-    try {
-      const bitacoraResult = await actualizarBitacoraAplicacionLote({
-        afectacionId: qna.afectacionId,
-        org0,
-        org1,
-        usuarioId,
-        afiliadosExitosos,
-        resumenFinalizacion,
-        internosNuevos
-      });
-      bitacoraActualizada = bitacoraResult.registrosActualizados;
-    } catch {
-      bitacoraActualizada = 0;
+    const bitacoraResult = await actualizarBitacoraAplicacionLote({
+      afectacionId: qna.afectacionId,
+      org0,
+      org1,
+      usuarioId,
+      afiliadosExitosos,
+      resumenFinalizacion,
+      internosNuevos
+    });
+    bitacoraActualizada = bitacoraResult.registrosActualizados;
+    if (bitacoraActualizada !== 1) {
+      throw new Error('BITACORA_APLICACION_MOVIMIENTOS_NO_ACTUALIZADA');
     }
   }
 
@@ -616,6 +642,10 @@ export async function aplicarBDIsspeaLote(
     afiliadosFallidos,
     afiliadosCompletos: afiliadosExitosos,
     bitacoraActualizada: todosExitosos ? bitacoraActualizada : 0,
+    entidadId: qna.entidadId,
+    organica2: qna.organica2,
+    organica3: qna.organica3,
+    aplicacionMovimientosFinalizada: todosExitosos && bitacoraActualizada === 1,
     movimientosMigrados,
     afiliadosConMigracionExitosa: afiliadosExitosos,
     afiliadosConMigracionFallida: afiliadosFallidos,

@@ -11,7 +11,6 @@ import {
   ParametrosReporteRevision,
   ReporteRevision,
   RevisionTarea,
-  TipoFondoLiberacionPcp,
   crearImportesRevision
 } from '../../domain/Revision.types.js';
 import {
@@ -154,6 +153,7 @@ export class RevisionRepository {
 
   async reclamarSiguiente(): Promise<RevisionTarea | null> {
     const resultado = await this.mssqlPool.request().query(`
+      SET TRANSACTION ISOLATION LEVEL READ COMMITTED;
       ;WITH siguiente AS (
         SELECT TOP (1) *
         FROM conciliacion.RevisionTarea WITH (UPDLOCK, READPAST, READCOMMITTEDLOCK, ROWLOCK)
@@ -452,9 +452,8 @@ export class RevisionRepository {
     return { importes: this.mapearImportes(row), registros: Number(row.REGISTROS || 0) };
   }
 
-  async calcularLiberacionPcp(
-    tarea: RevisionTarea,
-    tipoFondo: TipoFondoLiberacionPcp
+  async calcularLiberacionRetenciones(
+    tarea: RevisionTarea
   ): Promise<{ importes: ImportesRevision; registros: number }> {
     const rows = await executeSafeQuery(`
       SELECT COUNT(*) AS REGISTROS,
@@ -464,14 +463,14 @@ export class RevisionRepository {
         COALESCE(SUM(FAI), 0) AS FAI
       FROM FONDOS_INICIALES_IND
       WHERE ORG0 = ? AND ORG1 = ? AND PERIODO = ?
-        AND TIPO_FONDO = ?
+        AND TIPO_FONDO IN ('LFA', 'LFM', 'LFP')
     `, [
       tarea.org0,
       tarea.org1,
-      tarea.periodo,
-      tipoFondo
+      tarea.periodo
     ], FIREBIRD_TIMEOUTS.BATCH_OPERATION);
 
+    // LPF corresponde a liberaciones PCP en bajas y queda excluido hasta autorizacion funcional.
     const row = rows[0] || {};
     return { importes: this.mapearImportes(row), registros: Number(row.REGISTROS || 0) };
   }
@@ -564,10 +563,7 @@ export class RevisionRepository {
     const transaction = new sql.Transaction(this.mssqlPool);
     await transaction.begin();
     try {
-      const resultados: GuardarRevisionResultado[] = [];
-      for (const item of params) {
-        resultados.push(await this.guardarRevisionEnTransaccion(transaction, item));
-      }
+      const resultados = await this.guardarRevisionesEnTransaccion(transaction, params);
       await transaction.commit();
       return resultados;
     } catch (error) {
@@ -578,6 +574,17 @@ export class RevisionRepository {
       }
       throw error;
     }
+  }
+
+  async guardarRevisionesEnTransaccion(
+    transaction: Transaction,
+    params: GuardarRevisionParams[]
+  ): Promise<GuardarRevisionResultado[]> {
+    const resultados: GuardarRevisionResultado[] = [];
+    for (const item of params) {
+      resultados.push(await this.guardarRevisionEnTransaccion(transaction, item));
+    }
+    return resultados;
   }
 
   async guardarAjuste(params: GuardarAjusteRevisionData): Promise<GuardarAjusteRevisionResultado> {

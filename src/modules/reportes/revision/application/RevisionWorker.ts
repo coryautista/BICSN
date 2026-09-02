@@ -144,18 +144,8 @@ export class RevisionWorker {
         },
         {
           numeroConcepto: 13,
-          fuente: "FONDOS_INICIALES_IND (TIPO_FONDO = 'LFA'; FAT = FAA + FAE; FAI = FAR funcional)",
-          calcular: () => this.revisionRepo.calcularLiberacionPcp(tarea, 'LFA')
-        },
-        {
-          numeroConcepto: 15,
-          fuente: "FONDOS_INICIALES_IND (TIPO_FONDO = 'LFM'; FAT = FAA + FAE; FAI = FAR funcional)",
-          calcular: () => this.revisionRepo.calcularLiberacionPcp(tarea, 'LFM')
-        },
-        {
-          numeroConcepto: 16,
-          fuente: "FONDOS_INICIALES_IND (TIPO_FONDO = 'LFP'; FAT = FAA + FAE; FAI = FAR funcional)",
-          calcular: () => this.revisionRepo.calcularLiberacionPcp(tarea, 'LFP')
+          fuente: "FONDOS_INICIALES_IND (TIPO_FONDO IN ('LFA','LFM','LFP'); LPF excluido; FAT = FAA + FAE; FAI = FAR funcional)",
+          calcular: () => this.revisionRepo.calcularLiberacionRetenciones(tarea)
         }
       ];
       // El concepto 14 se captura administrativamente y no participa en el cálculo automático.

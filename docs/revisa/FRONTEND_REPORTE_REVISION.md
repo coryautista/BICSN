@@ -2,7 +2,7 @@
 
 ## Objetivo
 
-Implementar en el frontend de Entidad una pantalla para consultar y presentar el reporte REVISA de una orgánica y una QNA.
+Implementar en el frontend Administrador una pantalla para consultar y presentar el reporte REVISA de una orgánica y una QNA.
 
 El reporte se muestra como una matriz: cada fila corresponde a un concepto y cada columna a uno de los nueve fondos calculados por el backend.
 
@@ -14,6 +14,28 @@ El endpoint de consulta está disponible en `GET /v1/reportes/revision`.
 
 El frontend no debe consultar SQL Server, Firebird ni el archivo de trazabilidad SFTP directamente.
 
+La aplicación de movimientos puede crear antes una captura parcial de los conceptos 1, 3, 4 y 5. El reporte completo continúa disponible únicamente después de la aplicación QNA y de que su tarea REVISA posterior finalice. El frontend no debe interpretar la captura parcial como el reporte completo ni omitir el estado de la tarea.
+
+## Separación entre Entidad y Administrador
+
+- Entidad conserva su flujo vigente de `APLICAR MOVIMIENTOS` y `FINALIZAR MOVIMIENTOS` mediante `POST /v1/afiliado/aplicar-bdisssspea-lote`.
+- Al finalizar, el backend genera de forma síncrona los conceptos 1, 3, 4 y 5, incluso cuando no hay movimientos aprobados pendientes.
+- Entidad no presenta mensajes, operaciones, conceptos ni resúmenes REVISA. El campo `revisionMovimientos` puede permanecer ignorado por esa interfaz.
+- El frontend Administrador es el responsable de consultar y presentar el reporte REVISA mediante `GET /v1/reportes/revision`.
+- La aprobación individual de un movimiento no genera REVISA; la generación ocurre al aplicar o finalizar la etapa completa.
+
+### Estado del frontend Entidad
+
+El proyecto `front/Entidad/ISS-F-Entidad` no debe registrar una pantalla ni una ruta visual para REVISA. El módulo residual que exponía `/dependencia/revision` fue retirado junto con su widget, servicio HTTP y contratos exclusivos porque no tenía entrada de menú ni consumidores activos.
+
+Esta limpieza no modifica el procesamiento funcional:
+
+- Entidad continúa aplicando o finalizando movimientos mediante su flujo vigente.
+- El backend continúa generando silenciosamente los conceptos 1, 3, 4 y 5.
+- La aplicación QNA continúa programando el worker REVISA posterior.
+- `GET /v1/reportes/revision` permanece disponible para el frontend Administrador.
+- La pantalla, el polling y cualquier exportación de REVISA pertenecen exclusivamente a Administrador.
+
 ## Ubicación sugerida
 
 ```text
@@ -21,7 +43,7 @@ Reportes
 └── Revisión
 ```
 
-Ruta sugerida del frontend:
+Ruta sugerida del frontend Administrador:
 
 ```text
 /reportes/revision
@@ -52,6 +74,34 @@ Cada componente de la orgánica debe enviarse normalizado a dos dígitos.
 Los usuarios de Entidad no deben poder consultar una orgánica diferente de la contenida en su sesión. Si existen perfiles administrativos con acceso a varias orgánicas, el backend debe autorizar la selección; no basta con habilitarla en la interfaz.
 
 ## Contrato backend
+
+### Referencia: respuesta de aplicación de movimientos
+
+El endpoint independiente de movimientos:
+
+```http
+POST /v1/afiliado/aplicar-bdisssspea-lote
+```
+
+incluye actualmente estos campos de contexto en su respuesta exitosa:
+
+```json
+{
+  "aplicacionMovimientosFinalizada": true,
+  "organica2": "01",
+  "organica3": "01",
+  "revisionMovimientos": [
+    {
+      "numeroConcepto": 1,
+      "operacion": "INSERT | UPDATE | SIN_CAMBIOS",
+      "idRevision": 101,
+      "idRevisionHistorico": null
+    }
+  ]
+}
+```
+
+`revisionMovimientos` solo informa el resultado de persistencia de los conceptos 1, 3, 4 y 5 en ese primer momento. Es una referencia del endpoint de movimientos, no sustituye el contrato de `GET /v1/reportes/revision`, no acredita `estatusProceso = COMPLETADA` y no debe usarse como fuente del reporte completo.
 
 ### Consultar reporte
 
@@ -270,12 +320,10 @@ Orden esperado de los conceptos activos:
 | 10 | Capitalización de intereses a licencias |
 | 11 | Capitalización de intereses a activos |
 | 12 | Saldo actual |
-| 13 | Liberación de PCP con fondo de Ahorro |
+| 13 | Liberación de retenciones con fondo de Ahorro |
 | 14 | Ajustes |
-| 15 | Liberación de PMP con fondo de Ahorro |
-| 16 | Liberación de HIP con fondo de Ahorro |
 
-El concepto 14 es administrativo y opcional. Solo aparece cuando el proyecto Administrador ha registrado una fila de Ajustes para la orgánica y el período. El frontend de Entidad no debe asumir una cantidad fija de conceptos.
+El concepto 13 consolida `LFA`, `LFM` y `LFP`; los conceptos 15 y 16 están inactivos. El concepto 14 es administrativo y opcional. Solo aparece cuando el proyecto Administrador ha registrado una fila de Ajustes para la orgánica y el período. El frontend de Entidad no debe asumir una cantidad fija de conceptos.
 
 Los conceptos 8 y 11 son anuales: solo se calculan en el período `01AA`. En períodos `02AA` a `24AA` permanecen visibles con los nueve fondos en `0.00`; este cero significa que el concepto no aplica y que el backend no consultó su fuente Firebird.
 

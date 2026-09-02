@@ -20,6 +20,14 @@ Organica0 + Organica1 + Organica2 + Organica3 + Periodo + IdCatalogoRevision
 
 Si una fila vigente cambia, su valor anterior se guarda primero en `conciliacion.RevisionHistorico`. Si no existen cambios, no se genera histórico.
 
+### Ciclo dual de los conceptos 1, 3, 4 y 5
+
+Los conceptos 1, 3, 4 y 5 se generan en dos momentos separados. La primera generación ocurre al finalizar la aplicación de movimientos, incluso cuando no existen movimientos elegibles, y no crea una tarea en `conciliacion.RevisionTarea`. La segunda generación ocurre dentro del worker posterior a la aplicación QNA y reconcilia las filas preexistentes como parte del reporte automático completo.
+
+En ambos momentos se conservan las fuentes y fórmulas descritas en este documento. La persistencia compartida devuelve `INSERT`, `UPDATE` o `SIN_CAMBIOS`: un cambio respalda la versión previa en `conciliacion.RevisionHistorico`, mientras una fila nueva o sin cambios no genera histórico. `SIN_CAMBIOS` requiere que coincidan importes, estatus activo, usuario y, cuando aplica, snapshot.
+
+La generación de movimientos mantiene el lock del scope QNA durante cálculo y guardado. No se ejecuta en `APLICANDO_FIREBIRD` o `APLICACION_INCIERTA`, ni después de alcanzar `REVISA_PROGRAMADA` o `TERMINADO`; en esos estados la captura posterior a QNA es autoritativa y no puede ser sobrescrita por una reparación tardía de movimientos.
+
 ## Concepto 1: Saldo anterior
 
 Estado de implementación: **implementado**.
@@ -42,6 +50,10 @@ Ejemplos de período anterior:
 ```
 
 No se consulta `conciliacion.RevisionHistorico` para calcular el saldo anterior.
+
+### Momentos de generación
+
+El concepto 1 se calcula por primera vez al finalizar movimientos, incluida la rama de cero movimientos, sin crear tarea REVISA. El worker posterior a QNA lo vuelve a calcular y actualiza, conserva o inserta la fila según el resultado de persistencia. Esta secuencia no modifica la fuente ni la regla de saldo anterior.
 
 ### Comportamiento sin antecedente
 
@@ -282,6 +294,10 @@ La clasificación contable como entrada o salida se aplicará posteriormente al 
 
 Si una condición no devuelve registros, se generará la fila del concepto con los nueve fondos en `0.00`.
 
+### Momentos de generación
+
+Los conceptos 3, 4 y 5 se calculan por primera vez al finalizar movimientos, incluida la rama de cero movimientos, sin crear tarea REVISA. El worker posterior a QNA los vuelve a calcular con `AP_G_FONDOS_ALTBAJ` y reconcilia las filas mediante `INSERT`, `UPDATE` o `SIN_CAMBIOS`, con histórico únicamente cuando existe actualización.
+
 ### Validación realizada para `1526`
 
 Consulta realizada para la orgánica `04-24`, período `1526`:
@@ -518,9 +534,9 @@ El registro del concepto 12 se obtiene sumando los campos de todas las filas dev
 
 Si el procedimiento no devuelve registros, se guardará el concepto 12 con los nueve fondos en `0.00`.
 
-## Conceptos 13, 15 y 16: Liberaciones con fondo de Ahorro
+## Concepto 13: Liberación de retenciones con fondo de Ahorro
 
-Estado de implementación: **implementados y activos**.
+Estado de implementación: **implementado y activo**. Los conceptos 15 y 16 permanecen inactivos para evitar duplicidad.
 
 ### Fuente confirmada
 
@@ -534,14 +550,10 @@ FONDOS_INICIALES_IND
 ORG0 = org0
 AND ORG1 = org1
 AND PERIODO = periodo
-AND TIPO_FONDO = tipo correspondiente al concepto
+AND TIPO_FONDO IN ('LFA', 'LFM', 'LFP')
 ```
 
-| Concepto | Nombre de catálogo | `TIPO_FONDO` |
-| ---: | --- | --- |
-| 13 | Liberación de PCP con fondo de Ahorro | `LFA` |
-| 15 | Liberación de PMP con fondo de Ahorro | `LFM` |
-| 16 | Liberación de HIP con fondo de Ahorro | `LFP` |
+El concepto 13 consolida los tres tipos en una sola fila. `LPF`, que corresponde a liberaciones PCP en bajas, queda excluido de esta regla y señalado en el código para una posible autorización futura.
 
 No se aplican filtros por `ORG2`, `ORG3` ni `STATUS`.
 
@@ -555,11 +567,11 @@ No se aplican filtros por `ORG2`, `ORG3` ni `STATUS`.
 | `FAI` | `SUM(FAI)` |
 | `CAIR`, `FRA`, `FRE`, `FH`, `FV` | `0.00` |
 
-En esta tabla, y únicamente para esta regla funcional, `FAI` representa `FAR`, Fondo de Ahorro Rendimientos o Intereses. `FAT` se deriva como `FAA + FAE`. Si no existen registros se guarda el concepto correspondiente con los nueve fondos en `0.00`.
+En esta tabla, y únicamente para esta regla funcional, `FAI` representa `FAR`, Fondo de Ahorro Rendimientos o Intereses. `FAT` se deriva como `FAA + FAE`. Si no existen registros se guarda el concepto 13 con los nueve fondos en `0.00`.
 
 ### Validación para `1526`
 
-Para la orgánica `04-24`, período `1526`, los tipos `LFA`, `LFM` y `LFP` devuelven cero registros. Las ejecuciones nuevas guardan tres filas independientes; los períodos históricos se migran mediante el reproceso dirigido de conceptos PCP.
+Para la orgánica `04-24`, período `1526`, los tipos `LFA`, `LFM` y `LFP` devuelven cero registros. Las ejecuciones posteriores al despliegue guardan una sola fila del concepto 13. No se reabren ni reprocesan períodos históricos por este cambio.
 
 ## Concepto 14: Ajustes
 
@@ -579,7 +591,7 @@ Reglas:
 - El reporte REVISA de la orgánica y período debe existir y estar `COMPLETADA`.
 - La primera captura inserta la fila del concepto 14.
 - Una captura posterior conserva el valor anterior en `conciliacion.RevisionHistorico` antes de actualizarlo.
-- Si los importes y el usuario no cambian, la operación es `SIN_CAMBIOS`.
+- Si los importes, el estatus activo, el usuario y el snapshot aplicable no cambian, la operación es `SIN_CAMBIOS`.
 - Si nunca se captura un ajuste, no existe una fila del concepto 14 y no aparece en el reporte.
 - Los importes se conservan con el signo recibido.
 - Ajustes no modifica el concepto 12 ni reprocesa los conceptos automáticos 1 a 13, 15 y 16.

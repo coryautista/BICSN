@@ -6,6 +6,12 @@ Reemplazar gradualmente la estructura `EstadoCuentaAhorroHistorico` por un model
 
 El cálculo de REVISA se ejecutará en segundo plano después de que la aplicación QNA haya completado correctamente el `COMMIT` de Firebird y la generación de la Línea de Pago. El servicio de aplicación QNA no esperará a que termine REVISA.
 
+### Nota actual: ajuste por finalización de movimientos
+
+La implementación local agrega un momento anterior y separado para los conceptos 1, 3, 4 y 5. Al finalizar la aplicación de movimientos, incluso con cero movimientos elegibles, esos cuatro conceptos se calculan y persisten sin crear `RevisionTarea`. La aplicación QNA continúa como un proceso independiente: no aplica movimientos y, después de Línea de Pago, programa el worker que genera el reporte completo y reconcilia las filas 1/3/4/5 preexistentes.
+
+Este ajuste no cambia las fuentes ni fórmulas de los conceptos. Su alcance operativo, estado real, recuperación, riesgos y pendientes se mantienen en [`SEGUIMIENTO_REVISA_MOVIMIENTOS_QNA.md`](./SEGUIMIENTO_REVISA_MOVIMIENTOS_QNA.md).
+
 ## Estado actual
 
 ### Completado manualmente en SQL Server
@@ -36,6 +42,8 @@ El cálculo de REVISA se ejecutará en segundo plano después de que la aplicaci
 - Cálculo del concepto 12 mediante `AP_G_SALDO_FONDO(org0, org1, periodo)`.
 - Aplicación anual de los conceptos 8 y 11 exclusivamente en período `01`; en `02-24` se guardan en cero sin consultar Firebird.
 - Cierre ordenado del worker ante `SIGINT` y `SIGTERM`.
+- Primera generación local de los conceptos 1, 3, 4 y 5 al finalizar movimientos, incluida la rama de cero movimientos, sin tarea persistente.
+- Reconciliación posterior de las filas 1, 3, 4 y 5 por el worker REVISA mediante la persistencia e histórico existentes.
 
 ### Pendiente funcional
 
@@ -267,6 +275,18 @@ Se suman todos los registros devueltos con el siguiente mapeo:
 Si el procedimiento no devuelve registros, los nueve fondos se guardan en `0.00`.
 
 ## Flujo asíncrono
+
+### Procesos separados
+
+Antes del flujo asíncrono descrito históricamente abajo existe ahora un flujo de movimientos independiente:
+
+```text
+finalizar aplicación de movimientos, incluso con cero movimientos
+-> generar conceptos 1, 3, 4 y 5 sin RevisionTarea
+-> responder con el resultado parcial de persistencia
+```
+
+La aplicación QNA no aplica movimientos. Su worker posterior vuelve a calcular 1, 3, 4 y 5 y completa el resto del reporte automático. Por tanto, las filas creadas al finalizar movimientos son una captura parcial y no acreditan que la tarea QNA/REVISA esté `COMPLETADA`.
 
 Punto de integración confirmado en `AplicarBDIssspeaQNACommand`:
 

@@ -7,7 +7,6 @@ export type ImportesRevision = Record<FondoRevision, number>;
 export type ImportesRevisionSnapshot = Record<FondoRevision, string>;
 export type ImportesRevisionPersistencia = ImportesRevision | ImportesRevisionSnapshot;
 export type EstatusProcesoRevision = 'PENDIENTE' | 'PROCESANDO' | 'COMPLETADA' | 'ERROR';
-export type TipoFondoLiberacionPcp = 'LFA' | 'LFM' | 'LFP';
 
 export interface CatalogoRevisionActivo {
   numeroConcepto: number;

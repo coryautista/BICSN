@@ -509,6 +509,10 @@ import { EstadoCuentaAhorroExportador } from '../modules/reportes/estadoCuentaAh
 import { RevisionRepository } from '../modules/reportes/revision/infrastructure/persistence/RevisionRepository.js';
 import { RevisionScheduler } from '../modules/reportes/revision/application/RevisionScheduler.js';
 import { RevisionWorker } from '../modules/reportes/revision/application/RevisionWorker.js';
+import {
+  GenerarRevisionMovimientosService,
+  defaultRevisionMovimientosQnaRunner
+} from '../modules/reportes/revision/application/GenerarRevisionMovimientosService.js';
 import { ObtenerReporteRevisionQuery } from '../modules/reportes/revision/application/queries/ObtenerReporteRevisionQuery.js';
 import { GuardarAjusteRevisionCommand } from '../modules/reportes/revision/application/commands/GuardarAjusteRevisionCommand.js';
 
@@ -535,6 +539,8 @@ container.register({
   revisionRepo: asClass(RevisionRepository).singleton(),
   revisionScheduler: asClass(RevisionScheduler).singleton(),
   revisionWorker: asClass(RevisionWorker).singleton(),
+  revisionMovimientosQnaRunner: asValue(defaultRevisionMovimientosQnaRunner),
+  generarRevisionMovimientosService: asClass(GenerarRevisionMovimientosService).scoped(),
   
   // ============================================================================
   // AUTH MODULE

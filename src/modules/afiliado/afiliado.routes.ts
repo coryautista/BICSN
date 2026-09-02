@@ -6179,6 +6179,21 @@ export default async function afiliadoRoutes(app: FastifyInstance) {
                     description:
                       "Si se actualizó BitacoraAfectacionOrg (0 o 1)",
                   },
+                  organica2: { type: "string" },
+                  organica3: { type: "string" },
+                  aplicacionMovimientosFinalizada: { type: "boolean" },
+                  revisionMovimientos: {
+                    type: "array",
+                    items: {
+                      type: "object",
+                      properties: {
+                        numeroConcepto: { type: "number", enum: [1, 3, 4, 5] },
+                        operacion: { type: "string", enum: ["INSERT", "UPDATE", "SIN_CAMBIOS"] },
+                        idRevision: { type: "number" },
+                        idRevisionHistorico: { type: "number", nullable: true },
+                      },
+                    },
+                  },
                   periodo: {
                     type: "string",
                     nullable: true,
@@ -6208,6 +6223,10 @@ export default async function afiliadoRoutes(app: FastifyInstance) {
                     description:
                       "AfectacionId usado para actualizar la bitácora exacta",
                   },
+                  entidadId: {
+                    type: "number",
+                    description: "EntidadId resuelto desde BitacoraAfectacionOrg",
+                  },
                   resumen: {
                     type: "object",
                     properties: {
@@ -6236,6 +6255,7 @@ export default async function afiliadoRoutes(app: FastifyInstance) {
           },
           400: { type: "object" },
           404: { type: "object" },
+          409: { type: "object" },
           500: { type: "object" },
         },
       },
@@ -6342,6 +6362,11 @@ export default async function afiliadoRoutes(app: FastifyInstance) {
             afiliadosFallidos: resultado.afiliadosFallidos,
             afiliadosCompletos: resultado.afiliadosCompletos,
             bitacoraActualizada: resultado.bitacoraActualizada,
+            entidadId: resultado.entidadId,
+            organica2: resultado.organica2,
+            organica3: resultado.organica3,
+            aplicacionMovimientosFinalizada: resultado.aplicacionMovimientosFinalizada,
+            revisionMovimientos: resultado.revisionMovimientos || [],
             periodo: resultado.periodo,
             quincena: resultado.quincena,
             anio: resultado.anio,
@@ -6360,6 +6385,12 @@ export default async function afiliadoRoutes(app: FastifyInstance) {
           }),
         );
       } catch (error: any) {
+        if (error.code === "REVISION_MOVIMIENTOS_GENERACION_ERROR") {
+          return reply.code(500).send(fail(error.message, error.code));
+        }
+        if (error.code === "REVISION_MOVIMIENTOS_QNA_NO_DISPONIBLE") {
+          return reply.code(409).send(fail(error.message, error.code));
+        }
         if (error.message?.startsWith("MOVIMIENTOS_ESTADO_NO_PERMITIDO:")) {
           const totalNoPermitidos = error.message.split(":")[1] || "0";
           return reply
