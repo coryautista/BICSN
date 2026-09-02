@@ -8,25 +8,31 @@ Evitar aplicaciones parciales en Firebird cuando falla alguno de los procedimien
 
 1. `POST /v1/liquidaciones-qna/orquestar` captura una vez los diez dominios y persiste Snapshot V2 y Snapshot QNA V5.
 2. La promocion selecciona el Snapshot oficial, proyecta Retenciones V3 y ejecuta dual-write legacy dentro de la transaccion SQL Server.
-3. La conciliacion exacta devuelve `COMPLETE`, `WARNING` o `ERROR`; un `WARNING` legacy no bloquea que V5 sea oficial.
+3. Mientras el dual-write esta activo, la conciliacion exacta devuelve `COMPLETE`, `WARNING` o `ERROR`; un `WARNING` legacy no bloquea que V5 sea oficial. Una vez autorizado su retiro, `QNA_LEGACY_DUAL_WRITE_ENABLED=false` omite la proyeccion legacy y devuelve `DISABLED` sin omitir la proyeccion de retenciones V3.
 4. `POST /v1/afiliado/aplicar-bdisssspea-qna` resuelve el scope completo desde el token, revalida el Snapshot oficial y selecciona una unica bitacora exacta dentro de la transaccion SQL Server serializable.
 5. SQL Server crea un intento durable, vincula el `AfectacionId` y adquiere un claim Firebird con lease renovable.
 6. El backend inicia una unica transaccion Firebird.
-7. Dentro de esa transaccion ejecuta, en orden:
-   - `AP_P_APLICAR(..., 'C')`.
-   - `AP_P_APLICAR(..., 'F')`.
-   - `EBI2_RECIBOS_AP(..., 'APLICAR')` cuando la QNA es par.
+7. Dentro de esa transaccion ejecuta una de estas ramas, según el enlace nominal del Snapshot oficial revalidado:
+   - Con TXT vigente exacto: `AP_DN_APLICAR(periodo, org0, org1, org2, org3)` una sola vez.
+   - Sin TXT: `AP_P_APLICAR(org0, org1, periodo, periodo, 'C')` y después tipo `'F'`.
+   - En ambas ramas: `EBI2_RECIBOS_AP(..., 'APLICAR')` cuando la QNA es par.
 8. El resultado se clasifica como commit confirmado, rollback confirmado, incierto o no iniciado y se persiste antes de continuar.
 9. Despues del `COMMIT` Firebird, el backend genera o reutiliza la Linea de Pago con el importe oficial de `QnaSnapshotTotal` y registra `LINEA_CONFIRMADA`.
 10. Programa o reutiliza REVISA y registra `REVISA_PROGRAMADA`.
 11. Actualiza exclusivamente el `AfectacionId` ligado al intento y registra `TERMINADO`.
 12. El resultado se intenta guardar en SFTP sin alterar el resultado financiero si SFTP falla.
 
-Los eventos `BA_MOVIMIENTO` no forman parte de este proceso. Aplicar QNA no los crea, recupera ni modifica.
+Los eventos `BA_MOVIMIENTO` no forman parte de este proceso. Aplicar QNA no los crea, recupera ni modifica. Sin TXT, la captura nominal conserva la resolución existente por `INTERNO` desde `ORPERSONAL`.
+
+La aplicación de movimientos de afiliados también queda fuera de este proceso. Se finaliza mediante su endpoint en un momento anterior e independiente, donde pueden generarse por primera vez las filas REVISA 1, 3, 4 y 5, incluso con cero movimientos. Aplicar QNA no vuelve a aplicar esos movimientos; el worker REVISA posterior a QNA recalcula y reconcilia las filas 1/3/4/5 preexistentes como parte del reporte completo.
+
+La primera generación REVISA usa el mismo scope exacto de exclusión que Aplicar QNA: `EntidadId`, año, quincena y orgánicas 0-3. Las bitácoras legacy de Entidad pueden tener `EntidadId IS NULL` porque Aplicar movimientos no utilizaba antes ese identificador; exclusivamente en ese caso el backend resuelve `EntidadId=1`. Un valor presente igual a cero, negativo, vacío o no numérico se rechaza y no se sustituye.
+
+Un TXT ambiguo, sustituido o distinto al enlazado por Snapshot V2/V5 bloquea la promoción. No existe fallback automático de TXT a `AP_P_APLICAR`.
 
 ## Comportamiento ante error Firebird
 
-Si falla C, F o EBI y el rollback puede confirmarse:
+Si falla DN, C, F o EBI y el rollback puede confirmarse:
 
 - Firebird ejecuta `ROLLBACK` de la transaccion completa.
 - Los historicos previamente guardados en SQL Server permanecen disponibles.
@@ -48,7 +54,7 @@ Si todos los procedimientos Firebird terminan correctamente:
 
 ## Resultado incierto
 
-Un error de commit o rollback que no permita confirmar el resultado registra `APLICACION_INCIERTA`. El backend no consulta marcadores ni administra Firebird para resolverlo y nunca reejecuta automaticamente C, F o EBI.
+Un error de commit o rollback que no permita confirmar el resultado registra `APLICACION_INCIERTA`. El backend no consulta marcadores ni administra Firebird para resolverlo y nunca reejecuta automaticamente DN, C, F o EBI.
 
 La resolucion requiere un administrador y el endpoint:
 
@@ -65,9 +71,11 @@ La respuesta exitosa del endpoint y el archivo SFTP terminal incluyen:
 ```json
 {
   "firebirdTransaction": "COMMIT | ROLLBACK | INCIERTA | NO_INICIADA",
-  "pasoFallido": "AP_P_APLICAR_C | AP_P_APLICAR_F | EBI2_RECIBOS_AP | null"
+  "pasoFallido": "AP_DN_APLICAR | AP_P_APLICAR_C | AP_P_APLICAR_F | EBI2_RECIBOS_AP | null"
 }
 ```
+
+En `ejecuciones`, la respuesta con TXT contiene `aplicarDn` y omite `aplicarC`/`aplicarF`. Sin TXT contiene `aplicarC` y `aplicarF`, y omite `aplicarDn`.
 
 Los archivos se almacenan en:
 
@@ -86,7 +94,7 @@ Un rollback, resultado incierto o conflicto se devuelve mediante el envelope HTT
 - El dual-write y su conciliacion se conservan cuando Firebird falla; la aplicacion no se expone como terminada.
 - La bitacora se actualiza solo despues del `COMMIT` Firebird y de generar o reutilizar la Linea de Pago.
 - `BA_MOVIMIENTO` queda fuera de la transaccion y no depende del resultado de Aplicar QNA.
-- Si falla Linea, REVISA o bitacora despues del `COMMIT`, no se reejecutan C, F ni EBI; la misma aplicacion reanuda desde el estado persistido.
+- Si falla Linea, REVISA o bitacora despues del `COMMIT`, no se reejecutan DN, C, F ni EBI; la misma aplicacion reanuda desde el estado persistido.
 
 ## Creacion manual de BA_MOVIMIENTO
 

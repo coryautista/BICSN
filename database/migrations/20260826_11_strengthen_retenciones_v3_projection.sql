@@ -81,18 +81,20 @@ BEGIN TRY
   ALTER TABLE retenciones.RetencionHIPHistoricoV3 ALTER COLUMN SeguroD6 DECIMAL(19,6) NULL;
   ALTER TABLE retenciones.RetencionHIPHistoricoV3 ALTER COLUMN MoratorioD6 DECIMAL(19,6) NULL;
 
-  IF EXISTS(SELECT 1 FROM retenciones.RetencionPCPHistoricoV3 WHERE RetencionHistoricoLoteV3Id IS NULL AND (Prestamo IS NULL OR CapitalD6 IS NULL OR InteresD6 IS NULL OR MontoD6 IS NULL OR MoratoriosD6 IS NULL))
-    THROW 51725,'RETENCION_PCP_V4_EXISTENTE_INCOMPATIBLE_CON_NO_NULOS',1;
-  IF EXISTS(SELECT 1 FROM retenciones.RetencionPMPHistoricoV3 WHERE RetencionHistoricoLoteV3Id IS NULL AND (Prestamo IS NULL OR CapitalD6 IS NULL OR InteresD6 IS NULL OR MoratoriosD6 IS NULL OR SeguroD6 IS NULL))
-    THROW 51726,'RETENCION_PMP_V4_EXISTENTE_INCOMPATIBLE_CON_NO_NULOS',1;
-  IF EXISTS(SELECT 1 FROM retenciones.RetencionHIPHistoricoV3 WHERE RetencionHistoricoLoteV3Id IS NULL AND (Solicitud IS NULL OR DescuentoD6 IS NULL OR CapitalD6 IS NULL OR InteresD6 IS NULL OR InteresDiferidoD6 IS NULL OR SeguroD6 IS NULL OR MoratorioD6 IS NULL))
-    THROW 51727,'RETENCION_HIP_V4_EXISTENTE_INCOMPATIBLE_CON_NO_NULOS',1;
+  EXEC(N'
+    IF EXISTS(SELECT 1 FROM retenciones.RetencionPCPHistoricoV3 WHERE RetencionHistoricoLoteV3Id IS NULL AND (Prestamo IS NULL OR CapitalD6 IS NULL OR InteresD6 IS NULL OR MontoD6 IS NULL OR MoratoriosD6 IS NULL))
+      THROW 51725,''RETENCION_PCP_V4_EXISTENTE_INCOMPATIBLE_CON_NO_NULOS'',1;
+    IF EXISTS(SELECT 1 FROM retenciones.RetencionPMPHistoricoV3 WHERE RetencionHistoricoLoteV3Id IS NULL AND (Prestamo IS NULL OR CapitalD6 IS NULL OR InteresD6 IS NULL OR MoratoriosD6 IS NULL OR SeguroD6 IS NULL))
+      THROW 51726,''RETENCION_PMP_V4_EXISTENTE_INCOMPATIBLE_CON_NO_NULOS'',1;
+    IF EXISTS(SELECT 1 FROM retenciones.RetencionHIPHistoricoV3 WHERE RetencionHistoricoLoteV3Id IS NULL AND (Solicitud IS NULL OR DescuentoD6 IS NULL OR CapitalD6 IS NULL OR InteresD6 IS NULL OR InteresDiferidoD6 IS NULL OR SeguroD6 IS NULL OR MoratorioD6 IS NULL))
+      THROW 51727,''RETENCION_HIP_V4_EXISTENTE_INCOMPATIBLE_CON_NO_NULOS'',1;
+  ');
   IF OBJECT_ID(N'retenciones.CK_RetencionPCPHistoricoV3_LegacyNoNulo',N'C') IS NOT NULL ALTER TABLE retenciones.RetencionPCPHistoricoV3 DROP CONSTRAINT CK_RetencionPCPHistoricoV3_LegacyNoNulo;
-  ALTER TABLE retenciones.RetencionPCPHistoricoV3 WITH CHECK ADD CONSTRAINT CK_RetencionPCPHistoricoV3_LegacyNoNulo CHECK(RetencionHistoricoLoteV3Id IS NOT NULL OR (Prestamo IS NOT NULL AND CapitalD6 IS NOT NULL AND InteresD6 IS NOT NULL AND MontoD6 IS NOT NULL AND MoratoriosD6 IS NOT NULL));
+  EXEC(N'ALTER TABLE retenciones.RetencionPCPHistoricoV3 WITH CHECK ADD CONSTRAINT CK_RetencionPCPHistoricoV3_LegacyNoNulo CHECK(RetencionHistoricoLoteV3Id IS NOT NULL OR (Prestamo IS NOT NULL AND CapitalD6 IS NOT NULL AND InteresD6 IS NOT NULL AND MontoD6 IS NOT NULL AND MoratoriosD6 IS NOT NULL));');
   IF OBJECT_ID(N'retenciones.CK_RetencionPMPHistoricoV3_LegacyNoNulo',N'C') IS NOT NULL ALTER TABLE retenciones.RetencionPMPHistoricoV3 DROP CONSTRAINT CK_RetencionPMPHistoricoV3_LegacyNoNulo;
-  ALTER TABLE retenciones.RetencionPMPHistoricoV3 WITH CHECK ADD CONSTRAINT CK_RetencionPMPHistoricoV3_LegacyNoNulo CHECK(RetencionHistoricoLoteV3Id IS NOT NULL OR (Prestamo IS NOT NULL AND CapitalD6 IS NOT NULL AND InteresD6 IS NOT NULL AND MoratoriosD6 IS NOT NULL AND SeguroD6 IS NOT NULL));
+  EXEC(N'ALTER TABLE retenciones.RetencionPMPHistoricoV3 WITH CHECK ADD CONSTRAINT CK_RetencionPMPHistoricoV3_LegacyNoNulo CHECK(RetencionHistoricoLoteV3Id IS NOT NULL OR (Prestamo IS NOT NULL AND CapitalD6 IS NOT NULL AND InteresD6 IS NOT NULL AND MoratoriosD6 IS NOT NULL AND SeguroD6 IS NOT NULL));');
   IF OBJECT_ID(N'retenciones.CK_RetencionHIPHistoricoV3_LegacyNoNulo',N'C') IS NOT NULL ALTER TABLE retenciones.RetencionHIPHistoricoV3 DROP CONSTRAINT CK_RetencionHIPHistoricoV3_LegacyNoNulo;
-  ALTER TABLE retenciones.RetencionHIPHistoricoV3 WITH CHECK ADD CONSTRAINT CK_RetencionHIPHistoricoV3_LegacyNoNulo CHECK(RetencionHistoricoLoteV3Id IS NOT NULL OR (Solicitud IS NOT NULL AND DescuentoD6 IS NOT NULL AND CapitalD6 IS NOT NULL AND InteresD6 IS NOT NULL AND InteresDiferidoD6 IS NOT NULL AND SeguroD6 IS NOT NULL AND MoratorioD6 IS NOT NULL));
+  EXEC(N'ALTER TABLE retenciones.RetencionHIPHistoricoV3 WITH CHECK ADD CONSTRAINT CK_RetencionHIPHistoricoV3_LegacyNoNulo CHECK(RetencionHistoricoLoteV3Id IS NOT NULL OR (Solicitud IS NOT NULL AND DescuentoD6 IS NOT NULL AND CapitalD6 IS NOT NULL AND InteresD6 IS NOT NULL AND InteresDiferidoD6 IS NOT NULL AND SeguroD6 IS NOT NULL AND MoratorioD6 IS NOT NULL));');
 
   DECLARE @Esperadas TABLE(Tabla SYSNAME,Columna SYSNAME,Tipo SYSNAME,Longitud SMALLINT,Precision TINYINT,Escala TINYINT,Nullable BIT);
   INSERT @Esperadas VALUES
@@ -123,27 +125,27 @@ BEGIN TRY
       OR (EstadoFuente IN('EMPTY','NOT_APPLICABLE') AND Registros=0 AND HashFuente IS NULL)));
 
   IF OBJECT_ID(N'retenciones.CK_RetencionPCPHistoricoV3_CompletoV5',N'C') IS NOT NULL ALTER TABLE retenciones.RetencionPCPHistoricoV3 DROP CONSTRAINT CK_RetencionPCPHistoricoV3_CompletoV5;
-  ALTER TABLE retenciones.RetencionPCPHistoricoV3 WITH CHECK ADD CONSTRAINT CK_RetencionPCPHistoricoV3_CompletoV5 CHECK(RetencionHistoricoLoteV3Id IS NULL OR
-    (Interno IS NOT NULL AND EmpleadoClave=CONVERT(NVARCHAR(50),Interno) AND Nombre IS NOT NULL AND ClaveFilaHash IS NOT NULL AND HashFila IS NOT NULL AND LEN(ClaveFilaHash)=64 AND ClaveFilaHash COLLATE Latin1_General_100_BIN2 NOT LIKE '%[^0-9A-F]%' AND LEN(HashFila)=64 AND HashFila COLLATE Latin1_General_100_BIN2 NOT LIKE '%[^0-9A-F]%'
+  EXEC(N'ALTER TABLE retenciones.RetencionPCPHistoricoV3 WITH CHECK ADD CONSTRAINT CK_RetencionPCPHistoricoV3_CompletoV5 CHECK(RetencionHistoricoLoteV3Id IS NULL OR
+    (Interno IS NOT NULL AND EmpleadoClave=CONVERT(NVARCHAR(50),Interno) AND Nombre IS NOT NULL AND ClaveFilaHash IS NOT NULL AND HashFila IS NOT NULL AND LEN(ClaveFilaHash)=64 AND ClaveFilaHash COLLATE Latin1_General_100_BIN2 NOT LIKE ''%[^0-9A-F]%'' AND LEN(HashFila)=64 AND HashFila COLLATE Latin1_General_100_BIN2 NOT LIKE ''%[^0-9A-F]%''
       AND PayloadCanonico IS NOT NULL AND PayloadVersion=1 AND IdentificadorFuente IS NOT NULL AND EsHuerfano IS NOT NULL
-      AND ((EsHuerfano=1 AND QnaSnapshotDetalleId IS NULL) OR (EsHuerfano=0 AND QnaSnapshotDetalleId IS NOT NULL))));
+      AND ((EsHuerfano=1 AND QnaSnapshotDetalleId IS NULL) OR (EsHuerfano=0 AND QnaSnapshotDetalleId IS NOT NULL))));');
   IF OBJECT_ID(N'retenciones.CK_RetencionPMPHistoricoV3_CompletoV5',N'C') IS NOT NULL ALTER TABLE retenciones.RetencionPMPHistoricoV3 DROP CONSTRAINT CK_RetencionPMPHistoricoV3_CompletoV5;
-  ALTER TABLE retenciones.RetencionPMPHistoricoV3 WITH CHECK ADD CONSTRAINT CK_RetencionPMPHistoricoV3_CompletoV5 CHECK(RetencionHistoricoLoteV3Id IS NULL OR
-    (Interno IS NOT NULL AND EmpleadoClave=CONVERT(NVARCHAR(50),Interno) AND Nombre IS NOT NULL AND ClaveFilaHash IS NOT NULL AND HashFila IS NOT NULL AND LEN(ClaveFilaHash)=64 AND ClaveFilaHash COLLATE Latin1_General_100_BIN2 NOT LIKE '%[^0-9A-F]%' AND LEN(HashFila)=64 AND HashFila COLLATE Latin1_General_100_BIN2 NOT LIKE '%[^0-9A-F]%'
+  EXEC(N'ALTER TABLE retenciones.RetencionPMPHistoricoV3 WITH CHECK ADD CONSTRAINT CK_RetencionPMPHistoricoV3_CompletoV5 CHECK(RetencionHistoricoLoteV3Id IS NULL OR
+    (Interno IS NOT NULL AND EmpleadoClave=CONVERT(NVARCHAR(50),Interno) AND Nombre IS NOT NULL AND ClaveFilaHash IS NOT NULL AND HashFila IS NOT NULL AND LEN(ClaveFilaHash)=64 AND ClaveFilaHash COLLATE Latin1_General_100_BIN2 NOT LIKE ''%[^0-9A-F]%'' AND LEN(HashFila)=64 AND HashFila COLLATE Latin1_General_100_BIN2 NOT LIKE ''%[^0-9A-F]%''
       AND PayloadCanonico IS NOT NULL AND PayloadVersion=1 AND IdentificadorFuente IS NOT NULL AND EsHuerfano IS NOT NULL
-      AND ((EsHuerfano=1 AND QnaSnapshotDetalleId IS NULL) OR (EsHuerfano=0 AND QnaSnapshotDetalleId IS NOT NULL))));
+      AND ((EsHuerfano=1 AND QnaSnapshotDetalleId IS NULL) OR (EsHuerfano=0 AND QnaSnapshotDetalleId IS NOT NULL))));');
   IF OBJECT_ID(N'retenciones.CK_RetencionHIPHistoricoV3_CompletoV5',N'C') IS NOT NULL ALTER TABLE retenciones.RetencionHIPHistoricoV3 DROP CONSTRAINT CK_RetencionHIPHistoricoV3_CompletoV5;
-  ALTER TABLE retenciones.RetencionHIPHistoricoV3 WITH CHECK ADD CONSTRAINT CK_RetencionHIPHistoricoV3_CompletoV5 CHECK(RetencionHistoricoLoteV3Id IS NULL OR
-    (Interno IS NOT NULL AND EmpleadoClave=CONVERT(NVARCHAR(50),Interno) AND Nombre IS NOT NULL AND ClaveFilaHash IS NOT NULL AND HashFila IS NOT NULL AND LEN(ClaveFilaHash)=64 AND ClaveFilaHash COLLATE Latin1_General_100_BIN2 NOT LIKE '%[^0-9A-F]%' AND LEN(HashFila)=64 AND HashFila COLLATE Latin1_General_100_BIN2 NOT LIKE '%[^0-9A-F]%'
+  EXEC(N'ALTER TABLE retenciones.RetencionHIPHistoricoV3 WITH CHECK ADD CONSTRAINT CK_RetencionHIPHistoricoV3_CompletoV5 CHECK(RetencionHistoricoLoteV3Id IS NULL OR
+    (Interno IS NOT NULL AND EmpleadoClave=CONVERT(NVARCHAR(50),Interno) AND Nombre IS NOT NULL AND ClaveFilaHash IS NOT NULL AND HashFila IS NOT NULL AND LEN(ClaveFilaHash)=64 AND ClaveFilaHash COLLATE Latin1_General_100_BIN2 NOT LIKE ''%[^0-9A-F]%'' AND LEN(HashFila)=64 AND HashFila COLLATE Latin1_General_100_BIN2 NOT LIKE ''%[^0-9A-F]%''
       AND PayloadCanonico IS NOT NULL AND PayloadVersion=1 AND IdentificadorFuente IS NOT NULL AND EsHuerfano IS NOT NULL
-      AND ((EsHuerfano=1 AND QnaSnapshotDetalleId IS NULL) OR (EsHuerfano=0 AND QnaSnapshotDetalleId IS NOT NULL))));
+      AND ((EsHuerfano=1 AND QnaSnapshotDetalleId IS NULL) OR (EsHuerfano=0 AND QnaSnapshotDetalleId IS NOT NULL))));');
 
-  IF OBJECT_ID(N'retenciones.FK_RetencionPCPHistoricoV3_Lote',N'F') IS NULL ALTER TABLE retenciones.RetencionPCPHistoricoV3 WITH CHECK ADD CONSTRAINT FK_RetencionPCPHistoricoV3_Lote FOREIGN KEY(RetencionHistoricoLoteV3Id) REFERENCES retenciones.RetencionHistoricoLoteV3(RetencionHistoricoLoteV3Id);
-  IF OBJECT_ID(N'retenciones.FK_RetencionPMPHistoricoV3_Lote',N'F') IS NULL ALTER TABLE retenciones.RetencionPMPHistoricoV3 WITH CHECK ADD CONSTRAINT FK_RetencionPMPHistoricoV3_Lote FOREIGN KEY(RetencionHistoricoLoteV3Id) REFERENCES retenciones.RetencionHistoricoLoteV3(RetencionHistoricoLoteV3Id);
-  IF OBJECT_ID(N'retenciones.FK_RetencionHIPHistoricoV3_Lote',N'F') IS NULL ALTER TABLE retenciones.RetencionHIPHistoricoV3 WITH CHECK ADD CONSTRAINT FK_RetencionHIPHistoricoV3_Lote FOREIGN KEY(RetencionHistoricoLoteV3Id) REFERENCES retenciones.RetencionHistoricoLoteV3(RetencionHistoricoLoteV3Id);
-  IF OBJECT_ID(N'retenciones.FK_RetencionPCPHistoricoV3_QnaDetalle',N'F') IS NULL ALTER TABLE retenciones.RetencionPCPHistoricoV3 WITH CHECK ADD CONSTRAINT FK_RetencionPCPHistoricoV3_QnaDetalle FOREIGN KEY(QnaSnapshotDetalleId) REFERENCES liquidacion.QnaSnapshotDetalle(QnaSnapshotDetalleId);
-  IF OBJECT_ID(N'retenciones.FK_RetencionPMPHistoricoV3_QnaDetalle',N'F') IS NULL ALTER TABLE retenciones.RetencionPMPHistoricoV3 WITH CHECK ADD CONSTRAINT FK_RetencionPMPHistoricoV3_QnaDetalle FOREIGN KEY(QnaSnapshotDetalleId) REFERENCES liquidacion.QnaSnapshotDetalle(QnaSnapshotDetalleId);
-  IF OBJECT_ID(N'retenciones.FK_RetencionHIPHistoricoV3_QnaDetalle',N'F') IS NULL ALTER TABLE retenciones.RetencionHIPHistoricoV3 WITH CHECK ADD CONSTRAINT FK_RetencionHIPHistoricoV3_QnaDetalle FOREIGN KEY(QnaSnapshotDetalleId) REFERENCES liquidacion.QnaSnapshotDetalle(QnaSnapshotDetalleId);
+  IF OBJECT_ID(N'retenciones.FK_RetencionPCPHistoricoV3_Lote',N'F') IS NULL EXEC(N'ALTER TABLE retenciones.RetencionPCPHistoricoV3 WITH CHECK ADD CONSTRAINT FK_RetencionPCPHistoricoV3_Lote FOREIGN KEY(RetencionHistoricoLoteV3Id) REFERENCES retenciones.RetencionHistoricoLoteV3(RetencionHistoricoLoteV3Id);');
+  IF OBJECT_ID(N'retenciones.FK_RetencionPMPHistoricoV3_Lote',N'F') IS NULL EXEC(N'ALTER TABLE retenciones.RetencionPMPHistoricoV3 WITH CHECK ADD CONSTRAINT FK_RetencionPMPHistoricoV3_Lote FOREIGN KEY(RetencionHistoricoLoteV3Id) REFERENCES retenciones.RetencionHistoricoLoteV3(RetencionHistoricoLoteV3Id);');
+  IF OBJECT_ID(N'retenciones.FK_RetencionHIPHistoricoV3_Lote',N'F') IS NULL EXEC(N'ALTER TABLE retenciones.RetencionHIPHistoricoV3 WITH CHECK ADD CONSTRAINT FK_RetencionHIPHistoricoV3_Lote FOREIGN KEY(RetencionHistoricoLoteV3Id) REFERENCES retenciones.RetencionHistoricoLoteV3(RetencionHistoricoLoteV3Id);');
+  IF OBJECT_ID(N'retenciones.FK_RetencionPCPHistoricoV3_QnaDetalle',N'F') IS NULL EXEC(N'ALTER TABLE retenciones.RetencionPCPHistoricoV3 WITH CHECK ADD CONSTRAINT FK_RetencionPCPHistoricoV3_QnaDetalle FOREIGN KEY(QnaSnapshotDetalleId) REFERENCES liquidacion.QnaSnapshotDetalle(QnaSnapshotDetalleId);');
+  IF OBJECT_ID(N'retenciones.FK_RetencionPMPHistoricoV3_QnaDetalle',N'F') IS NULL EXEC(N'ALTER TABLE retenciones.RetencionPMPHistoricoV3 WITH CHECK ADD CONSTRAINT FK_RetencionPMPHistoricoV3_QnaDetalle FOREIGN KEY(QnaSnapshotDetalleId) REFERENCES liquidacion.QnaSnapshotDetalle(QnaSnapshotDetalleId);');
+  IF OBJECT_ID(N'retenciones.FK_RetencionHIPHistoricoV3_QnaDetalle',N'F') IS NULL EXEC(N'ALTER TABLE retenciones.RetencionHIPHistoricoV3 WITH CHECK ADD CONSTRAINT FK_RetencionHIPHistoricoV3_QnaDetalle FOREIGN KEY(QnaSnapshotDetalleId) REFERENCES liquidacion.QnaSnapshotDetalle(QnaSnapshotDetalleId);');
   DECLARE @FkEsperadas TABLE(Tabla SYSNAME,Nombre SYSNAME,Columna SYSNAME,TablaReferida SYSNAME,ColumnaReferida SYSNAME);
   INSERT @FkEsperadas VALUES
     (N'retenciones.RetencionHistoricoLoteV3',N'FK_RetencionHistoricoLoteV3_Snapshot',N'LiquidacionSnapshotId',N'liquidacion.QnaSnapshot',N'LiquidacionSnapshotId'),
@@ -166,9 +168,9 @@ BEGIN TRY
   ALTER TABLE retenciones.RetencionPMPHistoricoV3 WITH CHECK CHECK CONSTRAINT FK_RetencionPMPHistoricoV3_Lote,FK_RetencionPMPHistoricoV3_QnaDetalle;
   ALTER TABLE retenciones.RetencionHIPHistoricoV3 WITH CHECK CHECK CONSTRAINT FK_RetencionHIPHistoricoV3_Lote,FK_RetencionHIPHistoricoV3_QnaDetalle;
 
-  IF NOT EXISTS(SELECT 1 FROM sys.indexes WHERE object_id=OBJECT_ID(N'retenciones.RetencionPCPHistoricoV3') AND name=N'IX_RetencionPCPHistoricoV3_ClaveFilaHash') CREATE INDEX IX_RetencionPCPHistoricoV3_ClaveFilaHash ON retenciones.RetencionPCPHistoricoV3(LiquidacionSnapshotId,ClaveFilaHash) WHERE ClaveFilaHash IS NOT NULL;
-  IF NOT EXISTS(SELECT 1 FROM sys.indexes WHERE object_id=OBJECT_ID(N'retenciones.RetencionPMPHistoricoV3') AND name=N'IX_RetencionPMPHistoricoV3_ClaveFilaHash') CREATE INDEX IX_RetencionPMPHistoricoV3_ClaveFilaHash ON retenciones.RetencionPMPHistoricoV3(LiquidacionSnapshotId,ClaveFilaHash) WHERE ClaveFilaHash IS NOT NULL;
-  IF NOT EXISTS(SELECT 1 FROM sys.indexes WHERE object_id=OBJECT_ID(N'retenciones.RetencionHIPHistoricoV3') AND name=N'IX_RetencionHIPHistoricoV3_ClaveFilaHash') CREATE INDEX IX_RetencionHIPHistoricoV3_ClaveFilaHash ON retenciones.RetencionHIPHistoricoV3(LiquidacionSnapshotId,ClaveFilaHash) WHERE ClaveFilaHash IS NOT NULL;
+  IF NOT EXISTS(SELECT 1 FROM sys.indexes WHERE object_id=OBJECT_ID(N'retenciones.RetencionPCPHistoricoV3') AND name=N'IX_RetencionPCPHistoricoV3_ClaveFilaHash') EXEC(N'CREATE INDEX IX_RetencionPCPHistoricoV3_ClaveFilaHash ON retenciones.RetencionPCPHistoricoV3(LiquidacionSnapshotId,ClaveFilaHash) WHERE ClaveFilaHash IS NOT NULL;');
+  IF NOT EXISTS(SELECT 1 FROM sys.indexes WHERE object_id=OBJECT_ID(N'retenciones.RetencionPMPHistoricoV3') AND name=N'IX_RetencionPMPHistoricoV3_ClaveFilaHash') EXEC(N'CREATE INDEX IX_RetencionPMPHistoricoV3_ClaveFilaHash ON retenciones.RetencionPMPHistoricoV3(LiquidacionSnapshotId,ClaveFilaHash) WHERE ClaveFilaHash IS NOT NULL;');
+  IF NOT EXISTS(SELECT 1 FROM sys.indexes WHERE object_id=OBJECT_ID(N'retenciones.RetencionHIPHistoricoV3') AND name=N'IX_RetencionHIPHistoricoV3_ClaveFilaHash') EXEC(N'CREATE INDEX IX_RetencionHIPHistoricoV3_ClaveFilaHash ON retenciones.RetencionHIPHistoricoV3(LiquidacionSnapshotId,ClaveFilaHash) WHERE ClaveFilaHash IS NOT NULL;');
   IF EXISTS(SELECT 1 FROM @Tablas t JOIN sys.indexes i ON i.object_id=OBJECT_ID(t.Tabla) AND i.name=N'IX_Retencion'+REPLACE(REPLACE(t.Tabla,N'retenciones.Retencion',N''),N'HistoricoV3',N'')+N'HistoricoV3_ClaveFilaHash'
     WHERE i.is_unique=1 OR i.is_disabled=1 OR i.has_filter<>1 OR i.filter_definition NOT LIKE N'%ClaveFilaHash%IS NOT NULL%')
     THROW 51721,'RETENCION_V3_INDICE_CLAVE_INCOMPATIBLE',1;

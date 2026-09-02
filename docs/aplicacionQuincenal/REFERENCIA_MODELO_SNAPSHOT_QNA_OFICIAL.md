@@ -269,7 +269,7 @@ POST /v1/liquidaciones-qna/:id/resolver-aplicacion-incierta
 
 Requiere `intentoUuid`, `CONFIRMADA` o `REVERTIDA`, motivo, evidencia y scope completo. No consulta ni modifica Firebird. Un replay identico es idempotente; otra evidencia o resolucion devuelve conflicto. Una confirmacion administrativa permanece confirmada aunque la recuperacion SQL inmediata falle y quede marcada como pendiente.
 
-La aplicacion normal revalida dentro de la transaccion SQL serializable el snapshot oficial, carga TXT vigente, formula, V2, fuentes, hashes, conteos, totales y la unica bitacora elegible. Firebird ejecuta C, F y EBI en una transaccion unica. El resultado tipado distingue `COMMIT_CONFIRMADO`, `ROLLBACK_CONFIRMADO`, `RESULTADO_INCIERTO` y `NO_INICIADA`; el resultado conocido prevalece sobre el estado del heartbeat.
+La aplicacion normal revalida dentro de la transaccion SQL serializable el snapshot oficial, la carga TXT vigente exacta o su ausencia confirmada, formula, V2, fuentes, hashes, conteos, totales y la unica bitacora elegible. Firebird ejecuta DN con TXT, o C/F sin TXT, y EBI cuando corresponde, en una transaccion unica. El resultado tipado distingue `COMMIT_CONFIRMADO`, `ROLLBACK_CONFIRMADO`, `RESULTADO_INCIERTO` y `NO_INICIADA`; el resultado conocido prevalece sobre el estado del heartbeat.
 
 Despues de un commit confirmado, Linea, REVISA, bitacora y `TERMINADO` se recuperan por separado y sin volver a ejecutar Firebird. Un proceso ya `TERMINADO` responde idempotentemente sin consultar Firebird. SFTP es trazabilidad best effort y no cambia el resultado financiero.
 

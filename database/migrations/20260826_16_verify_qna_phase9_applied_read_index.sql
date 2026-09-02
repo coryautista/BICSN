@@ -1,7 +1,7 @@
 /* Verificacion read-only del indice de lectura aplicada fase 9. */
 SET NOCOUNT ON;
 
-IF DB_NAME()<>N'SII-ISSSSPEA-DES' THROW 51762,'QNA_PHASE9_VERIFICADOR_DESTINO_INVALIDO',1;
+IF DB_NAME() NOT IN(N'SII-ISSSSPEA-DES',N'SII-ISSSSPEA',N'SII-ISSSSPEA-PROD') THROW 51762,'QNA_PHASE9_VERIFICADOR_DESTINO_INVALIDO',1;
 IF OBJECT_ID(N'liquidacion.QnaProcesoTransicion',N'U') IS NULL THROW 51760,'QNA_PHASE9_TRANSICIONES_FALTANTES',1;
 
 DECLARE @IndexId INT=(SELECT index_id FROM sys.indexes WHERE object_id=OBJECT_ID(N'liquidacion.QnaProcesoTransicion') AND name=N'IX_QnaProcesoTransicion_EstadoProcesoFecha');

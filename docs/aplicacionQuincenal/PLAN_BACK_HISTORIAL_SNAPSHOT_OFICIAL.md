@@ -472,6 +472,19 @@ Criterio para retirar escritura legacy en QNA nuevas:
 
 No eliminar tablas legacy al retirar su escritura.
 
+### Preparacion controlada de fase 13
+
+La implementacion puede prepararse antes del cierre de fase 12 mediante
+`QNA_LEGACY_DUAL_WRITE_ENABLED`, con valor predeterminado `true`. El valor
+`false` omite exclusivamente `spProyectarLegacyDesdeSnapshotV5` para
+promociones V5 nuevas y devuelve `legacyProjectionStatus = DISABLED`; no
+retira tablas, lecturas historicas, retenciones V3 ni capacidades auditadas de
+conciliacion y reparacion.
+
+La bandera debe permanecer activa en Desarrollo, Calidad y Produccion hasta
+cumplir los seis criterios anteriores. Preparar y probar el interruptor no
+cambia el estado `PENDIENTE` de fase 13 ni constituye aprobacion operativa.
+
 ## Fases de Implementacion
 
 | Fase | Objetivo | Estado |
@@ -488,7 +501,7 @@ No eliminar tablas legacy al retirar su escritura.
 | 9 | Implementar endpoints de lectura aplicada | COMPLETADA |
 | 10 | Implementar fallback legacy identificado | COMPLETADA |
 | 11 | Probar saga, recuperacion e idempotencia | COMPLETADA |
-| 12 | Validar en Calidad y entregar contrato frontend | PENDIENTE |
+| 12 | Validar en Calidad y entregar contrato frontend | EN_PROGRESO |
 | 13 | Retirar dual-write para QNA nuevas | PENDIENTE |
 | 14 | Liberar en Produccion | PENDIENTE |
 
@@ -618,5 +631,10 @@ Compilar no es evidencia suficiente para marcar una fase como completada.
 | 2026-08-26 | 9 | COMPLETADA | `1078beb` | `QNA_PHASE9_APPLIED_READ_MIGRATION_OK` en aplicacion y reaplicacion; `QNA_PHASE9_APPLIED_READ_VERIFY_OK`; `QNA_PHASE9_APPLIED_PLAN_OK`; contratos, HTTP e integracion rollback aprobados | Tres endpoints V5 aplicados, Swagger, scope, paginacion, busqueda e integridad verificados; iniciar fase 10 |
 | 2026-08-26 | 10 | COMPLETADA | `0f97dce`, `0282e74` | `QNA_PHASE10_APPLIED_CONTRACTS_OK`; `QNA_PHASE10_APPLIED_INTEGRATION_DESARROLLO_ROLLBACK_OK`; `QNA_PHASE10_APPLIED_READ_VERIFIER_DESARROLLO_OK`; `QNA_PHASE10_APPLIED_PLAN_DESARROLLO_OK`; build, HTTP, fase 9 y revision independiente aprobados | Union discriminada V5/V3-V4/legacy, precedencia real por scope sin ocultar corrupcion, nullability, ausencia legacy, totales exactos, colisiones, auditoria admin y pagina mixta verificadas; no requirio migracion; iniciar fase 11 |
 | 2026-08-27 | 11 | COMPLETADA | `ff40203`, `c666210` | `QNA_PHASE11_ATTEMPT_LEDGER_MIGRATION_OK` en aplicacion y reaplicacion; dry-run rollback; `QNA_PHASE11_SAGA_OK`; `QNA_PHASE11_HTTP_OK`; `QNA_PHASE11_LINEA_ROUTE_OK`; `QNA_PHASE11_INTEGRATION_DESARROLLO_OK`; reparacion parcial, verificador, plan y regresiones aprobados | Ledger SQL, claims renovables, resultado Firebird tipado, bitacora exacta, recuperacion resumible, endpoint de Linea unificado y resolucion manual sin gestionar Firebird; pruebas Firebird con fakes y SQL rollback-only; iniciar fase 12 |
+| 2026-08-27 | 12 | EN_PROGRESO | Pendiente | Migraciones `09` a `17` aplicadas y reaplicadas en Calidad; `QNA_PHASE12_APPLIED_INTEGRITY_READONLY_OK`; `QNA_PHASE12_CALIDAD_HTTP_READONLY_OK`; health, Swagger, lista, resumen, detalle, paginacion y ciclos REVISA sin SQL 650 aprobados | Evidencia `1526` reconstruida V4 con hash canonico V3 validado y warning explicito; falta fixture V5 real `TERMINADO`, sin fabricar ni reprocesar datos |
+| 2026-08-27 | 12 | ESPERA_OPERATIVA_Q16 | Pendiente | Q16 2026, entidad 1 y scope `04/24/01/01` seleccionados para ejecucion exclusiva mediante el flujo normal del sistema | No usar ni reprocesar quincenas anteriores; esperar carga TXT vigente y terminacion de Q16 antes de validar V5 en Calidad |
+| 2026-08-27 | 13 | PREPARACION_VALIDADA_NO_ACTIVA | Pendiente | `QNA_PHASE13_DUAL_WRITE_TOGGLE_OK`; `QNA_PHASE13_DUAL_WRITE_DISABLED_INTEGRATION_DESARROLLO_ROLLBACK_OK`; integracion activa de fase 8, build y regresiones 8 a 11 aprobados | Q14 `04/24/01/01` promovida transaccionalmente con estado `DISABLED`; nueve stores retirables en cero y conteos globales intactos tras rollback; mantener bandera activa hasta cerrar fase 12 y recibir aprobacion operativa |
+| 2026-08-27 | 13 | PREPARACION_BLINDADA_NO_ACTIVA | Pendiente | Desactivacion fuera de Desarrollo exige confirmacion igual a la base; health publica estado y politica; template fija `true` para Calidad y Produccion; preflight de configuracion aprobado | No activar antes de cerrar fase 12 y obtener aprobacion operativa explicita |
+| 2026-08-27 | 14 | PREPARACION_READONLY | Pendiente | Preflight read-only ejecutado contra `SII-ISSSSPEA-PROD`; Firebird disponible y restricciones existentes confiables; paquete preparado con migraciones `09` a `17`, manifest y dual-write activo | Produccion no esta lista: faltan objetos, columnas y procedimientos V5 de fases 7, 8 y 11; no migrar ni desplegar antes de cerrar fases 12 y 13 |
 
 Actualizar esta tabla despues de cada cambio relevante. No marcar una fase como completada sin evidencia y referencia al commit correspondiente.

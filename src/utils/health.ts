@@ -1,5 +1,6 @@
 import { ping as pingMssql } from '../db/mssql.js';
 import { testFirebirdConnection } from '../db/firebird.js';
+import { env } from '../config/env.js';
 
 export interface HealthCheck {
   name: string;
@@ -106,11 +107,15 @@ export async function checkFirebirdDatabase(): Promise<HealthCheck> {
 export async function checkDependencies(): Promise<HealthCheck> {
   const startTime = Date.now();
   try {
-    // Verificar que las dependencias críticas estén cargadas
+    const loaded = await Promise.allSettled([
+      import('fastify'),
+      import('jsonwebtoken'),
+      import('argon2'),
+    ]);
     const criticalDeps = {
-      fastify: typeof require !== 'undefined',
-      jwt: typeof require !== 'undefined',
-      argon2: typeof require !== 'undefined',
+      fastify: loaded[0].status === 'fulfilled',
+      jwt: loaded[1].status === 'fulfilled',
+      argon2: loaded[2].status === 'fulfilled',
     };
 
     const allHealthy = Object.values(criticalDeps).every(dep => dep === true);
@@ -132,6 +137,19 @@ export async function checkDependencies(): Promise<HealthCheck> {
       message: error instanceof Error ? error.message : 'Unknown error'
     };
   }
+}
+
+export function checkQnaLegacyDualWrite(): HealthCheck {
+  const enabled = env.qna.legacyDualWriteEnabled;
+  return {
+    name: 'qna_legacy_dual_write',
+    status: enabled ? 'healthy' : 'degraded',
+    message: enabled ? 'QNA legacy dual-write enabled' : 'QNA legacy dual-write disabled by explicit configuration',
+    details: {
+      enabled,
+      policy: 'QNA-LEGACY-DUAL-WRITE-V1'
+    }
+  };
 }
 
 /**
@@ -170,7 +188,8 @@ export async function performDetailedHealthCheck(): Promise<DetailedHealthRespon
   const checks = await Promise.all([
     checkMssqlDatabase(),
     checkFirebirdDatabase(),
-    checkDependencies()
+    checkDependencies(),
+    Promise.resolve(checkQnaLegacyDualWrite())
   ]);
 
   // Determine overall status

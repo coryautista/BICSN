@@ -50,13 +50,19 @@ Para cada QNA nueva aplicada, reproducir sin fuentes vivas los diez dominios con
 | 9 | Endpoints oficiales de periodos, resumen y detalle | COMPLETADA | Fase 8 |
 | 10 | Fuentes discriminadas y fallback legacy | COMPLETADA | Fase 9 |
 | 11 | Saga, recuperacion e idempotencia verificadas | COMPLETADA | Fase 10 |
-| 12 | Evidencia integral en Calidad y contrato frontend | PENDIENTE | Fase 11 |
+| 12 | Evidencia integral en Calidad y contrato frontend | EN_PROGRESO | Fase 11 |
 | 13 | Retiro autorizado de escritura legacy para QNA nuevas | PENDIENTE | Fase 12 y aprobacion operativa |
 | 14 | Migracion y liberacion controlada en Produccion | PENDIENTE | Fase 13 |
 
 ## Fase Actual: 12
 
 Objetivo: validar la evidencia integral en Calidad y entregar el contrato frontend.
+
+Evidencia parcial del 2026-08-27: migraciones `09` a `17` aplicadas y reaplicadas idempotentemente en Calidad; health, Swagger y smoke autenticado read-only aprobados para lista, resumen y detalle. El unico periodo disponible es `1526`, fuente `SNAPSHOT_OFICIAL_RECONSTRUIDO`, con diez dominios y 167 filas de fondo. La cabecera V4 conserva un hash canonico V3 verificable y se publica con `QNA_RECONSTRUIDA_HASH_CANONICO_V3`, sin modificar la evidencia. Las lecturas restauran `READ COMMITTED` al liberar conexiones y el worker REVISA fuerza ese aislamiento al reclamar con `READPAST`; varios ciclos posteriores no reprodujeron SQL 650. La fase permanece abierta porque Calidad no contiene una QNA V5 real `TERMINADO` y `QnaSnapshotDetalle` sigue sin filas.
+
+Decision operativa para Calidad: la evidencia V5 pendiente se obtendra exclusivamente con la Q16 de 2026, scope `04/24/01/01`, mediante el flujo normal del sistema. No se permite usar, reabrir ni reprocesar Q12, Q13, Q14 o Q15, ni insertar o corregir manualmente snapshots, transiciones, bitacoras o detalles para satisfacer la puerta. Al registrar esta decision, Q16 conserva `APLICAR` pero todavia no tiene una carga TXT vigente; la operacion debe esperar a que el sistema complete ese prerrequisito.
+
+Despues de que el sistema termine Q16 se ejecutaran solamente verificaciones de Calidad: confirmar Snapshot V2 aprobado, QNA V5 oficial, diez fuentes completas, `QnaSnapshotDetalle` poblado, proceso y bitacora `TERMINADO`, Linea y REVISA concluidos, y smoke autenticado de lista, resumen y detalle sin consultar fuentes vivas.
 
 ## Evidencia de la Fase 11
 
@@ -283,15 +289,17 @@ No deben incluirse, revertirse ni ajustarse como parte de esta fase. Requieren u
 
 ## Puerta para Desbloquear Frontend
 
-- Migracion de proyecciones aplicada en Calidad.
-- `QnaSnapshotDetalle` poblado.
-- Payloads auxiliares completos y versionados.
-- Los tres endpoints oficiales disponibles.
-- Swagger estable.
-- Totales, paginacion y union discriminada documentados.
-- Una QNA de Calidad consultable sin fuentes vivas.
-- Saga, recuperacion e idempotencia de fase 11 aprobadas.
-- Pruebas backend obligatorias aprobadas.
+El piloto frontend fue implementado el 2026-08-29 exclusivamente para validacion en Desarrollo. Esto no cierra la puerta de liberacion ni autoriza despliegue en Calidad o Produccion.
+
+- [x] Migracion de proyecciones aplicada en Calidad.
+- [ ] `QnaSnapshotDetalle` poblado por una QNA V5 real `TERMINADO`.
+- [ ] Payloads auxiliares V5 completos y versionados validados en Calidad.
+- [x] Los tres endpoints oficiales disponibles.
+- [x] Swagger estable.
+- [x] Totales, paginacion y union discriminada documentados.
+- [x] Una QNA reconstruida de Calidad consultable sin fuentes vivas.
+- [x] Saga, recuperacion e idempotencia de fase 11 aprobadas.
+- [x] Pruebas backend obligatorias aprobadas.
 
 ## Riesgos Activos
 
@@ -328,6 +336,12 @@ No deben incluirse, revertirse ni ajustarse como parte de esta fase. Requieren u
 | 2026-08-26 | 9 | COMPLETADA | Commit `1078beb`; endpoints aplicados V5, Swagger, autorizacion, integridad, indice y plan verificados; integracion rollback sin fuentes vivas | Iniciar fase 10 |
 | 2026-08-26 | 10 | COMPLETADA | Commits `0f97dce` y `0282e74`; union discriminada, precedencia V5/V3-V4/legacy por scope, ausencia legacy, precision exacta, auditoria admin, plan global y pagina mixta aprobados en Desarrollo | Iniciar fase 11 |
 | 2026-08-27 | 11 | COMPLETADA | Commits `ff40203` y `c666210`; ledger SQL, claims, resultado Firebird tipado, recuperacion resumible, resolucion manual, ruta de Linea unificada, migracion idempotente e integracion rollback aprobados | Iniciar fase 12 en Calidad con autorizacion independiente |
+| 2026-08-27 | 12 | EN_PROGRESO | Migraciones `09` a `17` idempotentes; `QNA_PHASE12_APPLIED_INTEGRITY_READONLY_OK`; `QNA_PHASE12_CALIDAD_HTTP_READONLY_OK`; lista, resumen y detalle autenticados `200`; 167 filas, paginacion estable y REVISA sin SQL 650 | Obtener una QNA V5 real `TERMINADO` mediante operacion autorizada; no fabricar ni reprocesar evidencia |
+| 2026-08-27 | 12 | ESPERA_OPERATIVA_Q16 | Decision: usar exclusivamente Q16 2026 `04/24/01/01` mediante el sistema; quincenas anteriores descartadas; Q16 aun sin carga TXT vigente | Esperar terminacion normal de Q16 y ejecutar verificaciones read-only de Calidad |
+| 2026-08-27 | 13 | PREPARACION_VALIDADA_NO_ACTIVA | Interruptor seguro y prueba real rollback-only aprobados en Desarrollo: promoción V5 `DISABLED`, nueve stores retirables en cero, modo activo de fase 8 sin regresiones y conteos finales intactos | Mantener `QNA_LEGACY_DUAL_WRITE_ENABLED=true` en todos los ambientes; no iniciar ni cerrar fase 13 hasta completar fase 12 y obtener aprobacion operativa |
+| 2026-08-27 | 13 | PREPARACION_BLINDADA_NO_ACTIVA | Desactivacion fuera de Desarrollo protegida por confirmacion exacta de base; health, template y preflight mantienen visibilidad y valor seguro | Esperar cierre de fase 12 y aprobacion operativa antes de activar |
+| 2026-08-27 | 14 | PREPARACION_READONLY | Produccion inventariada sin escrituras: Firebird disponible, pero faltan objetos V5 de migraciones `09` a `17`; paquete futuro alineado con manifest y dual-write activo | No aplicar migraciones ni publicar hasta completar fases 12 y 13 |
+| 2026-08-29 | Frontend | EN_VALIDACION_DESARROLLO | Pantallas Entidad de aportaciones y retenciones consumen snapshots aplicados con contratos Zod, totales oficiales, busqueda y paginacion server-side; exportaciones pendientes deshabilitadas | Ejecutar smoke autenticado en Desarrollo; mantener bloqueada la liberacion en Calidad |
 
 ## Regla de Actualizacion
 

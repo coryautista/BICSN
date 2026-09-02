@@ -2,9 +2,11 @@
 
 ## Estado
 
-BLOQUEADO POR VALIDACION INTEGRAL EN CALIDAD.
+IMPLEMENTADO PARA VALIDACION EN DESARROLLO. LIBERACION BLOQUEADA POR AUSENCIA DE EVIDENCIA V5 REAL EN CALIDAD.
 
-El contrato, los endpoints de lectura y la saga recuperable estan estables en Desarrollo desde la fase 11. No implementar el consumo oficial hasta completar la validacion integral en Calidad de fase 12.
+El contrato, los endpoints de lectura y la saga recuperable estan estables. El frontend Entidad consume ya lista, resumen y detalle oficiales como piloto de Desarrollo. Esta implementacion no autoriza publicacion en Calidad ni Produccion hasta validar una QNA V5 real `TERMINADO` con `QnaSnapshotDetalle` poblado.
+
+La validacion V5 de Calidad se realizara exclusivamente con Q16 de 2026 para el scope `04/24/01/01`, una vez completada por el flujo normal del sistema. No se usaran ni reprocesaran quincenas anteriores y no se fabricara evidencia para desbloquear frontend.
 
 Fuente de seguimiento backend:
 
@@ -110,6 +112,8 @@ El detalle auxiliar devuelve `payloadCanonico` V1 completo. Hashes, identificado
 
 Usa `reconstructionStrategy: SNAPSHOT_V3_V4_PERSISTED_V2_FUNDS`. `snapshotCalculoV2Id`, `nominaCargaId` y `formulaCalculoVersionId` pueden ser `null`. Cuando existe V2, los cuatro fondos provienen de su detalle persistido y validado; sin V2, el backend entrega los fondos no disponibles y `QNA_RECONSTRUIDA_FONDOS_SIN_V2`. Identidad, RFC, nombre, interno y otros campos no acreditados pueden ser `null`. Detalles V3/V4 no validados no enriquecen la respuesta. La UI debe mostrar `advertencias` y no completar nulls desde fuentes actuales.
 
+Una cabecera V4 historica cuyo contenido coincide exactamente con su hash canonico V3 se acepta sin modificar datos y publica `QNA_RECONSTRUIDA_HASH_CANONICO_V3`. Cualquier otra divergencia de hash conserva el bloqueo de integridad.
+
 ### Historico legacy
 
 Usa `reconstructionStrategy: LEGACY_EXACT_FULL_SCOPE`. Debe permitir IDs nulos, payload nullable y campos no verificables nulos. La advertencia `LEGACY_REDUCED_ROWS_UNLINKED` indica que las filas historicas usan clave reducida y no tienen enlace de lote al evento `TERMINADO`.
@@ -147,12 +151,14 @@ El contrato oficial no debe reutilizar superficialmente `AportacionUnificada`. D
 ## Archivos Frontend Previstos
 
 ```text
-src/entities/aportaciones-proceso-verificacion/aportaciones-proceso-verificacion.types.ts
-src/services/aportaciones-proceso-verificacion/aportaciones-proceso-verificacion.api.ts
-src/features/aportaciones-proceso-verificacion/aportaciones-proceso-verificacion.hooks.ts
+src/entities/liquidacion-qna-aplicada/liquidacion-qna-aplicada.types.ts
+src/services/liquidacion-qna-aplicada/liquidacion-qna-aplicada.api.ts
+src/features/liquidacion-qna-aplicada/useLiquidacionQnaAplicada.ts
+src/widgets/liquidacion-qna-aplicada/LiquidacionQnaAplicadaWidget.tsx
 src/widgets/aportaciones-proceso-verificacion/resumen-proceso-aportaciones-verificacion.tsx
+src/widgets/retenciones-cobrar-verificacion/resumen-retenciones-cobrar-verificacion.tsx
 src/app/dependencia/aportaciones-proceso-verificacion/page.tsx
-src/features/periodo-trabajo/periodo-trabajo.hooks.ts
+src/app/dependencia/retenciones-cobrar-verificacion/page.tsx
 ```
 
 No revertir cambios ajenos en `.gitignore`, `architecture/` u otros archivos no relacionados.
@@ -328,5 +334,8 @@ Agregar pruebas automatizadas para schema, servicio, hook y UI antes de marcar l
 | 2026-08-21 | BLOQUEADO | - | Contrato esperado actualizado despues de tercera revision backend | - | Esperar endpoints y Swagger estables |
 | 2026-08-26 | BLOQUEADO_CALIDAD | `0f97dce`, `0282e74` | Contrato backend discriminado estabilizado en Desarrollo para V5, V3/V4 y legacy | Contratos, HTTP, integraciones rollback, verificador y planes aprobados | Esperar fases backend 11 y 12; no crear adaptadores temporales |
 | 2026-08-27 | BLOQUEADO_CALIDAD | `ff40203`, `c666210` | Saga, recuperacion, idempotencia, Linea y resolucion administrativa estabilizadas en Desarrollo | Firebird fake, HTTP, migracion, SQL rollback, verificador, plan y regresiones aprobados | Esperar validacion integral de fase 12 en Calidad |
+| 2026-08-27 | BLOQUEADO_V5_CALIDAD | Pendiente | Lista, resumen y detalle reconstruido validados en Calidad; compatibilidad acotada de hash V3 historico para cabecera V4 | `QNA_PHASE12_APPLIED_INTEGRITY_READONLY_OK`; `QNA_PHASE12_CALIDAD_HTTP_READONLY_OK`; 167 filas y paginacion estable | Falta una QNA V5 real `TERMINADO`; no fabricar ni reprocesar evidencia |
+| 2026-08-27 | ESPERA_Q16_CALIDAD | Pendiente | Q16 2026 `04/24/01/01` definida como unica evidencia V5 valida para cerrar fase 12 | Decision operativa documentada; quincenas anteriores excluidas | Esperar que Q16 termine mediante el sistema y ejecutar validacion read-only |
+| 2026-08-29 | EN_VALIDACION_DESARROLLO | Frontend `d9d050f` | Aportaciones y retenciones migradas a lista, resumen y detalle oficiales; contratos Zod compartidos, strings monetarios, paginacion, busqueda abortable y exportaciones deshabilitadas | `npm run typecheck`, `npm run lint` y `npm run build` aprobados; 33 paginas generadas | Ejecutar smoke autenticado en Desarrollo; no publicar en Calidad |
 
 Actualizar esta tabla al completar cada fase. No iniciar adaptadores temporales contra contratos backend no estabilizados.

@@ -11,6 +11,7 @@ const MAX_TEXT_LENGTH = 500;
 const MAX_BODY_BYTES = 20 * 1024;
 const PASOS_PERMITIDOS = new Set([
   'obtenerQuincena',
+  'aplicarDn',
   'aplicarC',
   'aplicarF',
   'envioLayout',
