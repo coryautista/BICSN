@@ -5,6 +5,9 @@ import {
   type AuthenticatedUser,
 } from '../src/modules/auth/domain/policies/OrganicaScopePolicy.js';
 import { requireAuth, requireRole } from '../src/modules/auth/auth.middleware.js';
+import { GetAguinaldoQuery } from '../src/modules/aportacionesFondos/application/queries/GetAguinaldoQuery.js';
+import { GetAportacionGuarderiasQuery } from '../src/modules/aportacionesFondos/application/queries/GetAportacionGuarderiasQuery.js';
+import { GetPensionNominaTransitorioQuery } from '../src/modules/aportacionesFondos/application/queries/GetPensionNominaTransitorioQuery.js';
 
 function user(overrides: Partial<AuthenticatedUser> = {}): AuthenticatedUser {
   return {
@@ -94,5 +97,30 @@ const unauthorizedRole = replyRecorder();
 await requireRole('admin')({ user: user({ roles: ['consulta'] }) }, unauthorizedRole.reply as any);
 assert.equal(unauthorizedRole.state.statusCode, 403);
 assert.deepEqual(unauthorizedRole.state.body, { ok: false, error: { code: 'FORBIDDEN', message: 'Insufficient role' } });
+
+const adminTargetRepo = {
+  validarAccesoClavesOrganicas(userClave0: string, userClave1: string, isEntidad: boolean, clave0?: string, clave1?: string) {
+    assert.equal(userClave0, '');
+    assert.equal(userClave1, '');
+    assert.equal(isEntidad, false);
+    return { clave0: clave0!, clave1: clave1! };
+  },
+  obtenerAguinaldo: async (org0: string, org1: string) => {
+    assert.deepEqual([org0, org1], ['04', '24']);
+    return [];
+  },
+  obtenerAportacionGuarderias: async (org0: string, org1: string) => {
+    assert.deepEqual([org0, org1], ['04', '24']);
+    return [];
+  },
+  obtenerPensionNominaTransitorio: async (org0: string, org1: string, org2: string, org3: string) => {
+    assert.deepEqual([org0, org1, org2, org3], ['04', '60', '04', '24']);
+    return [];
+  },
+};
+
+await new GetAguinaldoQuery(adminTargetRepo as any).execute('', '', false, '04', '24', 'admin', false, '1526');
+await new GetAportacionGuarderiasQuery(adminTargetRepo as any).execute('', '', false, '04', '24', 'admin', false, '1526');
+await new GetPensionNominaTransitorioQuery(adminTargetRepo as any).execute('', '', false, '04', '24', 'admin', false, '1526');
 
 console.log('ORGANICA_SCOPE_POLICY_TESTS_OK');

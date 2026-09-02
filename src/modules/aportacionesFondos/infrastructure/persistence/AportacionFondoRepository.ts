@@ -2083,11 +2083,19 @@ export class AportacionFondoRepository implements IAportacionFondoRepository {
     const sql = `
       SELECT 
         (SELECT MIN(e.INTERNO) FROM PERSONAL e
-          WHERE e.NOEMPLEADO = p.TITULAR_NO_EMPLEADO
-            AND (p.TITULAR_RFC IS NULL OR UPPER(TRIM(e.RFC)) = UPPER(TRIM(p.TITULAR_RFC)))) AS TITULAR_INTERNO,
-        (SELECT COUNT(*) FROM PERSONAL e
-          WHERE e.NOEMPLEADO = p.TITULAR_NO_EMPLEADO
-            AND (p.TITULAR_RFC IS NULL OR UPPER(TRIM(e.RFC)) = UPPER(TRIM(p.TITULAR_RFC)))) AS TITULAR_COINCIDENCIAS,
+          WHERE (NULLIF(TRIM(p.TITULAR_NO_EMPLEADO), '') IS NOT NULL
+              AND e.NOEMPLEADO = p.TITULAR_NO_EMPLEADO
+              AND (NULLIF(TRIM(p.TITULAR_RFC), '') IS NULL OR UPPER(TRIM(e.RFC)) = UPPER(TRIM(p.TITULAR_RFC))))
+            OR (NULLIF(TRIM(p.TITULAR_NO_EMPLEADO), '') IS NULL
+              AND NULLIF(TRIM(p.TITULAR_RFC), '') IS NOT NULL
+              AND UPPER(TRIM(e.RFC)) = UPPER(TRIM(p.TITULAR_RFC)))) AS TITULAR_INTERNO,
+        (SELECT COUNT(DISTINCT e.INTERNO) FROM PERSONAL e
+          WHERE (NULLIF(TRIM(p.TITULAR_NO_EMPLEADO), '') IS NOT NULL
+              AND e.NOEMPLEADO = p.TITULAR_NO_EMPLEADO
+              AND (NULLIF(TRIM(p.TITULAR_RFC), '') IS NULL OR UPPER(TRIM(e.RFC)) = UPPER(TRIM(p.TITULAR_RFC))))
+            OR (NULLIF(TRIM(p.TITULAR_NO_EMPLEADO), '') IS NULL
+              AND NULLIF(TRIM(p.TITULAR_RFC), '') IS NOT NULL
+              AND UPPER(TRIM(e.RFC)) = UPPER(TRIM(p.TITULAR_RFC)))) AS TITULAR_COINCIDENCIAS,
         p.TITULAR_NOMBRE, 
         p.TITULAR_NO_EMPLEADO, 
         p.TITULAR_MONTO, 
@@ -2175,7 +2183,7 @@ export class AportacionFondoRepository implements IAportacionFondoRepository {
               const identidadAmbigua = decodedResult.find((row: any) => Number(row.TITULAR_COINCIDENCIAS) !== 1);
               if (identidadAmbigua) {
                 reject(new AportacionFondoDomainError(
-                  `Identidad de guardería no verificable para empleado ${String(identidadAmbigua.TITULAR_NO_EMPLEADO ?? '')}`,
+                  'No fue posible resolver un único interno para un recibo de guardería',
                   AportacionFondoError.ERROR_CALCULO_APORTACION
                 ));
                 return;

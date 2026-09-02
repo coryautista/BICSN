@@ -30,7 +30,7 @@ export class GetAguinaldoQuery {
 
     try {
       // Validar parámetros de entrada
-      this.validarParametrosEntrada(userClave0, userClave1, claveOrganica0, claveOrganica1);
+      this.validarParametrosEntrada(userClave0, userClave1, isEntidad, claveOrganica0, claveOrganica1);
 
       // Validar acceso según el rol del usuario
       console.log('[APORTACIONES_FONDOS] [AGUINALDO] Validando acceso a claves orgánicas', logContext);
@@ -111,32 +111,33 @@ export class GetAguinaldoQuery {
   private validarParametrosEntrada(
     userClave0: string,
     userClave1: string,
+    isEntidad: boolean,
     claveOrganica0?: string,
     claveOrganica1?: string
   ): void {
-    // Validar claves orgánicas del usuario
-    if (!userClave0 || userClave0.trim().length === 0) {
+    // Las claves del token son obligatorias solo para usuarios entidad.
+    if (isEntidad && (!userClave0 || userClave0.trim().length === 0)) {
       throw new AportacionFondoDomainError(
         'Clave orgánica 0 del usuario es requerida',
         AportacionFondoError.CLAVE_ORGANICA_REQUERIDA
       );
     }
 
-    if (!userClave1 || userClave1.trim().length === 0) {
+    if (isEntidad && (!userClave1 || userClave1.trim().length === 0)) {
       throw new AportacionFondoDomainError(
         'Clave orgánica 1 del usuario es requerida',
         AportacionFondoError.CLAVE_ORGANICA_REQUERIDA
       );
     }
 
-    if (userClave0.length > 2) {
+    if (isEntidad && userClave0.length > 2) {
       throw new AportacionFondoDomainError(
         `Clave orgánica 0 del usuario inválida: "${userClave0}". Debe tener máximo 2 caracteres`,
         AportacionFondoError.CLAVE_ORGANICA_INVALIDA
       );
     }
 
-    if (userClave1.length > 2) {
+    if (isEntidad && userClave1.length > 2) {
       throw new AportacionFondoDomainError(
         `Clave orgánica 1 del usuario inválida: "${userClave1}". Debe tener máximo 2 caracteres`,
         AportacionFondoError.CLAVE_ORGANICA_INVALIDA

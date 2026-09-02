@@ -30,7 +30,7 @@ export class GetPensionNominaTransitorioQuery {
 
     try {
       // Validar parámetros de entrada
-      this.validarParametrosEntrada(userClave0, userClave1, claveOrganica0, claveOrganica1);
+      this.validarParametrosEntrada(userClave0, userClave1, isEntidad, claveOrganica0, claveOrganica1);
 
       // Validar acceso según el rol del usuario
       console.log('[APORTACIONES_FONDOS] [PENSION_NOMINA_TRANSITORIO] Validando acceso a claves orgánicas', logContext);
@@ -45,14 +45,14 @@ export class GetPensionNominaTransitorioQuery {
 
       const periodoData = periodoParam
         ? { periodo: periodoParam, accion: 'PERIODO_PARAM' }
-        : await this.aportacionFondoRepo.obtenerPeriodoAplicacion(userClave0, userClave1);
+        : await this.aportacionFondoRepo.obtenerPeriodoAplicacion(claves.clave0, claves.clave1);
       const { periodo, accion } = periodoData;
 
-      // Para pensionados: org0='04' y org1='60' son hardcodeados, org2 y org3 vienen del token
+      // Para pensionados: org0='04' y org1='60'; org2 y org3 usan el ámbito autorizado.
       const org0Pension = '04';
       const org1Pension = '60';
-      const org2Pension = userClave0;
-      const org3Pension = userClave1;
+      const org2Pension = claves.clave0;
+      const org3Pension = claves.clave1;
 
       // Obtener registros ejecutando función PENSION_NOMINA_QNAL_TRANSITORIO
       console.log('[APORTACIONES_FONDOS] [PENSION_NOMINA_TRANSITORIO] Ejecutando función PENSION_NOMINA_QNAL_TRANSITORIO', { 
@@ -81,10 +81,10 @@ export class GetPensionNominaTransitorioQuery {
         duracionMs: duration
       });
 
-      // Retornar org2 y org3 del token (las claves orgánicas reales del usuario)
+      // Retornar el ámbito efectivo validado para entidad o administrador.
       return {
-        clave_organica_0: userClave0,
-        clave_organica_1: userClave1,
+        clave_organica_0: claves.clave0,
+        clave_organica_1: claves.clave1,
         periodo,
         accion,
         registros
@@ -115,32 +115,33 @@ export class GetPensionNominaTransitorioQuery {
   private validarParametrosEntrada(
     userClave0: string,
     userClave1: string,
+    isEntidad: boolean,
     claveOrganica0?: string,
     claveOrganica1?: string
   ): void {
-    // Validar claves orgánicas del usuario
-    if (!userClave0 || userClave0.trim().length === 0) {
+    // Las claves del token son obligatorias solo para usuarios entidad.
+    if (isEntidad && (!userClave0 || userClave0.trim().length === 0)) {
       throw new AportacionFondoDomainError(
         'Clave orgánica 0 del usuario es requerida',
         AportacionFondoError.CLAVE_ORGANICA_REQUERIDA
       );
     }
 
-    if (!userClave1 || userClave1.trim().length === 0) {
+    if (isEntidad && (!userClave1 || userClave1.trim().length === 0)) {
       throw new AportacionFondoDomainError(
         'Clave orgánica 1 del usuario es requerida',
         AportacionFondoError.CLAVE_ORGANICA_REQUERIDA
       );
     }
 
-    if (userClave0.length > 2) {
+    if (isEntidad && userClave0.length > 2) {
       throw new AportacionFondoDomainError(
         `Clave orgánica 0 del usuario inválida: "${userClave0}". Debe tener máximo 2 caracteres`,
         AportacionFondoError.CLAVE_ORGANICA_INVALIDA
       );
     }
 
-    if (userClave1.length > 2) {
+    if (isEntidad && userClave1.length > 2) {
       throw new AportacionFondoDomainError(
         `Clave orgánica 1 del usuario inválida: "${userClave1}". Debe tener máximo 2 caracteres`,
         AportacionFondoError.CLAVE_ORGANICA_INVALIDA
