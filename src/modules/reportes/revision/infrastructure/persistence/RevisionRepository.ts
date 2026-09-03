@@ -338,7 +338,10 @@ export class RevisionRepository {
         COALESCE(SUM(FAI), 0) AS FAI
       FROM AP_G_FONDOS_ALTBAJ(?, ?, ?)
       WHERE CVE_MOVIMIENTO = ?
-    `, [tarea.org0, tarea.org1, tarea.periodo, movimiento], FIREBIRD_TIMEOUTS.BATCH_OPERATION);
+    `, [tarea.org0, tarea.org1, tarea.periodo, movimiento], FIREBIRD_TIMEOUTS.BATCH_OPERATION, {
+      org0: tarea.org0,
+      org1: tarea.org1
+    });
 
     const row = rows[0] || {};
     return { importes: this.mapearImportes(row), registros: Number(row.REGISTROS || 0) };
@@ -367,7 +370,7 @@ export class RevisionRepository {
       tarea.org1,
       tarea.org2,
       tarea.org3
-    ], FIREBIRD_TIMEOUTS.BATCH_OPERATION);
+    ], FIREBIRD_TIMEOUTS.BATCH_OPERATION, { org0: tarea.org0, org1: tarea.org1 });
 
     const row = rows[0] || {};
     return { importes: this.mapearImportes(row), registros: Number(row.REGISTROS || 0) };
@@ -386,7 +389,10 @@ export class RevisionRepository {
         COALESCE(SUM(SFAT), 0) AS FAT,
         COALESCE(SUM(SFAI), 0) AS FAI
       FROM AP_G_SALDO_FONDO(?, ?, ?)
-    `, [tarea.org0, tarea.org1, tarea.periodo], FIREBIRD_TIMEOUTS.BATCH_OPERATION);
+    `, [tarea.org0, tarea.org1, tarea.periodo], FIREBIRD_TIMEOUTS.BATCH_OPERATION, {
+      org0: tarea.org0,
+      org1: tarea.org1
+    });
 
     const row = rows[0] || {};
     return { importes: this.mapearImportes(row), registros: Number(row.REGISTROS || 0) };
@@ -409,7 +415,10 @@ export class RevisionRepository {
       FROM FONDOS_INICIALES_IND
       WHERE ORG0 = ? AND ORG1 = ?
         AND PERIODO = ? AND TIPO_FONDO = ?
-    `, [tarea.org0, tarea.org1, tarea.periodo, 'AED'], FIREBIRD_TIMEOUTS.BATCH_OPERATION);
+    `, [tarea.org0, tarea.org1, tarea.periodo, 'AED'], FIREBIRD_TIMEOUTS.BATCH_OPERATION, {
+      org0: tarea.org0,
+      org1: tarea.org1
+    });
 
     const row = rows[0] || {};
     return { importes: this.mapearImportes(row), registros: Number(row.REGISTROS || 0) };
@@ -446,7 +455,7 @@ export class RevisionRepository {
       estatus,
       tarea.org0,
       tarea.org1
-    ], FIREBIRD_TIMEOUTS.BATCH_OPERATION);
+    ], FIREBIRD_TIMEOUTS.BATCH_OPERATION, { org0: tarea.org0, org1: tarea.org1 });
 
     const row = rows[0] || {};
     return { importes: this.mapearImportes(row), registros: Number(row.REGISTROS || 0) };
@@ -468,7 +477,7 @@ export class RevisionRepository {
       tarea.org0,
       tarea.org1,
       tarea.periodo
-    ], FIREBIRD_TIMEOUTS.BATCH_OPERATION);
+    ], FIREBIRD_TIMEOUTS.BATCH_OPERATION, { org0: tarea.org0, org1: tarea.org1 });
 
     // LPF corresponde a liberaciones PCP en bajas y queda excluido hasta autorizacion funcional.
     const row = rows[0] || {};

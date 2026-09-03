@@ -233,20 +233,20 @@ export class EstadoCuentaAhorroRepository implements IEstadoCuentaAhorroReposito
     return fuentes;
   }
 
-  private obtenerHistorialMovimientos(periodo: string) {
-    return this.consultarFirebird('SELECT * FROM HISTORIAL_MOVIMIENTOS_QUIN(?)', [periodo]);
+  private obtenerHistorialMovimientos(periodo: string, parametros: ParametrosEstadoCuentaAhorro) {
+    return this.consultarFirebird('SELECT * FROM HISTORIAL_MOVIMIENTOS_QUIN(?)', [periodo], parametros);
   }
 
   private obtenerHistorialPromedio(periodo: string, parametros: ParametrosEstadoCuentaAhorro) {
-    return this.consultarFirebird('SELECT * FROM HISTORIAL_MOV_PROMEDIO_SDO(?, ?, ?, ?, ?)', [periodo, parametros.org0, parametros.org1, parametros.org2, parametros.org3]);
+    return this.consultarFirebird('SELECT * FROM HISTORIAL_MOV_PROMEDIO_SDO(?, ?, ?, ?, ?)', [periodo, parametros.org0, parametros.org1, parametros.org2, parametros.org3], parametros);
   }
 
   private obtenerAdeudoOrganica(periodo: string, parametros: ParametrosEstadoCuentaAhorro) {
-    return this.consultarFirebird('SELECT * FROM ADEUDO_ORGANICA_LAYOUT(?, ?, ?, ?, ?)', [parametros.org0, parametros.org1, parametros.org2, parametros.org3, periodo]);
+    return this.consultarFirebird('SELECT * FROM ADEUDO_ORGANICA_LAYOUT(?, ?, ?, ?, ?)', [parametros.org0, parametros.org1, parametros.org2, parametros.org3, periodo], parametros);
   }
 
-  private obtenerSarTotal(periodo: string) {
-    return this.consultarFirebird('SELECT * FROM SAR_TOTAL_A_ORG(?)', [periodo]);
+  private obtenerSarTotal(periodo: string, parametros: ParametrosEstadoCuentaAhorro) {
+    return this.consultarFirebird('SELECT * FROM SAR_TOTAL_A_ORG(?)', [periodo], parametros);
   }
 
   private async obtenerDevolucionesIntereses(fechaInicio: string, fechaFin: string, tipo: 'E' | 'C' | 'T', parametros: ParametrosEstadoCuentaAhorro) {
@@ -254,27 +254,27 @@ export class EstadoCuentaAhorroRepository implements IEstadoCuentaAhorroReposito
       new Date(`${fechaInicio}T00:00:00`),
       new Date(`${fechaFin}T00:00:00`),
       tipo
-    ]);
+    ], parametros);
     return registros
       .filter((registro) => ['ORG00', 'ORG11', 'ORG22', 'ORG33'].every((campo, indice) =>
         String(registro[campo] ?? '').trim() === [parametros.org0, parametros.org1, parametros.org2, parametros.org3][indice]))
       .map((registro) => ({ ...registro, TIPO_REPORTE: tipo }));
   }
 
-  private obtenerReingresos(periodo: string) {
-    return this.consultarFirebird('SELECT * FROM AP_G_FONDOS_REINGRESO(?)', [periodo]);
+  private obtenerReingresos(periodo: string, parametros: ParametrosEstadoCuentaAhorro) {
+    return this.consultarFirebird('SELECT * FROM AP_G_FONDOS_REINGRESO(?)', [periodo], parametros);
   }
 
-  private obtenerPensionTransitorio(periodo: string) {
-    return this.consultarFirebird('SELECT * FROM PENSION_NOMINA_QNAL_TRANSITORIO(?)', [periodo]);
+  private obtenerPensionTransitorio(periodo: string, parametros: ParametrosEstadoCuentaAhorro) {
+    return this.consultarFirebird('SELECT * FROM PENSION_NOMINA_QNAL_TRANSITORIO(?)', [periodo], parametros);
   }
 
   private obtenerAltasBajas(periodo: string, parametros: ParametrosEstadoCuentaAhorro) {
-    return this.consultarFirebird('SELECT * FROM AP_G_FONDOS_ALTBAJ(?, ?, ?)', [parametros.org0, parametros.org1, periodo]);
+    return this.consultarFirebird('SELECT * FROM AP_G_FONDOS_ALTBAJ(?, ?, ?)', [parametros.org0, parametros.org1, periodo], parametros);
   }
 
   private obtenerResumenAplicacion(periodo: string, parametros: ParametrosEstadoCuentaAhorro) {
-    return this.consultarFirebird('SELECT * FROM AP_RESUMEN_ORG_QNA_ALL(?, ?, ?)', [parametros.org0, parametros.org1, periodo]);
+    return this.consultarFirebird('SELECT * FROM AP_RESUMEN_ORG_QNA_ALL(?, ?, ?)', [parametros.org0, parametros.org1, periodo], parametros);
   }
 
   private async obtenerExtemporaneas(periodo: string, parametros: ParametrosEstadoCuentaAhorro): Promise<RegistroFuente[]> {
@@ -292,7 +292,7 @@ export class EstadoCuentaAhorroRepository implements IEstadoCuentaAhorroReposito
     return resultado.recordset;
   }
 
-  private consultarFirebird(consulta: string, parametros: unknown[]): Promise<RegistroFuente[]> {
+  private consultarFirebird(consulta: string, parametros: unknown[], scope: Pick<ParametrosEstadoCuentaAhorro, 'org0' | 'org1'>): Promise<RegistroFuente[]> {
     return executeSerializedQuery((db) => new Promise<RegistroFuente[]>((resolve, reject) => {
       db.query(consulta, parametros, (error: Error | null, resultado: RegistroFuente[] | undefined) => {
         if (error) {
@@ -301,7 +301,7 @@ export class EstadoCuentaAhorroRepository implements IEstadoCuentaAhorroReposito
         }
         resolve((resultado || []).map((registro) => decodeFirebirdObject(registro)));
       });
-    }));
+    }), { org0: scope.org0, org1: scope.org1 });
   }
 
   private aplicarResumenAplicacion(registros: RegistroFuente[], conceptos: ConceptoEstadoCuentaAhorro[], detalles: DetalleEstadoCuentaAhorro[]) {

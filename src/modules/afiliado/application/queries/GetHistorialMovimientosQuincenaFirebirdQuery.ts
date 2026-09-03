@@ -1,4 +1,4 @@
-import { decodeFirebirdObject, executeSerializedQuery } from '../../../../db/firebird.js';
+import { decodeFirebirdObject, executeSerializedQuery, type FirebirdScope } from '../../../../db/firebird.js';
 import { InvalidAfiliadoDataError } from '../../domain/errors.js';
 import { normalizeClaveOrganica } from '../../../../utils/organica.js';
 
@@ -59,8 +59,9 @@ export class GetHistorialMovimientosQuincenaFirebirdQuery {
     const page = Math.max(1, Number(input.page || 1));
     const pageSize = Math.min(500, Math.max(1, Number(input.pageSize || 100)));
     const buscar = input.buscar?.trim().toUpperCase() || null;
+    const scope = { org0, org1 };
 
-    const historial = await this.getHistorial(periodo, org0, org1);
+    const historial = await this.getHistorial(periodo, scope);
     const filtered = buscar
       ? historial.filter((item) => [
           item.interno,
@@ -74,8 +75,8 @@ export class GetHistorialMovimientosQuincenaFirebirdQuery {
 
     const total = filtered.length;
     const paged = filtered.slice((page - 1) * pageSize, page * pageSize);
-    const personas = await this.getPersonas(paged.map((item) => item.interno));
-    const orgPersonales = await this.getOrgPersonales(paged);
+    const personas = await this.getPersonas(paged.map((item) => item.interno), scope);
+    const orgPersonales = await this.getOrgPersonales(paged, scope);
 
     const items = paged.map((historialItem) => ({
       persona: personas.get(historialItem.interno) || null,
@@ -99,7 +100,7 @@ export class GetHistorialMovimientosQuincenaFirebirdQuery {
     };
   }
 
-  private async getHistorial(periodo: string, org0: string, org1: string): Promise<HistorialFirebirdRow[]> {
+  private async getHistorial(periodo: string, scope: FirebirdScope): Promise<HistorialFirebirdRow[]> {
     const query = `
       SELECT
         p.INTERNO, p.CONSECUTIVO, p.CVE_MOVIMIENTO, p.NOM_MOVIMIENTO, p.NOMBRE,
@@ -109,7 +110,7 @@ export class GetHistorialMovimientosQuincenaFirebirdQuery {
       FROM HISTORIAL_MOVIMIENTOS_QUIN_IND(?, ?, ?) p
     `;
 
-    const rows = await this.runFirebirdQuery(query, [periodo, org0, org1]);
+    const rows = await this.runFirebirdQuery(query, [periodo, scope.org0, scope.org1], scope);
     return rows.map((row: any) => ({
       interno: Number(row.INTERNO || 0),
       consecutivo: Number(row.CONSECUTIVO || 0),
@@ -141,7 +142,7 @@ export class GetHistorialMovimientosQuincenaFirebirdQuery {
     }));
   }
 
-  private async getPersonas(internos: number[]): Promise<Map<number, PersonaFirebird>> {
+  private async getPersonas(internos: number[], scope: FirebirdScope): Promise<Map<number, PersonaFirebird>> {
     const unique = [...new Set(internos.filter((interno) => interno > 0))];
     const map = new Map<number, PersonaFirebird>();
     if (unique.length === 0) return map;
@@ -155,7 +156,7 @@ export class GetHistorialMovimientosQuincenaFirebirdQuery {
                CELULAR, EXPEDIENTE, FULLNAME
         FROM PERSONAL
         WHERE INTERNO IN (${placeholders})
-      `, batch);
+      `, batch, scope);
       for (const row of rows) {
         map.set(Number(row.INTERNO), {
           interno: Number(row.INTERNO || 0),
@@ -180,7 +181,7 @@ export class GetHistorialMovimientosQuincenaFirebirdQuery {
     return map;
   }
 
-  private async getOrgPersonales(historial: HistorialFirebirdRow[]): Promise<Map<string, OrgPersonalFirebird>> {
+  private async getOrgPersonales(historial: HistorialFirebirdRow[], scope: FirebirdScope): Promise<Map<string, OrgPersonalFirebird>> {
     const map = new Map<string, OrgPersonalFirebird>();
     for (const item of historial) {
       const key = this.orgPersonalKey(item);
@@ -197,7 +198,7 @@ export class GetHistorialMovimientosQuincenaFirebirdQuery {
           AND CLAVE_ORGANICA_2 = ?
           AND CLAVE_ORGANICA_3 = ?
         ORDER BY FECHA_MOV_ALT DESC, ORGS DESC
-      `, [item.interno, item.org0, item.org1, item.org2, item.org3]);
+      `, [item.interno, item.org0, item.org1, item.org2, item.org3], scope);
       const row = rows[0];
       map.set(key, row ? {
         interno: Number(row.INTERNO || 0),
@@ -225,7 +226,7 @@ export class GetHistorialMovimientosQuincenaFirebirdQuery {
     return map;
   }
 
-  private runFirebirdQuery(query: string, params: any[]): Promise<any[]> {
+  private runFirebirdQuery(query: string, params: any[], scope: FirebirdScope): Promise<any[]> {
     return executeSerializedQuery((db) => new Promise<any[]>((resolve, reject) => {
       if (!db || typeof db.query !== 'function') {
         reject(new Error('Conexión Firebird no disponible'));
@@ -238,7 +239,7 @@ export class GetHistorialMovimientosQuincenaFirebirdQuery {
         }
         resolve((result || []).map((row: any) => decodeFirebirdObject(row)));
       });
-    }));
+    }), scope);
   }
 
   private orgPersonalKey(item: HistorialFirebirdRow) {

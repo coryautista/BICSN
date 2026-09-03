@@ -1,5 +1,5 @@
 import { getPool, sql } from '../../../../db/mssql.js';
-import { executeSerializedQuery, executeSelectableProcedure, FIREBIRD_TIMEOUTS } from '../../../../db/firebird.js';
+import { executeSerializedQuery, type FirebirdScope } from '../../../../db/firebird.js';
 import { getTipoMovimientoById } from '../../../tipoMovimiento/tipoMovimiento.repo.js';
 import { getAfiliadoOrgByAfiliadoId } from '../../../afiliadoOrg/afiliadoOrg.repo.js';
 import { getAfiliadoById, actualizarInternoAfiliado } from '../services/AfiliadoPersistenceService.js';
@@ -107,7 +107,7 @@ function normalizarBaseConfianza(value: unknown): 'B' | 'C' {
  * 1. Busca en tabla Afiliado (SQL Server)
  * 2. Si no existe o es 0, ejecuta DP_EDITA_PERSONAL en Firebird para crear el registro y obtener el INTERNO
  */
-export async function obtenerInterno(afiliadoId: number): Promise<number> {
+export async function obtenerInterno(afiliadoId: number, scope: FirebirdScope): Promise<number> {
   const logContext = {
     operation: 'obtenerInterno',
     afiliadoId
@@ -152,7 +152,7 @@ export async function obtenerInterno(afiliadoId: number): Promise<number> {
       throw new Error(`Afiliado con ID ${afiliadoId} no encontrado`);
     }
 
-    const internoEnFirebird = await buscarInternoEnFirebird(afiliado.curp, afiliado.rfc);
+    const internoEnFirebird = await buscarInternoEnFirebird(afiliado.curp, afiliado.rfc, scope);
 
     if (internoEnFirebird && internoEnFirebird > 0) {
       logger.info({
@@ -182,7 +182,7 @@ export async function obtenerInterno(afiliadoId: number): Promise<number> {
     // 3. Ejecutar DP_EDITA_PERSONAL para crear el registro y obtener el INTERNO
     let interno;
     try {
-      interno = await ejecutarDPEditaPersonal(afiliado);
+      interno = await ejecutarDPEditaPersonal(afiliado, scope);
     } catch (error: any) {
       logger.error({
         operation: 'obtenerInterno',
@@ -485,7 +485,7 @@ export async function prepararLogEjecucionDPEditaPersonal(
  * Ejecuta el stored procedure DP_EDITA_PERSONAL en Firebird
  * Retorna el INTERNO generado
  */
-export async function ejecutarDPEditaPersonal(afiliado: Afiliado): Promise<number> {
+export async function ejecutarDPEditaPersonal(afiliado: Afiliado, scope: FirebirdScope): Promise<number> {
   const logContext = {
     operation: 'ejecutarDPEditaPersonal',
     afiliadoId: afiliado.id
@@ -714,7 +714,7 @@ export async function ejecutarDPEditaPersonal(afiliado: Afiliado): Promise<numbe
           reject(error);
         }
       });
-    });
+    }, scope);
   } catch (error: any) {
     logger.error({
       operation: 'ejecutarDPEditaPersonal',
@@ -757,7 +757,8 @@ export async function ejecutarDPEditaPersonal(afiliado: Afiliado): Promise<numbe
  */
 async function buscarInternoEnFirebird(
   curp: string | null,
-  rfc: string | null
+  rfc: string | null,
+  scope: FirebirdScope
 ): Promise<number | null> {
   const logContext = {
     operation: 'buscarInternoEnFirebird',
@@ -860,7 +861,7 @@ async function buscarInternoEnFirebird(
           resolve(null); // No lanzar error, retornar null para continuar flujo
         }
       });
-    });
+    }, scope);
   } catch (error: any) {
     logger.error({
       ...logContext,
@@ -1326,7 +1327,7 @@ export async function ejecutarDPEditaEntidad(
             reject(error);
           }
         });
-      });
+      }, { org0: datos.org0, org1: datos.org1 });
       
       const executionTimeMs = Date.now() - startTime;
       
@@ -1469,7 +1470,7 @@ export async function prepararLogEjecucionDPEditaEntidad(
     log.validaciones.periodo = { valido: true, periodo };
 
     // 3. Obtener INTERNO
-    const interno = await obtenerInterno(movimiento.afiliadoId);
+    const interno = await obtenerInterno(movimiento.afiliadoId, { org0, org1 });
 
     // Los movimientos nuevos usan la fecha efectiva; los campos anteriores son fallback histórico.
     const { valor: fechaAFormatear, fuente: fechaFuente } = resolverFechaEfectivaMovimiento(movimiento);
@@ -1743,7 +1744,7 @@ export async function migrarMovimientoAFirebird(
     // 4. Obtener INTERNO
     let interno;
     try {
-      interno = await obtenerInterno(movimiento.afiliadoId);
+      interno = await obtenerInterno(movimiento.afiliadoId, { org0, org1 });
     } catch (error: any) {
       const afiliado = await getAfiliadoById(movimiento.afiliadoId).catch(() => null);
       logger.error({

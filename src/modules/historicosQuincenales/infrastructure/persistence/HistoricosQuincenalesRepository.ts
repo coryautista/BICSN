@@ -234,7 +234,7 @@ export class HistoricosQuincenalesRepository implements IHistoricosQuincenalesRe
       WHERE o.CLAVE_ORGANICA_0 = ?
         AND o.CLAVE_ORGANICA_1 = ?
         AND CAST(p.INTERNO AS VARCHAR(30)) IN (${placeholders})
-    `, [org0, org1, ...internos]);
+    `, [org0, org1, ...internos], undefined, { org0, org1 });
 
     const map = new Map<string, string>();
     result.forEach((row: any) => {

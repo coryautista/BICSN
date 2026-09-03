@@ -51,7 +51,7 @@ async function main() {
         COALESCE(SUM(FAT), 0) AS FAT,
         COALESCE(SUM(FAI), 0) AS FAI
       FROM AP_S_FONDOS(?, ?, ?)
-    `, [ORG0, ORG1, PERIODO], FIREBIRD_TIMEOUTS.BATCH_OPERATION);
+    `, [ORG0, ORG1, PERIODO], FIREBIRD_TIMEOUTS.BATCH_OPERATION, { org0: ORG0, org1: ORG1 });
     const row = rows[0] || {};
     const snapshot = {
       registros: Number(row.REGISTROS || 0),

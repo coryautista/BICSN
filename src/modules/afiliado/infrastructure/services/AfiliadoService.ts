@@ -9,7 +9,7 @@ import { createAfiliadoAfiliadoOrgMovimiento } from './AfiliadoCompositeCreation
 import type { Afiliado } from '../../domain/entities/Afiliado.js';
 import type { AfiliadoOrg } from '../../../afiliadoOrg/afiliadoOrg.repo.js';
 import type { Movimiento } from '../../../movimiento/movimiento.repo.js';
-import { executeSerializedQuery } from '../../../../db/firebird.js';
+import { executeSerializedQuery, type FirebirdScope } from '../../../../db/firebird.js';
 import { getPool, sql } from '../../../../db/mssql.js';
 import pino from 'pino';
 import {
@@ -29,7 +29,7 @@ const logger = pino({
 });
 
 // Validate that interno exists in Firebird PERSONAL and ORG_PERSONAL tables
-export async function validateInternoInFirebird(interno: number): Promise<boolean> {
+export async function validateInternoInFirebird(interno: number, scope: FirebirdScope): Promise<boolean> {
   const logContext = {
     operation: 'validateInternoInFirebird',
     interno,
@@ -73,7 +73,7 @@ export async function validateInternoInFirebird(interno: number): Promise<boolea
         });
       });
     });
-  });
+  }, scope);
 }
 
 export async function getAllAfiliadosService(): Promise<Afiliado[]> {
@@ -122,7 +122,7 @@ export async function getAfiliadoByIdService(id: number): Promise<Afiliado> {
   }
 }
 
-export async function createAfiliadoService(data: Omit<Afiliado, 'id' | 'createdAt' | 'updatedAt'>): Promise<Afiliado> {
+export async function createAfiliadoService(data: Omit<Afiliado, 'id' | 'createdAt' | 'updatedAt'>, scope: FirebirdScope): Promise<Afiliado> {
   const logContext = {
     operation: 'createAfiliado',
     folio: data.folio,
@@ -135,7 +135,7 @@ export async function createAfiliadoService(data: Omit<Afiliado, 'id' | 'created
   try {
     // Validar interno si está presente
     if (data.interno) {
-      const internoExists = await validateInternoInFirebird(data.interno);
+      const internoExists = await validateInternoInFirebird(data.interno, scope);
       if (!internoExists) {
         logger.warn({ ...logContext, interno: data.interno }, 'Interno no válido para crear afiliado');
         throw new InvalidInternoError(data.interno);
@@ -155,7 +155,7 @@ export async function createAfiliadoService(data: Omit<Afiliado, 'id' | 'created
   }
 }
 
-export async function updateAfiliadoService(id: number, data: Partial<Omit<Afiliado, 'id' | 'createdAt' | 'updatedAt'>>): Promise<Afiliado> {
+export async function updateAfiliadoService(id: number, data: Partial<Omit<Afiliado, 'id' | 'createdAt' | 'updatedAt'>>, scope: FirebirdScope): Promise<Afiliado> {
   const logContext = {
     operation: 'updateAfiliado',
     afiliadoId: id,
@@ -174,7 +174,7 @@ export async function updateAfiliadoService(id: number, data: Partial<Omit<Afili
 
     // Validar interno si está siendo actualizado
     if (data.interno) {
-      const internoExists = await validateInternoInFirebird(data.interno);
+      const internoExists = await validateInternoInFirebird(data.interno, scope);
       if (!internoExists) {
         logger.warn({ ...logContext, interno: data.interno }, 'Interno no válido para actualizar afiliado');
         throw new InvalidInternoError(data.interno);

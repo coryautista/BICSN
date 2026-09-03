@@ -5,6 +5,13 @@ import { GetOrganica2ChildrenQuery } from './application/queries/GetOrganica2Chi
 import { GetOrganica3ChildrenQuery } from './application/queries/GetOrganica3ChildrenQuery.js';
 import { handleOrganicaCascadeError } from './infrastructure/errorHandler.js';
 
+function getAuthenticatedFirebirdScope(user: any): { org0: string; org1: string } {
+  const org0 = user?.idOrganica0?.toString().trim();
+  const org1 = user?.idOrganica1?.toString().trim();
+  if (!org0 || !org1) throw new Error('FIREBIRD_SCOPE_REQUIRED');
+  return { org0: org0.padStart(2, '0'), org1: org1.padStart(2, '0') };
+}
+
 export default async function organicaCascadeRoutes(app: FastifyInstance) {
   // GET /v1/organica-cascade/org1?claveOrganica0={clave}
   app.get(
@@ -43,7 +50,7 @@ export default async function organicaCascadeRoutes(app: FastifyInstance) {
       try {
         const { claveOrganica0 } = request.query as { claveOrganica0: string };
         const getOrganica1ChildrenQuery = request.diScope.resolve<GetOrganica1ChildrenQuery>('getOrganica1ChildrenQuery');
-        const result = await getOrganica1ChildrenQuery.execute(claveOrganica0, request.user?.sub?.toString());
+        const result = await getOrganica1ChildrenQuery.execute(claveOrganica0, getAuthenticatedFirebirdScope(request.user), request.user?.sub?.toString());
         return reply.send(result);
       } catch (error: any) {
         return handleOrganicaCascadeError(error, reply);
@@ -93,7 +100,7 @@ export default async function organicaCascadeRoutes(app: FastifyInstance) {
           claveOrganica1: string;
         };
         const getOrganica2ChildrenQuery = request.diScope.resolve<GetOrganica2ChildrenQuery>('getOrganica2ChildrenQuery');
-        const result = await getOrganica2ChildrenQuery.execute(claveOrganica0, claveOrganica1, request.user?.sub?.toString());
+        const result = await getOrganica2ChildrenQuery.execute(claveOrganica0, claveOrganica1, getAuthenticatedFirebirdScope(request.user), request.user?.sub?.toString());
         return reply.send(result);
       } catch (error: any) {
         return handleOrganicaCascadeError(error, reply);
@@ -146,7 +153,7 @@ export default async function organicaCascadeRoutes(app: FastifyInstance) {
           claveOrganica2: string;
         };
         const getOrganica3ChildrenQuery = request.diScope.resolve<GetOrganica3ChildrenQuery>('getOrganica3ChildrenQuery');
-        const result = await getOrganica3ChildrenQuery.execute(claveOrganica0, claveOrganica1, claveOrganica2, request.user?.sub?.toString());
+        const result = await getOrganica3ChildrenQuery.execute(claveOrganica0, claveOrganica1, claveOrganica2, getAuthenticatedFirebirdScope(request.user), request.user?.sub?.toString());
         return reply.send(result);
       } catch (error: any) {
         return handleOrganicaCascadeError(error, reply);

@@ -1,5 +1,6 @@
 import { FastifyReply } from 'fastify';
 import { CAIRError } from '../domain/errors.js';
+import { OrganicaScopePolicyError } from '../../../auth/domain/policies/OrganicaScopePolicy.js';
 
 /**
  * Manejador centralizado de errores para el submódulo CAIR
@@ -7,6 +8,10 @@ import { CAIRError } from '../domain/errors.js';
 export function handleCAIRError(error: unknown, reply: FastifyReply): FastifyReply {
   // Log del error para debugging
   console.error('Error en módulo CAIR:', error);
+
+  if (error instanceof OrganicaScopePolicyError) {
+    return reply.code(error.statusCode).send({ success: false, error: { code: error.code, message: error.message } });
+  }
 
   // Si es un error del dominio CAIR, manejarlo específicamente
   if (error instanceof CAIRError) {

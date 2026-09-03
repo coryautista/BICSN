@@ -72,7 +72,7 @@ try {
   `);
   assert.equal(String(sqlResult.recordsets[0][0]?.BaseDatos), production.sqlDatabase);
 
-  const firebirdResult = await firebird.executeSafeQuery(
+  const firebirdResult = await firebird.executeTechnicalQuery(
     'SELECT CURRENT_TIMESTAMP AS FECHA_SERVIDOR FROM RDB$DATABASE',
     [],
   );

@@ -5,7 +5,7 @@ import { DynamicQuery } from '../../organica1.schemas.js';
 export class GetOrganica1DynamicQuery {
   constructor(private organica1Repo: IOrganica1Repository) {}
 
-  async execute(query: DynamicQuery, userId?: string): Promise<Organica1[]> {
+  async execute(query: DynamicQuery, scope: { org0: string; org1: string }, userId?: string): Promise<Organica1[]> {
     console.log('ORGANICA1_QUERY', {
       operation: 'GET_ORGANICA1_DYNAMIC',
       userId: userId || 'SYSTEM',
@@ -14,7 +14,7 @@ export class GetOrganica1DynamicQuery {
     });
 
     try {
-      const records = await this.organica1Repo.dynamicQuery(query);
+      const records = await this.organica1Repo.dynamicQuery(query, scope);
 
       console.log('ORGANICA1_QUERY_SUCCESS', {
         operation: 'GET_ORGANICA1_DYNAMIC',

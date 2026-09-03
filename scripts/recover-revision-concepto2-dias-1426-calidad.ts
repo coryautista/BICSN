@@ -51,7 +51,7 @@ async function main(): Promise<void> {
     const firebirdRows = await firebird.executeSafeQuery(`
       SELECT RFC,SARE,FRA,FRE,FHE,FVE,FAA,FAE,FAI
       FROM AP_S_FONDOS(?, ?, ?)
-    `, [ORG0, ORG1, PERIODO], firebird.FIREBIRD_TIMEOUTS.BATCH_OPERATION);
+    `, [ORG0, ORG1, PERIODO], firebird.FIREBIRD_TIMEOUTS.BATCH_OPERATION, { org0: ORG0, org1: ORG1 });
     assert.equal(firebirdRows.length, 169, 'FIREBIRD_1426_INCOMPLETO');
 
     const sqlResult = await pool.request()

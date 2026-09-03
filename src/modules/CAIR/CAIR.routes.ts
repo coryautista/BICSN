@@ -10,6 +10,7 @@ import {
 import { GetDevueltoTiposQuery } from './application/queries/GetDevueltoTiposQuery.js';
 import { GetChequesLeyendasQuery } from './application/queries/GetChequesLeyendasQuery.js';
 import { GetSARDevolucionQuery } from './application/queries/GetSARDevolucionQuery.js';
+import { normalizeClaveOrganica } from '../../utils/organica.js';
 
 export default async function CAIRRoutes(app: FastifyInstance) {
   // GET /cair/tipos-devolucion - Obtener tipos de devolución
@@ -41,16 +42,22 @@ export default async function CAIRRoutes(app: FastifyInstance) {
             timestamp: { type: 'string' }
           }
         },
+        400: { type: 'object' },
         401: { type: 'object' },
         500: { type: 'object' }
       }
     }
   }, async (request, reply) => {
     try {
-      const userId = (request as any).user?.sub;
+      const user = (request as any).user;
+      const scope = resolveTokenScope(user);
+      if (!scope) {
+        return reply.code(400).send({ success: false, error: { code: 'MISSING_ORGANICA_KEYS', message: 'org0 y org1 no están disponibles en el token del usuario.' } });
+      }
+      const userId = user?.sub;
 
       const query = request.diScope.resolve<GetDevueltoTiposQuery>('getDevueltoTiposQuery');
-      const tipos = await query.execute(userId);
+      const tipos = await query.execute(scope, userId);
 
       return reply.send({
         success: true,
@@ -89,16 +96,22 @@ export default async function CAIRRoutes(app: FastifyInstance) {
             timestamp: { type: 'string' }
           }
         },
+        400: { type: 'object' },
         401: { type: 'object' },
         500: { type: 'object' }
       }
     }
   }, async (request, reply) => {
     try {
-      const userId = (request as any).user?.sub;
+      const user = (request as any).user;
+      const scope = resolveTokenScope(user);
+      if (!scope) {
+        return reply.code(400).send({ success: false, error: { code: 'MISSING_ORGANICA_KEYS', message: 'org0 y org1 no están disponibles en el token del usuario.' } });
+      }
+      const userId = user?.sub;
 
       const query = request.diScope.resolve<GetChequesLeyendasQuery>('getChequesLeyendasQuery');
-      const leyendas = await query.execute(userId);
+      const leyendas = await query.execute(scope, userId);
 
       return reply.send({
         success: true,
@@ -184,10 +197,15 @@ export default async function CAIRRoutes(app: FastifyInstance) {
       }
 
       const { interno, tipo } = parsed.data;
-      const userId = (request as any).user?.sub;
+      const user = (request as any).user;
+      const scope = resolveTokenScope(user);
+      if (!scope) {
+        return reply.code(400).send({ success: false, error: { code: 'MISSING_ORGANICA_KEYS', message: 'org0 y org1 no están disponibles en el token del usuario.' } });
+      }
+      const userId = user?.sub;
 
       const query = request.diScope.resolve<GetSARDevolucionQuery>('getSARDevolucionQuery');
-      const devoluciones = await query.execute(interno, tipo, userId);
+      const devoluciones = await query.execute(interno, tipo, scope, userId);
 
       return reply.send({
         success: true,
@@ -198,5 +216,11 @@ export default async function CAIRRoutes(app: FastifyInstance) {
       return handleCAIRError(error, reply);
     }
   });
+}
+
+function resolveTokenScope(user: any) {
+  const org0 = normalizeClaveOrganica(user?.idOrganica0);
+  const org1 = normalizeClaveOrganica(user?.idOrganica1);
+  return org0 && org1 ? { org0, org1 } : null;
 }
 

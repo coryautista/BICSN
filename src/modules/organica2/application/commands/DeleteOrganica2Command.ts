@@ -11,7 +11,7 @@ import {
 export class DeleteOrganica2Command {
   constructor(private organica2Repo: IOrganica2Repository) {}
 
-  async execute(claveOrganica0: string, claveOrganica1: string, claveOrganica2: string, userId?: string): Promise<{ claveOrganica0: string; claveOrganica1: string; claveOrganica2: string; deleted: boolean }> {
+  async execute(claveOrganica0: string, claveOrganica1: string, claveOrganica2: string, scope: { org0: string; org1: string }, userId?: string): Promise<{ claveOrganica0: string; claveOrganica1: string; claveOrganica2: string; deleted: boolean }> {
     console.log('ORGANICA2_COMMAND', {
       operation: 'DELETE_ORGANICA2',
       userId: userId || 'SYSTEM',
@@ -28,7 +28,7 @@ export class DeleteOrganica2Command {
 
     try {
       // Verificar que la entidad existe
-      const existing = await this.organica2Repo.findById(claveOrganica0, claveOrganica1, claveOrganica2);
+      const existing = await this.organica2Repo.findById(claveOrganica0, claveOrganica1, claveOrganica2, scope);
       if (!existing) {
         console.warn('ORGANICA2_COMMAND_WARNING', {
           operation: 'DELETE_ORGANICA2',
@@ -43,10 +43,10 @@ export class DeleteOrganica2Command {
       }
 
       // Verificar si la entidad está siendo utilizada (lógica de negocio)
-      await this.checkOrganica2InUse(claveOrganica0, claveOrganica1, claveOrganica2);
+      await this.checkOrganica2InUse(claveOrganica0, claveOrganica1, claveOrganica2, scope);
 
       // Eliminar la entidad
-      const deleted = await this.organica2Repo.delete(claveOrganica0, claveOrganica1, claveOrganica2);
+      const deleted = await this.organica2Repo.delete(claveOrganica0, claveOrganica1, claveOrganica2, scope);
       if (!deleted) {
         console.warn('ORGANICA2_COMMAND_WARNING', {
           operation: 'DELETE_ORGANICA2',
@@ -130,8 +130,8 @@ export class DeleteOrganica2Command {
     }
   }
 
-  private async checkOrganica2InUse(claveOrganica0: string, claveOrganica1: string, claveOrganica2: string): Promise<void> {
-    const inUse = await this.organica2Repo.isInUse(claveOrganica0, claveOrganica1, claveOrganica2);
+  private async checkOrganica2InUse(claveOrganica0: string, claveOrganica1: string, claveOrganica2: string, scope: { org0: string; org1: string }): Promise<void> {
+    const inUse = await this.organica2Repo.isInUse(claveOrganica0, claveOrganica1, claveOrganica2, scope);
     if (inUse) {
       console.warn('ORGANICA2_COMMAND_WARNING', {
         operation: 'DELETE_ORGANICA2',

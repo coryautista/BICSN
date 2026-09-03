@@ -1,5 +1,5 @@
 import { AfiliadoPersonal } from '../../domain/entities/AfiliadoPersonal.js';
-import { IAfiliadoPersonalRepository } from '../../domain/repositories/IAfiliadoPersonalRepository.js';
+import { IAfiliadoPersonalRepository, type AfiliadoPersonalFirebirdScope } from '../../domain/repositories/IAfiliadoPersonalRepository.js';
 import {
   AfiliadosPersonalInvalidSearchTermError,
   AfiliadosPersonalQueryFailedError
@@ -17,7 +17,7 @@ const logger = pino({
 export class BusquedaHistoricoQuery {
   constructor(private afiliadoPersonalRepo: IAfiliadoPersonalRepository) {}
 
-  async execute(searchTerm?: string): Promise<AfiliadoPersonal[]> {
+  async execute(searchTerm: string | undefined, scope: AfiliadoPersonalFirebirdScope): Promise<AfiliadoPersonal[]> {
     // Validaciones de entrada
     this.validateInput(searchTerm);
 
@@ -29,7 +29,7 @@ export class BusquedaHistoricoQuery {
     logger.info(logContext, 'Iniciando búsqueda histórica de personal');
 
     try {
-      const results = await this.afiliadoPersonalRepo.busquedaHistorico(searchTerm);
+      const results = await this.afiliadoPersonalRepo.busquedaHistorico(searchTerm, scope);
 
       logger.info({
         ...logContext,

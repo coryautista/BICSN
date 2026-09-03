@@ -7,7 +7,7 @@ import { env } from '../../../../config/env.js';
 export class CreateOrganica2Command {
   constructor(private organica2Repo: IOrganica2Repository) {}
 
-  async execute(data: CreateOrganica2, userId?: string): Promise<Organica2> {
+  async execute(data: CreateOrganica2, scope: { org0: string; org1: string }, userId?: string): Promise<Organica2> {
     // Validate input parameters
     await this.validateInput(data.claveOrganica0, data.claveOrganica1, data.claveOrganica2);
     
@@ -26,7 +26,7 @@ export class CreateOrganica2Command {
 
     try {
       // Verificar si ya existe una entidad con la misma clave compuesta
-      const existing = await this.organica2Repo.findById(data.claveOrganica0, data.claveOrganica1, data.claveOrganica2);
+      const existing = await this.organica2Repo.findById(data.claveOrganica0, data.claveOrganica1, data.claveOrganica2, scope);
       if (existing) {
         console.warn(`[CREATE ORGANICA_2] Intento de crear entidad duplicada:`, {
           claveOrganica0: data.claveOrganica0,
@@ -50,7 +50,7 @@ export class CreateOrganica2Command {
         estatus: data.estatus
       };
 
-      const result = await this.organica2Repo.create(organica2Data);
+      const result = await this.organica2Repo.create(organica2Data, scope);
 
       console.log(`[CREATE ORGANICA_2] Entidad creada exitosamente:`, {
         claveOrganica0: data.claveOrganica0,

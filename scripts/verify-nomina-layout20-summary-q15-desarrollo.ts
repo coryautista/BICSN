@@ -35,11 +35,11 @@ const firebird = await import('../src/db/firebird.js');
 
 try {
   const [summaries, statuses] = await Promise.all([
-    firebird.executeSafeQuery('SELECT * FROM AP_D_ORIGEN_RESUMEN WHERE PERIODO=? AND ORG0=? AND ORG1=? AND ORG2=? AND ORG3=? AND TIPO=?', ['1526','04','24','01','01','AN']),
+    firebird.executeSafeQuery('SELECT * FROM AP_D_ORIGEN_RESUMEN WHERE PERIODO=? AND ORG0=? AND ORG1=? AND ORG2=? AND ORG3=? AND TIPO=?', ['1526','04','24','01','01','AN'], undefined, { org0: '04', org1: '24' }),
     firebird.executeSafeQuery(`SELECT COUNT(*) TOTAL,
       SUM(CASE WHEN STATUS='P' THEN 1 ELSE 0 END) TOTAL_P,
       SUM(CASE WHEN STATUS='A' THEN 1 ELSE 0 END) TOTAL_A
-      FROM AP_D_ORIGEN_TODOS WHERE QNA=? AND ORG0=? AND ORG1=?`, ['1526','04','24']),
+      FROM AP_D_ORIGEN_TODOS WHERE QNA=? AND ORG0=? AND ORG1=?`, ['1526','04','24'], undefined, { org0: '04', org1: '24' }),
   ]);
   assert.equal(summaries.length, 1, 'Q15_DEBE_TENER_UN_RESUMEN_AN');
   const row = summaries[0];

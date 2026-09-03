@@ -7,6 +7,7 @@ import {
 } from './afiliados.schemas.js';
 import { GetHistorialMovimientosQuinQuery } from './application/queries/GetHistorialMovimientosQuinQuery.js';
 import { GetHistorialMovPromedioSdoQuery } from './application/queries/GetHistorialMovPromedioSdoQuery.js';
+import { resolveOrganicaScope } from '../../auth/domain/policies/OrganicaScopePolicy.js';
 
 export async function afiliadosReportesRoutes(fastify: FastifyInstance) {
   // GET /reportes/afiliados/historial-movimientos-quin - HISTORIAL_MOVIMIENTOS_QUIN
@@ -23,7 +24,9 @@ export async function afiliadosReportesRoutes(fastify: FastifyInstance) {
           periodo: {
             type: 'string',
             description: 'Período en formato específico (ej: "2125")'
-          }
+          },
+          org0: { type: 'string', pattern: '^\\d{1,2}$' },
+          org1: { type: 'string', pattern: '^\\d{1,2}$' }
         },
         required: ['periodo']
       },
@@ -59,10 +62,16 @@ export async function afiliadosReportesRoutes(fastify: FastifyInstance) {
       }
 
       const { periodo } = parsed.data;
-      const userId = (request as any).user?.sub;
+      const user = (request as any).user;
+      const resolvedScope = resolveOrganicaScope(user, {
+        organica0: parsed.data.org0,
+        organica1: parsed.data.org1
+      }, 2);
+      const scope = { org0: resolvedScope.organica0, org1: resolvedScope.organica1 };
+      const userId = user?.sub;
 
       const query = request.diScope.resolve<GetHistorialMovimientosQuinQuery>('getHistorialMovimientosQuinQuery');
-      const historiales = await query.execute(periodo, userId);
+      const historiales = await query.execute(periodo, scope, userId);
 
       const responseObject = {
         success: true,

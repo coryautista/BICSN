@@ -209,7 +209,9 @@ export default async function aportacionesFondosRoutes(app: FastifyInstance) {
         additionalProperties: false,
         properties: {
           internos: { type: 'array', maxItems: 1000, items: { type: 'integer', minimum: 1 } },
-          rfcs: { type: 'array', maxItems: 1000, items: { type: 'string', minLength: 1, maxLength: 13 } }
+          rfcs: { type: 'array', maxItems: 1000, items: { type: 'string', minLength: 1, maxLength: 13 } },
+          clave_organica_0: { type: 'string', minLength: 1, maxLength: 2 },
+          clave_organica_1: { type: 'string', minLength: 1, maxLength: 2 }
         }
       }
     }
@@ -224,8 +226,17 @@ export default async function aportacionesFondosRoutes(app: FastifyInstance) {
         return reply.code(400).send(fail('Parámetros de consulta inválidos', 'PARAMETRO_INVALIDO'));
       }
 
+      const scope = resolveOrganicaScope(req.user, {
+        organica0: parsed.data.clave_organica_0,
+        organica1: parsed.data.clave_organica_1
+      }, 2);
       const query = req.diScope.resolve<GetNumerosEmpleadoQuery>('getNumerosEmpleadoQuery');
-      return reply.send(ok(await query.execute(parsed.data.internos, parsed.data.rfcs)));
+      return reply.send(ok(await query.execute(
+        parsed.data.internos,
+        parsed.data.rfcs,
+        scope.organica0,
+        scope.organica1
+      )));
     } catch (error: any) {
       return handleAportacionesFondosError(error, reply);
     }

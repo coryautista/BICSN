@@ -23,7 +23,7 @@ import {
 export class UpdateOrganica3Command {
   constructor(private organica3Repo: IOrganica3Repository) {}
 
-  async execute(claveOrganica0: string, claveOrganica1: string, claveOrganica2: string, claveOrganica3: string, data: UpdateOrganica3Data, userId?: string): Promise<Organica3> {
+  async execute(claveOrganica0: string, claveOrganica1: string, claveOrganica2: string, claveOrganica3: string, data: UpdateOrganica3Data, scope: { org0: string; org1: string }, userId?: string): Promise<Organica3> {
     console.log('ORGANICA3_COMMAND', {
       operation: 'UPDATE_ORGANICA3',
       userId: userId || 'SYSTEM',
@@ -92,7 +92,7 @@ export class UpdateOrganica3Command {
 
     try {
       // Verificar que la entidad existe
-      const existing = await this.organica3Repo.findById(claveOrganica0, claveOrganica1, claveOrganica2, claveOrganica3);
+      const existing = await this.organica3Repo.findById(claveOrganica0, claveOrganica1, claveOrganica2, claveOrganica3, scope);
       if (!existing) {
         console.warn('ORGANICA3_COMMAND_WARNING', {
           operation: 'UPDATE_ORGANICA3',
@@ -108,7 +108,7 @@ export class UpdateOrganica3Command {
       }
 
       // Actualizar la entidad
-      const result = await this.organica3Repo.update(claveOrganica0, claveOrganica1, claveOrganica2, claveOrganica3, data);
+      const result = await this.organica3Repo.update(claveOrganica0, claveOrganica1, claveOrganica2, claveOrganica3, data, scope);
 
       console.log('ORGANICA3_COMMAND_SUCCESS', {
         operation: 'UPDATE_ORGANICA3',

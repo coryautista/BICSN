@@ -9,6 +9,13 @@ import { CreatePersonalCommand } from './application/commands/CreatePersonalComm
 import { UpdatePersonalCommand } from './application/commands/UpdatePersonalCommand.js';
 import { DeletePersonalCommand } from './application/commands/DeletePersonalCommand.js';
 
+function getAuthenticatedFirebirdScope(user: any): { org0: string; org1: string } {
+  const org0 = user?.idOrganica0?.toString().trim();
+  const org1 = user?.idOrganica1?.toString().trim();
+  if (!org0 || !org1) throw new Error('FIREBIRD_SCOPE_REQUIRED');
+  return { org0: org0.padStart(2, '0'), org1: org1.padStart(2, '0') };
+}
+
 // Routes for Personal CRUD operations
 export default async function personalRoutes(app: FastifyInstance) {
 
@@ -90,7 +97,7 @@ export default async function personalRoutes(app: FastifyInstance) {
       const { claveOrganica0, claveOrganica1 } = req.query as { claveOrganica0?: string; claveOrganica1?: string };
       const userId = req.user?.sub || 'unknown';
       const getAllPersonalQuery = req.diScope.resolve<GetAllPersonalQuery>('getAllPersonalQuery');
-      const records = await getAllPersonalQuery.execute(claveOrganica0, claveOrganica1, userId);
+      const records = await getAllPersonalQuery.execute(getAuthenticatedFirebirdScope(req.user), claveOrganica0, claveOrganica1, userId);
       return reply.send(ok(records));
     } catch (error) {
       return handlePersonalError(error, reply, req.user?.sub);
@@ -185,7 +192,7 @@ export default async function personalRoutes(app: FastifyInstance) {
       const { interno } = req.params as { interno: number };
       const userId = req.user?.sub || 'unknown';
       const getPersonalByIdQuery = req.diScope.resolve<GetPersonalByIdQuery>('getPersonalByIdQuery');
-      const record = await getPersonalByIdQuery.execute(interno, userId);
+      const record = await getPersonalByIdQuery.execute(interno, getAuthenticatedFirebirdScope(req.user), userId);
       return reply.send(ok(record));
     } catch (error) {
       return handlePersonalError(error, reply, req.user?.sub);
@@ -310,7 +317,7 @@ export default async function personalRoutes(app: FastifyInstance) {
         celular: parsed.data.celular ?? null,
         expediente: parsed.data.expediente ?? null,
         f_expediente: parsed.data.f_expediente ?? null
-      }, userId);
+      }, getAuthenticatedFirebirdScope(req.user), userId);
       return reply.code(201).send(ok(record));
     } catch (error) {
       return handlePersonalError(error, reply, req.user?.sub);
@@ -424,7 +431,7 @@ export default async function personalRoutes(app: FastifyInstance) {
 
       const userId = req.user?.sub || 'unknown';
       const updatePersonalCommand = req.diScope.resolve<UpdatePersonalCommand>('updatePersonalCommand');
-      const record = await updatePersonalCommand.execute(interno, parsed.data, userId);
+      const record = await updatePersonalCommand.execute(interno, parsed.data, getAuthenticatedFirebirdScope(req.user), userId);
       return reply.send(ok(record));
     } catch (error) {
       return handlePersonalError(error, reply, req.user?.sub);
@@ -486,7 +493,7 @@ export default async function personalRoutes(app: FastifyInstance) {
       const { interno } = req.params as { interno: number };
       const userId = req.user?.sub || 'unknown';
       const deletePersonalCommand = req.diScope.resolve<DeletePersonalCommand>('deletePersonalCommand');
-      const result = await deletePersonalCommand.execute(interno, userId);
+      const result = await deletePersonalCommand.execute(interno, getAuthenticatedFirebirdScope(req.user), userId);
       return reply.send(ok(result));
     } catch (error) {
       return handlePersonalError(error, reply, req.user?.sub);

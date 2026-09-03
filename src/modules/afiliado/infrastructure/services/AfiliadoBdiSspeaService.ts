@@ -236,7 +236,8 @@ export async function registrarSiguienteQnaSiDisponible(
 ): Promise<{ creada: boolean; periodo: string | null; afectacionId: number | null }> {
   const rows = await executeSelectableProcedure('AP_G_APLICADO_TIPO', [org0, org1, '01', '01'], {
     alias: 'p',
-    columns: ['p.QUINCENA']
+    columns: ['p.QUINCENA'],
+    scope: { org0, org1 }
   });
   const periodo = String(rows[0]?.QUINCENA ?? '').padStart(4, '0');
   const ordenarPeriodo = (value: string) => (2000 + Number(value.slice(2, 4))) * 100 + Number(value.slice(0, 2));

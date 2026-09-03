@@ -10,6 +10,13 @@ import type { CreateOrganica1Command } from './application/commands/CreateOrgani
 import type { UpdateOrganica1Command } from './application/commands/UpdateOrganica1Command.js';
 import type { DeleteOrganica1Command } from './application/commands/DeleteOrganica1Command.js';
 
+function getAuthenticatedFirebirdScope(user: any): { org0: string; org1: string } {
+  const org0 = user?.idOrganica0?.toString().trim();
+  const org1 = user?.idOrganica1?.toString().trim();
+  if (!org0 || !org1) throw new Error('FIREBIRD_SCOPE_REQUIRED');
+  return { org0: org0.padStart(2, '0'), org1: org1.padStart(2, '0') };
+}
+
 // [FIREBIRD] Routes for ORGANICA_1 CRUD operations
 export default async function organica1Routes(app: FastifyInstance) {
 
@@ -87,7 +94,7 @@ export default async function organica1Routes(app: FastifyInstance) {
       
       // Use organica0 filter (parameter is now required)
       const getOrganica1ByClaveOrganica0Query: GetOrganica1ByClaveOrganica0Query = req.diScope.resolve('getOrganica1ByClaveOrganica0Query');
-      const records = await getOrganica1ByClaveOrganica0Query.execute(org0, req.user?.sub);
+      const records = await getOrganica1ByClaveOrganica0Query.execute(org0, getAuthenticatedFirebirdScope(req.user), req.user?.sub);
       return reply.send(ok(records));
     } catch (error) {
       return handleOrganica1Error(error, reply);
@@ -186,7 +193,7 @@ export default async function organica1Routes(app: FastifyInstance) {
     try {
       const { claveOrganica0, claveOrganica1 } = req.params as { claveOrganica0: string; claveOrganica1: string };
       const getOrganica1ByIdQuery: GetOrganica1ByIdQuery = req.diScope.resolve('getOrganica1ByIdQuery');
-      const record = await getOrganica1ByIdQuery.execute(claveOrganica0, claveOrganica1, req.user?.sub);
+      const record = await getOrganica1ByIdQuery.execute(claveOrganica0, claveOrganica1, getAuthenticatedFirebirdScope(req.user), req.user?.sub);
       return reply.send(ok(record));
     } catch (error) {
       return handleOrganica1Error(error, reply);
@@ -282,7 +289,7 @@ export default async function organica1Routes(app: FastifyInstance) {
 
     try {
       const createOrganica1Command: CreateOrganica1Command = req.diScope.resolve('createOrganica1Command');
-      const record = await createOrganica1Command.execute(parsed.data, req.user?.sub);
+      const record = await createOrganica1Command.execute(parsed.data, getAuthenticatedFirebirdScope(req.user), req.user?.sub);
       return reply.code(201).send(ok(record));
     } catch (error) {
       return handleOrganica1Error(error, reply);
@@ -384,7 +391,7 @@ export default async function organica1Routes(app: FastifyInstance) {
 
     try {
       const updateOrganica1Command: UpdateOrganica1Command = req.diScope.resolve('updateOrganica1Command');
-      const record = await updateOrganica1Command.execute(claveOrganica0, claveOrganica1, parsed.data, req.user?.sub);
+      const record = await updateOrganica1Command.execute(claveOrganica0, claveOrganica1, parsed.data, getAuthenticatedFirebirdScope(req.user), req.user?.sub);
       return reply.send(ok(record));
     } catch (error) {
       return handleOrganica1Error(error, reply);
@@ -459,7 +466,7 @@ export default async function organica1Routes(app: FastifyInstance) {
     try {
       const { claveOrganica0, claveOrganica1 } = req.params as { claveOrganica0: string; claveOrganica1: string };
       const deleteOrganica1Command: DeleteOrganica1Command = req.diScope.resolve('deleteOrganica1Command');
-      const result = await deleteOrganica1Command.execute(claveOrganica0, claveOrganica1, req.user?.sub);
+      const result = await deleteOrganica1Command.execute(claveOrganica0, claveOrganica1, getAuthenticatedFirebirdScope(req.user), req.user?.sub);
       return reply.send(ok(result));
     } catch (error) {
       return handleOrganica1Error(error, reply);
@@ -557,7 +564,7 @@ export default async function organica1Routes(app: FastifyInstance) {
 
     try {
       const getOrganica1DynamicQuery: GetOrganica1DynamicQuery = req.diScope.resolve('getOrganica1DynamicQuery');
-      const records = await getOrganica1DynamicQuery.execute(parsed.data, req.user?.sub);
+      const records = await getOrganica1DynamicQuery.execute(parsed.data, getAuthenticatedFirebirdScope(req.user), req.user?.sub);
       return reply.send(ok(records));
     } catch (error: any) {
       // Para esta ruta especial, mantenemos el manejo específico ya que usa una función diferente

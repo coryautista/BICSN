@@ -12,7 +12,7 @@ const logger = pino({
 });
 
 export class CAIRRepository implements ICAIRRepository {
-  async getDevueltoTipos(): Promise<DevueltoTipo[]> {
+  async getDevueltoTipos(scope: { org0: string; org1: string }): Promise<DevueltoTipo[]> {
     const startTime = Date.now();
     const logContext = {
       operation: 'getDevueltoTipos'
@@ -110,10 +110,10 @@ export class CAIRRepository implements ICAIRRepository {
           ));
         }
       });
-    });
+    }, scope);
   }
 
-  async getChequesLeyendas(): Promise<ChequeLeyenda[]> {
+  async getChequesLeyendas(scope: { org0: string; org1: string }): Promise<ChequeLeyenda[]> {
     const startTime = Date.now();
     const logContext = {
       operation: 'getChequesLeyendas'
@@ -208,10 +208,10 @@ export class CAIRRepository implements ICAIRRepository {
           ));
         }
       });
-    });
+    }, scope);
   }
 
-  async getSARDevolucion(interno: string, tipo: string): Promise<SARDevolucion[]> {
+  async getSARDevolucion(interno: string, tipo: string, scope: { org0: string; org1: string }): Promise<SARDevolucion[]> {
     const startTime = Date.now();
     const logContext = {
       operation: 'getSARDevolucion',
@@ -323,7 +323,7 @@ export class CAIRRepository implements ICAIRRepository {
           ));
         }
       });
-    });
+    }, scope);
   }
 }
 

@@ -3,7 +3,7 @@ import {
 } from '../../infrastructure/services/AfiliadoBdiSspeaService.js';
 import { ejecutarAP_DN_APLICAR, ejecutarAP_P_APLICAR, ejecutarEBI2_RECIBOS_AP, verificarAP_DN_APLICAR } from '../../infrastructure/services/AfiliadoBdiSspeaFirebirdService.js';
 import { crearAplicacionQnaLogPayload, guardarAplicacionQnaLogFtp } from '../../infrastructure/services/AplicacionQnaLogFtpService.js';
-import { executeInTransactionWithOutcome, type FirebirdTransactionExecution } from '../../../../db/firebird.js';
+import { executeInTransactionWithOutcome, type FirebirdScope, type FirebirdTransactionExecution } from '../../../../db/firebird.js';
 import { GenerateLineaCapturaPeriodoCommand, type GenerateLineaCapturaPeriodoResult } from '../../../reportes/aplicacionesQNA/application/commands/GenerateLineaCapturaPeriodoCommand.js';
 import type { ILiquidacionQnaRepository, QnaApplicationSnapshot } from '../../../liquidacionQna/domain/repositories/ILiquidacionQnaRepository.js';
 import type { QnaProcessState, QnaScope } from '../../../liquidacionQna/domain/entities/LiquidacionQna.js';
@@ -53,7 +53,7 @@ export interface AplicarBDIssspeaQNAResult {
 }
 
 export interface AplicarQnaDependencies {
-  executeFirebirdTransaction<T>(fn: (tx: any) => Promise<T>): Promise<FirebirdTransactionExecution<T>>;
+  executeFirebirdTransaction<T>(fn: (tx: any) => Promise<T>, scope: FirebirdScope): Promise<FirebirdTransactionExecution<T>>;
   verificarAP_DN_APLICAR: typeof verificarAP_DN_APLICAR;
   ejecutarAP_DN_APLICAR: typeof ejecutarAP_DN_APLICAR;
   ejecutarAP_P_APLICAR: typeof ejecutarAP_P_APLICAR;
@@ -139,7 +139,7 @@ export class AplicarBDIssspeaQNACommand {
           } else {
             ejecuciones.ebi2Recibos = { exito: true, duracionMs: 0, mensaje: 'No aplica en quincenas impares' };
           }
-        });
+        }, { org0: decision.scope.organica0, org1: decision.scope.organica1 });
       }catch(error){transaction={outcome:firebirdStarted?'RESULTADO_INCIERTO':'NO_INICIADA',error};}finally {await heartbeat.stop();}
       const heartbeatNote=heartbeat.failed()?' Heartbeat de claim no saludable.':'';
       const destination=transaction.outcome==='COMMIT_CONFIRMADO'?'FIREBIRD_CONFIRMADO':transaction.outcome==='RESULTADO_INCIERTO'?'APLICACION_INCIERTA':'FIREBIRD_REVERTIDO';

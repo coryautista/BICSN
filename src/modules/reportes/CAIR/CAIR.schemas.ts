@@ -2,14 +2,18 @@ import { z } from 'zod';
 
 // Schema para parámetros de Estado de Cuenta CAIR
 export const EstadoCuentaCAIRParamsSchema = z.object({
-  quincena: z.string().min(1).max(20).describe('Quincena en formato específico (ej: "2125")')
+  quincena: z.string().min(1).max(20).describe('Quincena en formato específico (ej: "2125")'),
+  org0: z.string().min(1).max(2).optional(),
+  org1: z.string().min(1).max(2).optional()
 });
 
 // Schema para parámetros de CAIR Entregado
 export const CAIREntregadoParamsSchema = z.object({
   fi: z.string().min(1).max(20).describe('Fecha inicial en formato específico'),
   ff: z.string().min(1).max(20).describe('Fecha final en formato específico'),
-  tipo: z.string().min(1).max(10).describe('Tipo de reporte')
+  tipo: z.string().min(1).max(10).describe('Tipo de reporte'),
+  org0: z.string().min(1).max(2).optional(),
+  org1: z.string().min(1).max(2).optional()
 });
 
 // Schemas para respuestas

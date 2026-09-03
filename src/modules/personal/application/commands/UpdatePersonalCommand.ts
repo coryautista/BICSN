@@ -24,7 +24,7 @@ import {
 export class UpdatePersonalCommand {
   constructor(private personalRepo: IPersonalRepository) {}
 
-  async execute(interno: number, data: UpdatePersonalData, userId: string): Promise<Personal> {
+  async execute(interno: number, data: UpdatePersonalData, scope: { org0: string; org1: string }, userId: string): Promise<Personal> {
     const timestamp = new Date().toISOString();
 
     console.log(`[${timestamp}] [Usuario: ${userId}] Iniciando actualización de registro personal`, {
@@ -42,13 +42,13 @@ export class UpdatePersonalCommand {
       await this.validateUpdateData(data);
 
       // Verificar que el registro exista
-      const existing = await this.personalRepo.findById(interno);
+      const existing = await this.personalRepo.findById(interno, scope);
       if (!existing) {
         throw new PersonalNotFoundError(interno);
       }
 
       // Actualizar el registro personal
-      const personal = await this.personalRepo.update(interno, data);
+      const personal = await this.personalRepo.update(interno, data, scope);
 
       console.log(`[${timestamp}] [Usuario: ${userId}] Registro personal actualizado exitosamente`, {
         interno: personal.interno,

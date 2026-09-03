@@ -140,7 +140,9 @@ async function main(): Promise<void> {
               CAST(FAT AS VARCHAR(40)) AS FAT,
               CAST(FAI AS VARCHAR(40)) AS FAI
        FROM AP_S_FONDOS(?, ?, ?)`,
-      [ORG0, ORG1, PERIODO]
+      [ORG0, ORG1, PERIODO],
+      undefined,
+      { org0: ORG0, org1: ORG1 }
     );
     const firebirdAggregate = await firebird.executeSafeQuery(
       `SELECT COUNT(*) AS REGISTROS,
@@ -154,7 +156,9 @@ async function main(): Promise<void> {
               CAST(SUM(FAT) AS VARCHAR(40)) AS FAT,
               CAST(SUM(FAI) AS VARCHAR(40)) AS FAI
        FROM AP_S_FONDOS(?, ?, ?)`,
-      [ORG0, ORG1, PERIODO]
+      [ORG0, ORG1, PERIODO],
+      undefined,
+      { org0: ORG0, org1: ORG1 }
     );
 
     const recordsets = sqlResult.recordsets as Array<Array<Record<string, unknown>>>;

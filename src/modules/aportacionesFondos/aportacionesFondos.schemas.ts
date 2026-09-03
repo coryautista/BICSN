@@ -15,7 +15,9 @@ export const AportacionesCompletasSchema = z.object({
 
 export const NumerosEmpleadoLookupSchema = z.object({
   internos: z.array(z.number().int().positive()).max(1000).default([]),
-  rfcs: z.array(z.string().trim().min(1).max(13)).max(1000).default([])
+  rfcs: z.array(z.string().trim().min(1).max(13)).max(1000).default([]),
+  clave_organica_0: z.string().min(1).max(2).optional(),
+  clave_organica_1: z.string().min(1).max(2).optional()
 }).refine((value) => value.internos.length > 0 || value.rfcs.length > 0, {
   message: 'Se requiere al menos un interno o RFC'
 });

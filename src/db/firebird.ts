@@ -10,19 +10,15 @@ import { env as config } from "../config/env.js";
 import iconv from "iconv-lite";
 import { createNativeClient, getDefaultLibraryFilename } from "node-firebird-driver-native";
 import type { Attachment, Transaction, TransactionOptions } from "node-firebird-driver";
+import { getFirebirdScopeCredential, invalidateFirebirdScopeCredential, normalizeFirebirdOrg } from "./firebirdCatalog.js";
 
 const POOL_SIZE = Number((config.firebird as any).poolSize || 5);
 const SERIALIZE_ALL = Boolean((config.firebird as any).serialize) || false;
 const FIREBIRD_CHARSET = config.firebird.charset || "WIN1252";
-/** Default query timeout in ms (configurable via FIREBIRD_TIMEOUT_MS env var) */
 const DEFAULT_TIMEOUT_MS = Number(config.firebird.timeoutMs) || 30000;
 
 const FIREBIRD_CLIENT_LIB = process.env.FIREBIRD_CLIENT_LIB || getDefaultLibraryFilename();
 const client = createNativeClient(FIREBIRD_CLIENT_LIB);
-
-// Estado global del attachment
-let attachment: Attachment | null = null;
-let charsetApplied = false; // Indica si ya aplicamos SET NAMES al attachment actual
 
 function buildUri(): string {
   const host = config.firebird.host || "localhost";
@@ -31,59 +27,106 @@ function buildUri(): string {
   return `${host}/${port}:${db}`;
 }
 
-/**
- * Obtener attachment válido, reconectando si es necesario.
- * Aplica SET NAMES una sola vez por conexión.
- */
-async function getAttachment(): Promise<Attachment> {
-  // Si el attachment no es válido, reconectar
-  if (!attachment || !attachment.isValid) {
-    const connectOptions: any = {
-      username: config.firebird.user,
-      password: config.firebird.password,
-    };
-
-    if (config.firebird.role) {
-      connectOptions.role = config.firebird.role;
-    }
-
-    attachment = await client.connect(buildUri(), connectOptions);
-    charsetApplied = false;
-  }
-
-  // Aplicar SET NAMES una vez por attachment
-  if (!charsetApplied && attachment.isValid) {
-    try {
-      // SET NAMES requiere una transacción; usamos una temporal breve
-      const tempTx = await attachment.startTransaction();
-      try {
-        await attachment.execute(tempTx, `SET NAMES ${FIREBIRD_CHARSET}`);
-        await tempTx.commit();
-        charsetApplied = true;
-      } catch {
-        // Si falla, intentamos rollback y marcamos como no aplicado
-        try { if (tempTx.isValid) await tempTx.rollback(); } catch { /* ignore */ }
-        charsetApplied = false;
-      }
-    } catch {
-      charsetApplied = false;
-    }
-  }
-
-  return attachment;
+export interface FirebirdScope {
+  org0: string;
+  org1: string;
 }
 
-/**
- * Invalida el attachment actual (fuerza reconexión en próxima operación)
- */
-function invalidateAttachment(): void {
-  if (attachment) {
+interface AttachmentEntry {
+  attachment: Attachment;
+  charsetApplied: boolean;
+}
+
+const attachments = new Map<string, AttachmentEntry>();
+const attachmentOpenings = new Map<string, Promise<AttachmentEntry>>();
+const DEFAULT_SCOPE_KEY = "__default__";
+
+function scopeKey(scope?: FirebirdScope): string {
+  return scope
+    ? `${normalizeFirebirdOrg(scope.org0)}|${normalizeFirebirdOrg(scope.org1)}`
+    : DEFAULT_SCOPE_KEY;
+}
+
+function credentialRejected(message: string): boolean {
+  const normalized = String(message).toLowerCase();
+  return normalized.includes("user name and password")
+    || normalized.includes("no match on the target security database")
+    || normalized.includes("non-existent role");
+}
+
+async function connectOptionsFor(scope?: FirebirdScope): Promise<Record<string, unknown>> {
+  if (scope) {
+    const credential = await getFirebirdScopeCredential(scope.org0, scope.org1);
+    const options: any = { username: credential.user, password: credential.password };
+    if (credential.role) options.role = credential.role;
+    return options;
+  }
+  const options: any = { username: config.firebird.user, password: config.firebird.password };
+  if (config.firebird.role) options.role = config.firebird.role;
+  return options;
+}
+
+async function openEntry(scope: FirebirdScope | undefined): Promise<AttachmentEntry> {
+  try {
+    const attachment = await client.connect(buildUri(), await connectOptionsFor(scope));
+    return { attachment, charsetApplied: false };
+  } catch (error) {
+    if (scope && credentialRejected(String((error as any)?.message ?? error))) {
+      invalidateFirebirdScopeCredential(scope.org0, scope.org1);
+    }
+    throw error;
+  }
+}
+
+function disposeEntry(key: string, entry?: AttachmentEntry): void {
+  attachments.delete(key);
+  if (entry) {
     try {
-      if (attachment.isValid) attachment.disconnect().catch(() => undefined);
+      if (entry.attachment.isValid) entry.attachment.disconnect().catch(() => undefined);
     } catch { /* ignore */ }
   }
-  attachment = null;
-  charsetApplied = false;
+}
+
+async function getAttachment(scope?: FirebirdScope): Promise<Attachment> {
+  const key = scopeKey(scope);
+  let entry = attachments.get(key);
+  if (!entry || !entry.attachment.isValid) {
+    if (entry) disposeEntry(key, entry);
+    let opening = attachmentOpenings.get(key);
+    if (!opening) {
+      opening = openEntry(scope);
+      attachmentOpenings.set(key, opening);
+    }
+    try {
+      entry = await opening;
+      attachments.set(key, entry);
+    } finally {
+      if (attachmentOpenings.get(key) === opening) attachmentOpenings.delete(key);
+    }
+  }
+
+  if (!entry.charsetApplied && entry.attachment.isValid) {
+    try {
+      const tempTx = await entry.attachment.startTransaction();
+      try {
+        await entry.attachment.execute(tempTx, `SET NAMES ${FIREBIRD_CHARSET}`);
+        await tempTx.commit();
+        entry.charsetApplied = true;
+      } catch {
+        try { if (tempTx.isValid) await tempTx.rollback(); } catch { /* ignore */ }
+        entry.charsetApplied = false;
+      }
+    } catch {
+      entry.charsetApplied = false;
+    }
+  }
+
+  return entry.attachment;
+}
+
+function invalidateAttachment(scope?: FirebirdScope): void {
+  const key = scopeKey(scope);
+  disposeEntry(key, attachments.get(key));
 }
 
 /**
@@ -91,7 +134,8 @@ function invalidateAttachment(): void {
  */
 async function withTransaction<T>(
   fn: (att: Attachment, tx: Transaction) => Promise<T>,
-  options?: TransactionOptions
+  options?: TransactionOptions,
+  scope?: FirebirdScope
 ): Promise<T> {
   let att: Attachment;
   let tx: Transaction;
@@ -100,12 +144,11 @@ async function withTransaction<T>(
   );
 
   try {
-    att = await getAttachment();
+    att = await getAttachment(scope);
     tx = await att.startTransaction(transactionOptions);
-  } catch (connectError: any) {
-    // Error al conectar/iniciar tx: invalidar y reintentar una vez
-    invalidateAttachment();
-    att = await getAttachment();
+  } catch {
+    invalidateAttachment(scope);
+    att = await getAttachment(scope);
     tx = await att.startTransaction(transactionOptions);
   }
 
@@ -114,15 +157,13 @@ async function withTransaction<T>(
     await tx.commit();
     return res;
   } catch (e: any) {
-    // Rollback si la tx sigue válida
     try {
       if (tx.isValid) await tx.rollback();
     } catch { /* ignore */ }
 
-    // Si el error indica conexión perdida, invalidar para reconexión futura
     const errMsg = String(e?.message || e || "").toLowerCase();
     if (errMsg.includes("connection") || errMsg.includes("invalid") || errMsg.includes("closed")) {
-      invalidateAttachment();
+      invalidateAttachment(scope);
     }
     throw e;
   }
@@ -152,31 +193,35 @@ type FirebirdDbCompat = {
   ) => void;
 };
 
-let database: FirebirdDbCompat | null = null;
+const databases = new Map<string, FirebirdDbCompat>();
 
 /**
  * Compatibilidad: devuelve un objeto con `query(sql, params, cb)`.
  * Internamente usa executeSafeQuery (driver nativo).
  */
-export async function connectFirebirdDatabase(): Promise<FirebirdDbCompat> {
-  await testFirebirdConnection();
-  if (database) return database;
+export async function connectFirebirdDatabase(scope?: FirebirdScope): Promise<FirebirdDbCompat> {
+  await getAttachment(scope);
+  const key = scopeKey(scope);
+  const current = databases.get(key);
+  if (current) return current;
 
-  database = {
+  const database: FirebirdDbCompat = {
     query: (sqlText: string, paramsOrCb: any[] | ((err: any, rows?: any[]) => void), cb?: (err: any, rows?: any[]) => void) => {
       const params = typeof paramsOrCb === "function" ? [] : (paramsOrCb ?? []);
       const callback = typeof paramsOrCb === "function" ? paramsOrCb : cb;
 
-      executeSafeQuery(sqlText, params)
+      executeSafeQueryInternal(sqlText, params, undefined, scope)
         .then((rows) => callback?.(null, rows))
         .catch((err) => callback?.(err));
     },
   };
 
+  databases.set(key, database);
   return database;
 }
 
-export function getFirebirdDb(): FirebirdDbCompat {
+export function getFirebirdDb(scope?: FirebirdScope): FirebirdDbCompat {
+  const database = databases.get(scopeKey(scope));
   if (!database) {
     throw new Error("Base de datos Firebird no conectada. Llame a connectFirebirdDatabase() primero.");
   }
@@ -187,11 +232,12 @@ export function getFirebirdDb(): FirebirdDbCompat {
  * Compatibilidad: ejecuta una función que recibe `db` (con `query` estilo node-firebird),
  * serializando si está habilitado.
  */
-export async function executeSerializedQuery<T>(queryFn: (db: FirebirdDbCompat) => Promise<T>): Promise<T> {
-  return runSerialized(async () => {
-    const db = await connectFirebirdDatabase();
-    return queryFn(db);
-  });
+export async function executeSerializedQuery<T>(
+  queryFn: (db: FirebirdDbCompat) => Promise<T>,
+  scope: FirebirdScope
+): Promise<T> {
+  const db = await connectFirebirdDatabase(scope);
+  return queryFn(db);
 }
 
 /**
@@ -238,12 +284,12 @@ function decodeValue(v: any): any {
   return v;
 }
 
-export async function testFirebirdConnection(): Promise<boolean> {
+export async function testFirebirdConnection(scope?: FirebirdScope): Promise<boolean> {
   try {
     await runSerialized(async () => {
       await withTransaction(async (att, tx) => {
         await att.executeSingletonAsObject(tx, "SELECT 1 AS OK FROM RDB$DATABASE");
-      });
+      }, undefined, scope);
     });
     return true;
   } catch (e) {
@@ -284,7 +330,12 @@ async function executeQueryOn(att: Attachment, tx: Transaction, sql: string, par
  * @param params - Query parameters
  * @param timeoutMs - Optional timeout in ms (default: FIREBIRD_TIMEOUT_MS env or 30000)
  */
-export async function executeSafeQuery(sql: string, params: any[] = [], timeoutMs?: number): Promise<any[]> {
+async function executeSafeQueryInternal(
+  sql: string,
+  params: any[],
+  timeoutMs?: number,
+  scope?: FirebirdScope
+): Promise<any[]> {
   const timeout = timeoutMs ?? DEFAULT_TIMEOUT_MS;
   return runSerialized(async () => {
     let timeoutHandle: NodeJS.Timeout | undefined;
@@ -292,7 +343,7 @@ export async function executeSafeQuery(sql: string, params: any[] = [], timeoutM
       return await Promise.race([
         withTransaction(async (att, tx) => {
           return await executeQueryOn(att, tx, sql, params);
-        }),
+        }, undefined, scope),
         new Promise<any[]>((_, reject) => {
           timeoutHandle = setTimeout(
             () => reject(new Error(`Tiempo de espera agotado en consulta Firebird (${timeout}ms)`)),
@@ -306,11 +357,28 @@ export async function executeSafeQuery(sql: string, params: any[] = [], timeoutM
   });
 }
 
+export async function executeSafeQuery(
+  sql: string,
+  params: any[],
+  timeoutMs: number | undefined,
+  scope: FirebirdScope
+): Promise<any[]> {
+  return executeSafeQueryInternal(sql, params, timeoutMs, scope);
+}
+
+export async function executeTechnicalQuery(
+  sql: string,
+  params: any[] = [],
+  timeoutMs?: number
+): Promise<any[]> {
+  return executeSafeQueryInternal(sql, params, timeoutMs);
+}
+
 /**
  * Transacciones nativas: ejecuta fn con un (att, tx) compartido.
  * Las queries dentro de fn deben usar executeQueryInTransaction para reutilizar el mismo tx.
  */
-export async function executeInTransaction<T>(fn: (tx: any) => Promise<T>): Promise<T> {
+export async function executeInTransaction<T>(fn: (tx: any) => Promise<T>, scope: FirebirdScope): Promise<T> {
   return runSerialized(async () => {
     return await withTransaction(async (att, tx) => {
       // Exponemos un "tx" compatible que ejecuta queries en el mismo (att, tx)
@@ -329,7 +397,7 @@ export async function executeInTransaction<T>(fn: (tx: any) => Promise<T>): Prom
         },
       };
       return await fn(compatTx);
-    });
+    }, undefined, scope);
   });
 }
 
@@ -340,7 +408,8 @@ export async function executeInTransaction<T>(fn: (tx: any) => Promise<T>): Prom
 export async function executeQueryInTransaction(
   cn: any,
   sql: string,
-  params: any[] = []
+  params: any[],
+  scope: FirebirdScope
 ): Promise<any[]> {
   // Si nos pasaron el compatTx, usamos su método query (mismo tx)
   if (cn?.query && typeof cn.query === "function") {
@@ -348,7 +417,7 @@ export async function executeQueryInTransaction(
     return Array.isArray(rows) ? rows : [];
   }
   // Fallback: si no hay compatTx válido, crear transacción nueva
-  return await executeSafeQuery(sql, params);
+  return await executeSafeQuery(sql, params, undefined, scope);
 }
 
 /**
@@ -358,7 +427,8 @@ export async function executeQueryInTransaction(
 export async function executeProcedureInTransaction(
   cn: any,
   procedureName: string,
-  params: any[] = []
+  params: any[],
+  scope: FirebirdScope
 ): Promise<any[]> {
   const placeholders = params.map(() => "?").join(", ");
   const sql = `EXECUTE PROCEDURE ${procedureName} ${placeholders ? "(" + placeholders + ")" : ""}`;
@@ -366,7 +436,7 @@ export async function executeProcedureInTransaction(
     await cn.attachment.execute(cn.transaction, sql, params);
     return [];
   }
-  return await executeQueryInTransaction(cn, sql, params);
+  return await executeQueryInTransaction(cn, sql, params, scope);
 }
 
 export type FirebirdTransactionOutcome = 'COMMIT_CONFIRMADO' | 'ROLLBACK_CONFIRMADO' | 'RESULTADO_INCIERTO' | 'NO_INICIADA';
@@ -416,21 +486,25 @@ export async function executeTypedTransaction<TContext, T>(
   }
 }
 
-export async function executeInTransactionWithOutcome<T>(fn: (tx: any) => Promise<T>): Promise<FirebirdTransactionExecution<T>> {
+export async function executeInTransactionWithOutcome<T>(
+  fn: (tx: any) => Promise<T>,
+  scope: FirebirdScope
+): Promise<FirebirdTransactionExecution<T>> {
   return runSerialized(async () => executeTypedTransaction(async () => {
     let att: Attachment;
     try {
-      att = await getAttachment();
+      att = await getAttachment(scope);
     } catch (error) {
-      invalidateAttachment();
-      throw error;
+      invalidateAttachment(scope);
+      att = await getAttachment(scope);
     }
     let tx: Transaction;
     try {
       tx = await att.startTransaction();
     } catch (error) {
-      invalidateAttachment();
-      throw error;
+      invalidateAttachment(scope);
+      att = await getAttachment(scope);
+      tx = await att.startTransaction();
     }
     const compatTx = {
       attachment: att,
@@ -449,13 +523,14 @@ export async function executeInTransactionWithOutcome<T>(fn: (tx: any) => Promis
 }
 
 export async function closeFirebirdPool(): Promise<void> {
-  const current = attachment;
-  attachment = null;
-  charsetApplied = false;
-  if (current?.isValid) {
-    try { await current.disconnect(); } catch { /* ignore during shutdown */ }
-  }
-  database = null;
+  const current = [...attachments.values()];
+  attachments.clear();
+  attachmentOpenings.clear();
+  databases.clear();
+  await Promise.all(current.map(async ({ attachment }) => {
+    if (!attachment.isValid) return;
+    try { await attachment.disconnect(); } catch { /* ignore during shutdown */ }
+  }));
 }
 
 /**
@@ -465,7 +540,7 @@ export async function closeFirebirdPool(): Promise<void> {
 export async function checkFirebirdCharset(): Promise<number> {
   try {
     // Intentar obtener el charset de la conexión actual
-    const rows = await executeSafeQuery(
+    const rows = await executeSafeQueryInternal(
       `SELECT
          a.mon$character_set_id AS charset_id
        FROM mon$attachments a
@@ -484,7 +559,7 @@ export async function checkFirebirdCharset(): Promise<number> {
 
   try {
     // Fallback: intentar obtener desde RDB$DATABASE
-    const rows = await executeSafeQuery('SELECT RDB$CHARACTER_SET_ID AS CHARSET_ID FROM RDB$DATABASE', []);
+    const rows = await executeSafeQueryInternal('SELECT RDB$CHARACTER_SET_ID AS CHARSET_ID FROM RDB$DATABASE', []);
     const row = rows?.[0] ?? {};
     const v = (row as any).CHARSET_ID ?? (row as any).charset_id ?? (row as any)['RDB$CHARACTER_SET_ID'];
     const n = typeof v === 'number' ? v : Number(v);
@@ -506,14 +581,23 @@ export const closeFirebirdConnection = closeFirebirdPool;
  * @param params - Query parameters
  * @param timeoutMs - Optional timeout in ms (default: FIREBIRD_TIMEOUT_MS env or 30000)
  */
-export async function executeQueryWithNewConnection(sql: string, params: any[] = [], timeoutMs?: number): Promise<any[]> {
+export async function executeQueryWithNewConnection(
+  sql: string,
+  params: any[],
+  timeoutMs: number | undefined,
+  scope: FirebirdScope
+): Promise<any[]> {
   const timeout = timeoutMs ?? DEFAULT_TIMEOUT_MS;
   return await Promise.race([
     (async () => {
-      const att = await client.connect(buildUri(), {
-        username: config.firebird.user,
-        password: config.firebird.password,
-      });
+      let att: Attachment;
+      try {
+        att = await client.connect(buildUri(), await connectOptionsFor(scope));
+      } catch (error) {
+        if (!scope || !credentialRejected(String((error as any)?.message ?? error))) throw error;
+        invalidateFirebirdScopeCredential(scope.org0, scope.org1);
+        att = await client.connect(buildUri(), await connectOptionsFor(scope));
+      }
       try {
         // Aplicar SET NAMES en la nueva conexión
         const initTx = await att.startTransaction();
@@ -569,6 +653,12 @@ export const firebirdRuntimeInfo = {
   uri: buildUri(),
 };
 
+export function getFirebirdRegistryStatus(): { scopesActivos: number } {
+  return {
+    scopesActivos: [...attachments.keys()].filter((key) => key !== DEFAULT_SCOPE_KEY).length,
+  };
+}
+
 // Timeout constants for heavy operations (can be passed to executeSafeQuery)
 export const FIREBIRD_TIMEOUTS = {
   DEFAULT: DEFAULT_TIMEOUT_MS,
@@ -592,6 +682,7 @@ export interface SelectableProcedureOptions {
   alias?: string;
   /** Columnas específicas a seleccionar (default: '*') */
   columns?: string[];
+  scope: FirebirdScope;
 }
 
 /**
@@ -609,16 +700,16 @@ export interface SelectableProcedureOptions {
 export async function executeSelectableProcedure(
   procedureName: string,
   params: any[] = [],
-  options: SelectableProcedureOptions = {}
+  options: SelectableProcedureOptions
 ): Promise<any[]> {
-  const { timeoutMs, alias, columns } = options;
+  const { timeoutMs, alias, columns, scope } = options;
   const placeholders = params.map(() => "?").join(", ");
   const selectColumns = columns && columns.length > 0 ? columns.join(", ") : "*";
   const aliasClause = alias ? ` ${alias}` : "";
   
   const sql = `SELECT ${selectColumns} FROM ${procedureName}(${placeholders})${aliasClause}`;
   
-  return await executeSafeQuery(sql, params, timeoutMs);
+  return await executeSafeQuery(sql, params, timeoutMs, scope);
 }
 
 /**
@@ -627,6 +718,7 @@ export async function executeSelectableProcedure(
 export interface ExecutableProcedureOptions {
   /** Timeout en ms (default: DEFAULT_TIMEOUT_MS) */
   timeoutMs?: number;
+  scope: FirebirdScope;
 }
 
 /**
@@ -640,11 +732,11 @@ export interface ExecutableProcedureOptions {
 export async function executeExecutableProcedure(
   procedureName: string,
   params: any[] = [],
-  options: ExecutableProcedureOptions = {}
+  options: ExecutableProcedureOptions
 ): Promise<any[]> {
-  const { timeoutMs } = options;
+  const { timeoutMs, scope } = options;
   const placeholders = params.map(() => "?").join(", ");
   const sql = `EXECUTE PROCEDURE ${procedureName}${placeholders ? "(" + placeholders + ")" : ""}`;
   
-  return await executeSafeQuery(sql, params, timeoutMs);
+  return await executeSafeQuery(sql, params, timeoutMs, scope);
 }

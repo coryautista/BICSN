@@ -4,7 +4,7 @@ import { Organica3 } from '../../domain/entities/Organica3.js';
 export class GetAllOrganica3Query {
   constructor(private organica3Repo: IOrganica3Repository) {}
 
-  async execute(userId?: string): Promise<Organica3[]> {
+  async execute(scope: { org0: string; org1: string }, userId?: string): Promise<Organica3[]> {
     console.log('ORGANICA3_QUERY', {
       operation: 'GET_ALL_ORGANICA3',
       userId: userId || 'SYSTEM',
@@ -12,7 +12,7 @@ export class GetAllOrganica3Query {
     });
 
     try {
-      const result = await this.organica3Repo.findAll();
+      const result = await this.organica3Repo.findAll(scope);
 
       console.log('ORGANICA3_QUERY_SUCCESS', {
         operation: 'GET_ALL_ORGANICA3',

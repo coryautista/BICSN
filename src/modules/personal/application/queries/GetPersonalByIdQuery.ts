@@ -8,7 +8,7 @@ import {
 export class GetPersonalByIdQuery {
   constructor(private personalRepo: IPersonalRepository) {}
 
-  async execute(interno: number, userId?: string): Promise<Personal> {
+  async execute(interno: number, scope: { org0: string; org1: string }, userId?: string): Promise<Personal> {
     const timestamp = new Date().toISOString();
 
     console.log(`[${timestamp}] [Usuario: ${userId || 'N/A'}] Consultando registro personal por ID`, {
@@ -21,7 +21,7 @@ export class GetPersonalByIdQuery {
         throw new PersonalInvalidInternoError(interno);
       }
 
-      const personal = await this.personalRepo.findById(interno);
+      const personal = await this.personalRepo.findById(interno, scope);
       if (!personal) {
         throw new PersonalNotFoundError(interno);
       }

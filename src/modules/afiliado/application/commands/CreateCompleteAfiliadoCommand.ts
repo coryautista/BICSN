@@ -1,6 +1,6 @@
 import { ConnectionPool } from 'mssql';
 import { sql } from '../../../../db/mssql.js';
-import { executeSerializedQuery, decodeFirebirdObject, executeSelectableProcedure } from '../../../../db/firebird.js';
+import { executeSelectableProcedure } from '../../../../db/firebird.js';
 import { CreateCompleteAfiliadoData, CompleteAfiliadoResult } from '../../domain/entities/CompleteAfiliado.js';
 import { getPool } from '../../../../db/mssql.js';
 import pino from 'pino';
@@ -489,7 +489,8 @@ export class CreateCompleteAfiliadoCommand {
         // Consultar Firebird para obtener quincena y fecha usando helper de SP
         const result = await executeSelectableProcedure('AP_G_APLICADO_TIPO', [org0, org1, '01', '01'], {
           alias: 'p',
-          columns: ['p.QUINCENA', 'p.FECHA']
+          columns: ['p.QUINCENA', 'p.FECHA'],
+          scope: { org0, org1 }
         });
 
         if (!result || result.length === 0) {

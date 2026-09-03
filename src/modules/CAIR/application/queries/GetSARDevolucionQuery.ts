@@ -10,7 +10,7 @@ const logger = pino({
 export class GetSARDevolucionQuery {
   constructor(private cairIndependentRepo: ICAIRRepository) {}
 
-  async execute(interno: string, tipo: string, userId?: string): Promise<SARDevolucion[]> {
+  async execute(interno: string, tipo: string, scope: { org0: string; org1: string }, userId?: string): Promise<SARDevolucion[]> {
     logger.info({
       operation: 'GET_SAR_DEVOLUCION',
       userId: userId || 'SYSTEM',
@@ -25,7 +25,7 @@ export class GetSARDevolucionQuery {
         throw new Error('interno y tipo son requeridos');
       }
 
-      const devoluciones = await this.cairIndependentRepo.getSARDevolucion(interno, tipo);
+      const devoluciones = await this.cairIndependentRepo.getSARDevolucion(interno, tipo, scope);
 
       logger.info({
         operation: 'GET_SAR_DEVOLUCION',

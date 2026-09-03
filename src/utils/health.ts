@@ -1,5 +1,5 @@
 import { ping as pingMssql } from '../db/mssql.js';
-import { testFirebirdConnection } from '../db/firebird.js';
+import { getFirebirdRegistryStatus, testFirebirdConnection } from '../db/firebird.js';
 import { env } from '../config/env.js';
 
 export interface HealthCheck {
@@ -83,7 +83,12 @@ export async function checkFirebirdDatabase(): Promise<HealthCheck> {
       message: isConnected ? 'Firebird connection successful' : 'Firebird connection failed',
       details: {
         connected: isConnected,
-        type: 'Firebird'
+        type: 'Firebird',
+        firebirdCatalog: {
+          enabled: env.firebirdCatalog.enabled,
+          scopesActivos: getFirebirdRegistryStatus().scopesActivos,
+          ttlMs: env.firebirdCatalog.ttlMs
+        }
       }
     };
   } catch (error) {
@@ -95,7 +100,12 @@ export async function checkFirebirdDatabase(): Promise<HealthCheck> {
       message: error instanceof Error ? error.message : 'Unknown error',
       details: {
         connected: false,
-        error: error instanceof Error ? error.message : 'Unknown error'
+        error: error instanceof Error ? error.message : 'Unknown error',
+        firebirdCatalog: {
+          enabled: env.firebirdCatalog.enabled,
+          scopesActivos: getFirebirdRegistryStatus().scopesActivos,
+          ttlMs: env.firebirdCatalog.ttlMs
+        }
       }
     };
   }

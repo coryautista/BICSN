@@ -617,7 +617,7 @@ export class AportacionFondoRepository implements IAportacionFondoRepository {
           ));
         }
       });
-    }).catch((error) => {
+    }, { org0: claveOrganica0, org1: claveOrganica1 }).catch((error) => {
       const duration = Date.now() - startTime;
       console.error('[APORTACIONES_FONDOS] [AP_S_PCP] Error en obtenerPrestamos', {
         ...logContext,
@@ -883,7 +883,7 @@ export class AportacionFondoRepository implements IAportacionFondoRepository {
           ));
         }
       });
-    }).catch((error) => {
+    }, { org0: claveOrganica0, org1: claveOrganica1 }).catch((error) => {
       const duration = Date.now() - startTime;
       console.error('[APORTACIONES_FONDOS] [AP_S_VIV] Error en obtenerPrestamosMedianoPlazo', {
         ...logContext,
@@ -1116,7 +1116,7 @@ export class AportacionFondoRepository implements IAportacionFondoRepository {
           ));
         }
       });
-    }).catch((error) => {
+    }, { org0: claveOrganica0, org1: claveOrganica1 }).catch((error) => {
       const duration = Date.now() - startTime;
       console.error(`[APORTACIONES_FONDOS] [HIPOTECARIOS] Error en obtenerPrestamosHipotecarios`, {
         ...logContext,
@@ -1344,7 +1344,10 @@ export class AportacionFondoRepository implements IAportacionFondoRepository {
     const rows = await executeSafeQuery(`
       SELECT INTERNO,RFC,CAST(FAI AS VARCHAR(40)) AS FAI
       FROM AP_S_FONDOS(?, ?, ?)
-    `, [claveOrganica0, claveOrganica1, periodo], FIREBIRD_TIMEOUTS.BATCH_OPERATION);
+    `, [claveOrganica0, claveOrganica1, periodo], FIREBIRD_TIMEOUTS.BATCH_OPERATION, {
+      org0: claveOrganica0,
+      org1: claveOrganica1
+    });
     return rows.map((row) => ({
       interno: Number(row.INTERNO),
       rfc: row.RFC === null || row.RFC === undefined ? null : String(row.RFC).trim(),
@@ -1557,7 +1560,7 @@ export class AportacionFondoRepository implements IAportacionFondoRepository {
           resolve(mappedRecords);
         });
       });
-    });
+    }, { org0: claveOrganica0, org1: claveOrganica1 });
   }
 
   private async calcularAportaciones(
@@ -1624,7 +1627,12 @@ export class AportacionFondoRepository implements IAportacionFondoRepository {
     });
   }
 
-  async obtenerNumerosEmpleado(internos: number[], rfcs: string[]): Promise<NumerosEmpleadoLookup> {
+  async obtenerNumerosEmpleado(
+    internos: number[],
+    rfcs: string[],
+    org0: string,
+    org1: string
+  ): Promise<NumerosEmpleadoLookup> {
     const internosUnicos = [...new Set(internos.filter(Number.isInteger).filter((interno) => interno > 0))];
     const rfcsUnicos = [
       ...new Set(
@@ -1705,7 +1713,7 @@ export class AportacionFondoRepository implements IAportacionFondoRepository {
 
         resolve({ porInterno, porRfc });
       });
-    }));
+    }), { org0, org1 });
   }
 
   private async obtenerFormulaPeriodo(periodo?: string): Promise<FormulaCalculo> {
@@ -2251,7 +2259,7 @@ export class AportacionFondoRepository implements IAportacionFondoRepository {
           ));
         }
       });
-    });
+    }, { org0, org1 });
   }
 
   /**
@@ -2561,7 +2569,7 @@ export class AportacionFondoRepository implements IAportacionFondoRepository {
           ));
         }
       });
-    });
+    }, { org0, org1 });
   }
 
   /**
@@ -2799,6 +2807,6 @@ export class AportacionFondoRepository implements IAportacionFondoRepository {
           ));
         }
       });
-    });
+    }, { org0, org1 });
   }
 }

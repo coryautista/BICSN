@@ -30,7 +30,11 @@ export class GetPlantillaQuery {
     logger.info(logContext, 'Consultando plantilla de personal por claves orgánicas');
 
     try {
-      const results = await this.afiliadoPersonalRepo.obtenerPlantilla(claveOrganica0, claveOrganica1);
+      const results = await this.afiliadoPersonalRepo.obtenerPlantilla(
+        claveOrganica0,
+        claveOrganica1,
+        { org0: claveOrganica0, org1: claveOrganica1 }
+      );
 
       logger.info({
         ...logContext,

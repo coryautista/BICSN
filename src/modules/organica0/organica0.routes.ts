@@ -9,6 +9,13 @@ import type { CreateOrganica0Command } from './application/commands/CreateOrgani
 import type { UpdateOrganica0Command } from './application/commands/UpdateOrganica0Command.js';
 import type { DeleteOrganica0Command } from './application/commands/DeleteOrganica0Command.js';
 
+function getAuthenticatedFirebirdScope(user: any): { org0: string; org1: string } {
+  const org0 = user?.idOrganica0?.toString().trim();
+  const org1 = user?.idOrganica1?.toString().trim();
+  if (!org0 || !org1) throw new Error('FIREBIRD_SCOPE_REQUIRED');
+  return { org0: org0.padStart(2, '0'), org1: org1.padStart(2, '0') };
+}
+
 // [FIREBIRD] Routes for ORGANICA_0 CRUD operations
 export default async function organica0Routes(app: FastifyInstance) {
 
@@ -96,7 +103,7 @@ export default async function organica0Routes(app: FastifyInstance) {
        }
        
         const getAllOrganica0Query: GetAllOrganica0Query = req.diScope.resolve('getAllOrganica0Query');
-        const records = await getAllOrganica0Query.execute(limit, offset, req.user?.sub);
+         const records = await getAllOrganica0Query.execute(getAuthenticatedFirebirdScope(req.user), limit, offset, req.user?.sub);
        
        const endTime = Date.now();
        console.log(`[ROUTE] organica0 GET: Completed in ${endTime - startTime}ms, returned ${records.length} records`);
@@ -195,7 +202,7 @@ export default async function organica0Routes(app: FastifyInstance) {
     try {
       const { claveOrganica } = req.params as { claveOrganica: string };
       const getOrganica0ByIdQuery: GetOrganica0ByIdQuery = req.diScope.resolve('getOrganica0ByIdQuery');
-      const record = await getOrganica0ByIdQuery.execute(claveOrganica, req.user?.sub);
+       const record = await getOrganica0ByIdQuery.execute(claveOrganica, getAuthenticatedFirebirdScope(req.user), req.user?.sub);
       return reply.send(ok(record));
     } catch (error) {
       return handleOrganica0Error(error, reply);
@@ -277,7 +284,7 @@ export default async function organica0Routes(app: FastifyInstance) {
 
     try {
       const createOrganica0Command: CreateOrganica0Command = req.diScope.resolve('createOrganica0Command');
-      const record = await createOrganica0Command.execute(parsed.data, req.user?.sub);
+       const record = await createOrganica0Command.execute(parsed.data, getAuthenticatedFirebirdScope(req.user), req.user?.sub);
       return reply.code(201).send(ok(record));
     } catch (error) {
       return handleOrganica0Error(error, reply);
@@ -365,7 +372,7 @@ export default async function organica0Routes(app: FastifyInstance) {
 
     try {
       const updateOrganica0Command: UpdateOrganica0Command = req.diScope.resolve('updateOrganica0Command');
-      const record = await updateOrganica0Command.execute(claveOrganica, parsed.data, req.user?.sub);
+       const record = await updateOrganica0Command.execute(claveOrganica, parsed.data, getAuthenticatedFirebirdScope(req.user), req.user?.sub);
       return reply.send(ok(record));
     } catch (error) {
       return handleOrganica0Error(error, reply);
@@ -426,7 +433,7 @@ export default async function organica0Routes(app: FastifyInstance) {
     try {
       const { claveOrganica } = req.params as { claveOrganica: string };
       const deleteOrganica0Command: DeleteOrganica0Command = req.diScope.resolve('deleteOrganica0Command');
-      const result = await deleteOrganica0Command.execute(claveOrganica, req.user?.sub);
+       const result = await deleteOrganica0Command.execute(claveOrganica, getAuthenticatedFirebirdScope(req.user), req.user?.sub);
       return reply.send(ok(result));
     } catch (error) {
       return handleOrganica0Error(error, reply);

@@ -15,7 +15,7 @@ import {
 export class CreateOrgPersonalCommand {
   constructor(private orgPersonalRepo: IOrgPersonalRepository) {}
 
-  async execute(data: CreateOrgPersonalData, userId?: string): Promise<OrgPersonal> {
+  async execute(data: CreateOrgPersonalData, scope: { org0: string; org1: string }, userId?: string): Promise<OrgPersonal> {
     // Logging de la operación
     console.log(`[ORG_PERSONAL] Creando nuevo registro orgPersonal, usuario: ${userId || 'desconocido'}`);
 
@@ -24,12 +24,12 @@ export class CreateOrgPersonalCommand {
 
     try {
       // Verificar si ya existe un registro con el mismo interno
-      const existing = await this.orgPersonalRepo.findById(data.interno);
+      const existing = await this.orgPersonalRepo.findById(data.interno, scope);
       if (existing) {
         throw new OrgPersonalAlreadyExistsError(data.interno);
       }
 
-      const result = await this.orgPersonalRepo.create(data);
+      const result = await this.orgPersonalRepo.create(data, scope);
       console.log(`[ORG_PERSONAL] Registro orgPersonal creado exitosamente: interno ${result.interno}`);
       return result;
     } catch (error: any) {

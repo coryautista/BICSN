@@ -11,7 +11,7 @@ import {
 export class CreateOrganica0Command {
   constructor(private organica0Repo: IOrganica0Repository) {}
 
-  async execute(data: CreateOrganica0Data, userId?: string): Promise<Organica0> {
+  async execute(data: CreateOrganica0Data, scope: { org0: string; org1: string }, userId?: string): Promise<Organica0> {
     console.log('ORGANICA0_COMMAND', {
       operation: 'CREATE_ORGANICA0',
       userId: userId || 'SYSTEM',
@@ -41,7 +41,7 @@ export class CreateOrganica0Command {
 
     try {
       // Verificar si ya existe una entidad con la misma clave
-      const existing = await this.organica0Repo.findById(data.claveOrganica);
+      const existing = await this.organica0Repo.findById(data.claveOrganica, scope);
       if (existing) {
         console.warn('ORGANICA0_COMMAND_WARNING', {
           operation: 'CREATE_ORGANICA0',
@@ -63,7 +63,7 @@ export class CreateOrganica0Command {
         estatus: data.estatus
       };
 
-      const result = await this.organica0Repo.create(organica0Data);
+      const result = await this.organica0Repo.create(organica0Data, scope);
 
       console.log('ORGANICA0_COMMAND_SUCCESS', {
         operation: 'CREATE_ORGANICA0',

@@ -10,7 +10,7 @@ import {
 export class UpdateOrganica0Command {
   constructor(private organica0Repo: IOrganica0Repository) {}
 
-  async execute(claveOrganica: string, data: UpdateOrganica0Data, userId?: string): Promise<Organica0> {
+  async execute(claveOrganica: string, data: UpdateOrganica0Data, scope: { org0: string; org1: string }, userId?: string): Promise<Organica0> {
     console.log('ORGANICA0_COMMAND', {
       operation: 'UPDATE_ORGANICA0',
       userId: userId || 'SYSTEM',
@@ -37,7 +37,7 @@ export class UpdateOrganica0Command {
 
     try {
       // Verificar que la entidad existe
-      const existing = await this.organica0Repo.findById(claveOrganica);
+      const existing = await this.organica0Repo.findById(claveOrganica, scope);
       if (!existing) {
         console.warn('ORGANICA0_COMMAND_WARNING', {
           operation: 'UPDATE_ORGANICA0',
@@ -50,7 +50,7 @@ export class UpdateOrganica0Command {
       }
 
       // Actualizar la entidad
-      const result = await this.organica0Repo.update(claveOrganica, data);
+      const result = await this.organica0Repo.update(claveOrganica, data, scope);
 
       console.log('ORGANICA0_COMMAND_SUCCESS', {
         operation: 'UPDATE_ORGANICA0',

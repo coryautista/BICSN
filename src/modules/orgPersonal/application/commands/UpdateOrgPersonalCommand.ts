@@ -15,7 +15,7 @@ import {
 export class UpdateOrgPersonalCommand {
   constructor(private orgPersonalRepo: IOrgPersonalRepository) {}
 
-  async execute(interno: number, data: UpdateOrgPersonalData, userId?: string): Promise<OrgPersonal> {
+  async execute(interno: number, data: UpdateOrgPersonalData, scope: { org0: string; org1: string }, userId?: string): Promise<OrgPersonal> {
     // Logging de la operación
     console.log(`[ORG_PERSONAL] Actualizando registro orgPersonal interno: ${interno}, usuario: ${userId || 'desconocido'}`);
 
@@ -28,12 +28,12 @@ export class UpdateOrgPersonalCommand {
 
     try {
       // Verificar que el registro existe
-      const existing = await this.orgPersonalRepo.findById(interno);
+      const existing = await this.orgPersonalRepo.findById(interno, scope);
       if (!existing) {
         throw new OrgPersonalNotFoundError(interno);
       }
 
-      const result = await this.orgPersonalRepo.update(interno, data);
+      const result = await this.orgPersonalRepo.update(interno, data, scope);
       console.log(`[ORG_PERSONAL] Registro orgPersonal actualizado exitosamente: interno ${interno}`);
       return result;
     } catch (error: any) {

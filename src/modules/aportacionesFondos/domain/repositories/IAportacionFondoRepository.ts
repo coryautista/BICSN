@@ -60,7 +60,12 @@ export interface IAportacionFondoRepository {
   ): Promise<PrestamoHipotecario[]>;
 
   // Obtiene números de empleado canónicos desde PERSONAL para cruces de retenciones.
-  obtenerNumerosEmpleado(internos: number[], rfcs: string[]): Promise<NumerosEmpleadoLookup>;
+  obtenerNumerosEmpleado(
+    internos: number[],
+    rfcs: string[],
+    org0: string,
+    org1: string
+  ): Promise<NumerosEmpleadoLookup>;
   
   // Obtener período de aplicación desde BitacoraAfectacionOrg
   obtenerPeriodoAplicacion(org0: string, org1: string): Promise<{ periodo: string; accion: string }>;

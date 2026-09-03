@@ -190,7 +190,12 @@ export default async function afiliadosPersonalRoutes(app: FastifyInstance) {
   }, async (req: any, reply) => {
     try {
       const { search } = req.query as { search?: string };
-      const records = await busquedaHistoricoQuery.execute(search);
+      const org0 = normalizeClaveOrganica(req.user?.idOrganica0);
+      const org1 = normalizeClaveOrganica(req.user?.idOrganica1);
+      if (!org0 || !org1) {
+        throw new AfiliadosPersonalAccessDeniedError('Usuario no tiene permisos para acceder a esta información', { userId: req.user?.sub });
+      }
+      const records = await busquedaHistoricoQuery.execute(search, { org0, org1 });
       
       // El mojibake se limpia automáticamente por el plugin mojibakeCleaner
       return reply.send(ok(records));

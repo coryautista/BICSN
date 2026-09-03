@@ -45,7 +45,10 @@ export class RetencionesPorCobrarRepository implements IRetencionesPorCobrarRepo
 
     try {
       // executeSafeQuery ya incluye serialización, timeout, y decodificación
-      const result = await executeSafeQuery(sql, [clave0, clave1, periodoStr]);
+      const result = await executeSafeQuery(sql, [clave0, clave1, periodoStr], undefined, {
+        org0: clave0,
+        org1: clave1
+      });
       const duration = Date.now() - startTime;
 
       if (!result || result.length === 0) {
@@ -137,7 +140,7 @@ export class RetencionesPorCobrarRepository implements IRetencionesPorCobrarRepo
       `;
       const filasBrutas = await executeQueryInTransaction(transaction, sqlExistentes, [
         clave0, clave1, periodoStr
-      ]);
+      ], { org0: clave0, org1: clave1 });
 
       const getCol = (row: any, name: string): any => {
         if (row[name] !== undefined && row[name] !== null) return row[name];
@@ -199,7 +202,7 @@ export class RetencionesPorCobrarRepository implements IRetencionesPorCobrarRepo
         logger.debug({ ...logContext, tipo }, 'Insertando registro');
 
         try {
-          await executeQueryInTransaction(transaction, sql, params);
+          await executeQueryInTransaction(transaction, sql, params, { org0: clave0, org1: clave1 });
           registrosCreados.push({
             claveOrganica0: clave0,
             claveOrganica1: clave1,
@@ -228,7 +231,6 @@ export class RetencionesPorCobrarRepository implements IRetencionesPorCobrarRepo
       }, 'Retenciones moratorio creadas/actualizadas');
 
       return registrosCreados;
-    });
+    }, { org0: clave0, org1: clave1 });
   }
 }
-

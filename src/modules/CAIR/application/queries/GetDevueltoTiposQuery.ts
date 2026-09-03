@@ -10,7 +10,7 @@ const logger = pino({
 export class GetDevueltoTiposQuery {
   constructor(private cairIndependentRepo: ICAIRRepository) {}
 
-  async execute(userId?: string): Promise<DevueltoTipo[]> {
+  async execute(scope: { org0: string; org1: string }, userId?: string): Promise<DevueltoTipo[]> {
     logger.info({
       operation: 'GET_DEVUELTO_TIPOS',
       userId: userId || 'SYSTEM',
@@ -18,7 +18,7 @@ export class GetDevueltoTiposQuery {
     }, 'CAIR_QUERY');
 
     try {
-      const tipos = await this.cairIndependentRepo.getDevueltoTipos();
+      const tipos = await this.cairIndependentRepo.getDevueltoTipos(scope);
 
       logger.info({
         operation: 'GET_DEVUELTO_TIPOS',

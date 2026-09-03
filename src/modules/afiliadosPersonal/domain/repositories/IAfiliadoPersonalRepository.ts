@@ -1,5 +1,10 @@
 import { AfiliadoPersonal } from '../entities/AfiliadoPersonal.js';
 
+export interface AfiliadoPersonalFirebirdScope {
+  org0: string;
+  org1: string;
+}
+
 /**
  * Repository interface for AfiliadoPersonal operations
  */
@@ -10,12 +15,12 @@ export interface IAfiliadoPersonalRepository {
    * @param claveOrganica1 - Second level organic key
    * @returns List of employees matching the organic keys with their latest active org_personal record
    */
-  obtenerPlantilla(claveOrganica0: string, claveOrganica1: string): Promise<AfiliadoPersonal[]>;
+  obtenerPlantilla(claveOrganica0: string, claveOrganica1: string, scope: AfiliadoPersonalFirebirdScope): Promise<AfiliadoPersonal[]>;
 
   /**
    * Search employees in historical data
    * @param searchTerm - Optional search term (searches in RFC, CURP, INTERNO, NOEMPLEADO, FULLNAME)
    * @returns List of employees matching the search criteria with their latest org_personal record
    */
-  busquedaHistorico(searchTerm?: string): Promise<AfiliadoPersonal[]>;
+  busquedaHistorico(searchTerm: string | undefined, scope: AfiliadoPersonalFirebirdScope): Promise<AfiliadoPersonal[]>;
 }

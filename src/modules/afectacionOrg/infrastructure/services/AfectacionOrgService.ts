@@ -97,7 +97,8 @@ export class AfectacionOrgService {
 
       const spResult = await executeSelectableProcedure('AP_G_APLICADO_TIPO', [org0, org1, org2Final, org3Final], {
         alias: 'p',
-        columns: ['p.QUINCENA', 'p.FECHA']
+        columns: ['p.QUINCENA', 'p.FECHA'],
+        scope: { org0, org1 }
       });
 
       if (!spResult || spResult.length === 0) {

@@ -5,7 +5,7 @@ import { Organica0NotFoundError } from '../../domain/errors.js';
 export class GetOrganica0ByIdQuery {
   constructor(private organica0Repo: IOrganica0Repository) {}
 
-  async execute(claveOrganica: string, userId?: string): Promise<Organica0> {
+  async execute(claveOrganica: string, scope: { org0: string; org1: string }, userId?: string): Promise<Organica0> {
     console.log('ORGANICA0_QUERY', {
       operation: 'GET_ORGANICA0_BY_ID',
       userId: userId || 'SYSTEM',
@@ -17,7 +17,7 @@ export class GetOrganica0ByIdQuery {
     this.validateClaveOrganica(claveOrganica);
 
     try {
-      const organica0 = await this.organica0Repo.findById(claveOrganica);
+      const organica0 = await this.organica0Repo.findById(claveOrganica, scope);
 
       if (!organica0) {
         console.warn('ORGANICA0_QUERY_WARNING', {

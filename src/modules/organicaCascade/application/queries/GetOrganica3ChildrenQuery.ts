@@ -5,7 +5,7 @@ import { OrganicaCascadeInvalidClaveOrganica0Error, OrganicaCascadeInvalidClaveO
 export class GetOrganica3ChildrenQuery {
   constructor(private organicaCascadeRepo: IOrganicaCascadeRepository) {}
 
-  async execute(claveOrganica0: string, claveOrganica1: string, claveOrganica2: string, userId?: string): Promise<OrganicaChild[]> {
+  async execute(claveOrganica0: string, claveOrganica1: string, claveOrganica2: string, scope: { org0: string; org1: string }, userId?: string): Promise<OrganicaChild[]> {
     // Logging de la operación
     console.log(`[ORGANICA_CASCADE] Consultando hijos de organica3 para claves ${claveOrganica0}-${claveOrganica1}-${claveOrganica2}, usuario: ${userId || 'desconocido'}`);
 
@@ -37,7 +37,7 @@ export class GetOrganica3ChildrenQuery {
     }
 
     try {
-      const result = await this.organicaCascadeRepo.findOrganica3ByOrganica2(claveOrganica0, claveOrganica1, claveOrganica2);
+      const result = await this.organicaCascadeRepo.findOrganica3ByOrganica2(claveOrganica0, claveOrganica1, claveOrganica2, scope);
 
       // Verificar si se encontraron resultados
       if (!result || result.length === 0) {

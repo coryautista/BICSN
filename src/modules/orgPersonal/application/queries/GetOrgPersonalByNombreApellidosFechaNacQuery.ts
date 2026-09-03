@@ -10,6 +10,7 @@ export class GetOrgPersonalByNombreApellidosFechaNacQuery {
     apellidoPaterno: string,
     apellidoMaterno: string | null,
     fechaNacimiento: string,
+    scope: { org0: string; org1: string },
     userId?: string
   ): Promise<OrgPersonal> {
     // Logging de la operación
@@ -43,7 +44,8 @@ export class GetOrgPersonalByNombreApellidosFechaNacQuery {
         nombreTrimmed,
         apellidoPaternoTrimmed,
         apellidoMaternoTrimmed,
-        fechaNacimientoTrimmed
+        fechaNacimientoTrimmed,
+        scope
       );
 
       if (!orgPersonal) {

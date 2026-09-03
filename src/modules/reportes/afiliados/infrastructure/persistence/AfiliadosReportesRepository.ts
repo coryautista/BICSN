@@ -11,7 +11,7 @@ const logger = pino({
 });
 
 export class AfiliadosReportesRepository implements IAfiliadosReportesRepository {
-  async getHistorialMovimientosQuin(periodo: string): Promise<HistorialMovimientosQuin[]> {
+  async getHistorialMovimientosQuin(periodo: string, scope: { org0: string; org1: string }): Promise<HistorialMovimientosQuin[]> {
     const startTime = Date.now();
     
     // Asegurar que el período tenga exactamente 4 caracteres (formato esperado por Firebird)
@@ -162,7 +162,7 @@ export class AfiliadosReportesRepository implements IAfiliadosReportesRepository
           ));
         }
       });
-    });
+    }, scope);
   }
 
   async getHistorialMovPromedioSdo(periodo: string, pOrg0: string, pOrg1: string, pOrg2: string, pOrg3: string): Promise<HistorialMovPromedioSdo[]> {
@@ -318,7 +318,7 @@ export class AfiliadosReportesRepository implements IAfiliadosReportesRepository
           ));
         }
       });
-    });
+    }, { org0: pOrg0, org1: pOrg1 });
   }
 }
 

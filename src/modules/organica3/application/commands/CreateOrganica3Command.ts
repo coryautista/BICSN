@@ -23,7 +23,7 @@ import {
 export class CreateOrganica3Command {
   constructor(private organica3Repo: IOrganica3Repository) {}
 
-  async execute(data: CreateOrganica3Data, userId?: string): Promise<Organica3> {
+  async execute(data: CreateOrganica3Data, scope: { org0: string; org1: string }, userId?: string): Promise<Organica3> {
     console.log('ORGANICA3_COMMAND', {
       operation: 'CREATE_ORGANICA3',
       userId: userId || 'SYSTEM',
@@ -86,7 +86,7 @@ export class CreateOrganica3Command {
 
     try {
       // Verificar que no exista ya la entidad
-      const existing = await this.organica3Repo.findById(data.claveOrganica0, data.claveOrganica1, data.claveOrganica2, data.claveOrganica3);
+      const existing = await this.organica3Repo.findById(data.claveOrganica0, data.claveOrganica1, data.claveOrganica2, data.claveOrganica3, scope);
       if (existing) {
         console.warn('ORGANICA3_COMMAND_WARNING', {
           operation: 'CREATE_ORGANICA3',
@@ -105,7 +105,7 @@ export class CreateOrganica3Command {
       await this.validateParentExists(data.claveOrganica0, data.claveOrganica1, data.claveOrganica2);
 
       // Crear la entidad
-      const result = await this.organica3Repo.create(data);
+      const result = await this.organica3Repo.create(data, scope);
 
       console.log('ORGANICA3_COMMAND_SUCCESS', {
         operation: 'CREATE_ORGANICA3',

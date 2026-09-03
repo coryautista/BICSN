@@ -7,6 +7,8 @@ import { CAIRRoutes } from './CAIR/CAIR.routes.js';
 import { afiliadosReportesRoutes } from './afiliados/afiliados.routes.js';
 import { estadoCuentaAhorroRoutes } from './estadoCuentaAhorro/estadoCuentaAhorro.routes.js';
 import { revisionRoutes } from './revision/revision.routes.js';
+import { requireAuth } from '../auth/auth.middleware.js';
+import { resolveOrganicaScope } from '../auth/domain/policies/OrganicaScopePolicy.js';
 
 export async function reportesRoutes(fastify: FastifyInstance) {
   // Registrar submódulo aplicacionesQNA
@@ -22,13 +24,16 @@ export async function reportesRoutes(fastify: FastifyInstance) {
   await fastify.register(revisionRoutes, { prefix: '/revision' });
   
   // GET /reportes/mensual - Reporte mensual de personal con desglose por quincenas
-  fastify.get('/mensual', async (request, reply) => {
+  fastify.get('/mensual', { preHandler: [requireAuth] }, async (request, reply) => {
     try {
       const filters = request.query as any;
-      const userId = (request as any).user?.id;
+      const user = (request as any).user;
+      const resolvedScope = resolveOrganicaScope(user, filters, 2);
+      const scope = { org0: resolvedScope.organica0, org1: resolvedScope.organica1 };
+      const userId = user?.sub;
 
       const getMonthlyReportQuery = request.diScope.resolve<GetMonthlyPersonnelReportQuery>('getMonthlyPersonnelReportQuery');
-      const reports = await getMonthlyReportQuery.execute(filters, userId);
+      const reports = await getMonthlyReportQuery.execute(filters, scope, userId);
 
       return {
         success: true,
@@ -41,13 +46,16 @@ export async function reportesRoutes(fastify: FastifyInstance) {
   });
 
   // GET /reportes/movimientos - Lista detallada de movimientos de personal
-  fastify.get('/movimientos', async (request, reply) => {
+  fastify.get('/movimientos', { preHandler: [requireAuth] }, async (request, reply) => {
     try {
       const filters = request.query as any;
-      const userId = (request as any).user?.id;
+      const user = (request as any).user;
+      const resolvedScope = resolveOrganicaScope(user, filters, 2);
+      const scope = { org0: resolvedScope.organica0, org1: resolvedScope.organica1 };
+      const userId = user?.sub;
 
       const getPersonnelMovementsQuery = request.diScope.resolve<GetPersonnelMovementsQuery>('getPersonnelMovementsQuery');
-      const movements = await getPersonnelMovementsQuery.execute(filters, userId);
+      const movements = await getPersonnelMovementsQuery.execute(filters, scope, userId);
 
       return {
         success: true,

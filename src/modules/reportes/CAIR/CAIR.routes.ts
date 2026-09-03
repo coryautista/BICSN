@@ -7,6 +7,7 @@ import {
 } from './CAIR.schemas.js';
 import { GetEstadoCuentaCAIRQuery } from './application/queries/GetEstadoCuentaCAIRQuery.js';
 import { GetCAIREntregadoQuery } from './application/queries/GetCAIREntregadoQuery.js';
+import { resolveOrganicaScope } from '../../auth/domain/policies/OrganicaScopePolicy.js';
 
 export async function CAIRRoutes(fastify: FastifyInstance) {
   // GET /reportes/cair/estado-cuenta - SAR_TOTAL_A_ORG
@@ -23,7 +24,9 @@ export async function CAIRRoutes(fastify: FastifyInstance) {
           quincena: {
             type: 'string',
             description: 'Quincena en formato específico (ej: "2125")'
-          }
+          },
+          org0: { type: 'string', pattern: '^\\d{1,2}$' },
+          org1: { type: 'string', pattern: '^\\d{1,2}$' }
         },
         required: ['quincena']
       },
@@ -59,10 +62,16 @@ export async function CAIRRoutes(fastify: FastifyInstance) {
       }
 
       const { quincena } = parsed.data;
-      const userId = (request as any).user?.sub;
+      const user = (request as any).user;
+      const resolvedScope = resolveOrganicaScope(user, {
+        organica0: parsed.data.org0,
+        organica1: parsed.data.org1
+      }, 2);
+      const scope = { org0: resolvedScope.organica0, org1: resolvedScope.organica1 };
+      const userId = user?.sub;
 
       const query = request.diScope.resolve<GetEstadoCuentaCAIRQuery>('getEstadoCuentaCAIRQuery');
-      const estados = await query.execute(quincena, userId);
+      const estados = await query.execute(quincena, scope, userId);
 
       const responseObject = {
         success: true,
@@ -99,7 +108,9 @@ export async function CAIRRoutes(fastify: FastifyInstance) {
           tipo: {
             type: 'string',
             description: 'Tipo de reporte'
-          }
+          },
+          org0: { type: 'string', pattern: '^\\d{1,2}$' },
+          org1: { type: 'string', pattern: '^\\d{1,2}$' }
         },
         required: ['fi', 'ff', 'tipo']
       },
@@ -135,10 +146,16 @@ export async function CAIRRoutes(fastify: FastifyInstance) {
       }
 
       const { fi, ff, tipo } = parsed.data;
-      const userId = (request as any).user?.sub;
+      const user = (request as any).user;
+      const resolvedScope = resolveOrganicaScope(user, {
+        organica0: parsed.data.org0,
+        organica1: parsed.data.org1
+      }, 2);
+      const scope = { org0: resolvedScope.organica0, org1: resolvedScope.organica1 };
+      const userId = user?.sub;
 
       const query = request.diScope.resolve<GetCAIREntregadoQuery>('getCAIREntregadoQuery');
-      const entregados = await query.execute(fi, ff, tipo, userId);
+      const entregados = await query.execute(fi, ff, tipo, scope, userId);
 
       const responseObject = {
         success: true,

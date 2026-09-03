@@ -11,6 +11,13 @@ import { UpdateOrgPersonalCommand } from './application/commands/UpdateOrgPerson
 import { DeleteOrgPersonalCommand } from './application/commands/DeleteOrgPersonalCommand.js';
 import { handleOrgPersonalError } from './infrastructure/errorHandler.js';
 
+function getAuthenticatedFirebirdScope(user: any): { org0: string; org1: string } {
+  const org0 = user?.idOrganica0?.toString().trim();
+  const org1 = user?.idOrganica1?.toString().trim();
+  if (!org0 || !org1) throw new Error('FIREBIRD_SCOPE_REQUIRED');
+  return { org0: org0.padStart(2, '0'), org1: org1.padStart(2, '0') };
+}
+
 // Routes for OrgPersonal CRUD operations
 export default async function orgPersonalRoutes(app: FastifyInstance) {
 
@@ -74,7 +81,7 @@ export default async function orgPersonalRoutes(app: FastifyInstance) {
   }, async (req, reply) => {
     try {
       const getAllOrgPersonalQuery = req.diScope.resolve<GetAllOrgPersonalQuery>('getAllOrgPersonalQuery');
-      const records = await getAllOrgPersonalQuery.execute(req.user?.sub?.toString());
+      const records = await getAllOrgPersonalQuery.execute(getAuthenticatedFirebirdScope(req.user), req.user?.sub?.toString());
       return reply.send(ok(records));
     } catch (error: any) {
       return handleOrgPersonalError(error, reply);
@@ -172,6 +179,7 @@ export default async function orgPersonalRoutes(app: FastifyInstance) {
         apellidoPaterno,
         apellidoMaterno || null,
         fechaNacimiento,
+        getAuthenticatedFirebirdScope(req.user),
         req.user?.sub?.toString()
       );
       return reply.send(ok(record));
@@ -258,7 +266,7 @@ export default async function orgPersonalRoutes(app: FastifyInstance) {
     try {
       const { searchTerm } = req.params as { searchTerm: string };
       const getOrgPersonalBySearchQuery = req.diScope.resolve<GetOrgPersonalBySearchQuery>('getOrgPersonalBySearchQuery');
-      const record = await getOrgPersonalBySearchQuery.execute(searchTerm, req.user?.sub?.toString());
+      const record = await getOrgPersonalBySearchQuery.execute(searchTerm, getAuthenticatedFirebirdScope(req.user), req.user?.sub?.toString());
       return reply.send(ok(record));
     } catch (error: any) {
       return handleOrgPersonalError(error, reply);
@@ -343,7 +351,7 @@ export default async function orgPersonalRoutes(app: FastifyInstance) {
     try {
       const { interno } = req.params as { interno: number };
       const getOrgPersonalByIdQuery = req.diScope.resolve<GetOrgPersonalByIdQuery>('getOrgPersonalByIdQuery');
-      const record = await getOrgPersonalByIdQuery.execute(interno, req.user?.sub?.toString());
+      const record = await getOrgPersonalByIdQuery.execute(interno, getAuthenticatedFirebirdScope(req.user), req.user?.sub?.toString());
       return reply.send(ok(record));
     } catch (error: any) {
       return handleOrgPersonalError(error, reply);
@@ -440,7 +448,7 @@ export default async function orgPersonalRoutes(app: FastifyInstance) {
         aplicar: parsed.data.aplicar ?? null,
         bc: parsed.data.bc ?? null,
         porcentaje: parsed.data.porcentaje ?? null
-      }, req.user?.sub?.toString());
+      }, getAuthenticatedFirebirdScope(req.user), req.user?.sub?.toString());
       return reply.code(201).send(ok(record));
     } catch (error: any) {
       return handleOrgPersonalError(error, reply);
@@ -539,7 +547,7 @@ export default async function orgPersonalRoutes(app: FastifyInstance) {
 
     try {
       const updateOrgPersonalCommand = req.diScope.resolve<UpdateOrgPersonalCommand>('updateOrgPersonalCommand');
-      const record = await updateOrgPersonalCommand.execute(interno, parsed.data, req.user?.sub?.toString());
+      const record = await updateOrgPersonalCommand.execute(interno, parsed.data, getAuthenticatedFirebirdScope(req.user), req.user?.sub?.toString());
       return reply.send(ok(record));
     } catch (error: any) {
       return handleOrgPersonalError(error, reply);
@@ -600,7 +608,7 @@ export default async function orgPersonalRoutes(app: FastifyInstance) {
     try {
       const { interno } = req.params as { interno: number };
       const deleteOrgPersonalCommand = req.diScope.resolve<DeleteOrgPersonalCommand>('deleteOrgPersonalCommand');
-      const result = await deleteOrgPersonalCommand.execute(interno, req.user?.sub?.toString());
+      const result = await deleteOrgPersonalCommand.execute(interno, getAuthenticatedFirebirdScope(req.user), req.user?.sub?.toString());
       return reply.send(ok(result));
     } catch (error: any) {
       return handleOrgPersonalError(error, reply);

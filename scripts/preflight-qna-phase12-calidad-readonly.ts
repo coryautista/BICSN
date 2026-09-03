@@ -121,7 +121,7 @@ try {
 
   assert.equal(String(identity?.BaseDatos), quality.sqlDatabase, 'QNA_PHASE12_SQL_DESTINATION_INVALID');
 
-  const firebirdRows = await firebird.executeSafeQuery(`
+  const firebirdRows = await firebird.executeTechnicalQuery(`
     SELECT MON$ATTACHMENT_NAME AS DATABASE_NAME
     FROM MON$ATTACHMENTS
     WHERE MON$ATTACHMENT_ID=CURRENT_CONNECTION

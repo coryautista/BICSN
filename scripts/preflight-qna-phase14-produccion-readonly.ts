@@ -53,7 +53,7 @@ try {
       AND (fk.is_disabled=1 OR fk.is_not_trusted=1);
   `);
   assert.equal(String(result.recordsets[0][0]?.BaseDatos), production.sqlDatabase);
-  const firebirdRows = await firebird.executeSafeQuery('SELECT CURRENT_TIMESTAMP FECHA_SERVIDOR FROM RDB$DATABASE');
+  const firebirdRows = await firebird.executeTechnicalQuery('SELECT CURRENT_TIMESTAMP FECHA_SERVIDOR FROM RDB$DATABASE');
   assert.equal(firebirdRows.length, 1);
 
   const missingObjects = result.recordsets[1].filter((row) => Number(row.Existe) !== 1);

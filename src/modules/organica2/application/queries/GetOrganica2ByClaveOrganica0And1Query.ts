@@ -8,7 +8,7 @@ import {
 export class GetOrganica2ByClaveOrganica0And1Query {
   constructor(private organica2Repo: IOrganica2Repository) {}
 
-  async execute(claveOrganica0: string, claveOrganica1: string, userId?: string): Promise<Organica2[]> {
+  async execute(claveOrganica0: string, claveOrganica1: string, scope: { org0: string; org1: string }, userId?: string): Promise<Organica2[]> {
     console.log('ORGANICA2_QUERY', {
       operation: 'GET_ORGANICA2_BY_CLAVE_ORGANICA0_AND_1',
       userId: userId || 'SYSTEM',
@@ -22,7 +22,7 @@ export class GetOrganica2ByClaveOrganica0And1Query {
     this.validateClaveOrganica1(claveOrganica1);
 
     try {
-      const result = await this.organica2Repo.findByClaveOrganica0And1(claveOrganica0, claveOrganica1);
+      const result = await this.organica2Repo.findByClaveOrganica0And1(claveOrganica0, claveOrganica1, scope);
 
       console.log('ORGANICA2_QUERY_SUCCESS', {
         operation: 'GET_ORGANICA2_BY_CLAVE_ORGANICA0_AND_1',

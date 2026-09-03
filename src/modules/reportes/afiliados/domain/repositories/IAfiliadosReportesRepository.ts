@@ -2,7 +2,7 @@ import { HistorialMovimientosQuin } from '../entities/HistorialMovimientosQuin.j
 import { HistorialMovPromedioSdo } from '../entities/HistorialMovPromedioSdo.js';
 
 export interface IAfiliadosReportesRepository {
-  getHistorialMovimientosQuin(periodo: string): Promise<HistorialMovimientosQuin[]>;
+  getHistorialMovimientosQuin(periodo: string, scope: { org0: string; org1: string }): Promise<HistorialMovimientosQuin[]>;
   getHistorialMovPromedioSdo(periodo: string, pOrg0: string, pOrg1: string, pOrg2: string, pOrg3: string): Promise<HistorialMovPromedioSdo[]>;
 }
 

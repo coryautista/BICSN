@@ -32,6 +32,33 @@ El despliegue no copia las bases. Configura dos instancias del backend:
 
 La pareja de Desarrollo se configura localmente y queda fuera de ese despliegue.
 
+## Credenciales Firebird por organica
+
+Las operaciones de negocio resuelven el usuario Firebird mediante
+`config.FirebirdOrganicaCredential` en el SQL Server del mismo ambiente. La clave
+es `(Org0, Org1)` y no existe fallback al usuario tecnico cuando falta una fila
+activa.
+
+- `FIREBIRD_CATALOG_ENABLED=true` habilita el catalogo.
+- `FIREBIRD_CATALOG_TTL_MS` admite de 1000 a 300000 ms.
+- `FIREBIRD_CATALOG_MASTER_KEY` debe contener 64 caracteres hexadecimales y no
+  debe almacenarse en el repositorio.
+- El usuario configurado mediante `FIREBIRD_USER` queda reservado para health,
+  arranque y diagnosticos tecnicos sin scope.
+- El DBA crea, habilita y rota los usuarios y roles en Firebird, y actualiza el
+  ciphertext del catalogo SQL. El backend nunca crea usuarios Firebird.
+- Una organica sin credencial activa falla con
+  `FIREBIRD_CREDENCIAL_ORGANICA_NO_CONFIGURADA`.
+
+Antes de aplicar la migracion o verificar el catalogo debe ejecutarse
+`npm run verify:database:environments`. Las operaciones en Desarrollo son:
+
+```bash
+npm run apply:firebird:catalog:desarrollo
+npm run firebird:credential:encrypt -- --org0=04 --org1=24 --apply
+npm run verify:firebird:catalog:desarrollo
+```
+
 El contenido existente en `dist-deploy/BICSN` es un artefacto generado y puede quedar atrás respecto al código fuente. Antes de un nuevo despliegue debe generarse un artefacto fresco; no se debe promover automáticamente el paquete anterior.
 
 Para una publicación exclusiva de Calidad se usa `npm run package:deploy:calidad` y `deploy_calidad.template.sh`. Este flujo solo reconstruye `bicsn-des-api`, preserva el `.env` remoto y fija la pareja de Calidad. El segundo argumento controla `SNAPSHOT_CALCULO_V2_SHADOW_ENABLED`, el tercero `SNAPSHOT_CALCULO_V2_READ_ENABLED` y el cuarto `SNAPSHOT_CALCULO_V2_OFFICIAL_READ_ENABLED`; los tres usan `false` por defecto. No reinicia ni modifica `bicsn-prod-api`.

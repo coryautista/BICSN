@@ -4,7 +4,7 @@ import { Personal } from '../../domain/entities/Personal.js';
 export class GetAllPersonalQuery {
   constructor(private personalRepo: IPersonalRepository) {}
 
-  async execute(claveOrganica0?: string, claveOrganica1?: string, userId?: string): Promise<Personal[]> {
+  async execute(scope: { org0: string; org1: string }, claveOrganica0?: string, claveOrganica1?: string, userId?: string): Promise<Personal[]> {
     const timestamp = new Date().toISOString();
 
     console.log(`[${timestamp}] [Usuario: ${userId || 'N/A'}] Consultando todos los registros personales`, {
@@ -26,7 +26,7 @@ export class GetAllPersonalQuery {
         }
       }
 
-      const result = await this.personalRepo.findAll(claveOrganica0, claveOrganica1);
+      const result = await this.personalRepo.findAll(scope, claveOrganica0, claveOrganica1);
 
       console.log(`[${timestamp}] [Usuario: ${userId || 'N/A'}] Consulta de registros personales completada`, {
         totalRegistros: result.length,

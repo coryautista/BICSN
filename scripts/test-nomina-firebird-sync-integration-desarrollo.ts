@@ -17,6 +17,8 @@ process.env.FIREBIRD_DATABASE = development.firebirdDatabase;
 process.env.FIREBIRD_READ_ONLY = 'false';
 assertDatabaseEnvironment('DESARROLLO', process.env.SQLSERVER_DB, process.env.FIREBIRD_DATABASE);
 
+const mssql = await import('../src/db/mssql.js');
+await mssql.connectDatabase();
 const firebird = await import('../src/db/firebird.js');
 
 try {
@@ -28,7 +30,7 @@ try {
   const registrosRollback = parsed.registros.map((registro) => ({ ...registro, lote: '0127001' }));
   await assertEmpty(firebird);
 
-  const rollbackRunner = async <T>(fn: (tx: any) => Promise<T>) => firebird.executeInTransactionWithOutcome(async (tx) => {
+  const rollbackRunner = async <T>(fn: (tx: any) => Promise<T>, firebirdScope: { org0: string; org1: string }) => firebird.executeInTransactionWithOutcome(async (tx) => {
     await fn(tx);
     const [mapping, summary] = await Promise.all([tx.query(`
       SELECT COUNT(*) AS TOTAL,
@@ -49,7 +51,7 @@ try {
     assert.equal(Number(summary[0]?.TOTAL ?? 0), 1, 'NOMINA_FIREBIRD_RESUMEN_1526_DIFIERE');
     assert.equal(Number(summary[0]?.SCOPE_EXACTO ?? 0), 1, 'NOMINA_FIREBIRD_RESUMEN_SCOPE_DIFIERE');
     throw rollbackSignal;
-  });
+  }, firebirdScope);
 
   const outcome = await new NominaLayout20FirebirdSyncService(rollbackRunner).sincronizar({ scope, registros: registrosRollback });
   assert.equal(outcome.outcome, 'ROLLBACK_CONFIRMADO');
@@ -63,13 +65,15 @@ try {
   process.exitCode = 1;
 } finally {
   await firebird.closeFirebirdPool();
+  await mssql.closeDatabaseConnection();
 }
 
 async function assertEmpty(fb: typeof import('../src/db/firebird.js')) {
   const params = [periodo, scope.organica0, scope.organica1];
+  const firebirdScope = { org0: scope.organica0, org1: scope.organica1 };
   const [details, summaries] = await Promise.all([
-    fb.executeSafeQuery('SELECT COUNT(*) TOTAL FROM AP_D_ORIGEN_TODOS WHERE QNA = ? AND ORG0 = ? AND ORG1 = ?', params),
-    fb.executeSafeQuery('SELECT COUNT(*) TOTAL FROM AP_D_ORIGEN_RESUMEN WHERE PERIODO = ? AND ORG0 = ? AND ORG1 = ?', params),
+    fb.executeSafeQuery('SELECT COUNT(*) TOTAL FROM AP_D_ORIGEN_TODOS WHERE QNA = ? AND ORG0 = ? AND ORG1 = ?', params, undefined, firebirdScope),
+    fb.executeSafeQuery('SELECT COUNT(*) TOTAL FROM AP_D_ORIGEN_RESUMEN WHERE PERIODO = ? AND ORG0 = ? AND ORG1 = ?', params, undefined, firebirdScope),
   ]);
   assert.equal(Number(details[0]?.TOTAL ?? 0), 0, 'NOMINA_FIREBIRD_ROLLBACK_DEJO_DETALLES');
   assert.equal(Number(summaries[0]?.TOTAL ?? 0), 0, 'NOMINA_FIREBIRD_ROLLBACK_DEJO_RESUMEN');

@@ -1,4 +1,4 @@
-import { IPersonalRepository } from '../../domain/repositories/IPersonalRepository.js';
+import { IPersonalRepository, PersonalFirebirdScope } from '../../domain/repositories/IPersonalRepository.js';
 import { Personal, CreatePersonalData, UpdatePersonalData } from '../../domain/entities/Personal.js';
 import { executeSerializedQuery, executeSafeQuery } from '../../../../db/firebird.js';
 
@@ -29,7 +29,7 @@ const toIsoTimestamp = (value: any): string | null => {
 };
 
 export class PersonalRepository implements IPersonalRepository {
-  async findAll(claveOrganica0?: string, claveOrganica1?: string): Promise<Personal[]> {
+  async findAll(scope: PersonalFirebirdScope, claveOrganica0?: string, claveOrganica1?: string): Promise<Personal[]> {
     let sql = `
       SELECT
         P.INTERNO, P.CURP, P.RFC, P.NOEMPLEADO, P.NOMBRE,
@@ -68,7 +68,7 @@ export class PersonalRepository implements IPersonalRepository {
 
     sql += ' ORDER BY P.INTERNO';
 
-    const result = await executeSafeQuery(sql, params);
+    const result = await executeSafeQuery(sql, params, undefined, scope);
 
     return result.map((row: any) => ({
       interno: row.INTERNO,
@@ -103,7 +103,7 @@ export class PersonalRepository implements IPersonalRepository {
     }));
   }
 
-  async findById(interno: number): Promise<Personal | undefined> {
+  async findById(interno: number, scope: PersonalFirebirdScope): Promise<Personal | undefined> {
     const sql = `
       SELECT
         INTERNO, CURP, RFC, NOEMPLEADO, NOMBRE,
@@ -116,7 +116,7 @@ export class PersonalRepository implements IPersonalRepository {
       WHERE INTERNO = ?
     `;
 
-    const result = await executeSafeQuery(sql, [interno]);
+    const result = await executeSafeQuery(sql, [interno], undefined, scope);
 
     if (result.length === 0) {
       return undefined;
@@ -156,7 +156,7 @@ export class PersonalRepository implements IPersonalRepository {
     };
   }
 
-  async create(data: CreatePersonalData): Promise<Personal> {
+  async create(data: CreatePersonalData, scope: PersonalFirebirdScope): Promise<Personal> {
     const sql = `
       INSERT INTO PERSONAL (
         INTERNO, CURP, RFC, NOEMPLEADO, NOMBRE,
@@ -248,10 +248,10 @@ export class PersonalRepository implements IPersonalRepository {
           });
         });
       });
-    });
+    }, scope);
   }
 
-  async update(interno: number, data: UpdatePersonalData): Promise<Personal> {
+  async update(interno: number, data: UpdatePersonalData, scope: PersonalFirebirdScope): Promise<Personal> {
     const updates: string[] = [];
     const params: any[] = [];
 
@@ -345,10 +345,10 @@ export class PersonalRepository implements IPersonalRepository {
           });
         });
       });
-    });
+    }, scope);
   }
 
-  async delete(interno: number): Promise<void> {
+  async delete(interno: number, scope: PersonalFirebirdScope): Promise<void> {
     const sql = 'DELETE FROM PERSONAL WHERE INTERNO = ?';
 
     return executeSerializedQuery((db) => {
@@ -367,6 +367,6 @@ export class PersonalRepository implements IPersonalRepository {
           resolve();
         });
       });
-    });
+    }, scope);
   }
 }

@@ -52,7 +52,8 @@ export async function getQuincenaAplicacion(
 
       const firebirdRows = await executeSelectableProcedure('AP_G_APLICADO_TIPO', [org0, org1, '01', '01'], {
         alias: 'p',
-        columns: ['p.QUINCENA', 'p.FECHA']
+        columns: ['p.QUINCENA', 'p.FECHA'],
+        scope: { org0, org1 }
       });
 
       if (!firebirdRows || firebirdRows.length === 0) {

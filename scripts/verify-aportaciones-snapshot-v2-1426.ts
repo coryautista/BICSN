@@ -100,7 +100,7 @@ async function main(): Promise<void> {
     const firebirdRows = await firebird.executeSafeQuery(`
       SELECT INTERNO, RFC, CAST(FAI AS VARCHAR(40)) AS FAI
       FROM AP_S_FONDOS(?, ?, ?)
-    `, [ORG0, ORG1, PERIODO], firebird.FIREBIRD_TIMEOUTS.BATCH_OPERATION);
+    `, [ORG0, ORG1, PERIODO], firebird.FIREBIRD_TIMEOUTS.BATCH_OPERATION, { org0: ORG0, org1: ORG1 });
     assert.equal(firebirdRows.length, 169, 'FIREBIRD_1426_INCOMPLETO');
     const faiByInterno = new Map(firebirdRows.map((row) => [Number(row.INTERNO), d6(row.FAI)]));
     const rfcByInterno = new Map(firebirdRows.map((row) => [Number(row.INTERNO), normalizeRfc(row.RFC)]));

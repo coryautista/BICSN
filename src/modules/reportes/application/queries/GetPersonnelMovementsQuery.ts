@@ -16,7 +16,7 @@ const logger = pino({
 export class GetPersonnelMovementsQuery {
   constructor(private reportsRepo: IReportsRepository) {}
 
-  async execute(filters: ReportFilters, userId?: string): Promise<PersonnelMovement[]> {
+  async execute(filters: ReportFilters, scope: { org0: string; org1: string }, userId?: string): Promise<PersonnelMovement[]> {
     logger.info({
       operation: 'GET_PERSONNEL_MOVEMENTS',
       userId: userId || 'SYSTEM',
@@ -38,7 +38,7 @@ export class GetPersonnelMovementsQuery {
         throw new InvalidYearError(filters.year);
       }
 
-      const movements = await this.reportsRepo.getPersonnelMovements(filters);
+      const movements = await this.reportsRepo.getPersonnelMovements(filters, scope);
 
       logger.info({
         operation: 'GET_PERSONNEL_MOVEMENTS',

@@ -10,7 +10,7 @@ const logger = pino({
 export class GetChequesLeyendasQuery {
   constructor(private cairIndependentRepo: ICAIRRepository) {}
 
-  async execute(userId?: string): Promise<ChequeLeyenda[]> {
+  async execute(scope: { org0: string; org1: string }, userId?: string): Promise<ChequeLeyenda[]> {
     logger.info({
       operation: 'GET_CHEQUES_LEYENDAS',
       userId: userId || 'SYSTEM',
@@ -18,7 +18,7 @@ export class GetChequesLeyendasQuery {
     }, 'CAIR_QUERY');
 
     try {
-      const leyendas = await this.cairIndependentRepo.getChequesLeyendas();
+      const leyendas = await this.cairIndependentRepo.getChequesLeyendas(scope);
 
       logger.info({
         operation: 'GET_CHEQUES_LEYENDAS',

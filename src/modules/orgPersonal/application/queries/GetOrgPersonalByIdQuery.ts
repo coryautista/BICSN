@@ -5,7 +5,7 @@ import { OrgPersonalInvalidInternoError, OrgPersonalNotFoundError } from '../../
 export class GetOrgPersonalByIdQuery {
   constructor(private orgPersonalRepo: IOrgPersonalRepository) {}
 
-  async execute(interno: number, userId?: string): Promise<OrgPersonal> {
+  async execute(interno: number, scope: { org0: string; org1: string }, userId?: string): Promise<OrgPersonal> {
     // Logging de la operación
     console.log(`[ORG_PERSONAL] Consultando registro orgPersonal por interno: ${interno}, usuario: ${userId || 'desconocido'}`);
 
@@ -15,7 +15,7 @@ export class GetOrgPersonalByIdQuery {
     }
 
     try {
-      const orgPersonal = await this.orgPersonalRepo.findById(interno);
+      const orgPersonal = await this.orgPersonalRepo.findById(interno, scope);
       if (!orgPersonal) {
         console.warn(`[ORG_PERSONAL] Registro orgPersonal con interno ${interno} no encontrado`);
         throw new OrgPersonalNotFoundError(interno);

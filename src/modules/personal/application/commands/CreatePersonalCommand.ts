@@ -24,7 +24,7 @@ import {
 export class CreatePersonalCommand {
   constructor(private personalRepo: IPersonalRepository) {}
 
-  async execute(data: CreatePersonalData, userId: string): Promise<Personal> {
+  async execute(data: CreatePersonalData, scope: { org0: string; org1: string }, userId: string): Promise<Personal> {
     const timestamp = new Date().toISOString();
 
     console.log(`[${timestamp}] [Usuario: ${userId}] Iniciando creación de registro personal`, {
@@ -39,13 +39,13 @@ export class CreatePersonalCommand {
       await this.validateCreateData(data);
 
       // Verificar que no exista un registro con el mismo interno
-      const existingPersonal = await this.personalRepo.findById(data.interno);
+      const existingPersonal = await this.personalRepo.findById(data.interno, scope);
       if (existingPersonal) {
         throw new PersonalAlreadyExistsError(data.interno);
       }
 
       // Crear el registro personal
-      const personal = await this.personalRepo.create(data);
+      const personal = await this.personalRepo.create(data, scope);
 
       console.log(`[${timestamp}] [Usuario: ${userId}] Registro personal creado exitosamente`, {
         interno: personal.interno,

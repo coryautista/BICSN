@@ -12,7 +12,7 @@ import {
 export class DeleteOrganica3Command {
   constructor(private organica3Repo: IOrganica3Repository) {}
 
-  async execute(claveOrganica0: string, claveOrganica1: string, claveOrganica2: string, claveOrganica3: string, userId?: string): Promise<{ claveOrganica0: string; claveOrganica1: string; claveOrganica2: string; claveOrganica3: string; deleted: boolean }> {
+  async execute(claveOrganica0: string, claveOrganica1: string, claveOrganica2: string, claveOrganica3: string, scope: { org0: string; org1: string }, userId?: string): Promise<{ claveOrganica0: string; claveOrganica1: string; claveOrganica2: string; claveOrganica3: string; deleted: boolean }> {
     console.log('ORGANICA3_COMMAND', {
       operation: 'DELETE_ORGANICA3',
       userId: userId || 'SYSTEM',
@@ -31,7 +31,7 @@ export class DeleteOrganica3Command {
 
     try {
       // Verificar que la entidad existe
-      const existing = await this.organica3Repo.findById(claveOrganica0, claveOrganica1, claveOrganica2, claveOrganica3);
+      const existing = await this.organica3Repo.findById(claveOrganica0, claveOrganica1, claveOrganica2, claveOrganica3, scope);
       if (!existing) {
         console.warn('ORGANICA3_COMMAND_WARNING', {
           operation: 'DELETE_ORGANICA3',
@@ -47,10 +47,10 @@ export class DeleteOrganica3Command {
       }
 
       // Verificar si la entidad está siendo utilizada (lógica de negocio)
-      await this.checkOrganica3InUse(claveOrganica0, claveOrganica1, claveOrganica2, claveOrganica3);
+      await this.checkOrganica3InUse(claveOrganica0, claveOrganica1, claveOrganica2, claveOrganica3, scope);
 
       // Eliminar la entidad
-      const deleted = await this.organica3Repo.delete(claveOrganica0, claveOrganica1, claveOrganica2, claveOrganica3);
+      const deleted = await this.organica3Repo.delete(claveOrganica0, claveOrganica1, claveOrganica2, claveOrganica3, scope);
       if (!deleted) {
         console.warn('ORGANICA3_COMMAND_WARNING', {
           operation: 'DELETE_ORGANICA3',
@@ -152,8 +152,8 @@ export class DeleteOrganica3Command {
     }
   }
 
-  private async checkOrganica3InUse(claveOrganica0: string, claveOrganica1: string, claveOrganica2: string, claveOrganica3: string): Promise<void> {
-    const inUse = await this.organica3Repo.isInUse(claveOrganica0, claveOrganica1, claveOrganica2, claveOrganica3);
+  private async checkOrganica3InUse(claveOrganica0: string, claveOrganica1: string, claveOrganica2: string, claveOrganica3: string, scope: { org0: string; org1: string }): Promise<void> {
+    const inUse = await this.organica3Repo.isInUse(claveOrganica0, claveOrganica1, claveOrganica2, claveOrganica3, scope);
     if (inUse) {
       console.warn('ORGANICA3_COMMAND_WARNING', {
         operation: 'DELETE_ORGANICA3',

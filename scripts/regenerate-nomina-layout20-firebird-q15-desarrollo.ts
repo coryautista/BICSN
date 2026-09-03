@@ -34,7 +34,7 @@ try {
   const before = await firebird.executeSafeQuery(`SELECT COUNT(*) TOTAL,
     SUM(CASE WHEN STATUS='A' THEN 1 ELSE 0 END) TOTAL_A,
     SUM(CASE WHEN STATUS='P' THEN 1 ELSE 0 END) TOTAL_P
-    FROM AP_D_ORIGEN_TODOS WHERE QNA=? AND ORG0=? AND ORG1=?`, ['1526','04','24']);
+    FROM AP_D_ORIGEN_TODOS WHERE QNA=? AND ORG0=? AND ORG1=?`, ['1526','04','24'], undefined, { org0: scope.organica0, org1: scope.organica1 });
   const preflight = { environment: 'DESARROLLO', periodo: '1526', details: Number(before[0]?.TOTAL ?? 0), applied: Number(before[0]?.TOTAL_A ?? 0), pending: Number(before[0]?.TOTAL_P ?? 0) };
   console.log(JSON.stringify(preflight));
   assert.equal(preflight.applied, 0, 'Q15_TIENE_STATUS_A_NO_SE_PUEDE_RECARGAR');

@@ -10,7 +10,7 @@ const logger = pino({
 export class GetCAIREntregadoQuery {
   constructor(private cairRepo: ICAIRRepository) {}
 
-  async execute(fi: string, ff: string, tipo: string, userId?: string): Promise<CAIREntregado[]> {
+  async execute(fi: string, ff: string, tipo: string, scope: { org0: string; org1: string }, userId?: string): Promise<CAIREntregado[]> {
     logger.info({
       operation: 'GET_CAIR_ENTREGADO',
       userId: userId || 'SYSTEM',
@@ -26,7 +26,7 @@ export class GetCAIREntregadoQuery {
         throw new Error('fi, ff y tipo son requeridos');
       }
 
-      const entregados = await this.cairRepo.getCAIREntregado(fi, ff, tipo);
+      const entregados = await this.cairRepo.getCAIREntregado(fi, ff, tipo, scope);
 
       logger.info({
         operation: 'GET_CAIR_ENTREGADO',

@@ -11,7 +11,7 @@ const logger = pino({
 });
 
 export class CAIRRepository implements ICAIRRepository {
-  async getEstadoCuentaCAIR(quincena: string): Promise<EstadoCuentaCAIR[]> {
+  async getEstadoCuentaCAIR(quincena: string, scope: { org0: string; org1: string }): Promise<EstadoCuentaCAIR[]> {
     const startTime = Date.now();
     const logContext = {
       operation: 'getEstadoCuentaCAIR',
@@ -150,10 +150,10 @@ export class CAIRRepository implements ICAIRRepository {
           ));
         }
       });
-    });
+    }, scope);
   }
 
-  async getCAIREntregado(fi: string, ff: string, tipo: string): Promise<CAIREntregado[]> {
+  async getCAIREntregado(fi: string, ff: string, tipo: string, scope: { org0: string; org1: string }): Promise<CAIREntregado[]> {
     const startTime = Date.now();
     const logContext = {
       operation: 'getCAIREntregado',
@@ -334,7 +334,7 @@ export class CAIRRepository implements ICAIRRepository {
           ));
         }
       });
-    });
+    }, scope);
   }
 }
 

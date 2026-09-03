@@ -11,6 +11,7 @@ import {
   InvalidYearError,
   ReportDatabaseError
 } from '../domain/errors.js';
+import { OrganicaScopePolicyError } from '../../auth/domain/policies/OrganicaScopePolicy.js';
 
 const logger = pino({
   name: 'reportesErrorHandler',
@@ -42,6 +43,10 @@ export function handleReportsError(error: any, reply: FastifyReply): FastifyRepl
   }, 'Error en módulo Reportes');
 
   // Manejo específico de errores del dominio Reportes
+  if (error instanceof OrganicaScopePolicyError) {
+    return reply.code(error.statusCode).send(fail(error.code, error.message));
+  }
+
   if (error instanceof InvalidReportFiltersError) {
     return reply.code(400).send(fail(error.code, error.message));
   }

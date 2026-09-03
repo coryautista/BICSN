@@ -16,7 +16,7 @@ const logger = pino({
 export class GetMonthlyPersonnelReportQuery {
   constructor(private reportsRepo: IReportsRepository) {}
 
-  async execute(filters: ReportFilters, userId?: string): Promise<MonthlyPersonnelReport[]> {
+  async execute(filters: ReportFilters, scope: { org0: string; org1: string }, userId?: string): Promise<MonthlyPersonnelReport[]> {
     logger.info({
       operation: 'GET_MONTHLY_PERSONNEL_REPORT',
       userId: userId || 'SYSTEM',
@@ -38,7 +38,7 @@ export class GetMonthlyPersonnelReportQuery {
         throw new InvalidYearError(filters.year);
       }
 
-      const reports = await this.reportsRepo.getMonthlyPersonnelReport(filters);
+      const reports = await this.reportsRepo.getMonthlyPersonnelReport(filters, scope);
 
       logger.info({
         operation: 'GET_MONTHLY_PERSONNEL_REPORT',

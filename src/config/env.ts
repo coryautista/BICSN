@@ -40,6 +40,24 @@ assertQnaLegacyDualWriteConfiguration(
   process.env.QNA_LEGACY_DUAL_WRITE_DISABLE_CONFIRMATION
 );
 
+export function parseFirebirdCatalogEnabled(value: string | undefined): boolean {
+  if (value === undefined) return true;
+  const normalized = value.trim().toLowerCase();
+  if (normalized === 'true') return true;
+  if (normalized === 'false') return false;
+  throw new Error('FIREBIRD_CATALOG_ENABLED_INVALIDO');
+}
+
+const firebirdCatalogEnabled = parseFirebirdCatalogEnabled(process.env.FIREBIRD_CATALOG_ENABLED);
+const firebirdCatalogTtlMs = Number(process.env.FIREBIRD_CATALOG_TTL_MS ?? 300000);
+if (!Number.isFinite(firebirdCatalogTtlMs) || firebirdCatalogTtlMs < 1000 || firebirdCatalogTtlMs > 300000) {
+  throw new Error('FIREBIRD_CATALOG_TTL_MS_INVALIDO: el TTL debe estar entre 1000 y 300000 ms');
+}
+const firebirdCatalogMasterKey = process.env.FIREBIRD_CATALOG_MASTER_KEY ?? '';
+if (firebirdCatalogEnabled && !/^[0-9a-fA-F]{64}$/.test(firebirdCatalogMasterKey)) {
+  throw new Error('FIREBIRD_CATALOG_MASTER_KEY_INVALIDA: se requiere hex de 32 bytes (64 caracteres)');
+}
+
 export const env = {
   host: process.env.HOST ?? '0.0.0.0',
   port: Number(process.env.PORT ?? 4000),
@@ -53,6 +71,11 @@ export const env = {
   qna: {
     hipLegacyPeriods: parseQnaHipLegacyPeriods(process.env.QNA_HIP_LEGACY_PERIODS),
     legacyDualWriteEnabled
+  },
+  firebirdCatalog: {
+    enabled: firebirdCatalogEnabled,
+    ttlMs: firebirdCatalogTtlMs,
+    masterKey: firebirdCatalogMasterKey
   },
   sql: {
     user: process.env.SQLSERVER_USER!,

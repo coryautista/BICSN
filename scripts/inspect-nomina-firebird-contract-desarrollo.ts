@@ -12,13 +12,13 @@ try {
   const requestedProcedure = process.argv[2]?.toUpperCase();
   if (requestedProcedure) {
     const sourceStart = Number(process.argv[3] ?? 1);
-    const source = await firebird.executeSafeQuery(`
+    const source = await firebird.executeTechnicalQuery(`
       SELECT TRIM(RDB$PROCEDURE_NAME) AS PROCEDURE_NAME,
              CAST(SUBSTRING(RDB$PROCEDURE_SOURCE FROM ${sourceStart} FOR 8000) AS VARCHAR(8000)) AS PROCEDURE_SOURCE
       FROM RDB$PROCEDURES
       WHERE RDB$PROCEDURE_NAME = ?
     `, [requestedProcedure]);
-    const parameters = await firebird.executeSafeQuery(`
+    const parameters = await firebird.executeTechnicalQuery(`
       SELECT TRIM(RDB$PARAMETER_NAME) AS PARAM_NAME,
              RDB$PARAMETER_TYPE AS PARAM_TYPE,
              RDB$PARAMETER_NUMBER AS PARAM_NUMBER
@@ -29,7 +29,7 @@ try {
     console.log(JSON.stringify({ source, parameters }, null, 2));
     process.exitCode = source.length === 1 ? 0 : 1;
   } else {
-  const procedureParameters = await firebird.executeSafeQuery(`
+  const procedureParameters = await firebird.executeTechnicalQuery(`
     SELECT TRIM(pp.RDB$PARAMETER_NAME) AS PARAM_NAME,
            pp.RDB$PARAMETER_TYPE AS PARAM_TYPE,
            pp.RDB$PARAMETER_NUMBER AS PARAM_NUMBER,
@@ -42,7 +42,7 @@ try {
     ORDER BY pp.RDB$PARAMETER_TYPE, pp.RDB$PARAMETER_NUMBER
   `, ['AP_D_IDENTIFICA_ARCHIVOTXT']);
 
-  const summaryColumns = await firebird.executeSafeQuery(`
+  const summaryColumns = await firebird.executeTechnicalQuery(`
     SELECT TRIM(rf.RDB$FIELD_NAME) AS FIELD_NAME,
            rf.RDB$FIELD_POSITION AS FIELD_POSITION,
            f.RDB$FIELD_TYPE AS FIELD_TYPE,
@@ -54,7 +54,7 @@ try {
     ORDER BY rf.RDB$FIELD_POSITION
   `, ['AP_D_ORIGEN_RESUMEN']);
 
-  const procedureSources = await firebird.executeSafeQuery(`
+  const procedureSources = await firebird.executeTechnicalQuery(`
     SELECT TRIM(RDB$PROCEDURE_NAME) AS PROCEDURE_NAME,
            CAST(RDB$PROCEDURE_SOURCE AS VARCHAR(8191)) AS PROCEDURE_SOURCE
     FROM RDB$PROCEDURES

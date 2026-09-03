@@ -10,6 +10,13 @@ import { UpdateOrganica2Command } from './application/commands/UpdateOrganica2Co
 import { DeleteOrganica2Command } from './application/commands/DeleteOrganica2Command.js';
 import { handleOrganica2Error } from './infrastructure/errorHandler.js';
 
+function getAuthenticatedFirebirdScope(user: any): { org0: string; org1: string } {
+  const org0 = user?.idOrganica0?.toString().trim();
+  const org1 = user?.idOrganica1?.toString().trim();
+  if (!org0 || !org1) throw new Error('FIREBIRD_SCOPE_REQUIRED');
+  return { org0: org0.padStart(2, '0'), org1: org1.padStart(2, '0') };
+}
+
 // [FIREBIRD] Routes for ORGANICA_2 CRUD operations
 export default async function organica2Routes(app: FastifyInstance) {
 
@@ -98,7 +105,7 @@ export default async function organica2Routes(app: FastifyInstance) {
       if (!getOrganica2ByClaveOrganica0And1Query) {
         return reply.code(500).send(validationError([{ message: 'Internal server error' }]));
       }
-      const records = await getOrganica2ByClaveOrganica0And1Query.execute(claveOrganica0, claveOrganica1, req.user?.sub?.toString());
+      const records = await getOrganica2ByClaveOrganica0And1Query.execute(claveOrganica0, claveOrganica1, getAuthenticatedFirebirdScope(req.user), req.user?.sub?.toString());
       return reply.send(ok(records));
     } catch (error) {
       return handleOrganica2Error(error, reply);
@@ -160,15 +167,15 @@ export default async function organica2Routes(app: FastifyInstance) {
     }
   }, async (req: any, reply) => {
     try {
-      // Default to organica0='01' and organica1='01' if not provided
-      const { org0 = '01', org1 = '01' } = req.query as { org0?: string; org1?: string };
+      const scope = getAuthenticatedFirebirdScope(req.user);
+      const { org0 = scope.org0, org1 = scope.org1 } = req.query as { org0?: string; org1?: string };
 
       // Use organica0 and organica1 filters (parameters are now required)
       const getOrganica2ByClaveOrganica0And1Query = req.diScope?.resolve('getOrganica2ByClaveOrganica0And1Query') as GetOrganica2ByClaveOrganica0And1Query;
       if (!getOrganica2ByClaveOrganica0And1Query) {
         return reply.code(500).send(validationError([{ message: 'Internal server error' }]));
       }
-      const records = await getOrganica2ByClaveOrganica0And1Query.execute(org0, org1, req.user?.sub?.toString());
+      const records = await getOrganica2ByClaveOrganica0And1Query.execute(org0, org1, scope, req.user?.sub?.toString());
       return reply.send(ok(records));
     } catch (error) {
       return handleOrganica2Error(error, reply);
@@ -234,7 +241,7 @@ export default async function organica2Routes(app: FastifyInstance) {
       if (!query) {
         return reply.code(500).send(validationError([{ message: 'Internal server error' }]));
       }
-      const record = await query.execute(claveOrganica0, claveOrganica1, claveOrganica2);
+      const record = await query.execute(claveOrganica0, claveOrganica1, claveOrganica2, getAuthenticatedFirebirdScope(req.user), req.user?.sub?.toString());
       return reply.send(ok(record));
     } catch (error) {
       console.error('Error in get organica2 by id:', error);
@@ -343,7 +350,7 @@ export default async function organica2Routes(app: FastifyInstance) {
       if (!createOrganica2Command) {
         return reply.code(500).send(validationError([{ message: 'Internal server error' }]));
       }
-      const record = await createOrganica2Command.execute(parsed.data, req.user?.sub?.toString());
+      const record = await createOrganica2Command.execute(parsed.data, getAuthenticatedFirebirdScope(req.user), req.user?.sub?.toString());
       return reply.code(201).send(ok(record));
     } catch (error: any) {
       return handleOrganica2Error(error, reply);
@@ -438,7 +445,7 @@ export default async function organica2Routes(app: FastifyInstance) {
       if (!updateOrganica2Command) {
         return reply.code(500).send(validationError([{ message: 'Internal server error' }]));
       }
-      const record = await updateOrganica2Command.execute(claveOrganica0, claveOrganica1, claveOrganica2, parsed.data, req.user?.sub?.toString());
+      const record = await updateOrganica2Command.execute(claveOrganica0, claveOrganica1, claveOrganica2, parsed.data, getAuthenticatedFirebirdScope(req.user), req.user?.sub?.toString());
       return reply.send(ok(record));
     } catch (error) {
       return handleOrganica2Error(error, reply);
@@ -491,7 +498,7 @@ export default async function organica2Routes(app: FastifyInstance) {
       if (!deleteOrganica2Command) {
         return reply.code(500).send(validationError([{ message: 'Internal server error' }]));
       }
-      const result = await deleteOrganica2Command.execute(claveOrganica0, claveOrganica1, claveOrganica2, req.user?.sub?.toString());
+      const result = await deleteOrganica2Command.execute(claveOrganica0, claveOrganica1, claveOrganica2, getAuthenticatedFirebirdScope(req.user), req.user?.sub?.toString());
       return reply.send(ok(result));
     } catch (error) {
       return handleOrganica2Error(error, reply);
@@ -607,7 +614,7 @@ export default async function organica2Routes(app: FastifyInstance) {
       if (!getOrganica2DynamicQuery) {
         return reply.code(500).send(validationError([{ message: 'Internal server error' }]));
       }
-      const records = await getOrganica2DynamicQuery.execute(parsed.data, req.user?.sub?.toString());
+      const records = await getOrganica2DynamicQuery.execute(parsed.data, getAuthenticatedFirebirdScope(req.user), req.user?.sub?.toString());
       return reply.send(ok(records));
     } catch (error) {
       return handleOrganica2Error(error, reply);

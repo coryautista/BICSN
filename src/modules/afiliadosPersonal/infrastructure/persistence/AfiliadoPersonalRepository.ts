@@ -1,5 +1,5 @@
 import { AfiliadoPersonal } from '../../domain/entities/AfiliadoPersonal.js';
-import { IAfiliadoPersonalRepository } from '../../domain/repositories/IAfiliadoPersonalRepository.js';
+import { IAfiliadoPersonalRepository, type AfiliadoPersonalFirebirdScope } from '../../domain/repositories/IAfiliadoPersonalRepository.js';
 import { executeSerializedQuery, decodeFirebirdObject } from '../../../../db/firebird.js';
 import pino from 'pino';
 
@@ -22,7 +22,7 @@ export class AfiliadoPersonalRepository implements IAfiliadoPersonalRepository {
    * Get employee roster by organic keys
    * Returns employees with their latest active ORG_PERSONAL record
    */
-  async obtenerPlantilla(claveOrganica0: string, claveOrganica1: string): Promise<AfiliadoPersonal[]> {
+  async obtenerPlantilla(claveOrganica0: string, claveOrganica1: string, scope: AfiliadoPersonalFirebirdScope): Promise<AfiliadoPersonal[]> {
     const logContext = {
       operation: 'obtenerPlantilla',
       claveOrganica0,
@@ -161,7 +161,7 @@ export class AfiliadoPersonalRepository implements IAfiliadoPersonalRepository {
           }
         });
       });
-    });
+    }, scope);
   }
 
   /**
@@ -169,7 +169,7 @@ export class AfiliadoPersonalRepository implements IAfiliadoPersonalRepository {
    * Searches by RFC, CURP, INTERNO, NOEMPLEADO, or FULLNAME
    * Returns employees with their latest ORG_PERSONAL record regardless of ACTIVO status
    */
-  async busquedaHistorico(searchTerm?: string): Promise<AfiliadoPersonal[]> {
+  async busquedaHistorico(searchTerm: string | undefined, scope: AfiliadoPersonalFirebirdScope): Promise<AfiliadoPersonal[]> {
     const logContext = {
       operation: 'busquedaHistorico',
       searchTerm
@@ -308,7 +308,7 @@ export class AfiliadoPersonalRepository implements IAfiliadoPersonalRepository {
           }
         });
       });
-    });
+    }, scope);
   }
 
   /**

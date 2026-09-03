@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 
 const QUALITY_SQL = 'SII-ISSSSPEA';
 const QUALITY_FIREBIRD = '/db/db/dbQna1426.fdb';
+const FIREBIRD_SCOPE = { org0: '04', org1: '24' };
 
 process.env.SQLSERVER_DB = QUALITY_SQL;
 process.env.FIREBIRD_DATABASE = QUALITY_FIREBIRD;
@@ -29,7 +30,7 @@ async function main(): Promise<void> {
 
   try {
     const result = await firebird.executeInTransaction(async (tx) => {
-      const before = await selectRows(tx, firebird.executeQueryInTransaction);
+      const before = await selectRows(tx, firebird.executeQueryInTransaction, FIREBIRD_SCOPE);
       validateRows(before, true);
 
       const torn = before.find((row) => normalizeRfc(row.RFC) === 'TORN71052064A')!;
@@ -47,7 +48,7 @@ async function main(): Promise<void> {
             AND CLAVE_ORGANICA_2 = '01'
             AND CLAVE_ORGANICA_3 = '01'
             AND ACTIVO = 'A'
-        `, [expected.TORN71052064A.targetSueldo, expected.TORN71052064A.interno]);
+        `, [expected.TORN71052064A.targetSueldo, expected.TORN71052064A.interno], FIREBIRD_SCOPE);
         await firebird.executeQueryInTransaction(tx, `
           UPDATE ORG_PERSONAL
           SET QUINQUENIOS = ?
@@ -57,13 +58,13 @@ async function main(): Promise<void> {
             AND CLAVE_ORGANICA_2 = '01'
             AND CLAVE_ORGANICA_3 = '01'
             AND ACTIVO = 'A'
-        `, [expected.PEMN790425RYA.targetQuinquenios, expected.PEMN790425RYA.interno]);
+        `, [expected.PEMN790425RYA.targetQuinquenios, expected.PEMN790425RYA.interno], FIREBIRD_SCOPE);
       }
 
-      const after = await selectRows(tx, firebird.executeQueryInTransaction);
+      const after = await selectRows(tx, firebird.executeQueryInTransaction, FIREBIRD_SCOPE);
       validateRows(after, false);
       return { before, after, alreadyApplied };
-    });
+    }, FIREBIRD_SCOPE);
 
     console.log(JSON.stringify({
       environment: 'CALIDAD',
@@ -80,7 +81,8 @@ async function main(): Promise<void> {
 
 async function selectRows(
   tx: unknown,
-  execute: (tx: unknown, sql: string, params?: unknown[]) => Promise<unknown[]>
+  execute: (tx: unknown, sql: string, params: unknown[], scope: { org0: string; org1: string }) => Promise<unknown[]>,
+  scope: { org0: string; org1: string }
 ): Promise<SourceRow[]> {
   const rows = await execute(tx, `
     SELECT o.INTERNO, p.RFC, o.SUELDO, o.QUINQUENIOS
@@ -93,7 +95,7 @@ async function selectRows(
       AND o.ACTIVO = 'A'
       AND UPPER(TRIM(p.RFC)) IN ('TORN71052064A', 'PEMN790425RYA')
     ORDER BY p.RFC
-  `);
+  `, [], scope);
   return rows as SourceRow[];
 }
 

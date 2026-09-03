@@ -5,7 +5,7 @@ import { OrgPersonalSearchNotFoundError } from '../../domain/errors.js';
 export class GetOrgPersonalBySearchQuery {
   constructor(private orgPersonalRepo: IOrgPersonalRepository) {}
 
-  async execute(searchTerm: string, userId?: string): Promise<OrgPersonal> {
+  async execute(searchTerm: string, scope: { org0: string; org1: string }, userId?: string): Promise<OrgPersonal> {
     // Logging de la operación
     console.log(`[ORG_PERSONAL] Buscando registro orgPersonal por término: '${searchTerm}', usuario: ${userId || 'desconocido'}`);
 
@@ -18,7 +18,7 @@ export class GetOrgPersonalBySearchQuery {
     const trimmedSearchTerm = searchTerm.trim();
 
     try {
-      const orgPersonal = await this.orgPersonalRepo.findBySearch(trimmedSearchTerm);
+      const orgPersonal = await this.orgPersonalRepo.findBySearch(trimmedSearchTerm, scope);
       if (!orgPersonal) {
         console.warn(`[ORG_PERSONAL] No se encontró registro orgPersonal para el término: '${trimmedSearchTerm}'`);
         // Detectar el tipo de búsqueda basado en el formato del término

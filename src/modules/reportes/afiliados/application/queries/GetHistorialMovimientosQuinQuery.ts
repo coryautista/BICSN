@@ -10,7 +10,7 @@ const logger = pino({
 export class GetHistorialMovimientosQuinQuery {
   constructor(private afiliadosReportesRepo: IAfiliadosReportesRepository) {}
 
-  async execute(periodo: string, userId?: string): Promise<HistorialMovimientosQuin[]> {
+  async execute(periodo: string, scope: { org0: string; org1: string }, userId?: string): Promise<HistorialMovimientosQuin[]> {
     logger.info({
       operation: 'GET_HISTORIAL_MOVIMIENTOS_QUIN',
       userId: userId || 'SYSTEM',
@@ -24,7 +24,7 @@ export class GetHistorialMovimientosQuinQuery {
         throw new Error('Periodo es requerido');
       }
 
-      const historiales = await this.afiliadosReportesRepo.getHistorialMovimientosQuin(periodo);
+      const historiales = await this.afiliadosReportesRepo.getHistorialMovimientosQuin(periodo, scope);
 
       logger.info({
         operation: 'GET_HISTORIAL_MOVIMIENTOS_QUIN',

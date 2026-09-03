@@ -310,7 +310,7 @@ export class AplicacionQuincenalRepository implements IAplicacionQuincenalReposi
             resolve(Array.isArray(rows) ? rows : []);
           });
         });
-      });
+      }, { org0: clave0, org1: clave1 });
       const duration = Date.now() - startTime;
 
       const registros = (Array.isArray(result) ? result : [])
@@ -576,7 +576,7 @@ export class AplicacionQuincenalRepository implements IAplicacionQuincenalReposi
           ));
         }
       });
-    });
+    }, { org0: clave0, org1: clave1 });
   }
 
   async getResumenOrgQnaAll(org0: string, org1: string, periodo: string): Promise<ResumenOrgQnaAll[]> {
@@ -765,7 +765,7 @@ export class AplicacionQuincenalRepository implements IAplicacionQuincenalReposi
           ));
         }
       });
-    });
+    }, { org0: clave0, org1: clave1 });
   }
 
   async guardarHistoricoAportaciones(
@@ -1125,7 +1125,10 @@ export class AplicacionQuincenalRepository implements IAplicacionQuincenalReposi
     const firebirdRows = await executeSafeQuery(`
       SELECT INTERNO,RFC,CAST(FAI AS VARCHAR(40)) AS FAI
       FROM AP_S_FONDOS(?, ?, ?)
-    `, [scope.org0, scope.org1, periodo], FIREBIRD_TIMEOUTS.BATCH_OPERATION);
+    `, [scope.org0, scope.org1, periodo], FIREBIRD_TIMEOUTS.BATCH_OPERATION, {
+      org0: scope.org0,
+      org1: scope.org1
+    });
     if (firebirdRows.length === 0) return omit('FIREBIRD_SIN_DETALLE');
 
     try {
@@ -1174,7 +1177,7 @@ export class AplicacionQuincenalRepository implements IAplicacionQuincenalReposi
       executeSafeQuery(`
         SELECT RFC,SARE,FRA,FRE,FHE,FVE,FAA,FAE,FAI
         FROM AP_S_FONDOS(?, ?, ?)
-      `, [org0, org1, periodo], FIREBIRD_TIMEOUTS.BATCH_OPERATION),
+      `, [org0, org1, periodo], FIREBIRD_TIMEOUTS.BATCH_OPERATION, { org0, org1 }),
       this.obtenerNominaRevisionContext(org0, org1, periodo)
     ]);
     const calculo = this.revisionAplicacionDiasFactory.crear(rows, nomina);

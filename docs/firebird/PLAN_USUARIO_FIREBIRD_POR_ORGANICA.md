@@ -2,7 +2,7 @@
 
 ## Estado
 
-APROBADO Y EN ESPERA DE EJECUCION. El plan esta guardado para seguimiento; la implementacion inicia cuando los ajustes pendientes marcados por el usuario lo permitan. No iniciar ninguna fase sin autorizacion explicita.
+IMPLEMENTADO Y VALIDADO EN DESARROLLO. La habilitacion en Calidad y Produccion queda fuera de alcance hasta contar con autorizacion operativa, catalogo poblado y clave maestra por ambiente.
 
 ## Objetivo
 
@@ -117,6 +117,23 @@ src/modules/liquidacionQna (flujos de captura que ejecutan SP Firebird)
 - `CURRENT_USER` de Firebird refleja el usuario del catalogo en Desarrollo.
 - Calidad y Produccion fuera de alcance hasta completar Desarrollo y autorizacion operativa.
 
+## Deuda tecnica no bloqueante
+
+El typecheck aislado de los scripts detecta errores historicos que no pertenecen
+al cambio de credenciales por organica y no afectan `npm run build`, ya que el
+build principal compila `src/`:
+
+- `scripts/fix-firebird-inputs-1526-calidad.ts`: dos errores `TS2345` por
+  montos inferidos como uniones de literales numericos.
+- `scripts/verify-aportaciones-1426-shadow.ts`: un error `TS2503` porque una
+  anotacion usa el namespace `mssql` sin declararlo.
+- `scripts/verify-aportaciones-snapshot-v2-1426.ts`: cuatro errores `TS2322`;
+  el script no incorpora campos agregados posteriormente a
+  `SnapshotCalculoV2Detalle` y `SnapshotTotalesA2`.
+
+Estos errores quedan documentados para una correccion separada. No deben
+mezclarse con la habilitacion del catalogo Firebird en Calidad o Produccion.
+
 ## Riesgos y Controles
 
 | Riesgo | Control |
@@ -132,3 +149,4 @@ src/modules/liquidacionQna (flujos de captura que ejecutan SP Firebird)
 | Fecha | Estado | Cambio | Notas |
 |---|---|---|---|
 | 2026-08-31 | PLAN_GUARDADO | Plan aprobado por el usuario y documentado para seguimiento | Ejecucion diferida hasta cerrar ajustes pendientes marcados por el usuario |
+| 2026-09-03 | DESARROLLO_COMPLETADO | Catalogo SQL, cifrado, registro por scope, consumidores, health y documentacion implementados | `04/24` validado con `CURRENT_USER=DES`; scope sin catalogo rechazado; Calidad y Produccion sin cambios |

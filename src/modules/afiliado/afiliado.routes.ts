@@ -357,9 +357,13 @@ export default async function afiliadoRoutes(app: FastifyInstance) {
           req.diScope.resolve<GetHistorialMovimientosQuincenaFirebirdQuery>(
             "getHistorialMovimientosQuincenaFirebirdQuery",
           );
+        const scope = resolveOrganicaScope(req.user!, {
+          organica0: query.org0,
+          organica1: query.org1,
+        }, 2);
         const result = await getHistorial.execute({
-          org0: query.org0 || req.user?.idOrganica0 || null,
-          org1: query.org1 || req.user?.idOrganica1 || null,
+          org0: scope.organica0,
+          org1: scope.organica1,
           periodo: query.periodo,
           buscar: query.buscar,
           page: query.page,
@@ -2790,8 +2794,10 @@ export default async function afiliadoRoutes(app: FastifyInstance) {
           req.diScope.resolve<ValidateInternoInFirebirdQuery>(
             "validateInternoInFirebirdQuery",
           );
+        const firebirdScope = resolveOrganicaScope(req.user!, {}, 2);
         const internoExists = await validateInternoInFirebirdQuery.execute(
           parsed.data.interno!,
+          { org0: firebirdScope.organica0, org1: firebirdScope.organica1 },
         );
         if (!internoExists) {
           return reply
@@ -3226,8 +3232,10 @@ export default async function afiliadoRoutes(app: FastifyInstance) {
           req.diScope.resolve<ValidateInternoInFirebirdQuery>(
             "validateInternoInFirebirdQuery",
           );
+        const firebirdScope = resolveOrganicaScope(req.user!, {}, 2);
         const internoExists = await validateInternoInFirebirdQuery.execute(
           parsed.data.interno!,
+          { org0: firebirdScope.organica0, org1: firebirdScope.organica1 },
         );
         if (!internoExists) {
           return reply
@@ -3657,8 +3665,10 @@ export default async function afiliadoRoutes(app: FastifyInstance) {
           req.diScope.resolve<ValidateInternoInFirebirdQuery>(
             "validateInternoInFirebirdQuery",
           );
+        const firebirdScope = resolveOrganicaScope(req.user!, {}, 2);
         const internoExists = await validateInternoInFirebirdQuery.execute(
           parsed.data.interno!,
+          { org0: firebirdScope.organica0, org1: firebirdScope.organica1 },
         );
         if (!internoExists) {
           return reply
@@ -3908,8 +3918,10 @@ export default async function afiliadoRoutes(app: FastifyInstance) {
           req.diScope.resolve<ValidateInternoInFirebirdQuery>(
             "validateInternoInFirebirdQuery",
           );
+        const firebirdScope = resolveOrganicaScope(req.user!, {}, 2);
         const internoExists = await validateInternoInFirebirdQuery.execute(
           parsed.data.interno!,
+          { org0: firebirdScope.organica0, org1: firebirdScope.organica1 },
         );
         if (!internoExists) {
           return reply
@@ -4169,8 +4181,10 @@ export default async function afiliadoRoutes(app: FastifyInstance) {
           req.diScope.resolve<ValidateInternoInFirebirdQuery>(
             "validateInternoInFirebirdQuery",
           );
+        const firebirdScope = resolveOrganicaScope(req.user!, {}, 2);
         const internoExists = await validateInternoInFirebirdQuery.execute(
           parsed.data.interno!,
+          { org0: firebirdScope.organica0, org1: firebirdScope.organica1 },
         );
         if (!internoExists) {
           return reply

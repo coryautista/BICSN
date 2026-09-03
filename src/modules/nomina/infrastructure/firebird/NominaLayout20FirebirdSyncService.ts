@@ -1,4 +1,4 @@
-import { executeInTransactionWithOutcome, type FirebirdTransactionExecution } from '../../../../db/firebird.js';
+import { executeInTransactionWithOutcome, type FirebirdScope, type FirebirdTransactionExecution } from '../../../../db/firebird.js';
 import type { NominaAplicacionQnalRegistroParsed } from '../../domain/entities/NominaAplicacionQnalTxt.js';
 import {
   NominaLayout20FirebirdSyncError,
@@ -11,7 +11,7 @@ interface FirebirdTx {
   execute(sql: string, params?: unknown[]): Promise<Record<string, unknown>[]>;
 }
 
-type TransactionRunner = <T>(fn: (tx: FirebirdTx) => Promise<T>) => Promise<FirebirdTransactionExecution<T>>;
+type TransactionRunner = <T>(fn: (tx: FirebirdTx) => Promise<T>, scope: FirebirdScope) => Promise<FirebirdTransactionExecution<T>>;
 
 interface IdentifiedPersonal {
   interno: number;
@@ -49,7 +49,10 @@ export class NominaLayout20FirebirdSyncService {
     if (input.registros.length === 0) throw new NominaLayout20FirebirdSyncError('NOMINA_FIREBIRD_SIN_DETALLES');
 
     const lote = parseLote(input.registros);
-    return this.runTransaction((tx) => this.sincronizarEnTransaccion(tx, input, lote));
+    return this.runTransaction((tx) => this.sincronizarEnTransaccion(tx, input, lote), {
+      org0: input.scope.organica0,
+      org1: input.scope.organica1,
+    });
   }
 
   async corregirPendientesEnSitio(input: NominaLayout20FirebirdSyncInput): Promise<FirebirdTransactionExecution<NominaLayout20FirebirdSyncEvidence>> {
@@ -58,7 +61,10 @@ export class NominaLayout20FirebirdSyncService {
     }
     if (input.registros.length === 0) throw new NominaLayout20FirebirdSyncError('NOMINA_FIREBIRD_SIN_DETALLES');
     const lote = parseLote(input.registros);
-    return this.runTransaction((tx) => this.corregirPendientesEnTransaccion(tx, input, lote));
+    return this.runTransaction((tx) => this.corregirPendientesEnTransaccion(tx, input, lote), {
+      org0: input.scope.organica0,
+      org1: input.scope.organica1,
+    });
   }
 
   private async sincronizarEnTransaccion(tx: FirebirdTx, input: NominaLayout20FirebirdSyncInput, lote: Lote): Promise<NominaLayout20FirebirdSyncEvidence> {

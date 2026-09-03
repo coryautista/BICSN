@@ -10,7 +10,7 @@ const logger = pino({
 export class GetEstadoCuentaCAIRQuery {
   constructor(private cairRepo: ICAIRRepository) {}
 
-  async execute(quincena: string, userId?: string): Promise<EstadoCuentaCAIR[]> {
+  async execute(quincena: string, scope: { org0: string; org1: string }, userId?: string): Promise<EstadoCuentaCAIR[]> {
     logger.info({
       operation: 'GET_ESTADO_CUENTA_CAIR',
       userId: userId || 'SYSTEM',
@@ -24,7 +24,7 @@ export class GetEstadoCuentaCAIRQuery {
         throw new Error('Quincena es requerida');
       }
 
-      const estados = await this.cairRepo.getEstadoCuentaCAIR(quincena);
+      const estados = await this.cairRepo.getEstadoCuentaCAIR(quincena, scope);
 
       logger.info({
         operation: 'GET_ESTADO_CUENTA_CAIR',

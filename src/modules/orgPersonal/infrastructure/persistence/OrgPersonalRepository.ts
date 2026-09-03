@@ -1,4 +1,4 @@
-import { IOrgPersonalRepository } from '../../domain/repositories/IOrgPersonalRepository.js';
+import { IOrgPersonalRepository, OrgPersonalFirebirdScope } from '../../domain/repositories/IOrgPersonalRepository.js';
 import { OrgPersonal, CreateOrgPersonalData, UpdateOrgPersonalData } from '../../domain/entities/OrgPersonal.js';
 import { executeSerializedQuery, executeSafeQuery } from '../../../../db/firebird.js';
 
@@ -72,7 +72,7 @@ export async function getOrgPersonalByClavesOrganicas(
       ORDER BY INTERNO
     `;
 
-    const result = await executeSafeQuery(sql, [claveOrganica0, claveOrganica1]);
+  const result = await executeSafeQuery(sql, [claveOrganica0, claveOrganica1], undefined, { org0: claveOrganica0, org1: claveOrganica1 });
 
     const records = result.map((row: any) => {
       try {
@@ -97,7 +97,7 @@ export async function getOrgPersonalByClavesOrganicas(
 }
 
 export class OrgPersonalRepository implements IOrgPersonalRepository {
-  async findAll(): Promise<OrgPersonal[]> {
+  async findAll(scope: OrgPersonalFirebirdScope): Promise<OrgPersonal[]> {
     try {
       const sql = `
         SELECT
@@ -109,7 +109,7 @@ export class OrgPersonalRepository implements IOrgPersonalRepository {
         ORDER BY INTERNO
       `;
 
-      const result = await executeSafeQuery(sql, []);
+      const result = await executeSafeQuery(sql, [], undefined, scope);
       return result.map(mapOrgPersonalRow);
     } catch (error) {
       console.error('Error in findAll OrgPersonal:', error);
@@ -117,10 +117,10 @@ export class OrgPersonalRepository implements IOrgPersonalRepository {
     }
   }
 
-  async findById(interno: number): Promise<OrgPersonal | undefined> {
+  async findById(interno: number, scope: OrgPersonalFirebirdScope): Promise<OrgPersonal | undefined> {
     try {
       const sql = 'SELECT * FROM ORG_PERSONAL WHERE INTERNO = ?';
-      const result = await executeSafeQuery(sql, [interno]);
+      const result = await executeSafeQuery(sql, [interno], undefined, scope);
       return result[0] ? mapOrgPersonalRow(result[0]) : undefined;
     } catch (error) {
       console.error('Error in findById OrgPersonal:', error);
@@ -128,7 +128,7 @@ export class OrgPersonalRepository implements IOrgPersonalRepository {
     }
   }
 
-  async findBySearch(searchTerm: string): Promise<OrgPersonal | undefined> {
+  async findBySearch(searchTerm: string, scope: OrgPersonalFirebirdScope): Promise<OrgPersonal | undefined> {
     const trimmedTerm = searchTerm.trim();
     const searchType = detectSearchType(trimmedTerm);
 
@@ -176,7 +176,7 @@ export class OrgPersonalRepository implements IOrgPersonalRepository {
       params = [`%${trimmedTerm}%`];
     }
 
-    const result = await executeSafeQuery(sql, params);
+    const result = await executeSafeQuery(sql, params, undefined, scope);
     return result[0] ? mapOrgPersonalRow(result[0]) : undefined;
   }
 
@@ -184,7 +184,8 @@ export class OrgPersonalRepository implements IOrgPersonalRepository {
     nombre: string,
     apellidoPaterno: string,
     apellidoMaterno: string | null,
-    fechaNacimiento: string
+    fechaNacimiento: string,
+    scope: OrgPersonalFirebirdScope
   ): Promise<OrgPersonal | undefined> {
     const nombreTrimmed = nombre.trim();
     const apellidoPaternoTrimmed = apellidoPaterno.trim();
@@ -243,11 +244,11 @@ export class OrgPersonalRepository implements IOrgPersonalRepository {
       params = [nombreTrimmed, apellidoPaternoTrimmed, fechaFormateada, fechaFormateada];
     }
 
-    const result = await executeSafeQuery(sql, params);
+    const result = await executeSafeQuery(sql, params, undefined, scope);
     return result[0] ? mapOrgPersonalRow(result[0]) : undefined;
   }
 
-  async create(data: CreateOrgPersonalData): Promise<OrgPersonal> {
+  async create(data: CreateOrgPersonalData, scope: OrgPersonalFirebirdScope): Promise<OrgPersonal> {
     const sql = `
       INSERT INTO ORG_PERSONAL (
         INTERNO, CLAVE_ORGANICA_0, CLAVE_ORGANICA_1, CLAVE_ORGANICA_2, CLAVE_ORGANICA_3,
@@ -292,10 +293,10 @@ export class OrgPersonalRepository implements IOrgPersonalRepository {
           resolve(mapOrgPersonalRow(result[0]));
         });
       });
-    });
+    }, scope);
   }
 
-  async update(interno: number, data: UpdateOrgPersonalData): Promise<OrgPersonal> {
+  async update(interno: number, data: UpdateOrgPersonalData, scope: OrgPersonalFirebirdScope): Promise<OrgPersonal> {
     const fields = [
       'CLAVE_ORGANICA_0', 'CLAVE_ORGANICA_1', 'CLAVE_ORGANICA_2', 'CLAVE_ORGANICA_3',
       'SUELDO', 'OTRAS_PRESTACIONES', 'QUINQUENIOS', 'ACTIVO', 'FECHA_MOV_ALT',
@@ -331,10 +332,10 @@ export class OrgPersonalRepository implements IOrgPersonalRepository {
           resolve(mapOrgPersonalRow(result[0]));
         });
       });
-    });
+    }, scope);
   }
 
-  async delete(interno: number): Promise<void> {
+  async delete(interno: number, scope: OrgPersonalFirebirdScope): Promise<void> {
     const sql = 'DELETE FROM ORG_PERSONAL WHERE INTERNO = ?';
 
     return executeSerializedQuery((db) => {
@@ -353,6 +354,6 @@ export class OrgPersonalRepository implements IOrgPersonalRepository {
           resolve();
         });
       });
-    });
+    }, scope);
   }
 }

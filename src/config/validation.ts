@@ -56,6 +56,20 @@ const firebirdSchema = z.object({
   timeoutMs: z.number().int().min(5000).max(300000).default(30000)
 });
 
+const firebirdCatalogSchema = z.object({
+  enabled: z.boolean().default(true),
+  ttlMs: z.number().int().min(1000).max(300000).default(300000),
+  masterKey: z.string().default('')
+}).superRefine((value, context) => {
+  if (value.enabled && !/^[0-9a-fA-F]{64}$/.test(value.masterKey)) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['masterKey'],
+      message: 'FIREBIRD_CATALOG_MASTER_KEY must be 64 hexadecimal characters when catalog is enabled'
+    });
+  }
+});
+
 /**
  * FTP configuration schema
  */
@@ -80,6 +94,7 @@ const envSchema = z.object({
   jwt: jwtSchema,
   cookie: cookieSchema,
   firebird: firebirdSchema,
+  firebirdCatalog: firebirdCatalogSchema,
   ftp: ftpSchema
 });
 
@@ -229,6 +244,7 @@ export class ConfigurationValidator {
         jwt: jwtSchema,
         cookie: cookieSchema,
         firebird: firebirdSchema,
+        firebirdCatalog: firebirdCatalogSchema,
         ftp: ftpSchema
       };
 
@@ -323,6 +339,11 @@ FIREBIRD_PORT=3050
 FIREBIRD_DATABASE=/path/to/your/database.fdb
 FIREBIRD_USER=SYSDBA
 FIREBIRD_PASSWORD=your_firebird_password
+
+# Firebird credentials by organica
+FIREBIRD_CATALOG_ENABLED=true
+FIREBIRD_CATALOG_TTL_MS=300000
+FIREBIRD_CATALOG_MASTER_KEY=64_hexadecimal_characters
 `;
   }
 }

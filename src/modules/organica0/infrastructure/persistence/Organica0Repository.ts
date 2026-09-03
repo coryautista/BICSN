@@ -1,5 +1,5 @@
 import { executeSerializedQuery, decodeFirebirdObject } from '../../../../db/firebird.js';
-import { IOrganica0Repository } from '../../domain/repositories/IOrganica0Repository.js';
+import { IOrganica0Repository, Organica0FirebirdScope } from '../../domain/repositories/IOrganica0Repository.js';
 import { Organica0, CreateOrganica0Data, UpdateOrganica0Data } from '../../domain/entities/Organica0.js';
 import pino from 'pino';
 
@@ -9,7 +9,7 @@ const logger = pino({
 });
 
 export class Organica0Repository implements IOrganica0Repository {
-  async findById(claveOrganica: string): Promise<Organica0 | undefined> {
+  async findById(claveOrganica: string, scope: Organica0FirebirdScope): Promise<Organica0 | undefined> {
     return executeSerializedQuery((db) => {
       return new Promise<Organica0 | undefined>((resolve, reject) => {
       db.query(
@@ -37,10 +37,10 @@ export class Organica0Repository implements IOrganica0Repository {
         }
       );
       });
-    });
+    }, scope);
   }
 
-  async findAll(limit?: number, offset?: number): Promise<Organica0[]> {
+  async findAll(scope: Organica0FirebirdScope, limit?: number, offset?: number): Promise<Organica0[]> {
     logger.info('Starting findAll operation in Organica0Repository');
     let query = 'SELECT CLAVE_ORGANICA, NOMBRE_ORGANICA, USUARIO, FECHA_REGISTRO, FECHA_FIN, ESTATUS FROM ORGANICA_0';
     let params: any[] = [];
@@ -89,10 +89,10 @@ export class Organica0Repository implements IOrganica0Repository {
         }
       );
       });
-    });
+    }, scope);
   }
 
-  async create(data: CreateOrganica0Data): Promise<Organica0> {
+  async create(data: CreateOrganica0Data, scope: Organica0FirebirdScope): Promise<Organica0> {
     const fechaRegistro = new Date();
 
     return executeSerializedQuery((db) => {
@@ -123,10 +123,10 @@ export class Organica0Repository implements IOrganica0Repository {
         }
       );
       });
-    });
+    }, scope);
   }
 
-  async update(claveOrganica: string, data: UpdateOrganica0Data): Promise<Organica0> {
+  async update(claveOrganica: string, data: UpdateOrganica0Data, scope: Organica0FirebirdScope): Promise<Organica0> {
 
     // Build dynamic update query
     const updates: string[] = [];
@@ -151,7 +151,7 @@ export class Organica0Repository implements IOrganica0Repository {
 
     if (updates.length === 0) {
       // No updates, just return current record
-      const existing = await this.findById(claveOrganica);
+      const existing = await this.findById(claveOrganica, scope);
       if (!existing) {
         throw new Error('ORGANICA0_NOT_FOUND');
       }
@@ -172,7 +172,7 @@ export class Organica0Repository implements IOrganica0Repository {
           }
           // Return updated record
           try {
-            const updated = await this.findById(claveOrganica);
+            const updated = await this.findById(claveOrganica, scope);
             if (!updated) {
               reject(new Error('ORGANICA0_NOT_FOUND'));
               return;
@@ -184,10 +184,10 @@ export class Organica0Repository implements IOrganica0Repository {
         }
       );
       });
-    });
+    }, scope);
   }
 
-  async delete(claveOrganica: string): Promise<boolean> {
+  async delete(claveOrganica: string, scope: Organica0FirebirdScope): Promise<boolean> {
     return executeSerializedQuery((db) => {
       return new Promise<boolean>((resolve, reject) => {
       db.query(
@@ -202,10 +202,10 @@ export class Organica0Repository implements IOrganica0Repository {
         }
       );
       });
-    });
+    }, scope);
   }
 
-  async isInUse(claveOrganica: string): Promise<boolean> {
+  async isInUse(claveOrganica: string, scope: Organica0FirebirdScope): Promise<boolean> {
     return executeSerializedQuery((db) => {
       return new Promise<boolean>((resolve, reject) => {
       // Check if there are any dependent records in related tables
@@ -244,6 +244,6 @@ export class Organica0Repository implements IOrganica0Repository {
         resolve(inUse);
       });
       });
-    });
+    }, scope);
   }
 }

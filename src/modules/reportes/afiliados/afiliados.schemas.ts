@@ -2,7 +2,9 @@ import { z } from 'zod';
 
 // Schema para parámetros de Historial Movimientos Quincenales
 export const HistorialMovimientosQuinParamsSchema = z.object({
-  periodo: z.string().min(1).max(20).describe('Período en formato específico (ej: "2125")')
+  periodo: z.string().min(1).max(20).describe('Período en formato específico (ej: "2125")'),
+  org0: z.string().min(1).max(2).optional(),
+  org1: z.string().min(1).max(2).optional()
 });
 
 // Schema para parámetros de Historial Mov Promedio Sueldo

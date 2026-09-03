@@ -11,7 +11,7 @@ import {
 export class GetOrganica3ByIdQuery {
   constructor(private organica3Repo: IOrganica3Repository) {}
 
-  async execute(claveOrganica0: string, claveOrganica1: string, claveOrganica2: string, claveOrganica3: string, userId?: string): Promise<Organica3> {
+  async execute(claveOrganica0: string, claveOrganica1: string, claveOrganica2: string, claveOrganica3: string, scope: { org0: string; org1: string }, userId?: string): Promise<Organica3> {
     console.log('ORGANICA3_QUERY', {
       operation: 'GET_ORGANICA3_BY_ID',
       userId: userId || 'SYSTEM',
@@ -29,7 +29,7 @@ export class GetOrganica3ByIdQuery {
     this.validateClaveOrganica3(claveOrganica3);
 
     try {
-      const organica3 = await this.organica3Repo.findById(claveOrganica0, claveOrganica1, claveOrganica2, claveOrganica3);
+      const organica3 = await this.organica3Repo.findById(claveOrganica0, claveOrganica1, claveOrganica2, claveOrganica3, scope);
       if (!organica3) {
         console.warn('ORGANICA3_QUERY_WARNING', {
           operation: 'GET_ORGANICA3_BY_ID',

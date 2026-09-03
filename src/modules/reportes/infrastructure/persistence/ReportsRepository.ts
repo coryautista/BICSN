@@ -26,7 +26,7 @@ const toIsoString = (value: any): string => {
 };
 
 export class ReportsRepository implements IReportsRepository {
-  async getMonthlyPersonnelReport(filters: ReportFilters): Promise<MonthlyPersonnelReport[]> {
+  async getMonthlyPersonnelReport(filters: ReportFilters, scope: { org0: string; org1: string }): Promise<MonthlyPersonnelReport[]> {
     // Complex query to get monthly report with bi-weekly breakdown
     const sql = `
       SELECT
@@ -103,10 +103,10 @@ export class ReportsRepository implements IReportsRepository {
           resolve(reports);
         });
       });
-    });
+    }, scope);
   }
 
-  async getPersonnelMovements(filters: ReportFilters): Promise<PersonnelMovement[]> {
+  async getPersonnelMovements(filters: ReportFilters, scope: { org0: string; org1: string }): Promise<PersonnelMovement[]> {
     const sql = `
       SELECT FIRST 10
         OP.INTERNO,
@@ -167,6 +167,6 @@ export class ReportsRepository implements IReportsRepository {
           resolve(movements);
         });
       });
-    });
+    }, scope);
   }
 }

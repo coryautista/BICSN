@@ -53,7 +53,10 @@ try {
         FAE,EBIA,EBIE,VIV,EBI,CAIRVOL,AYUDBCOT,QUINQBCOT,DESCTOS,STATUS,MOVIMIENTO,
         DOMICILIO,COLONIA,CIUDAD,CLAVE_EDO,CLAVE_MPIO,COD_POS,TELEFONO,SEXO,EDO_CIVIL,
         FECHANAC,CORG0,CORG1,CORG2,CORG3,ENCONTRO,N_ERROR
-      FROM AP_D_ORIGEN_TODOS WHERE QNA=? AND ORG0=? AND ORG1=?`, params);
+      FROM AP_D_ORIGEN_TODOS WHERE QNA=? AND ORG0=? AND ORG1=?`, params, undefined, {
+        org0: String(header.Organica0),
+        org1: String(header.Organica1),
+      });
     const byRfc = new Map(firebirdRows.map((row) => [normalize(row.RFC), row]));
     assert.equal(byRfc.size, firebirdRows.length, `RFC_DUPLICADO_FIREBIRD_${expected.periodo}`);
     const mismatches = Object.fromEntries(mappings.map(([, column]) => [column, 0])) as Record<string, number>;

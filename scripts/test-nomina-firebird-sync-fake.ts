@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { executeTypedTransaction, type FirebirdTransactionHandle } from '../src/db/firebird.js';
+import { executeTypedTransaction, type FirebirdScope, type FirebirdTransactionHandle } from '../src/db/firebird.js';
 import { NominaLayout20FirebirdSyncService } from '../src/modules/nomina/infrastructure/firebird/NominaLayout20FirebirdSyncService.js';
 import { NominaLayout20FirebirdSyncError } from '../src/modules/nomina/domain/services/NominaLayout20FirebirdSync.js';
 import type { NominaAplicacionQnalRegistroParsed } from '../src/modules/nomina/domain/entities/NominaAplicacionQnalTxt.js';
@@ -68,8 +68,15 @@ class FakeTx {
   }
 }
 
-function runner(tx: FakeTx, options: { commitFails?: boolean; rollbackFails?: boolean } = {}) {
-  return <T>(fn: (context: FakeTx) => Promise<T>) => executeTypedTransaction(async (): Promise<FirebirdTransactionHandle<FakeTx>> => ({ context: tx, commit: async () => { if (options.commitFails) throw new Error('COMMIT_FAIL'); }, rollback: async () => { if (options.rollbackFails) throw new Error('ROLLBACK_FAIL'); }, isValid: () => true }), fn);
+function runner(
+  tx: FakeTx,
+  options: { commitFails?: boolean; rollbackFails?: boolean } = {},
+  expectedScope: FirebirdScope = { org0: input.scope.organica0, org1: input.scope.organica1 }
+) {
+  return <T>(fn: (context: FakeTx) => Promise<T>, scope: FirebirdScope) => {
+    assert.deepEqual(scope, expectedScope);
+    return executeTypedTransaction(async (): Promise<FirebirdTransactionHandle<FakeTx>> => ({ context: tx, commit: async () => { if (options.commitFails) throw new Error('COMMIT_FAIL'); }, rollback: async () => { if (options.rollbackFails) throw new Error('ROLLBACK_FAIL'); }, isValid: () => true }), fn);
+  };
 }
 
 const appliedTx = new FakeTx('APLICADO');
@@ -135,5 +142,5 @@ assert.equal(uncertainRollback.outcome, 'RESULTADO_INCIERTO');
 const uncertainCommit = await new NominaLayout20FirebirdSyncService(runner(new FakeTx(), { commitFails: true })).sincronizar(input);
 assert.equal(uncertainCommit.outcome, 'RESULTADO_INCIERTO');
 
-await assert.rejects(() => new NominaLayout20FirebirdSyncService(runner(new FakeTx())).sincronizar({ ...input, scope: { ...input.scope, organica0: '01' } }), /ORGANICA no está certificada/);
+await assert.rejects(() => new NominaLayout20FirebirdSyncService(runner(new FakeTx(), {}, { org0: '01', org1: input.scope.organica1 })).sincronizar({ ...input, scope: { ...input.scope, organica0: '01' } }), /ORGANICA no está certificada/);
 console.log('NOMINA_FIREBIRD_SYNC_FAKE_OK');

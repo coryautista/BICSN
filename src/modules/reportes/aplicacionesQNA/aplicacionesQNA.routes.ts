@@ -911,7 +911,8 @@ export async function aplicacionesQNARoutes(fastify: FastifyInstance) {
 
       const rows = await executeSelectableProcedure('AP_G_APLICADO_TIPO', [org0, org1, '01', '01'], {
         alias: 'p',
-        columns: ['p.QUINCENA']
+        columns: ['p.QUINCENA'],
+        scope: { org0, org1 }
       });
       const qnaFirebird = String(rows[0]?.QUINCENA ?? '').padStart(4, '0');
       if (!/^([0-1]\d|2[0-4])\d{2}$/.test(qnaFirebird) || Number(qnaFirebird.slice(0, 2)) < 1) {
@@ -1145,7 +1146,9 @@ export async function aplicacionesQNARoutes(fastify: FastifyInstance) {
 
       const dependenciaRows = await executeSafeQuery(
         'SELECT DESCRIPCION FROM ORGANICA_1 WHERE CLAVE_ORGANICA_0 = ? AND CLAVE_ORGANICA_1 = ?',
-        [org0, org1]
+        [org0, org1],
+        undefined,
+        { org0, org1 }
       );
       const dependencia = String(dependenciaRows[0]?.DESCRIPCION ?? '').trim() || null;
 

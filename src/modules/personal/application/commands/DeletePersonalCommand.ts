@@ -7,7 +7,7 @@ import {
 export class DeletePersonalCommand {
   constructor(private personalRepo: IPersonalRepository) {}
 
-  async execute(interno: number, userId: string): Promise<{ interno: number; deleted: boolean }> {
+  async execute(interno: number, scope: { org0: string; org1: string }, userId: string): Promise<{ interno: number; deleted: boolean }> {
     const timestamp = new Date().toISOString();
 
     console.log(`[${timestamp}] [Usuario: ${userId}] Iniciando eliminación de registro personal`, {
@@ -21,7 +21,7 @@ export class DeletePersonalCommand {
       }
 
       // Verificar que el registro exista
-      const existing = await this.personalRepo.findById(interno);
+      const existing = await this.personalRepo.findById(interno, scope);
       if (!existing) {
         throw new PersonalNotFoundError(interno);
       }
@@ -30,7 +30,7 @@ export class DeletePersonalCommand {
       // Por ejemplo, verificar si el registro está siendo usado en otras tablas
 
       // Eliminar el registro personal
-      await this.personalRepo.delete(interno);
+      await this.personalRepo.delete(interno, scope);
 
       console.log(`[${timestamp}] [Usuario: ${userId}] Registro personal eliminado exitosamente`, {
         interno

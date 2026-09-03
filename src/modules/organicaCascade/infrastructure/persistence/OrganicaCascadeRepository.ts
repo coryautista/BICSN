@@ -1,9 +1,9 @@
-import { IOrganicaCascadeRepository } from '../../domain/repositories/IOrganicaCascadeRepository.js';
+import { IOrganicaCascadeRepository, OrganicaCascadeFirebirdScope } from '../../domain/repositories/IOrganicaCascadeRepository.js';
 import { OrganicaChild } from '../../domain/entities/OrganicaChild.js';
 import { executeSerializedQuery, decodeFirebirdObject } from '../../../../db/firebird.js';
 
 export class OrganicaCascadeRepository implements IOrganicaCascadeRepository {
-  async findOrganica1ByOrganica0(claveOrganica0: string): Promise<OrganicaChild[]> {
+  async findOrganica1ByOrganica0(claveOrganica0: string, scope: OrganicaCascadeFirebirdScope): Promise<OrganicaChild[]> {
     return executeSerializedQuery((db) => {
       return new Promise<OrganicaChild[]>((resolve, reject) => {
       db.query(
@@ -35,10 +35,10 @@ export class OrganicaCascadeRepository implements IOrganicaCascadeRepository {
         }
       );
       });
-    });
+    }, scope);
   }
 
-  async findOrganica2ByOrganica1(claveOrganica0: string, claveOrganica1: string): Promise<OrganicaChild[]> {
+  async findOrganica2ByOrganica1(claveOrganica0: string, claveOrganica1: string, scope: OrganicaCascadeFirebirdScope): Promise<OrganicaChild[]> {
     return executeSerializedQuery((db) => {
       return new Promise<OrganicaChild[]>((resolve, reject) => {
       db.query(
@@ -72,10 +72,10 @@ export class OrganicaCascadeRepository implements IOrganicaCascadeRepository {
         }
       );
       });
-    });
+    }, scope);
   }
 
-  async findOrganica3ByOrganica2(claveOrganica0: string, claveOrganica1: string, claveOrganica2: string): Promise<OrganicaChild[]> {
+  async findOrganica3ByOrganica2(claveOrganica0: string, claveOrganica1: string, claveOrganica2: string, scope: OrganicaCascadeFirebirdScope): Promise<OrganicaChild[]> {
     return executeSerializedQuery((db) => {
       return new Promise<OrganicaChild[]>((resolve, reject) => {
       db.query(
@@ -111,6 +111,6 @@ export class OrganicaCascadeRepository implements IOrganicaCascadeRepository {
         }
       );
       });
-    });
+    }, scope);
   }
 }

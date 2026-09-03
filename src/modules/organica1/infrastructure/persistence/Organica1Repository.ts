@@ -1,10 +1,10 @@
 import { executeSerializedQuery, executeSafeQuery, decodeFirebirdObject } from '../../../../db/firebird.js';
-import { IOrganica1Repository } from '../../domain/repositories/IOrganica1Repository.js';
+import { IOrganica1Repository, Organica1FirebirdScope } from '../../domain/repositories/IOrganica1Repository.js';
 import { Organica1, CreateOrganica1Data, UpdateOrganica1Data } from '../../domain/entities/Organica1.js';
 import { DynamicQuery } from '../../organica1.schemas.js';
 
 export class Organica1Repository implements IOrganica1Repository {
-  async findById(claveOrganica0: string, claveOrganica1: string): Promise<Organica1 | undefined> {
+  async findById(claveOrganica0: string, claveOrganica1: string, scope: Organica1FirebirdScope): Promise<Organica1 | undefined> {
     return executeSerializedQuery((db) => {
       return new Promise<Organica1 | undefined>((resolve, reject) => {
         db.query(
@@ -46,10 +46,10 @@ export class Organica1Repository implements IOrganica1Repository {
         }
       );
       });
-    });
+    }, scope);
   }
 
-  async findAll(): Promise<Organica1[]> {
+  async findAll(scope: Organica1FirebirdScope): Promise<Organica1[]> {
     return executeSerializedQuery((db) => {
       return new Promise<Organica1[]>((resolve, reject) => {
         db.query(
@@ -88,10 +88,10 @@ export class Organica1Repository implements IOrganica1Repository {
         }
       );
       });
-    });
+    }, scope);
   }
 
-  async findByClaveOrganica0(claveOrganica0: string): Promise<Organica1[]> {
+  async findByClaveOrganica0(claveOrganica0: string, scope: Organica1FirebirdScope): Promise<Organica1[]> {
     return executeSerializedQuery((db) => {
       return new Promise<Organica1[]>((resolve, reject) => {
         db.query(
@@ -130,10 +130,10 @@ export class Organica1Repository implements IOrganica1Repository {
         }
       );
       });
-    });
+    }, scope);
   }
 
-  async create(data: CreateOrganica1Data): Promise<Organica1> {
+  async create(data: CreateOrganica1Data, scope: Organica1FirebirdScope): Promise<Organica1> {
     const fechaRegistro1 = new Date();
 
     return executeSerializedQuery((db) => {
@@ -192,10 +192,10 @@ export class Organica1Repository implements IOrganica1Repository {
         }
       );
       });
-    });
+    }, scope);
   }
 
-  async update(claveOrganica0: string, claveOrganica1: string, data: UpdateOrganica1Data): Promise<Organica1> {
+  async update(claveOrganica0: string, claveOrganica1: string, data: UpdateOrganica1Data, scope: Organica1FirebirdScope): Promise<Organica1> {
 
     // Build dynamic update query
     const updates: string[] = [];
@@ -272,7 +272,7 @@ export class Organica1Repository implements IOrganica1Repository {
 
     if (updates.length === 0) {
       // No updates, just return current record
-      const existing = await this.findById(claveOrganica0, claveOrganica1);
+      const existing = await this.findById(claveOrganica0, claveOrganica1, scope);
       if (!existing) {
         throw new Error('ORGANICA1_NOT_FOUND');
       }
@@ -293,7 +293,7 @@ export class Organica1Repository implements IOrganica1Repository {
           }
           // Return updated record
           try {
-            const updated = await this.findById(claveOrganica0, claveOrganica1);
+            const updated = await this.findById(claveOrganica0, claveOrganica1, scope);
             if (!updated) {
               reject(new Error('ORGANICA1_NOT_FOUND'));
               return;
@@ -305,10 +305,10 @@ export class Organica1Repository implements IOrganica1Repository {
         }
       );
       });
-    });
+    }, scope);
   }
 
-  async delete(claveOrganica0: string, claveOrganica1: string): Promise<boolean> {
+  async delete(claveOrganica0: string, claveOrganica1: string, scope: Organica1FirebirdScope): Promise<boolean> {
     return executeSerializedQuery((db) => {
       return new Promise<boolean>((resolve, reject) => {
       db.query(
@@ -323,10 +323,10 @@ export class Organica1Repository implements IOrganica1Repository {
         }
       );
       });
-    });
+    }, scope);
   }
 
-  async isInUse(claveOrganica0: string, claveOrganica1: string): Promise<boolean> {
+  async isInUse(claveOrganica0: string, claveOrganica1: string, scope: Organica1FirebirdScope): Promise<boolean> {
     return executeSerializedQuery((db) => {
       return new Promise<boolean>((resolve, reject) => {
         // Verificar si hay registros dependientes en ORGANICA_2
@@ -345,10 +345,10 @@ export class Organica1Repository implements IOrganica1Repository {
         }
       );
       });
-    });
+    }, scope);
   }
 
-  async dynamicQuery(query: DynamicQuery): Promise<Organica1[]> {
+  async dynamicQuery(query: DynamicQuery, scope: Organica1FirebirdScope): Promise<Organica1[]> {
     let sql = 'SELECT CLAVE_ORGANICA_0, CLAVE_ORGANICA_1, DESCRIPCION, TITULAR, RFC, IMSS, INFONAVIT, BANCO_SAR, CUENTA_SAR, TIPO_EMPRESA_SAR, PCP, PH, FV, FG, DI, FECHA_REGISTRO_1, FECHA_FIN_1, USUARIO, ESTATUS, SAR FROM ORGANICA_1';
     const params: any[] = [];
     const conditions: string[] = [];
@@ -393,7 +393,7 @@ export class Organica1Repository implements IOrganica1Repository {
       params.push(query.offset + 1000);
     }
 
-    const result = await executeSafeQuery(sql, params);
+    const result = await executeSafeQuery(sql, params, undefined, scope);
     const decodedResult = result.map((row: any) => decodeFirebirdObject(row));
 
     return decodedResult.map((row: any) => ({

@@ -173,7 +173,7 @@ export class AplicacionesQNARepository implements IAplicacionesQNARepository {
           ));
         }
       });
-    });
+    }, { org0: pOrg0, org1: pOrg1 });
 
     // Si no hay movimientos, retornar vacío
     if (movimientosBase.length === 0) {
@@ -190,8 +190,8 @@ export class AplicacionesQNARepository implements IAplicacionesQNARepository {
     
     // Batch loading: obtener todos los datos de PERSONAL y antigüedad en 2 consultas
     const [datosPersonalMap, datosAntiguedadMap] = await Promise.all([
-      this.obtenerDatosPersonalBatch(internosUnicos),
-      this.obtenerAntiguedadBatch(internosUnicos)
+      this.obtenerDatosPersonalBatch(internosUnicos, { org0: pOrg0, org1: pOrg1 }),
+      this.obtenerAntiguedadBatch(internosUnicos, { org0: pOrg0, org1: pOrg1 })
     ]);
     
     // Combinar datos usando los mapas para lookup O(1)
@@ -230,7 +230,7 @@ export class AplicacionesQNARepository implements IAplicacionesQNARepository {
    * Obtiene datos de PERSONAL (SEXO y FECHA_NACIMIENTO) por INTERNO - BATCH VERSION
    * Retorna un Map<interno, {sexo, fechaNacimiento}> para lookup O(1)
    */
-  private async obtenerDatosPersonalBatch(internos: number[]): Promise<Map<number, { sexo: string | null; fechaNacimiento: string | null }>> {
+  private async obtenerDatosPersonalBatch(internos: number[], scope: { org0: string; org1: string }): Promise<Map<number, { sexo: string | null; fechaNacimiento: string | null }>> {
     const logContext = {
       operation: 'obtenerDatosPersonalBatch',
       totalInternos: internos.length
@@ -290,7 +290,7 @@ export class AplicacionesQNARepository implements IAplicacionesQNARepository {
               }
             );
           });
-        });
+        }, scope);
       }
 
       logger.debug({
@@ -314,7 +314,7 @@ export class AplicacionesQNARepository implements IAplicacionesQNARepository {
    * Nota: Como DP_ANTIGUEDAD_IND es un stored procedure que acepta un solo INTERNO,
    * ejecutamos múltiples llamadas en paralelo (limitado por executeSerializedQuery)
    */
-  private async obtenerAntiguedadBatch(internos: number[]): Promise<Map<number, {
+  private async obtenerAntiguedadBatch(internos: number[], scope: { org0: string; org1: string }): Promise<Map<number, {
     periodos: number | null;
     anios: number | null;
     meses: number | null;
@@ -408,7 +408,7 @@ export class AplicacionesQNARepository implements IAplicacionesQNARepository {
             });
           }
         }
-      });
+      }, scope);
 
       logger.debug({
         ...logContext,
@@ -596,7 +596,7 @@ export class AplicacionesQNARepository implements IAplicacionesQNARepository {
           ));
         }
       });
-    });
+    }, { org0: pOrg0, org1: pOrg1 });
   }
 
   async getAplicacionPCP(pOrg0: string, pOrg1: string, pPeriodo: string): Promise<AplicacionPCP[]> {
@@ -841,7 +841,7 @@ export class AplicacionesQNARepository implements IAplicacionesQNARepository {
           ));
         }
       });
-    });
+    }, { org0: pOrg0, org1: pOrg1 });
     } catch (error: any) {
       const duration = Date.now() - startTime;
       logger.error({
@@ -1029,7 +1029,7 @@ export class AplicacionesQNARepository implements IAplicacionesQNARepository {
           ));
         }
       });
-    });
+    }, { org0: pOrg0, org1: pOrg1 });
   }
 
   async getAplicacionHIP(org0: string, org1: string, quincena: string): Promise<AplicacionHIP[]> {
@@ -1195,7 +1195,7 @@ export class AplicacionesQNARepository implements IAplicacionesQNARepository {
           ));
         }
       });
-    });
+    }, { org0, org1 });
   }
 
   async getConcentrado(org0: string, org1: string, org2: string, org3: string, periodo: string): Promise<Concentrado[]> {
@@ -1366,7 +1366,7 @@ export class AplicacionesQNARepository implements IAplicacionesQNARepository {
           ));
         }
       });
-    });
+    }, { org0, org1 });
   }
 
   /**

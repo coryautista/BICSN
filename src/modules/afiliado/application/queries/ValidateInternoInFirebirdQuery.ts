@@ -1,4 +1,4 @@
-import { executeSerializedQuery } from '../../../../db/firebird.js';
+import { executeSerializedQuery, type FirebirdScope } from '../../../../db/firebird.js';
 import pino from 'pino';
 import {
   InvalidInternoError,
@@ -12,7 +12,7 @@ const logger = pino({
 });
 
 export class ValidateInternoInFirebirdQuery {
-  async execute(interno: number): Promise<boolean> {
+  async execute(interno: number, scope: FirebirdScope): Promise<boolean> {
     const logContext = {
       operation: 'validateInternoInFirebird',
       interno
@@ -81,7 +81,7 @@ export class ValidateInternoInFirebirdQuery {
             });
           });
         });
-      });
+      }, scope);
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Error desconocido';
       logger.error({

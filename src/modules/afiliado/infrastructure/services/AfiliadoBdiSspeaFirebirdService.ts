@@ -26,12 +26,12 @@ export async function verificarAP_DN_APLICAR(
       SUM(CASE WHEN STATUS = 'N' THEN 1 ELSE 0 END) AS NUEVOS,
       SUM(CASE WHEN STATUS = 'A' THEN 1 ELSE 0 END) AS APLICADOS
     FROM AP_D_ORIGEN_TODOS
-    WHERE QNA = ? AND ORG0 = ? AND ORG1 = ?`, [periodo, org0, org1]);
+    WHERE QNA = ? AND ORG0 = ? AND ORG1 = ?`, [periodo, org0, org1], { org0, org1 });
   const summary = await executeQueryInTransaction(tx, `
     SELECT COUNT(*) AS TOTAL
     FROM AP_D_ORIGEN_RESUMEN
     WHERE PERIODO = ? AND ORG0 = ? AND ORG1 = ?
-      AND ORG2 = ? AND ORG3 = ? AND TIPO = 'AN'`, [periodo, org0, org1, org2, org3]);
+      AND ORG2 = ? AND ORG3 = ? AND TIPO = 'AN'`, [periodo, org0, org1, org2, org3], { org0, org1 });
   const row = details[0] ?? {};
   const total = Number(row.TOTAL ?? row.total ?? 0);
   const prepared = Number(row.PREPARADOS ?? row.preparados ?? 0);
@@ -61,8 +61,8 @@ export async function ejecutarAP_DN_APLICAR(
   const startTime = Date.now();
   logger.info(logContext, 'Iniciando ejecución de AP_DN_APLICAR');
   try {
-    if (tx) await executeProcedureInTransaction(tx, 'AP_DN_APLICAR', params);
-    else await executeExecutableProcedure('AP_DN_APLICAR', params, { timeoutMs: FIREBIRD_TIMEOUTS.HEAVY_SP });
+    if (tx) await executeProcedureInTransaction(tx, 'AP_DN_APLICAR', params, { org0, org1 });
+    else await executeExecutableProcedure('AP_DN_APLICAR', params, { timeoutMs: FIREBIRD_TIMEOUTS.HEAVY_SP, scope: { org0, org1 } });
     logger.info({ ...logContext, duracionMs: Date.now() - startTime }, 'AP_DN_APLICAR ejecutado exitosamente');
   } catch (error: any) {
     logger.error({ ...logContext, error: { message: error.message || String(error), code: error.code }, duracionMs: Date.now() - startTime },
@@ -108,9 +108,9 @@ export async function ejecutarAP_P_APLICAR(
   try {
     const params = [org0, org1, quincenaC, quincenaA, tipo];
     if (tx) {
-      await executeProcedureInTransaction(tx, 'AP_P_APLICAR', params);
+      await executeProcedureInTransaction(tx, 'AP_P_APLICAR', params, { org0, org1 });
     } else {
-      await executeExecutableProcedure('AP_P_APLICAR', params, { timeoutMs: FIREBIRD_TIMEOUTS.HEAVY_SP });
+      await executeExecutableProcedure('AP_P_APLICAR', params, { timeoutMs: FIREBIRD_TIMEOUTS.HEAVY_SP, scope: { org0, org1 } });
     }
 
     const duration = Date.now() - startTime;
@@ -179,8 +179,8 @@ export async function ejecutarEBI2_RECIBOS_AP(
   try {
     const params = [org0, org1, org2, org3, periodo, accion];
     const resultRows = tx
-      ? await executeQueryInTransaction(tx, 'SELECT * FROM EBI2_RECIBOS_AP(?, ?, ?, ?, ?, ?)', params)
-      : await executeSelectableProcedure('EBI2_RECIBOS_AP', params, { timeoutMs: FIREBIRD_TIMEOUTS.HEAVY_SP });
+      ? await executeQueryInTransaction(tx, 'SELECT * FROM EBI2_RECIBOS_AP(?, ?, ?, ?, ?, ?)', params, { org0, org1 })
+      : await executeSelectableProcedure('EBI2_RECIBOS_AP', params, { timeoutMs: FIREBIRD_TIMEOUTS.HEAVY_SP, scope: { org0, org1 } });
     const result = resultRows[0] ?? {};
     if (result.ERROR === true) {
       throw new Error(result.MENSAJE || 'EBI2_RECIBOS_AP reportó un error sin mensaje.');
@@ -238,7 +238,8 @@ export async function ejecutarAP_D_ENVIO_LAYOUT(
 
   try {
     await executeExecutableProcedure('AP_D_ENVIO_LAYOUT', [quincena, org0, org1, org2, org3], {
-      timeoutMs: FIREBIRD_TIMEOUTS.HEAVY_SP
+      timeoutMs: FIREBIRD_TIMEOUTS.HEAVY_SP,
+      scope: { org0, org1 }
     });
 
     const duration = Date.now() - startTime;

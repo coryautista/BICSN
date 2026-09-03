@@ -1,5 +1,6 @@
 import { FastifyReply } from 'fastify';
 import { AfiliadosReportesError } from '../domain/errors.js';
+import { OrganicaScopePolicyError } from '../../../auth/domain/policies/OrganicaScopePolicy.js';
 
 /**
  * Manejador centralizado de errores para el submódulo afiliados reportes
@@ -7,6 +8,10 @@ import { AfiliadosReportesError } from '../domain/errors.js';
 export function handleAfiliadosReportesError(error: unknown, reply: FastifyReply): FastifyReply {
   // Log del error para debugging
   console.error('Error en módulo afiliados reportes:', error);
+
+  if (error instanceof OrganicaScopePolicyError) {
+    return reply.code(error.statusCode).send({ success: false, error: { code: error.code, message: error.message } });
+  }
 
   // Si es un error del dominio afiliados reportes, manejarlo específicamente
   if (error instanceof AfiliadosReportesError) {
