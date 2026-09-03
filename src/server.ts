@@ -216,8 +216,12 @@ async function buildApp() {
           url: 'http://localhost:4000/v1',
           description: 'Servidor de desarrollo'
         },
-        {         
-          url: 'http://10.20.1.90:4000/v1',
+        {
+          url: 'http://10.20.1.92:8080/v1',
+          description: 'Servidor de calidad'
+        },
+        {
+          url: 'http://10.20.1.92:9090/v1',
           description: 'Servidor de producción'
         }
       ],

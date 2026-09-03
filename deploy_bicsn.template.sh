@@ -74,13 +74,44 @@ if test ! -f "$DEV_DIR/.env" || test ! -f "$PROD_DIR/.env"; then
   exit 1
 fi
 
-sed -i 's/^PORT=.*/PORT=8080/' "$DEV_DIR/.env"
-sed -i 's/^NODE_ENV=.*/NODE_ENV=production/' "$DEV_DIR/.env"
-sed -i 's/^SQLSERVER_DB=.*/SQLSERVER_DB=SII-ISSSSPEA/' "$DEV_DIR/.env"
+set_env_value() {
+  key="$1"
+  value="$2"
+  file="$3"
+  if grep -q "^$key=" "$file"; then
+    sed -i "s|^$key=.*|$key=$value|" "$file"
+  else
+    printf '%s=%s\n' "$key" "$value" >> "$file"
+  fi
+}
 
-sed -i 's/^PORT=.*/PORT=8080/' "$PROD_DIR/.env"
-sed -i 's/^NODE_ENV=.*/NODE_ENV=production/' "$PROD_DIR/.env"
-sed -i 's/^SQLSERVER_DB=.*/SQLSERVER_DB=SII-ISSSSPEA-PROD/' "$PROD_DIR/.env"
+set_env_value PORT 8080 "$DEV_DIR/.env"
+set_env_value NODE_ENV production "$DEV_DIR/.env"
+set_env_value SQLSERVER_DB SII-ISSSSPEA "$DEV_DIR/.env"
+set_env_value FIREBIRD_DATABASE /db/db/dbQna1426.fdb "$DEV_DIR/.env"
+set_env_value FIREBIRD_USER DES "$DEV_DIR/.env"
+set_env_value FIREBIRD_PASSWORD hamburguesadelujo "$DEV_DIR/.env"
+set_env_value FIREBIRD_ROLE R_DESARROLLO "$DEV_DIR/.env"
+set_env_value FTP_HOST 10.20.1.17 "$DEV_DIR/.env"
+set_env_value FTP_PORT 22 "$DEV_DIR/.env"
+set_env_value FTP_USER Des "$DEV_DIR/.env"
+set_env_value FTP_PASS 'sy?FAWI1' "$DEV_DIR/.env"
+set_env_value FTP_BASE_PATH /Autodeterminacion/Calidad "$DEV_DIR/.env"
+set_env_value QNA_LEGACY_DUAL_WRITE_ENABLED true "$DEV_DIR/.env"
+
+set_env_value PORT 8080 "$PROD_DIR/.env"
+set_env_value NODE_ENV production "$PROD_DIR/.env"
+set_env_value SQLSERVER_DB SII-ISSSSPEA-PROD "$PROD_DIR/.env"
+set_env_value FIREBIRD_DATABASE /db/db/dbQna1326.fdb "$PROD_DIR/.env"
+set_env_value FIREBIRD_USER DES "$PROD_DIR/.env"
+set_env_value FIREBIRD_PASSWORD hamburguesadelujo "$PROD_DIR/.env"
+set_env_value FIREBIRD_ROLE R_DESARROLLO "$PROD_DIR/.env"
+set_env_value FTP_HOST 10.20.1.17 "$PROD_DIR/.env"
+set_env_value FTP_PORT 22 "$PROD_DIR/.env"
+set_env_value FTP_USER Des "$PROD_DIR/.env"
+set_env_value FTP_PASS 'sy?FAWI1' "$PROD_DIR/.env"
+set_env_value FTP_BASE_PATH /Autodeterminacion/Produccion "$PROD_DIR/.env"
+set_env_value QNA_LEGACY_DUAL_WRITE_ENABLED true "$PROD_DIR/.env"
 
 cat > "$DEV_DIR/docker-compose.yml" <<'COMPOSE_DEV'
 services:

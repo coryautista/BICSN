@@ -1,3 +1,5 @@
+# syntax=docker/dockerfile:1
+
 # ---------- Build ----------
 FROM node:20-bookworm-slim AS builder
 WORKDIR /app
@@ -10,12 +12,14 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 COPY package*.json ./
 COPY tsconfig.json ./
-RUN npm ci
+RUN --mount=type=cache,target=/root/.npm,sharing=locked \
+  npm ci --prefer-offline --no-audit
 
 COPY src ./src
 COPY types ./types
 
-RUN npm run build
+RUN npm run build \
+  && npm prune --omit=dev --no-audit
 
 
 # ---------- Runtime ----------
@@ -37,16 +41,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
   && (ln -sf /usr/lib/x86_64-linux-gnu/libfbclient.so.2 /usr/lib/x86_64-linux-gnu/libfbclient.so 2>/dev/null || true) \
   && (ln -sf /lib/x86_64-linux-gnu/libfbclient.so.2 /lib/x86_64-linux-gnu/libfbclient.so 2>/dev/null || true)
 
-# Dependencias de producción
-COPY package*.json ./
-RUN apt-get update && apt-get install -y --no-install-recommends \
-      python3 \
-      make \
-      g++ \
-    && npm ci --omit=dev \
-    && apt-get purge -y --auto-remove python3 make g++ \
-    && rm -rf /var/lib/apt/lists/* \
-    && npm cache clean --force
+# Dependencias de producción ya compiladas en la misma imagen base/arquitectura.
+COPY --from=builder /app/node_modules ./node_modules
 
 # Código compilado
 COPY --from=builder /app/dist ./dist

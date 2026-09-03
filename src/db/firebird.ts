@@ -324,6 +324,9 @@ export async function executeInTransaction<T>(fn: (tx: any) => Promise<T>): Prom
         execute: async (sqlText: string, params: any[] = []) => {
           return await executeQueryOn(att, tx, sqlText, params);
         },
+        executeSingleton: async (sqlText: string, params: any[] = []) => {
+          return decodeValue(await att.executeSingletonAsObject<any>(tx, sqlText, params));
+        },
       };
       return await fn(compatTx);
     });
@@ -434,6 +437,7 @@ export async function executeInTransactionWithOutcome<T>(fn: (tx: any) => Promis
       transaction: tx,
       query: (sqlText: string, params: any[] = []) => executeQueryOn(att, tx, sqlText, params),
       execute: (sqlText: string, params: any[] = []) => executeQueryOn(att, tx, sqlText, params),
+      executeSingleton: async (sqlText: string, params: any[] = []) => decodeValue(await att.executeSingletonAsObject<any>(tx, sqlText, params)),
     };
     return {
       context: compatTx,
