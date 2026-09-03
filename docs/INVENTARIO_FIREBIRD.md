@@ -161,7 +161,7 @@
 | POST | `/baja-termina-suspension` | body movimiento | **Sí** | **Sí** (DP_EDITA) |
 | POST | `/baja-termina-suspension-y-baja` | body movimiento | **Sí** | **Sí** (DP_EDITA) |
 | GET | `/obtener-movimientos-quincenales` | token org0/1 | **Sí** | No |
-| POST | `/aplicar-bdisssspea-lote` | body array | **Sí** | **Sí** (lote DP_EDITA) |
+| POST | `/aplicar-bdisssspea-lote` | objeto `{ motivo?, observaciones? }` | **Sí** | **Sí** (lote DP_EDITA); al finalizar genera REVISA 1/3/4/5 en SQL Server |
 | POST | `/aplicar-bdisssspea-qna` | org0/1, periodo | **Sí** | **Sí** (lote DP_EDITA) |
 
 ### 14. Reportes - Aplicaciones QNA (`/v1/reportes/aplicaciones-qna` y `/v1/aplicaciones-qna`)
