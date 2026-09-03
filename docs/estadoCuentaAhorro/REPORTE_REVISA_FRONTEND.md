@@ -1,5 +1,11 @@
 # Reporte Revisa - Especificacion Frontend
 
+> **Estado: documento histórico, no aplicable al frontend Entidad.**
+>
+> El proyecto `front/Entidad/ISS-F-Entidad` no implementa ni presenta una pantalla REVISA. Entidad conserva únicamente la ejecución silenciosa asociada a sus flujos de movimientos y QNA. La integración visual vigente del reporte pertenece al frontend Administrador y se documenta en `docs/revisa/FRONTEND_REPORTE_REVISION.md`.
+>
+> Los endpoints de estado de cuenta de ahorro descritos aquí no deben usarse para reconstruir `/dependencia/revision` en Entidad sin una nueva decisión funcional y técnica.
+
 ## Objetivo
 
 Construir la pantalla frontend del nuevo reporte **Revisa**. Reemplaza la presentacion del reporte anterior y consume exclusivamente los historicos generados por el backend de estado de cuenta de ahorro.
