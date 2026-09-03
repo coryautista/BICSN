@@ -59,6 +59,21 @@ npm run firebird:credential:encrypt -- --org0=04 --org1=24 --apply
 npm run verify:firebird:catalog:desarrollo
 ```
 
+En Calidad se debe contar primero con un respaldo verificable. El dry-run no
+persiste cambios; la aplicacion exige confirmacion explicita y la referencia del
+respaldo:
+
+```bash
+npm run migrate:firebird:catalog:calidad
+npm run apply:firebird:catalog:calidad -- --backup-reference=<referencia-verificable>
+npm run firebird:credential:encrypt -- --environment=CALIDAD --org0=04 --org1=24 --apply --confirm-quality=SII-ISSSSPEA --backup-reference=<referencia-verificable>
+npm run verify:firebird:catalog:calidad
+```
+
+El empaquetador de Calidad rechaza cambios sin commit en cualquiera de los
+archivos incluidos para que `sourceCommit` siempre identifique exactamente el
+contenido publicado.
+
 El contenido existente en `dist-deploy/BICSN` es un artefacto generado y puede quedar atrás respecto al código fuente. Antes de un nuevo despliegue debe generarse un artefacto fresco; no se debe promover automáticamente el paquete anterior.
 
 Para una publicación exclusiva de Calidad se usa `npm run package:deploy:calidad` y `deploy_calidad.template.sh`. Este flujo solo reconstruye `bicsn-des-api`, preserva el `.env` remoto y fija la pareja de Calidad. El segundo argumento controla `SNAPSHOT_CALCULO_V2_SHADOW_ENABLED`, el tercero `SNAPSHOT_CALCULO_V2_READ_ENABLED` y el cuarto `SNAPSHOT_CALCULO_V2_OFFICIAL_READ_ENABLED`; los tres usan `false` por defecto. No reinicia ni modifica `bicsn-prod-api`.

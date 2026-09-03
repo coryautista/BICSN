@@ -10,13 +10,24 @@ function argumentValue(name: string): string | undefined {
 const org0 = argumentValue('org0');
 const org1 = argumentValue('org1');
 const apply = process.argv.includes('--apply');
+const environmentName = (argumentValue('environment') ?? 'DESARROLLO').toUpperCase();
 const passwordEnvName = argumentValue('password-env') ?? 'FIREBIRD_PASSWORD';
 const userEnvName = argumentValue('user-env') ?? 'FIREBIRD_USER';
 const roleEnvName = argumentValue('role-env') ?? 'FIREBIRD_ROLE';
 
 if (!org0 || !org1) {
-  console.error('Uso: tsx scripts/firebird-credential-encrypt.ts --org0=04 --org1=24 [--password-env=FIREBIRD_PASSWORD] [--user-env=FIREBIRD_USER] [--role-env=FIREBIRD_ROLE] [--apply]');
+  console.error('Uso: tsx scripts/firebird-credential-encrypt.ts --org0=04 --org1=24 [--environment=DESARROLLO|CALIDAD] [--password-env=FIREBIRD_PASSWORD] [--user-env=FIREBIRD_USER] [--role-env=FIREBIRD_ROLE] [--apply]');
   process.exit(2);
+}
+if (environmentName !== 'DESARROLLO' && environmentName !== 'CALIDAD') {
+  throw new Error('FIREBIRD_CATALOG_ENVIRONMENT_INVALIDO: use DESARROLLO o CALIDAD');
+}
+const environment = environmentName as 'DESARROLLO' | 'CALIDAD';
+if (apply && environment === 'CALIDAD') {
+  const confirmed = process.argv.includes('--confirm-quality=SII-ISSSSPEA');
+  const backupReference = argumentValue('backup-reference')?.trim();
+  if (!confirmed) throw new Error('CONFIRMACION_REQUERIDA:--confirm-quality=SII-ISSSSPEA');
+  if (!backupReference) throw new Error('RESPALDO_REQUERIDO:--backup-reference=<referencia-verificable>');
 }
 
 const masterKey = process.env.FIREBIRD_CATALOG_MASTER_KEY ?? '';
@@ -56,17 +67,17 @@ if (!apply) {
     org1: normalizedOrg1,
     usuario: user,
     rol: role ?? null,
-    secretoHex,
-    sql: `UPDATE/INSERT config.FirebirdOrganicaCredential (Org0='${normalizedOrg0}', Org1='${normalizedOrg1}', Usuario=N'${user}', Rol=${role ? `N'${role}'` : 'NULL'}, Secreto=0x${secretHex.slice(0, 32)}...)`,
+    secretoBytes: secretHex.length / 2,
+    destino: DATABASE_ENVIRONMENTS[environment].sqlDatabase,
   }, null, 2));
   console.log('FIREBIRD_CREDENTIAL_ENCRYPT_PREVIEW_OK');
   process.exit(0);
 }
 
-const development = DATABASE_ENVIRONMENTS.DESARROLLO;
-process.env.SQLSERVER_DB = development.sqlDatabase;
-process.env.FIREBIRD_DATABASE = development.firebirdDatabase;
-assertDatabaseEnvironment('DESARROLLO', process.env.SQLSERVER_DB, process.env.FIREBIRD_DATABASE);
+const target = DATABASE_ENVIRONMENTS[environment];
+process.env.SQLSERVER_DB = target.sqlDatabase;
+process.env.FIREBIRD_DATABASE = target.firebirdDatabase;
+assertDatabaseEnvironment(environment, process.env.SQLSERVER_DB, process.env.FIREBIRD_DATABASE);
 
 const { connectDatabase, closeDatabaseConnection } = await import('../src/db/mssql.js');
 const pool = await connectDatabase();
@@ -79,7 +90,7 @@ try {
     .input('Rol', sql.VarChar(64), role ?? null);
   const updated = await request.query(updateSql);
   if ((updated.rowsAffected[0] ?? 0) === 0) await request.query(insertSql);
-  console.log(JSON.stringify({ org0: normalizedOrg0, org1: normalizedOrg1, usuario: user, rol: role ?? null }, null, 2));
+  console.log(JSON.stringify({ environment, sqlDatabase: target.sqlDatabase, org0: normalizedOrg0, org1: normalizedOrg1, usuario: user, rol: role ?? null }, null, 2));
   console.log('FIREBIRD_CREDENTIAL_SEED_APPLIED_OK');
 } finally {
   await closeDatabaseConnection();

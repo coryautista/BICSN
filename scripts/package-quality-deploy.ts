@@ -47,11 +47,22 @@ const files = [
   'database/migrations/20260827_21_verify_nomina_txt_sync_ledger_staging.sql',
   'database/migrations/20260901_22_add_nomina_staging_layout20_semantics.sql',
   'database/migrations/20260901_23_verify_nomina_staging_layout20_semantics.sql',
+  'database/migrations/20260902_24_create_firebird_organica_credential.sql',
+  'database/migrations/20260902_25_verify_firebird_organica_credential.sql',
   'Dockerfile',
   'package.json',
   'package-lock.json',
   'tsconfig.json'
 ];
+
+const dirtyPackageSources = execFileSync(
+  'git',
+  ['status', '--porcelain', '--untracked-files=all', '--', ...files],
+  { cwd: root, encoding: 'utf8' }
+).trim();
+if (dirtyPackageSources) {
+  throw new Error(`QUALITY_DEPLOY_REQUIERE_FUENTES_COMMITTEADAS:\n${dirtyPackageSources}`);
+}
 
 await mkdir(outputDirectory, { recursive: true });
 await rm(stagingDirectory, { recursive: true, force: true });

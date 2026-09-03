@@ -4,6 +4,7 @@ import { DATABASE_ENVIRONMENTS, assertDatabaseEnvironment } from '../src/config/
 const development = DATABASE_ENVIRONMENTS.DESARROLLO;
 process.env.SQLSERVER_DB = development.sqlDatabase;
 process.env.FIREBIRD_DATABASE = development.firebirdDatabase;
+process.env.FIREBIRD_CATALOG_TTL_MS = '1000';
 assertDatabaseEnvironment('DESARROLLO', process.env.SQLSERVER_DB, process.env.FIREBIRD_DATABASE);
 
 const mssql = await import('../src/db/mssql.js');
@@ -15,12 +16,13 @@ try {
   const scope = { org0: '04', org1: '24' };
   const credential = await catalog.getFirebirdScopeCredential(scope.org0, scope.org1);
   const rows = await firebird.executeSafeQuery(
-    'SELECT CURRENT_USER AS USUARIO FROM RDB$DATABASE',
+    'SELECT CURRENT_USER AS USUARIO, CURRENT_CONNECTION AS CONEXION FROM RDB$DATABASE',
     [],
     undefined,
     scope
   );
   assert.equal(String(rows[0]?.USUARIO ?? '').trim().toUpperCase(), credential.user.trim().toUpperCase());
+  const firstConnection = Number(rows[0]?.CONEXION);
   const callbackRows = await firebird.executeSerializedQuery((db) => new Promise<any[]>((resolve, reject) => {
     db.query('SELECT CURRENT_USER AS USUARIO FROM RDB$DATABASE', [], (error, result) => {
       if (error) reject(error);
@@ -28,6 +30,15 @@ try {
     });
   }), scope);
   assert.equal(String(callbackRows[0]?.USUARIO ?? '').trim().toUpperCase(), credential.user.trim().toUpperCase());
+
+  await new Promise((resolve) => setTimeout(resolve, 1100));
+  const refreshedRows = await firebird.executeSafeQuery(
+    'SELECT CURRENT_CONNECTION AS CONEXION FROM RDB$DATABASE',
+    [],
+    undefined,
+    scope
+  );
+  assert.notEqual(Number(refreshedRows[0]?.CONEXION), firstConnection, 'ATTACHMENT_SCOPE_NO_RENOVADO_TRAS_TTL');
 
   const configured = await mssql.getPool().request().query(`
     SELECT Org0, Org1
@@ -47,6 +58,7 @@ try {
   );
 
   console.log('FIREBIRD_SCOPE_CURRENT_USER_DESARROLLO_OK');
+  console.log('FIREBIRD_SCOPE_ATTACHMENT_TTL_DESARROLLO_OK');
   console.log('FIREBIRD_SCOPE_MISSING_REJECTED_DESARROLLO_OK');
 } finally {
   await firebird.closeFirebirdPool();

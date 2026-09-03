@@ -10,7 +10,7 @@ import { env as config } from "../config/env.js";
 import iconv from "iconv-lite";
 import { createNativeClient, getDefaultLibraryFilename } from "node-firebird-driver-native";
 import type { Attachment, Transaction, TransactionOptions } from "node-firebird-driver";
-import { getFirebirdScopeCredential, invalidateFirebirdScopeCredential, normalizeFirebirdOrg } from "./firebirdCatalog.js";
+import { getFirebirdScopeCredentialLease, invalidateFirebirdScopeCredential, normalizeFirebirdOrg } from "./firebirdCatalog.js";
 
 const POOL_SIZE = Number((config.firebird as any).poolSize || 5);
 const SERIALIZE_ALL = Boolean((config.firebird as any).serialize) || false;
@@ -35,6 +35,7 @@ export interface FirebirdScope {
 interface AttachmentEntry {
   attachment: Attachment;
   charsetApplied: boolean;
+  credentialExpiresAt: number;
 }
 
 const attachments = new Map<string, AttachmentEntry>();
@@ -54,22 +55,26 @@ function credentialRejected(message: string): boolean {
     || normalized.includes("non-existent role");
 }
 
-async function connectOptionsFor(scope?: FirebirdScope): Promise<Record<string, unknown>> {
+async function connectOptionsFor(scope?: FirebirdScope): Promise<{
+  options: Record<string, unknown>;
+  credentialExpiresAt: number;
+}> {
   if (scope) {
-    const credential = await getFirebirdScopeCredential(scope.org0, scope.org1);
+    const { credential, expiresAt } = await getFirebirdScopeCredentialLease(scope.org0, scope.org1);
     const options: any = { username: credential.user, password: credential.password };
     if (credential.role) options.role = credential.role;
-    return options;
+    return { options, credentialExpiresAt: expiresAt };
   }
   const options: any = { username: config.firebird.user, password: config.firebird.password };
   if (config.firebird.role) options.role = config.firebird.role;
-  return options;
+  return { options, credentialExpiresAt: Number.POSITIVE_INFINITY };
 }
 
 async function openEntry(scope: FirebirdScope | undefined): Promise<AttachmentEntry> {
   try {
-    const attachment = await client.connect(buildUri(), await connectOptionsFor(scope));
-    return { attachment, charsetApplied: false };
+    const { options, credentialExpiresAt } = await connectOptionsFor(scope);
+    const attachment = await client.connect(buildUri(), options);
+    return { attachment, charsetApplied: false, credentialExpiresAt };
   } catch (error) {
     if (scope && credentialRejected(String((error as any)?.message ?? error))) {
       invalidateFirebirdScopeCredential(scope.org0, scope.org1);
@@ -90,6 +95,10 @@ function disposeEntry(key: string, entry?: AttachmentEntry): void {
 async function getAttachment(scope?: FirebirdScope): Promise<Attachment> {
   const key = scopeKey(scope);
   let entry = attachments.get(key);
+  if (scope && entry && entry.credentialExpiresAt <= Date.now()) {
+    disposeEntry(key, entry);
+    entry = undefined;
+  }
   if (!entry || !entry.attachment.isValid) {
     if (entry) disposeEntry(key, entry);
     let opening = attachmentOpenings.get(key);
@@ -592,11 +601,11 @@ export async function executeQueryWithNewConnection(
     (async () => {
       let att: Attachment;
       try {
-        att = await client.connect(buildUri(), await connectOptionsFor(scope));
+        att = await client.connect(buildUri(), (await connectOptionsFor(scope)).options);
       } catch (error) {
         if (!scope || !credentialRejected(String((error as any)?.message ?? error))) throw error;
         invalidateFirebirdScopeCredential(scope.org0, scope.org1);
-        att = await client.connect(buildUri(), await connectOptionsFor(scope));
+        att = await client.connect(buildUri(), (await connectOptionsFor(scope)).options);
       }
       try {
         // Aplicar SET NAMES en la nueva conexión

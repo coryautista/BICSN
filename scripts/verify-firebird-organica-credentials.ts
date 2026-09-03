@@ -3,15 +3,20 @@ import 'dotenv/config';
 import { DATABASE_ENVIRONMENTS, assertDatabaseEnvironment } from '../src/config/databaseEnvironments.js';
 import { decryptSecret } from '../src/shared/crypto/symmetric.js';
 
-const development = DATABASE_ENVIRONMENTS.DESARROLLO;
-process.env.SQLSERVER_DB = development.sqlDatabase;
-process.env.FIREBIRD_DATABASE = development.firebirdDatabase;
-assertDatabaseEnvironment('DESARROLLO', process.env.SQLSERVER_DB, process.env.FIREBIRD_DATABASE);
-
 function argumentValue(name: string): string | undefined {
   const prefix = `--${name}=`;
   return process.argv.find((argument) => argument.startsWith(prefix))?.slice(prefix.length);
 }
+
+const environmentName = (argumentValue('environment') ?? 'DESARROLLO').toUpperCase();
+if (environmentName !== 'DESARROLLO' && environmentName !== 'CALIDAD') {
+  throw new Error('FIREBIRD_CATALOG_ENVIRONMENT_INVALIDO: use DESARROLLO o CALIDAD');
+}
+const environment = environmentName as 'DESARROLLO' | 'CALIDAD';
+const target = DATABASE_ENVIRONMENTS[environment];
+process.env.SQLSERVER_DB = target.sqlDatabase;
+process.env.FIREBIRD_DATABASE = target.firebirdDatabase;
+assertDatabaseEnvironment(environment, process.env.SQLSERVER_DB, process.env.FIREBIRD_DATABASE);
 
 const onlyOrg0 = argumentValue('org0');
 const onlyOrg1 = argumentValue('org1');
@@ -44,8 +49,8 @@ try {
 
   console.log(JSON.stringify({
     check: 'FIREBIRD_ORGANICA_CREDENTIALS_VERIFY',
-    environment: 'DESARROLLO',
-    sqlDatabase: development.sqlDatabase,
+    environment,
+    sqlDatabase: target.sqlDatabase,
     readOnly: true,
     masterKeyConfigurada: masterKeyValida,
     filas: rows.map((row) => ({

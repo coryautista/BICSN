@@ -11,6 +11,11 @@ export interface FirebirdScopeCredential {
   role: string | null;
 }
 
+export interface FirebirdScopeCredentialLease {
+  credential: FirebirdScopeCredential;
+  expiresAt: number;
+}
+
 interface CacheEntry {
   expiresAt: number;
   credential: FirebirdScopeCredential;
@@ -33,7 +38,7 @@ export function normalizeFirebirdOrg(value: string): string {
   return normalized.padStart(2, '0');
 }
 
-export async function getFirebirdScopeCredential(org0: string, org1: string): Promise<FirebirdScopeCredential> {
+export async function getFirebirdScopeCredentialLease(org0: string, org1: string): Promise<FirebirdScopeCredentialLease> {
   if (!env.firebirdCatalog.enabled) {
     throw new FirebirdOrganicaCredentialError('Catalogo de credenciales Firebird deshabilitado', 'FIREBIRD_CATALOG_DESHABILITADO');
   }
@@ -42,7 +47,7 @@ export async function getFirebirdScopeCredential(org0: string, org1: string): Pr
   const key = `${normalizedOrg0}|${normalizedOrg1}`;
   const now = Date.now();
   const hit = cache.get(key);
-  if (hit && hit.expiresAt > now) return hit.credential;
+  if (hit && hit.expiresAt > now) return { credential: hit.credential, expiresAt: hit.expiresAt };
 
   const result = await getPool().request()
     .input('Org0', sql.VarChar(2), normalizedOrg0)
@@ -70,8 +75,13 @@ export async function getFirebirdScopeCredential(org0: string, org1: string): Pr
     password: decryptSecret(String(row.SecretoHex), env.firebirdCatalog.masterKey),
     role: row.RolFirebird == null ? null : String(row.RolFirebird),
   };
-  cache.set(key, { expiresAt: now + env.firebirdCatalog.ttlMs, credential });
-  return credential;
+  const expiresAt = now + env.firebirdCatalog.ttlMs;
+  cache.set(key, { expiresAt, credential });
+  return { credential, expiresAt };
+}
+
+export async function getFirebirdScopeCredential(org0: string, org1: string): Promise<FirebirdScopeCredential> {
+  return (await getFirebirdScopeCredentialLease(org0, org1)).credential;
 }
 
 export function invalidateFirebirdScopeCredential(org0: string, org1: string): void {
