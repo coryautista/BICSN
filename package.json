@@ -16,6 +16,8 @@
     "diagnose:qna:phase12:applied:calidad:readonly": "npm run verify:database:environments && tsx scripts/diagnose-qna-phase12-applied-calidad-readonly.ts",
     "migrate:qna:phase12:calidad": "npm run verify:database:environments && tsx scripts/migrate-qna-phase12-calidad.ts",
     "apply:qna:phase12:calidad": "npm run verify:database:environments && tsx scripts/migrate-qna-phase12-calidad.ts --execute --confirm-quality=SII-ISSSSPEA",
+    "migrate:calidad:18-23": "tsx scripts/migrate-calidad-18-23.ts",
+    "apply:calidad:18-23": "tsx scripts/migrate-calidad-18-23.ts --execute --confirm-quality=SII-ISSSSPEA --backup-reference=REQUIRED",
     "package:deploy:calidad": "tsx scripts/package-quality-deploy.ts",
     "package:deploy:produccion": "tsx scripts/package-production-deploy.ts",
     "preflight:produccion:readonly": "tsx scripts/preflight-produccion-readonly.ts",
