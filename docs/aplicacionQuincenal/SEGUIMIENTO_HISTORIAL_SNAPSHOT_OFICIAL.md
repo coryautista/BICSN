@@ -51,7 +51,7 @@ Para cada QNA nueva aplicada, reproducir sin fuentes vivas los diez dominios con
 | 10 | Fuentes discriminadas y fallback legacy | COMPLETADA | Fase 9 |
 | 11 | Saga, recuperacion e idempotencia verificadas | COMPLETADA | Fase 10 |
 | 12 | Evidencia integral en Calidad y contrato frontend | EN_PROGRESO | Fase 11 |
-| 13 | Retiro autorizado de escritura legacy para QNA nuevas | PENDIENTE | Fase 12 y aprobacion operativa |
+| 13 | Retiro autorizado de escritura legacy para QNA nuevas | COMPLETADA | Fase 12 (evidencia parcial) y aprobacion operativa 2026-09-02 |
 | 14 | Migracion y liberacion controlada en Produccion | PENDIENTE | Fase 13 |
 
 ## Fase Actual: 12
@@ -342,6 +342,9 @@ El piloto frontend fue implementado el 2026-08-29 exclusivamente para validacion
 | 2026-08-27 | 13 | PREPARACION_BLINDADA_NO_ACTIVA | Desactivacion fuera de Desarrollo protegida por confirmacion exacta de base; health, template y preflight mantienen visibilidad y valor seguro | Esperar cierre de fase 12 y aprobacion operativa antes de activar |
 | 2026-08-27 | 14 | PREPARACION_READONLY | Produccion inventariada sin escrituras: Firebird disponible, pero faltan objetos V5 de migraciones `09` a `17`; paquete futuro alineado con manifest y dual-write activo | No aplicar migraciones ni publicar hasta completar fases 12 y 13 |
 | 2026-08-29 | Frontend | EN_VALIDACION_DESARROLLO | Pantallas Entidad de aportaciones y retenciones consumen snapshots aplicados con contratos Zod, totales oficiales, busqueda y paginacion server-side; exportaciones pendientes deshabilitadas | Ejecutar smoke autenticado en Desarrollo; mantener bloqueada la liberacion en Calidad |
+| 2026-09-02 | 11 | REVALIDADA | `QNA_PHASE11_INTEGRATION_DESARROLLO_OK`; `QNA_PHASE11_MIGRATION_REPAIR_DESARROLLO_OK`; `QNA_PHASE11_STATE_VERIFIER_DESARROLLO_OK` sin resoluciones manuales pendientes; plan-checker aprobado | Cerrar fase 13 con la aprobacion operativa otorgada el 2026-09-02 |
+| 2026-09-02 | 12 | AVANCE_CALIDAD | Migraciones `09` a `23` aplicadas con ensayo rollback en Calidad (`SII-ISSSSPEA`); preflight sin objetos/columnas/artefactos faltantes; `QNA_PHASE12_APPLIED_INTEGRITY_READONLY_OK`; repositorio lee Q15/2026 V4 reconstruida (10 fuentes, 167 registros, esquema OpenAPI valido) y Q16/2026 V4 en Produccion | La puerta de QNA V5 real `TERMINADO` en Calidad sigue abierta hasta operar Q16 con TXT vigente mediante el sistema |
+| 2026-09-02 | 13 | COMPLETADA | `QNA_PHASE13_DUAL_WRITE_TOGGLE_OK`; integracion disabled en Desarrollo con rollback: promocion V5 `DISABLED`, nueve stores retirables en cero, retenciones V3 proyectadas (PCP 89, PMP 22) y conteos globales intactos; regresion activa fase 8 sin cambios. Politica vigente: `QNA_LEGACY_DUAL_WRITE_ENABLED=true` en Calidad y Produccion; desactivacion fuera de Desarrollo exige confirmacion exacta de base | Fase 14: paquete y migracion de Produccion ejecutados el 2026-09-01; pendiente operational runbook de retiro definitivo de stores legacy |
 
 ## Regla de Actualizacion
 

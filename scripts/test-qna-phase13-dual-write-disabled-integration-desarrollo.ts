@@ -13,7 +13,7 @@ assertDatabaseEnvironment('DESARROLLO', process.env.SQLSERVER_DB, process.env.FI
 const scope = {
   entidadId: 1,
   anio: 2026,
-  quincena: 14,
+  quincena: 15,
   organica0: '04',
   organica1: '24',
   organica2: '01',
@@ -51,6 +51,11 @@ async function main(): Promise<void> {
         evidencia: 'Prueba automatizada con dual-write desactivado'
       }));
     const official = new factoryModule.QnaOfficialSnapshotV5Factory().create(capture, approvals);
+    // Scope libre (04/24/31/01: sin oficial ni TXT vigente) con ausencia confirmada de carga
+    // nominal; conserva la evidencia y procedencia de 1526 (org0/org1) sin tocar la oficial ya aplicada.
+    const targetScope = { entidadId: 1, anio: 2026, quincena: 15, organica0: '04', organica1: '24', organica2: '31', organica3: '01' };
+    official.snapshotV2 = { ...official.snapshotV2, ...targetScope, nominaCargaId: null };
+    official.candidate = { ...official.candidate, ...targetScope, nominaCargaId: null };
 
     await transaction.begin(sql.ISOLATION_LEVEL.SERIALIZABLE);
     active = true;
@@ -123,9 +128,9 @@ async function snapshotEvidence(transaction: sql.Transaction, snapshotId: string
       (SELECT COUNT(*) FROM aportaciones.AguinaldoHistorico WHERE QnaLiquidacionSnapshotId=@Id) Aguinaldo,
       (SELECT COUNT(*) FROM aportaciones.ResumenHistorico WHERE QnaLiquidacionSnapshotId=@Id) Resumen,
       (SELECT COUNT(*) FROM conciliacion.RevisionAplicacionHistorico WHERE QnaLiquidacionSnapshotId=@Id) Revision,
-      (SELECT COUNT(*) FROM retenciones.PrestamosCortoPlazoHistorico WHERE QnaLiquidacionSnapshotId=@Id) PCP,
-      (SELECT COUNT(*) FROM retenciones.PrestamosMedianoPlazoHistorico WHERE QnaLiquidacionSnapshotId=@Id) PMP,
-      (SELECT COUNT(*) FROM retenciones.PrestamosHipotecariosHistorico WHERE QnaLiquidacionSnapshotId=@Id) HIP;
+      (SELECT COUNT(*) FROM retenciones.RetencionPCPHistoricoV3 WHERE LiquidacionSnapshotId=@Id) PCP,
+      (SELECT COUNT(*) FROM retenciones.RetencionPMPHistoricoV3 WHERE LiquidacionSnapshotId=@Id) PMP,
+      (SELECT COUNT(*) FROM retenciones.RetencionHIPHistoricoV3 WHERE LiquidacionSnapshotId=@Id) HIP;
   `);
   const row = result.recordset[0];
   return {
