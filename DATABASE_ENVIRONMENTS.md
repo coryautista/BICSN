@@ -65,8 +65,8 @@ respaldo:
 
 ```bash
 npm run migrate:firebird:catalog:calidad
-npm run apply:firebird:catalog:calidad -- --backup-reference=<referencia-verificable>
-npm run firebird:credential:encrypt -- --environment=CALIDAD --org0=04 --org1=24 --apply --confirm-quality=SII-ISSSSPEA --backup-reference=<referencia-verificable>
+npm run apply:firebird:catalog:calidad -- "<referencia-verificable>"
+npm run firebird:credential:encrypt -- --environment=CALIDAD --org0=04 --org1=24 --apply --confirm-quality=SII-ISSSSPEA "<referencia-verificable>"
 npm run verify:firebird:catalog:calidad
 ```
 

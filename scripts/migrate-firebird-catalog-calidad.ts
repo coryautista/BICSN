@@ -4,14 +4,17 @@ import { DATABASE_ENVIRONMENTS, assertDatabaseEnvironment } from '../src/config/
 
 const execute = process.argv.includes('--execute');
 const confirmed = process.argv.includes('--confirm-quality=SII-ISSSSPEA');
-const backupReference = process.argv.find((argument) => argument.startsWith('--backup-reference='))?.split('=', 2)[1]?.trim();
+const backupReference = (
+  process.argv.find((argument) => argument.startsWith('--backup-reference='))?.split('=', 2)[1]
+  ?? process.argv.slice(2).find((argument) => !argument.startsWith('--'))
+)?.trim();
 const quality = DATABASE_ENVIRONMENTS.CALIDAD;
 
 if (execute && !confirmed) {
   throw new Error('CONFIRMACION_REQUERIDA:--confirm-quality=SII-ISSSSPEA');
 }
 if (execute && !backupReference) {
-  throw new Error('RESPALDO_REQUERIDO:--backup-reference=<referencia-verificable>');
+  throw new Error('RESPALDO_REQUERIDO: proporcione la referencia verificable como argumento final');
 }
 
 process.env.SQLSERVER_DB = quality.sqlDatabase;

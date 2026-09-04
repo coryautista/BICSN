@@ -16,7 +16,7 @@
     "apply:firebird:catalog:desarrollo": "tsx scripts/migrate-firebird-catalog-desarrollo.ts --execute --confirm-development=SII-ISSSSPEA-DES",
     "verify:firebird:catalog:desarrollo": "tsx scripts/verify-firebird-organica-credentials.ts",
     "migrate:firebird:catalog:calidad": "npm run verify:database:environments && tsx scripts/migrate-firebird-catalog-calidad.ts",
-    "apply:firebird:catalog:calidad": "npm run verify:database:environments && tsx scripts/migrate-firebird-catalog-calidad.ts --execute --confirm-quality=SII-ISSSSPEA",
+    "apply:firebird:catalog:calidad": "tsx scripts/migrate-firebird-catalog-calidad.ts --execute --confirm-quality=SII-ISSSSPEA",
     "verify:firebird:catalog:calidad": "npm run verify:database:environments && tsx scripts/verify-firebird-organica-credentials.ts --environment=CALIDAD",
     "test:firebird:catalog:crypto": "tsx scripts/test-firebird-catalog-crypto.ts",
     "test:firebird:scope:desarrollo": "tsx scripts/test-firebird-scope-integration-desarrollo.ts",

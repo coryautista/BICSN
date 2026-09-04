@@ -25,9 +25,12 @@ if (environmentName !== 'DESARROLLO' && environmentName !== 'CALIDAD') {
 const environment = environmentName as 'DESARROLLO' | 'CALIDAD';
 if (apply && environment === 'CALIDAD') {
   const confirmed = process.argv.includes('--confirm-quality=SII-ISSSSPEA');
-  const backupReference = argumentValue('backup-reference')?.trim();
+  const backupReference = (
+    argumentValue('backup-reference')
+    ?? process.argv.slice(2).find((argument) => !argument.startsWith('--'))
+  )?.trim();
   if (!confirmed) throw new Error('CONFIRMACION_REQUERIDA:--confirm-quality=SII-ISSSSPEA');
-  if (!backupReference) throw new Error('RESPALDO_REQUERIDO:--backup-reference=<referencia-verificable>');
+  if (!backupReference) throw new Error('RESPALDO_REQUERIDO: proporcione la referencia verificable como argumento final');
 }
 
 const masterKey = process.env.FIREBIRD_CATALOG_MASTER_KEY ?? '';
