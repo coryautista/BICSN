@@ -38,6 +38,8 @@
     "test:revision:movimientos": "tsx scripts/test-revision-movimientos.ts",
     "test:revision:movimientos:desarrollo": "npm run verify:database:environments && tsx scripts/test-revision-movimientos-integration-desarrollo.ts",
     "verify:revision:movimientos:desarrollo": "npm run verify:database:environments && tsx scripts/verify-revision-movimientos-desarrollo.ts",
+    "preview:revision:concepto3-1526:desarrollo": "npm run verify:database:environments && tsx scripts/restore-revision-concepto3-1526-desarrollo.ts",
+    "restore:revision:concepto3-1526:desarrollo": "npm run verify:database:environments && tsx scripts/restore-revision-concepto3-1526-desarrollo.ts --execute --confirm-development=SII-ISSSSPEA-DES",
     "test:revision:concept13:desarrollo": "tsx scripts/test-revision-concept13-migration-integration-desarrollo.ts",
     "test:nomina:layout20": "tsx scripts/test-nomina-layout20-parser.ts",
     "test:nomina:upload-validation": "tsx scripts/test-nomina-upload-validation.ts",
