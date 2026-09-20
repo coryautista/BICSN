@@ -24,7 +24,7 @@ Evitar aplicaciones parciales en Firebird cuando falla alguno de los procedimien
 
 Los eventos `BA_MOVIMIENTO` no forman parte de este proceso. Aplicar QNA no los crea, recupera ni modifica. Sin TXT, la captura nominal conserva la resolución existente por `INTERNO` desde `ORPERSONAL`.
 
-La aplicación de movimientos de afiliados también queda fuera de este proceso. Se finaliza mediante su endpoint en un momento anterior e independiente, donde pueden generarse por primera vez las filas REVISA 1, 3, 4 y 5, incluso con cero movimientos. Aplicar QNA no vuelve a aplicar esos movimientos; el worker REVISA posterior a QNA recalcula y reconcilia las filas 1/3/4/5 preexistentes como parte del reporte completo.
+La aplicación de movimientos de afiliados también queda fuera de este proceso. Se finaliza mediante su endpoint en un momento anterior e independiente, donde se generan las filas REVISA 1, 3, 4 y 5, incluso con cero movimientos. Aplicar QNA no vuelve a aplicar esos movimientos y el worker REVISA posterior no recalcula ni modifica esas cuatro filas; únicamente completa los demás conceptos del reporte.
 
 La primera generación REVISA usa el mismo scope exacto de exclusión que Aplicar QNA: `EntidadId`, año, quincena y orgánicas 0-3. Las bitácoras legacy de Entidad pueden tener `EntidadId IS NULL` porque Aplicar movimientos no utilizaba antes ese identificador; exclusivamente en ese caso el backend resuelve `EntidadId=1`. Un valor presente igual a cero, negativo, vacío o no numérico se rechaza y no se sustituye.
 

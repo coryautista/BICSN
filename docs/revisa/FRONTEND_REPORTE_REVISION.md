@@ -101,7 +101,7 @@ incluye actualmente estos campos de contexto en su respuesta exitosa:
 }
 ```
 
-`revisionMovimientos` solo informa el resultado de persistencia de los conceptos 1, 3, 4 y 5 en ese primer momento. Es una referencia del endpoint de movimientos, no sustituye el contrato de `GET /v1/reportes/revision`, no acredita `estatusProceso = COMPLETADA` y no debe usarse como fuente del reporte completo.
+`revisionMovimientos` solo informa el resultado de persistencia de los conceptos 1, 3, 4 y 5 durante el cierre de movimientos. Es una referencia del endpoint de movimientos, no sustituye el contrato de `GET /v1/reportes/revision`, no acredita `estatusProceso = COMPLETADA` y no debe usarse como fuente del reporte completo. El worker posterior a QNA conserva esas filas sin recalcularlas.
 
 ### Consultar reporte
 

@@ -20,13 +20,13 @@ Organica0 + Organica1 + Organica2 + Organica3 + Periodo + IdCatalogoRevision
 
 Si una fila vigente cambia, su valor anterior se guarda primero en `conciliacion.RevisionHistorico`. Si no existen cambios, no se genera histórico.
 
-### Ciclo dual de los conceptos 1, 3, 4 y 5
+### Generacion exclusiva de los conceptos 1, 3, 4 y 5
 
-Los conceptos 1, 3, 4 y 5 se generan en dos momentos separados. La primera generación ocurre al finalizar la aplicación de movimientos, incluso cuando no existen movimientos elegibles, y no crea una tarea en `conciliacion.RevisionTarea`. La segunda generación ocurre dentro del worker posterior a la aplicación QNA y reconcilia las filas preexistentes como parte del reporte automático completo.
+Los conceptos 1, 3, 4 y 5 se generan exclusivamente al finalizar la aplicación de movimientos, incluso cuando no existen movimientos elegibles. Esta generación no crea una tarea en `conciliacion.RevisionTarea`.
 
-En ambos momentos se conservan las fuentes y fórmulas descritas en este documento. La persistencia compartida devuelve `INSERT`, `UPDATE` o `SIN_CAMBIOS`: un cambio respalda la versión previa en `conciliacion.RevisionHistorico`, mientras una fila nueva o sin cambios no genera histórico. `SIN_CAMBIOS` requiere que coincidan importes, estatus activo, usuario y, cuando aplica, snapshot.
+La persistencia devuelve `INSERT`, `UPDATE` o `SIN_CAMBIOS`: un cambio respalda la versión previa en `conciliacion.RevisionHistorico`, mientras una fila nueva o sin cambios no genera histórico. El worker posterior a QNA reconoce estos conceptos como gestionados por movimientos, pero no los calcula ni los guarda.
 
-La generación de movimientos mantiene el lock del scope QNA durante cálculo y guardado. No se ejecuta en `APLICANDO_FIREBIRD` o `APLICACION_INCIERTA`, ni después de alcanzar `REVISA_PROGRAMADA` o `TERMINADO`; en esos estados la captura posterior a QNA es autoritativa y no puede ser sobrescrita por una reparación tardía de movimientos.
+La generación de movimientos mantiene el lock del scope QNA durante cálculo y guardado. No se ejecuta en `APLICANDO_FIREBIRD` o `APLICACION_INCIERTA`, ni después de alcanzar `REVISA_PROGRAMADA` o `TERMINADO`; así se evita una reparación tardía después del cierre QNA.
 
 ## Concepto 1: Saldo anterior
 
@@ -53,7 +53,7 @@ No se consulta `conciliacion.RevisionHistorico` para calcular el saldo anterior.
 
 ### Momentos de generación
 
-El concepto 1 se calcula por primera vez al finalizar movimientos, incluida la rama de cero movimientos, sin crear tarea REVISA. El worker posterior a QNA lo vuelve a calcular y actualiza, conserva o inserta la fila según el resultado de persistencia. Esta secuencia no modifica la fuente ni la regla de saldo anterior.
+El concepto 1 se calcula al finalizar movimientos, incluida la rama de cero movimientos, sin crear tarea REVISA. El worker posterior a QNA no lo recalcula ni modifica.
 
 ### Comportamiento sin antecedente
 
@@ -296,7 +296,7 @@ Si una condición no devuelve registros, se generará la fila del concepto con l
 
 ### Momentos de generación
 
-Los conceptos 3, 4 y 5 se calculan por primera vez al finalizar movimientos, incluida la rama de cero movimientos, sin crear tarea REVISA. El worker posterior a QNA los vuelve a calcular con `AP_G_FONDOS_ALTBAJ` y reconcilia las filas mediante `INSERT`, `UPDATE` o `SIN_CAMBIOS`, con histórico únicamente cuando existe actualización.
+Los conceptos 3, 4 y 5 se calculan al finalizar movimientos, incluida la rama de cero movimientos, sin crear tarea REVISA. El worker posterior a QNA no vuelve a consultar `AP_G_FONDOS_ALTBAJ` para estos conceptos ni modifica sus filas.
 
 ### Validación realizada para `1526`
 

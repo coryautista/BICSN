@@ -2,19 +2,19 @@
 
 ## Objetivo
 
-Conservar el contexto operativo del ciclo dual de REVISA para los conceptos 1, 3, 4 y 5: una primera generación al finalizar la aplicación de movimientos y una segunda generación dentro del worker posterior a la aplicación QNA.
+Conservar el contexto operativo de REVISA para los conceptos 1, 3, 4 y 5: se generan exclusivamente al finalizar la aplicación de movimientos y el worker posterior a QNA los conserva sin cambios.
 
 La implementación local es la fuente de verdad para el estado de este documento. `IMPLEMENTADO_LOCAL` significa que el código y las pruebas aisladas existen en el repositorio; no implica despliegue, migración aplicada ni prueba contra SQL Server o Firebird reales.
 
 ## Decisiones vigentes
 
 - La aplicación de movimientos y la aplicación QNA son procesos separados.
-- La primera generación ocurre cuando la aplicación de movimientos queda finalizada, incluso si la QNA no tenía movimientos elegibles.
-- La primera generación calcula únicamente los conceptos 1, 3, 4 y 5.
-- La primera generación no crea ni reclama una fila en `conciliacion.RevisionTarea`.
+- La generación ocurre cuando la aplicación de movimientos queda finalizada, incluso si la QNA no tenía movimientos elegibles.
+- Esa generación calcula únicamente los conceptos 1, 3, 4 y 5.
+- Esa generación no crea ni reclama una fila en `conciliacion.RevisionTarea`.
 - La aplicación QNA no aplica movimientos de afiliados.
-- Después de QNA, el worker persistente calcula el reporte automático completo y vuelve a calcular 1, 3, 4 y 5 con las mismas fuentes y fórmulas.
-- Ambas generaciones usan la persistencia vigente de `conciliacion.Revision` y `conciliacion.RevisionHistorico`.
+- Después de QNA, el worker persistente completa el reporte automático sin calcular ni guardar 1, 3, 4 y 5.
+- La generación de movimientos usa la persistencia vigente de `conciliacion.Revision` y `conciliacion.RevisionHistorico`.
 - La primera captura parcial no representa un reporte REVISA completo.
 - El frontend Entidad ejecuta esta primera generación de forma silenciosa al aplicar o finalizar movimientos; no muestra conceptos ni resultados REVISA.
 - El reporte REVISA se consulta y presenta únicamente en el frontend Administrador.
@@ -31,9 +31,9 @@ La implementación local es la fuente de verdad para el estado de este documento
 - Definir o implementar la exportación oficial del reporte.
 - Corregir automáticamente diferencias históricas, incluida la diferencia `FAT` de `0.04`.
 
-## Flujo en dos momentos
+## Flujos separados
 
-### Momento 1: finalización de movimientos
+### Finalización de movimientos
 
 ```text
 POST /v1/afiliado/aplicar-bdisssspea-lote
@@ -45,7 +45,7 @@ POST /v1/afiliado/aplicar-bdisssspea-lote
 -> responder revisionMovimientos
 ```
 
-Este momento es síncrono respecto de la respuesta del endpoint. `GenerarRevisionMovimientosService` construye un contexto de revisión sin tarea persistente y guarda los cuatro conceptos en una sola transacción SQL Server.
+Este flujo es síncrono respecto de la respuesta del endpoint. `GenerarRevisionMovimientosService` construye un contexto de revisión sin tarea persistente y guarda los cuatro conceptos en una sola transacción SQL Server.
 
 Entidad conserva el mismo endpoint y la misma acción. Cuando existen aprobados muestra `APLICAR MOVIMIENTOS`; cuando no hay aprobados pendientes muestra `FINALIZAR MOVIMIENTOS`. La respuesta puede incluir `revisionMovimientos`, pero Entidad no la presenta al usuario.
 
@@ -57,7 +57,7 @@ El frontend Entidad permite `FINALIZAR MOVIMIENTOS` en esos casos siempre que la
 
 Los conceptos 3, 4 y 5 se persisten con los nueve fondos en `0.00` cuando su condición no devuelve registros. El concepto 1 conserva su propia regla de saldo anterior y puede fallar si falta el antecedente requerido.
 
-### Momento 2: aplicación QNA y worker
+### Aplicación QNA y worker
 
 ```text
 aplicación QNA independiente
@@ -65,12 +65,12 @@ aplicación QNA independiente
 -> generar o reutilizar Línea de Pago
 -> programar o reutilizar RevisionTarea
 -> responder sin esperar REVISA
--> worker calcula el reporte automático completo
--> worker vuelve a calcular conceptos 1, 3, 4 y 5
+-> worker calcula los demás conceptos del reporte automático
+-> worker conserva conceptos 1, 3, 4 y 5 sin cambios
 -> guardar INSERT, UPDATE o SIN_CAMBIOS
 ```
 
-La aplicación QNA ejecuta sus procedimientos de QNA, pero no crea, recupera ni aplica movimientos de afiliados. El worker posterior reconcilia las filas 1, 3, 4 y 5 que pueden existir desde el primer momento y completa los demás conceptos automáticos activos.
+La aplicación QNA ejecuta sus procedimientos de QNA, pero no crea, recupera ni aplica movimientos de afiliados. El worker posterior reconoce 1, 3, 4 y 5 como conceptos gestionados por movimientos y completa únicamente los demás conceptos automáticos activos.
 
 ## Conceptos 1, 3, 4 y 5
 
@@ -149,7 +149,7 @@ La eliminación se limita a la presentación no navegable de Entidad. No elimina
 | Compatibilidad `EntidadId` de bitácora legacy | `PASS_LOCAL` | Sólo `NULL` o ausente se resuelve como `EntidadId=1`; valores presentes inválidos continúan bloqueados. |
 | Generar conceptos 1/3/4/5 al finalizar movimientos | `IMPLEMENTADO_LOCAL` | Servicio dedicado invocado por `AplicarBDIsspeaLoteCommand`. |
 | Omitir tarea en la primera generación | `IMPLEMENTADO_LOCAL` | El servicio no invoca `encolar` ni inserta `RevisionTarea`. |
-| Reconciliar 1/3/4/5 en el worker | `IMPLEMENTADO_LOCAL` | `RevisionWorker` conserva esos conceptos dentro del cálculo completo. |
+| Excluir 1/3/4/5 del worker QNA | `IMPLEMENTADO_LOCAL` | `RevisionWorker` los reconoce como gestionados por movimientos, sin calcularlos ni guardarlos. |
 | Persistencia e histórico idempotentes | `IMPLEMENTADO_LOCAL` | Guardado transaccional compartido con `INSERT`, `UPDATE` y `SIN_CAMBIOS`. |
 | Exponer contexto en respuesta de movimientos | `IMPLEMENTADO_LOCAL` | Respuesta incluye `EntidadId`, finalización, orgánicas 2/3 y resultados de revisión. |
 | Excluir carrera con aplicación QNA y worker | `IMPLEMENTADO_LOCAL` | Applock durante cálculo/guardado; estados Firebird activos/inciertos y REVISA ya programada/terminada responden 409. |
@@ -231,9 +231,11 @@ Después de ambas correcciones se completó la aplicación funcional en Desarrol
 - El concepto 1 depende del concepto 12 anterior; un antecedente faltante impide guardar los cuatro conceptos por la atomicidad del lote.
 - `AP_G_FONDOS_ALTBAJ` trabaja con orgánicas 0/1, pero REVISA persiste por orgánicas 0-3; esta asimetría puede requerir decisión funcional.
 - La persistencia y los cálculos 1/3/4/5 tienen evidencia rollback-only con SQL Server y Firebird reales de Desarrollo. La exclusión concurrente y los estados permitidos/bloqueados continúan cubiertos sólo por la prueba aislada con runner transaccional falso.
-- La aplicación funcional acredita el comportamiento del endpoint y el `COMMIT` de movimientos en Desarrollo. Todavía no acredita la reconciliación posterior a Aplicar QNA ni el reporte REVISA completo del worker.
+- La aplicación funcional acredita el comportamiento del endpoint y el `COMMIT` de movimientos en Desarrollo. La regresión futura debe confirmar que Aplicar QNA conserva 1/3/4/5 y completa el resto del reporte.
 
 ## Pendientes REVISA
+
+- La corrección de `PLAN_CORRECCION_CONCEPTOS_MOVIMIENTOS_QNA_1526.md` fue ejecutada en Desarrollo: el worker dejó de calcular 1/3/4/5 y el concepto 3 de `1526` fue restaurado desde el histórico previo, conservando el estado sustituido en un nuevo histórico.
 
 - Definir la participación funcional de `AP_S_MINIMOS`; actualmente está excluido.
 - Confirmar la diferencia histórica `FAT` de `0.04` respecto de `FAA + FAE`.

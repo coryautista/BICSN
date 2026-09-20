@@ -8,7 +8,7 @@ El cálculo de REVISA se ejecutará en segundo plano después de que la aplicaci
 
 ### Nota actual: ajuste por finalización de movimientos
 
-La implementación local agrega un momento anterior y separado para los conceptos 1, 3, 4 y 5. Al finalizar la aplicación de movimientos, incluso con cero movimientos elegibles, esos cuatro conceptos se calculan y persisten sin crear `RevisionTarea`. La aplicación QNA continúa como un proceso independiente: no aplica movimientos y, después de Línea de Pago, programa el worker que genera el reporte completo y reconcilia las filas 1/3/4/5 preexistentes.
+Los conceptos 1, 3, 4 y 5 se calculan y persisten exclusivamente al finalizar la aplicación de movimientos, incluso con cero movimientos elegibles, sin crear `RevisionTarea`. La aplicación QNA continúa como un proceso independiente: no aplica movimientos y su worker completa el resto del reporte sin recalcular ni modificar 1/3/4/5.
 
 Este ajuste no cambia las fuentes ni fórmulas de los conceptos. Su alcance operativo, estado real, recuperación, riesgos y pendientes se mantienen en [`SEGUIMIENTO_REVISA_MOVIMIENTOS_QNA.md`](./SEGUIMIENTO_REVISA_MOVIMIENTOS_QNA.md).
 
@@ -36,14 +36,14 @@ Este ajuste no cambia las fuentes ni fórmulas de los conceptos. Su alcance oper
 - Integración posterior a la generación o reutilización exitosa de Línea de Pago.
 - Cobertura de Línea de Pago automática y recuperación manual.
 - Reporte JSON de éxito o error en SFTP.
-- Cálculo de los conceptos automáticos 1 al 13, 15 y 16; el concepto 14 queda fuera del worker.
+- Cálculo en el worker de los conceptos automáticos 2 y 6 al 13, 15 y 16; los conceptos 1/3/4/5 pertenecen al cierre de movimientos y el concepto 14 queda fuera del worker.
 - Captura administrativa del concepto 14 sin reprocesar los conceptos automáticos.
 - Normalización del concepto 6 a la QNA par inmediata siguiente cuando la QNA solicitada es impar.
 - Cálculo del concepto 12 mediante `AP_G_SALDO_FONDO(org0, org1, periodo)`.
 - Aplicación anual de los conceptos 8 y 11 exclusivamente en período `01`; en `02-24` se guardan en cero sin consultar Firebird.
 - Cierre ordenado del worker ante `SIGINT` y `SIGTERM`.
 - Primera generación local de los conceptos 1, 3, 4 y 5 al finalizar movimientos, incluida la rama de cero movimientos, sin tarea persistente.
-- Reconciliación posterior de las filas 1, 3, 4 y 5 por el worker REVISA mediante la persistencia e histórico existentes.
+- Exclusión de los conceptos 1, 3, 4 y 5 del worker posterior a QNA para conservar la evidencia del cierre de movimientos.
 
 ### Pendiente funcional
 
@@ -286,7 +286,7 @@ finalizar aplicación de movimientos, incluso con cero movimientos
 -> responder con el resultado parcial de persistencia
 ```
 
-La aplicación QNA no aplica movimientos. Su worker posterior vuelve a calcular 1, 3, 4 y 5 y completa el resto del reporte automático. Por tanto, las filas creadas al finalizar movimientos son una captura parcial y no acreditan que la tarea QNA/REVISA esté `COMPLETADA`.
+La aplicación QNA no aplica movimientos. Su worker conserva sin cambios los conceptos 1, 3, 4 y 5 y completa el resto del reporte automático. Las filas creadas al finalizar movimientos siguen siendo una captura parcial y no acreditan por sí solas que la tarea QNA/REVISA esté `COMPLETADA`.
 
 Punto de integración confirmado en `AplicarBDIssspeaQNACommand`:
 
