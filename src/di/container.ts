@@ -66,7 +66,7 @@ import { DeleteAfiliadoCommand } from '../modules/afiliado/application/commands/
 import { CreateCompleteAfiliadoCommand } from '../modules/afiliado/application/commands/CreateCompleteAfiliadoCommand.js';
 import { AplicarBDIsspeaIndividualCommand } from '../modules/afiliado/application/commands/AplicarBDIsspeaIndividualCommand.js';
 import { AplicarBDIsspeaLoteCommand } from '../modules/afiliado/application/commands/AplicarBDIsspeaLoteCommand.js';
-import { AplicarBDIssspeaQNACommand, aplicarQnaDependencies } from '../modules/afiliado/application/commands/AplicarBDIssspeaQNACommand.js';
+import { AplicarBDIssspeaQNACommand, aplicarQnaDependenciesValues } from '../modules/afiliado/application/commands/AplicarBDIssspeaQNACommand.js';
 import { UpdateBitacoraAfectacionOrgTerminadoCommand } from '../modules/afiliado/application/commands/UpdateBitacoraAfectacionOrgTerminadoCommand.js';
 import { CargarSemanasExtemporaneasLoteCommand } from '../modules/afiliado/application/commands/CargarSemanasExtemporaneasLoteCommand.js';
 import { FormatoExtemporaneaRepository } from '../modules/afiliado/infrastructure/persistence/FormatoExtemporaneaRepository.js';
@@ -656,7 +656,7 @@ container.register({
   aplicarBDIsspeaIndividualCommand: asClass(AplicarBDIsspeaIndividualCommand).scoped(),
   aplicarBDIsspeaLoteCommand: asClass(AplicarBDIsspeaLoteCommand).scoped(),
   aplicarBDIssspeaQNACommand: asClass(AplicarBDIssspeaQNACommand).scoped(),
-  aplicarQnaDependencies: asValue(aplicarQnaDependencies),
+  aplicarQnaDependencies: asValue(aplicarQnaDependenciesValues),
   updateBitacoraAfectacionOrgTerminadoCommand: asClass(UpdateBitacoraAfectacionOrgTerminadoCommand).scoped(),
   cargarSemanasExtemporaneasLoteCommand: asClass(CargarSemanasExtemporaneasLoteCommand).scoped(),
   

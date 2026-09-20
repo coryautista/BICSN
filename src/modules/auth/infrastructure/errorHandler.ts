@@ -25,7 +25,8 @@ import {
   RegistrationFailedError,
   LoginFailedError,
   TokenRefreshFailedError,
-  LogoutFailedError
+  LogoutFailedError,
+  AdminOrganicaNotAllowedError
 } from '../domain/errors.js';
 
 const logger = pino({
@@ -152,6 +153,14 @@ export function handleAuthError(error: any, reply: FastifyReply): FastifyReply {
       resource: error.details?.resource
     }, 'Acceso no autorizado');
     return reply.code(403).send(fail('UNAUTHORIZED_ACCESS', 'Acceso no autorizado'));
+  }
+
+  if (error instanceof AdminOrganicaNotAllowedError) {
+    logger.warn({
+      ...logContext,
+      portal: error.details?.portal
+    }, 'Login admin rechazado por organica no permitida');
+    return reply.code(403).send(fail(error.message, 'ADMIN_ORGANICA_NOT_ALLOWED'));
   }
 
   if (error instanceof RateLimitExceededError) {

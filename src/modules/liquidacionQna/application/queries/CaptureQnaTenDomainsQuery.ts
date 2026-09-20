@@ -1,8 +1,8 @@
 import { randomUUID } from 'node:crypto';
-import { env } from '../../../../config/env.js';
 import type { IAportacionFondoRepository } from '../../../aportacionesFondos/domain/repositories/IAportacionFondoRepository.js';
 import type { QnaEnvironment } from '../../domain/entities/LiquidacionQna.js';
 import type { QnaCaptureScope, QnaTenDomainCapture } from '../../domain/entities/QnaTenDomainCapture.js';
+import { QNA_CURRENT_HIP_PROCEDURE } from '../../domain/services/LiquidacionQnaContracts.js';
 import { QnaTenDomainCaptureFactory } from '../../domain/services/QnaTenDomainCaptureFactory.js';
 
 export type CaptureQnaTenDomainsInput = QnaCaptureScope & {
@@ -17,9 +17,7 @@ export class CaptureQnaTenDomainsQuery {
 
   async execute(input: CaptureQnaTenDomainsInput): Promise<QnaTenDomainCapture> {
     const periodo = `${String(input.quincena).padStart(2, '0')}${String(input.anio).slice(-2)}`;
-    if (env.qna.hipLegacyPeriods === null) throw new Error('QNA_HIP_POLICY_NOT_CONFIGURED');
-    const hipLegacy = env.qna.hipLegacyPeriods.includes(periodo);
-    const hipProcedure = hipLegacy ? 'AP_S_COMP_QNA' : 'AP_S_HIP_QNA';
+    const hipProcedure = QNA_CURRENT_HIP_PROCEDURE;
     const [fondos, identidadesFai, guarderias, transitorio, aguinaldo, pcp, pmp, hip] = await Promise.all([
       this.aportacionFondoRepo.obtenerAportacionesCompletas(
         input.organica0,
@@ -33,7 +31,7 @@ export class CaptureQnaTenDomainsQuery {
       this.aportacionFondoRepo.obtenerAguinaldo(input.organica0, input.organica1, periodo),
       this.aportacionFondoRepo.obtenerPrestamos(input.organica0, input.organica1, periodo),
       this.aportacionFondoRepo.obtenerPrestamosMedianoPlazo(input.organica0, input.organica1, periodo),
-      this.aportacionFondoRepo.obtenerPrestamosHipotecarios(input.organica0, input.organica1, periodo, hipLegacy)
+      this.aportacionFondoRepo.obtenerPrestamosHipotecarios(input.organica0, input.organica1, periodo, false)
     ]);
 
     const guarderiasConInterno = guarderias.map((row) => {

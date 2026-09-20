@@ -2264,7 +2264,7 @@ export class AportacionFondoRepository implements IAportacionFondoRepository {
 
   /**
    * Obtiene pensión nómina transitorio ejecutando la función PENSION_NOMINA_QNAL_TRANSITORIO en Firebird
-   * Para pensionados: org0='04' y org1='60' son hardcodeados, org2 y org3 vienen del token del usuario
+   * org0/org1 ubican los datos de pensionados; org2/org3 identifican a la organica actora.
    */
   async obtenerPensionNominaTransitorio(
     org0: string,
@@ -2569,7 +2569,8 @@ export class AportacionFondoRepository implements IAportacionFondoRepository {
           ));
         }
       });
-    }, { org0, org1 });
+    // El destino 04/60 concentra los datos; CURRENT_USER debe auditar a la organica actora.
+    }, { org0: org2, org1: org3 });
   }
 
   /**

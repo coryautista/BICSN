@@ -10,7 +10,8 @@ import { env as config } from "../config/env.js";
 import iconv from "iconv-lite";
 import { createNativeClient, getDefaultLibraryFilename } from "node-firebird-driver-native";
 import type { Attachment, Transaction, TransactionOptions } from "node-firebird-driver";
-import { getFirebirdScopeCredentialLease, invalidateFirebirdScopeCredential, normalizeFirebirdOrg } from "./firebirdCatalog.js";
+import { getFirebirdScopeCredentialLease, invalidateFirebirdScopeCredential, normalizeFirebirdOrg, type RolContexto } from "./firebirdCatalog.js";
+import { firebirdRolContextoActual } from "./firebirdRolContexto.js";
 
 const POOL_SIZE = Number((config.firebird as any).poolSize || 5);
 const SERIALIZE_ALL = Boolean((config.firebird as any).serialize) || false;
@@ -30,6 +31,7 @@ function buildUri(): string {
 export interface FirebirdScope {
   org0: string;
   org1: string;
+  rolContexto?: RolContexto;
 }
 
 interface AttachmentEntry {
@@ -42,9 +44,13 @@ const attachments = new Map<string, AttachmentEntry>();
 const attachmentOpenings = new Map<string, Promise<AttachmentEntry>>();
 const DEFAULT_SCOPE_KEY = "__default__";
 
+function effectiveRolContexto(scope?: FirebirdScope): RolContexto {
+  return scope?.rolContexto ?? firebirdRolContextoActual() ?? 'OPERATIVO';
+}
+
 function scopeKey(scope?: FirebirdScope): string {
   return scope
-    ? `${normalizeFirebirdOrg(scope.org0)}|${normalizeFirebirdOrg(scope.org1)}`
+    ? `${normalizeFirebirdOrg(scope.org0)}|${normalizeFirebirdOrg(scope.org1)}|${effectiveRolContexto(scope)}`
     : DEFAULT_SCOPE_KEY;
 }
 
@@ -60,7 +66,7 @@ async function connectOptionsFor(scope?: FirebirdScope): Promise<{
   credentialExpiresAt: number;
 }> {
   if (scope) {
-    const { credential, expiresAt } = await getFirebirdScopeCredentialLease(scope.org0, scope.org1);
+    const { credential, expiresAt } = await getFirebirdScopeCredentialLease(scope.org0, scope.org1, effectiveRolContexto(scope));
     const options: any = { username: credential.user, password: credential.password };
     if (credential.role) options.role = credential.role;
     return { options, credentialExpiresAt: expiresAt };

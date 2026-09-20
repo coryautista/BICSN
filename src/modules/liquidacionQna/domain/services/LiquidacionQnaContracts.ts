@@ -11,11 +11,12 @@ import {
 } from '../entities/LiquidacionQna.js';
 import { qnaFail } from '../errors.js';
 import { QNA_AUXILIARY_PAYLOAD_V1_FIELDS } from './QnaAuxiliaryPayloadV1.js';
-import { env } from '../../../../config/env.js';
 
 export const MONEY_A2_PATTERN = /^-?(0|[1-9]\d*)\.\d{2}$/;
 export const MONEY_D6_PATTERN = /^-?(0|[1-9]\d*)\.\d{6}$/;
 export const HASH_PATTERN = /^[0-9A-F]{64}$/;
+
+export const QNA_CURRENT_HIP_PROCEDURE = 'AP_S_HIP_QNA' as const;
 
 function a2Units(value: MoneyA2): bigint {
   if (!MONEY_A2_PATTERN.test(value)) qnaFail('Importe A2 invalido', 'QNA_IMPORTE_A2_INVALIDO', 400);
@@ -136,7 +137,7 @@ export function validateQnaCandidate(input: CreateQnaCandidateInput, options: Qn
     validateQnaRetentionSemantics(input.detalles, input.fuentes, {
       ambiente: input.ambiente, anio: input.anio, quincena: input.quincena,
       organica0: input.organica0, organica1: input.organica1,
-    }, env.qna.hipLegacyPeriods, options);
+    }, options);
   }
   for (const [domain, totalName] of Object.entries(detailTotalNames)) {
     const source = input.fuentes.find(item => item.dominio === domain)!;
@@ -164,7 +165,6 @@ export function validateQnaRetentionSemantics(
   details: QnaSourceDetail[],
   sources: QnaSource[],
   context: QnaRetentionProvenanceContext,
-  hipLegacyPeriods: string[] | null,
   options: QnaValidationOptions = {},
 ): void {
   const sqlInt = { min: -2147483648, max: 2147483647 } as const;
@@ -181,7 +181,6 @@ export function validateQnaRetentionSemantics(
       integers: [['pno_solicitud', sqlInt], ['pano', sqlSmallInt], ['plazo', sqlInt]] },
   } as const;
   const historical = options.retentionProvenanceMode === 'PERSISTED_HISTORICAL';
-  if (!historical && hipLegacyPeriods === null) qnaFail('Politica HIP no configurada', 'QNA_HIP_POLICY_NOT_CONFIGURED', 500);
   const periodo = `${String(context.quincena).padStart(2, '0')}${String(context.anio).slice(-2)}`;
   for (const [domain, definition] of Object.entries(definitions)) {
     const source = sources.find((item) => item.dominio === domain);
@@ -190,7 +189,7 @@ export function validateQnaRetentionSemantics(
       qnaFail(`Fuente ${domain} incompatible`, 'QNA_RETENCION_SEMANTICA_INVALIDA', 400);
     }
     const procedure = domain === 'HIP'
-      ? (historical ? null : (hipLegacyPeriods!.includes(periodo) ? 'AP_S_COMP_QNA' : 'AP_S_HIP_QNA'))
+      ? (historical ? null : QNA_CURRENT_HIP_PROCEDURE)
       : definition.procedure;
     const expectedIdentifiers = domain === 'HIP' && historical
       ? ['AP_S_HIP_QNA','AP_S_COMP_QNA'].map(item => `FIREBIRD:${item}:${context.ambiente}:${periodo}:${context.organica0}:${context.organica1}`)

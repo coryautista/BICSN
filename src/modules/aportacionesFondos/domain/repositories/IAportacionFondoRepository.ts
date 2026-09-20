@@ -83,10 +83,10 @@ export interface IAportacionFondoRepository {
   
   // Obtener pensión nómina transitorio ejecutando función PENSION_NOMINA_QNAL_TRANSITORIO
   obtenerPensionNominaTransitorio(
-    org0: string,
-    org1: string,
-    org2: string,
-    org3: string,
+    dataOrg0: string,
+    dataOrg1: string,
+    actorOrg0: string,
+    actorOrg1: string,
     periodo: string,
     usarDiasLaboradosNomina?: boolean
   ): Promise<PensionNominaTransitorio[]>;

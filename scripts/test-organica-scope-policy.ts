@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
 import {
   OrganicaScopePolicyError,
   resolveOrganicaScope,
@@ -122,5 +123,42 @@ const adminTargetRepo = {
 await new GetAguinaldoQuery(adminTargetRepo as any).execute('', '', false, '04', '24', 'admin', false, '1526');
 await new GetAportacionGuarderiasQuery(adminTargetRepo as any).execute('', '', false, '04', '24', 'admin', false, '1526');
 await new GetPensionNominaTransitorioQuery(adminTargetRepo as any).execute('', '', false, '04', '24', 'admin', false, '1526');
+
+const repositorySource = await readFile(
+  new URL('../src/modules/aportacionesFondos/infrastructure/persistence/AportacionFondoRepository.ts', import.meta.url),
+  'utf8'
+);
+const transitorioStart = repositorySource.indexOf('async obtenerPensionNominaTransitorio(');
+const transitorioEnd = repositorySource.indexOf('async obtenerAguinaldo(', transitorioStart);
+assert(transitorioStart >= 0 && transitorioEnd > transitorioStart);
+const transitorioSource = repositorySource.slice(transitorioStart, transitorioEnd);
+assert.match(transitorioSource, /\}, \{ org0: org2, org1: org3 \}\);/);
+assert.doesNotMatch(transitorioSource, /\}, \{ org0, org1 \}\);/);
+
+const catalogSource = await readFile(new URL('../src/db/firebirdCatalog.ts', import.meta.url), 'utf8');
+assert.match(catalogSource, /FIREBIRD_CREDENCIAL_ORGANICA_USUARIO_TECNICO/);
+assert.match(catalogSource, /catalogUser\.localeCompare\(technicalUser/);
+assert.match(catalogSource, /FIREBIRD_CREDENCIAL_ROL_ENTIDAD_NO_CONFIGURADO/);
+assert.match(catalogSource, /RolFirebirdEntidad/);
+
+const { firebirdRolContextoActual, runWithFirebirdRolContexto, resolveRolContextoUsuario } = await import('../src/db/firebirdRolContexto.js');
+assert.equal(firebirdRolContextoActual(), null);
+assert.equal(resolveRolContextoUsuario({ entidades: [true] }), 'ENTIDAD');
+assert.equal(resolveRolContextoUsuario({ entidades: [false] }), 'OPERATIVO');
+assert.equal(resolveRolContextoUsuario({ entidades: [] }), 'OPERATIVO');
+assert.equal(resolveRolContextoUsuario(undefined), 'OPERATIVO');
+await runWithFirebirdRolContexto('ENTIDAD', async () => {
+  assert.equal(firebirdRolContextoActual(), 'ENTIDAD');
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(firebirdRolContextoActual(), 'ENTIDAD');
+});
+assert.equal(firebirdRolContextoActual(), null);
+
+const pluginSource = await readFile(new URL('../src/plugins/firebirdRolContexto.ts', import.meta.url), 'utf8');
+assert.match(pluginSource, /addHook\('onRoute'/);
+assert.match(pluginSource, /runWithFirebirdRolContexto\(resolverRolContexto\(req\), \(\) => handler\(req, reply\)\)/);
+
+const firebirdSource = await readFile(new URL('../src/db/firebird.ts', import.meta.url), 'utf8');
+assert.match(firebirdSource, /firebirdRolContextoActual\(\)/);
 
 console.log('ORGANICA_SCOPE_POLICY_TESTS_OK');

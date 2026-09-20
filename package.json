@@ -31,6 +31,8 @@
     "package:deploy:produccion": "tsx scripts/package-production-deploy.ts",
     "preflight:produccion:readonly": "tsx scripts/preflight-produccion-readonly.ts",
     "verify:produccion:v3:postmigration": "tsx scripts/verify-produccion-v3-postmigration-readonly.ts",
+    "recover:retenciones:q15:produccion": "tsx scripts/recover-retenciones-snapshot-produccion.ts --periodo=1526",
+    "recover:retenciones:q16:produccion": "tsx scripts/recover-retenciones-snapshot-produccion.ts --periodo=1626",
     "test:revision:concepto2:dias": "tsx scripts/test-revision-concepto2-dias.ts",
     "test:revision:ftp:opcional": "tsx scripts/test-revision-ftp-opcional.ts",
     "test:revision:estado:ftp:opcional": "tsx scripts/test-revision-estado-ftp-opcional.ts",

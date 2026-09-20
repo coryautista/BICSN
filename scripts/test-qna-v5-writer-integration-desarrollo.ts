@@ -6,7 +6,6 @@ const development = DATABASE_ENVIRONMENTS.DESARROLLO;
 process.env.SQLSERVER_DB = development.sqlDatabase;
 process.env.FIREBIRD_DATABASE = development.firebirdDatabase;
 process.env.FIREBIRD_READ_ONLY = 'true';
-process.env.QNA_HIP_LEGACY_PERIODS = '1526,1626';
 assertDatabaseEnvironment('DESARROLLO', process.env.SQLSERVER_DB, process.env.FIREBIRD_DATABASE);
 
 const scope = { entidadId: 1, anio: 2026, quincena: 15, organica0: '04', organica1: '24', organica2: '01', organica3: '01' };

@@ -145,16 +145,9 @@ Guarderias resuelve `titular_interno` en la misma consulta Firebird. La consulta
 
 ### Fuente HIP
 
-La seleccion entre `AP_S_HIP_QNA` y `AP_S_COMP_QNA` no se acepta desde HTTP. Se deriva de `QNA_HIP_LEGACY_PERIODS`:
+La captura automatica actual usa siempre `AP_S_HIP_QNA`, que corresponde a `computadora_antigua=false`. La seleccion no depende del periodo ni del ambiente.
 
-```text
-QNA_HIP_LEGACY_PERIODS=1526,1626
-QNA_HIP_LEGACY_PERIODS=NONE
-```
-
-Cada valor usa formato `QQAA`, con quincena entre `01` y `24`. Una configuracion ausente o invalida bloquea la captura.
-
-El valor operativo confirmado es `QNA_HIP_LEGACY_PERIODS=1526,1626`. La captura read-only de `1526` en Desarrollo verifico la seleccion de `AP_S_COMP_QNA`.
+`AP_S_COMP_QNA` se conserva exclusivamente para el flujo explicito `computadora_antigua=true`. Esa validacion todavia no forma parte de la orquestacion automatica de snapshots. Los snapshots historicos que ya registraron `AP_S_COMP_QNA` siguen siendo legibles como evidencia, pero no se usan como modelo para capturas nuevas.
 
 ## Multiplicidad
 

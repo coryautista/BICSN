@@ -8,6 +8,7 @@ import { fastifyAwilixPlugin } from '@fastify/awilix';
 import requestLoggerPlugin from './plugins/requestLogger.js';
 import loggerPlugin from './plugins/logger.js';
 import versioningPlugin from './plugins/versioning.js';
+import firebirdRolContextoPlugin from './plugins/firebirdRolContexto.js';
 import { container } from './di/container.js';
 import { env } from './config/env.js';
 import { connectDatabase, ping } from './db/mssql.js';
@@ -95,6 +96,7 @@ async function buildApp() {
   await app.register(requestLoggerPlugin);
   await app.register(loggerPlugin);
   await app.register(versioningPlugin);
+  await app.register(firebirdRolContextoPlugin);
 
   // Plugin para limpiar mojibake automáticamente de todas las respuestas
   const mojibakeCleanerPlugin = (await import('./plugins/mojibakeCleaner.js')).default;

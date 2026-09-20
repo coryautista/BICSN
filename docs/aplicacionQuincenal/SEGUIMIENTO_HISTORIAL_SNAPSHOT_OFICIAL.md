@@ -168,9 +168,9 @@ Riesgo aceptado: el principal runtime actual `usrISSSSPEA` pertenece a `db_owner
 - [x] Preservar filas repetidas, multiplicidad, hashes y orden canonico.
 - [x] Congelar recursivamente el agregado y prohibir relecturas posteriores.
 - [x] Dejar fuentes vacias como `EMPTY` sin aprobacion automatica.
-- [x] Retirar la seleccion HIP del contrato HTTP y validar estrictamente su configuracion.
+- [x] Fijar `AP_S_HIP_QNA` como fuente HIP de la captura automatica actual.
 - [x] Aprobar build, pruebas puras, orquestacion y revision sin bloqueos.
-- [x] Confirmar `QNA_HIP_LEGACY_PERIODS=1526,1626` como valor operativo.
+- [x] Corregir la asociacion indebida entre quincenas legacy y `AP_S_COMP_QNA`: este procedimiento solo corresponde a `computadora_antigua=true`, validacion aun no incorporada a la captura automatica.
 - [x] Ejecutar una captura read-only en Desarrollo con cero snapshots creados.
 - [x] Registrar los commits `3970da8` y `6327e70`.
 

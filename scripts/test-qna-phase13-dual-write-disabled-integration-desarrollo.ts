@@ -6,7 +6,6 @@ const development = DATABASE_ENVIRONMENTS.DESARROLLO;
 process.env.SQLSERVER_DB = development.sqlDatabase;
 process.env.FIREBIRD_DATABASE = development.firebirdDatabase;
 process.env.FIREBIRD_READ_ONLY = 'true';
-process.env.QNA_HIP_LEGACY_PERIODS = '1526,1626';
 process.env.QNA_LEGACY_DUAL_WRITE_ENABLED = 'false';
 assertDatabaseEnvironment('DESARROLLO', process.env.SQLSERVER_DB, process.env.FIREBIRD_DATABASE);
 

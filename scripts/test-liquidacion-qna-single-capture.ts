@@ -2,7 +2,6 @@ import assert from 'node:assert/strict';
 
 process.env.SQLSERVER_DB = 'SII-ISSSSPEA-DES';
 process.env.FIREBIRD_DATABASE = '/db/db/dbRestaura.fdb';
-process.env.QNA_HIP_LEGACY_PERIODS = '1526';
 
 const { CaptureQnaTenDomainsQuery } = await import('../src/modules/liquidacionQna/application/queries/CaptureQnaTenDomainsQuery.js');
 const { QNA_AUXILIARY_PAYLOAD_V1_FIELDS } = await import('../src/modules/liquidacionQna/domain/services/QnaAuxiliaryPayloadV1.js');
@@ -10,12 +9,6 @@ const { QnaOfficialSnapshotV5Factory } = await import('../src/modules/liquidacio
 const { calculateQnaEmployeeDetailHash, calculateQnaHash, validateQnaCandidate } = await import('../src/modules/liquidacionQna/domain/services/LiquidacionQnaContracts.js');
 const { calcularSnapshotCalculoV2Hash } = await import('../src/modules/aportacionesFondos/domain/services/SnapshotCalculoV2Hasher.js');
 const { LiquidacionQnaError } = await import('../src/modules/liquidacionQna/domain/errors.js');
-const { parseQnaHipLegacyPeriods } = await import('../src/config/env.js');
-
-assert.equal(parseQnaHipLegacyPeriods(undefined), null);
-assert.deepEqual(parseQnaHipLegacyPeriods('NONE'), []);
-assert.deepEqual(parseQnaHipLegacyPeriods('1526,0127,1526'), ['1526', '0127']);
-assert.throws(() => parseQnaHipLegacyPeriods('9926'), /QNA_HIP_LEGACY_PERIODS_INVALIDO/);
 
 function fundRow(tipo: string, totalD6: string) {
   return {
@@ -115,7 +108,7 @@ const repo = {
   obtenerPrestamosMedianoPlazo: once('pmp', [pmp]),
   obtenerPrestamosHipotecarios: async (...args: unknown[]) => {
     calls.set('hip', (calls.get('hip') ?? 0) + 1);
-    assert.equal(args[3], true);
+    assert.equal(args[3], false);
     return [hip];
   }
 };
@@ -129,7 +122,7 @@ const capture = await new CaptureQnaTenDomainsQuery(repo as any).execute({
 for (const name of ['fondos','fai','guarderias','transitorio','aguinaldo','pcp','pmp','hip']) {
   assert.equal(calls.get(name), 1, `${name} debe consultarse una vez`);
 }
-assert.equal(capture.hipProcedure, 'AP_S_COMP_QNA');
+assert.equal(capture.hipProcedure, 'AP_S_HIP_QNA');
 assert.equal(capture.nominaCargaId, '20');
 assert.equal(capture.auxiliares.GUARDERIAS.details[0].empleadoClave, '1');
 assert.equal(capture.auxiliares.GUARDERIAS.details[0].nombre, 'María  López');

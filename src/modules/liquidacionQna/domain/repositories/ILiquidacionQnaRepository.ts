@@ -46,6 +46,7 @@ export interface ILiquidacionQnaRepository {
   promote(id: string, motivo: string | null, usuarioId: string): Promise<PromoteQnaResult>;
   resolveOfficialById(id: string): Promise<QnaSnapshot | null>;
   resolveOfficialByScope(scope: QnaScope): Promise<QnaSnapshot | null>;
+  resolveProcessStateByScope(scope: QnaScope): Promise<QnaProcessState | null>;
   appendProcessTransition(id: string, destination: QnaProcessState, motivo: string | null, usuarioId: string, allowSame?: boolean): Promise<void>;
   beginOrResumeApplication(id: string, scope: QnaScope, usuarioId: string): Promise<QnaApplicationSnapshot>;
   resolveUncertainApplication(id: string, intentoUuid: string, scope: QnaScope, resolution: QnaManualResolution, motivo: string, evidencia: string, usuarioId: string): Promise<QnaManualResolutionResult>;

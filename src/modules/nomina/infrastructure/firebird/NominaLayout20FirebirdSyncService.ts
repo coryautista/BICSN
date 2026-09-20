@@ -117,13 +117,13 @@ export class NominaLayout20FirebirdSyncService {
     for (const registro of input.registros) await updateDetail(tx, input, lote, registro);
     const totals = await aggregateSummary(tx, input, lote);
     const fechaResumen = summaryDate(input);
-    const summaryParams = SUMMARY_NUMERIC_COLUMNS.map((column) => totals[column] ?? 0);
-    await tx.execute(`UPDATE AP_D_ORIGEN_RESUMEN SET ${SUMMARY_NUMERIC_COLUMNS.map((column) => `${column}=?`).join(', ')}, FMOV_ALT=? WHERE PERIODO=? AND ORG0=? AND ORG1=? AND TIPO='AN'`, [...summaryParams, fechaResumen, ...scope]);
+    const summaryParams = SUMMARY_UPDATABLE_NUMERIC_COLUMNS.map((column) => totals[column] ?? 0);
+    await tx.execute(`UPDATE AP_D_ORIGEN_RESUMEN SET ${SUMMARY_UPDATABLE_NUMERIC_COLUMNS.map((column) => `${column}=?`).join(', ')}, FMOV_ALT=? WHERE PERIODO=? AND ORG0=? AND ORG1=? AND TIPO='AN'`, [...summaryParams, fechaResumen, ...scope]);
 
     const final = await statusCounts(tx, scope);
-    const summary = await tx.query(`SELECT ${SUMMARY_NUMERIC_COLUMNS.join(', ')}, FMOV_ALT FROM AP_D_ORIGEN_RESUMEN WHERE PERIODO=? AND ORG0=? AND ORG1=? AND TIPO='AN'`, scope);
+    const summary = await tx.query(`SELECT ${SUMMARY_UPDATABLE_NUMERIC_COLUMNS.join(', ')}, FMOV_ALT FROM AP_D_ORIGEN_RESUMEN WHERE PERIODO=? AND ORG0=? AND ORG1=? AND TIPO='AN'`, scope);
     if (final.n !== 0 || final.p !== input.registros.length || summary.length !== 1) throw new NominaLayout20FirebirdSyncError('NOMINA_FIREBIRD_CONCILIACION_FALLIDA');
-    for (const key of SUMMARY_NUMERIC_COLUMNS) {
+    for (const key of SUMMARY_UPDATABLE_NUMERIC_COLUMNS) {
       if (money(number(summary[0], key)) !== money(totals[key] ?? 0)) throw new NominaLayout20FirebirdSyncError('NOMINA_FIREBIRD_TOTALES_INCONSISTENTES', `El campo ${key} no concilia.`);
     }
     assertSummaryDate(summary[0], fechaResumen);
@@ -174,8 +174,8 @@ async function updateDetail(tx: FirebirdTx, input: NominaLayout20FirebirdSyncInp
 function detailValues(input: NominaLayout20FirebirdSyncInput, lote: Lote, row: NominaAplicacionQnalRegistroParsed, personal: IdentifiedPersonal): unknown[] {
   const s = input.scope;
   return [
-    lote.anio, lote.quincena, row.tipoRegistro, '', row.rfc, row.clavePersonal, row.nombreAfiliado,
-    '', row.fechaMovimiento, row.sueldoMensual, row.ayudasMensuales ?? 0, row.quinqueniosMensual ?? 0,
+    lote.anio, lote.quincena, row.tipoRegistro, ' ', row.rfc, row.clavePersonal, row.nombreAfiliado,
+    ' ', row.fechaMovimiento, row.sueldoMensual, row.ayudasMensuales ?? 0, row.quinqueniosMensual ?? 0,
     row.baseCotizacionSueldo, row.baseCotizacionQuinquenios ?? 0,
     row.aportacionEntidadFondoAhorro ?? 0, 0, 0, 0,
     row.descuentoPrestamoCortoPlazo ?? 0, row.descuentoPrestamoHipotecario ?? 0, 0, 0,
@@ -260,10 +260,15 @@ async function aggregateSummary(tx: FirebirdTx, input: NominaLayout20FirebirdSyn
   return totals;
 }
 
+// Columnas que el legacy deja en NULL (el trigger AP_D_ORIGEN_RESUMEN_BI0 no las
+// normaliza a cero). Omitirlas del INSERT reproduce el resumen de Produccion.
+const SUMMARY_NULL_COLUMNS = ['FR_AFIL', 'PCP_N_NUEVOS', 'PCP_N_ALTAS', 'PCP_N_BAJAS', 'PCP_N_CANCELADO', 'PCP_N_DIRECTOS'] as const;
+
 async function insertSummary(tx: FirebirdTx, input: NominaLayout20FirebirdSyncInput, lote: Lote, totals: Record<string, number>, fechaResumen: Date) {
   const identity: Record<string, unknown> = { ORG0: input.scope.organica0, ORG1: input.scope.organica1, ORG2: input.scope.organica2, ORG3: input.scope.organica3, PERIODO: lote.periodo, TIPO: 'AN', FMOV_ALT: fechaResumen };
-  const params = SUMMARY_COLUMNS.map((column) => Object.hasOwn(identity, column) ? identity[column] : totals[column] ?? 0);
-  await tx.execute(`INSERT INTO AP_D_ORIGEN_RESUMEN (${SUMMARY_COLUMNS.join(', ')}) VALUES (${params.map(() => '?').join(', ')})`, params);
+  const columns = SUMMARY_COLUMNS.filter((column) => !(SUMMARY_NULL_COLUMNS as readonly string[]).includes(column));
+  const params = columns.map((column) => Object.hasOwn(identity, column) ? identity[column] : totals[column] ?? 0);
+  await tx.execute(`INSERT INTO AP_D_ORIGEN_RESUMEN (${columns.join(', ')}) VALUES (${params.map(() => '?').join(', ')})`, params);
 }
 
 function value(row: Record<string, unknown> | undefined, key: string): unknown {
@@ -293,3 +298,4 @@ async function aggregate(tx: FirebirdTx, name: string, sql: string, params: unkn
 }
 
 const SUMMARY_NUMERIC_COLUMNS = SUMMARY_COLUMNS.filter((column) => !['ORG0', 'ORG1', 'ORG2', 'ORG3', 'PERIODO', 'TIPO', 'FMOV_ALT'].includes(column));
+const SUMMARY_UPDATABLE_NUMERIC_COLUMNS = SUMMARY_NUMERIC_COLUMNS.filter((column) => !(SUMMARY_NULL_COLUMNS as readonly string[]).includes(column));

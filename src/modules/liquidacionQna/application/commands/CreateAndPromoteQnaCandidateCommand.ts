@@ -2,6 +2,7 @@ import { env } from '../../../../config/env.js';
 import { resolveDatabaseEnvironment } from '../../../../config/databaseEnvironments.js';
 import type { ILiquidacionQnaRepository } from '../../domain/repositories/ILiquidacionQnaRepository.js';
 import { qnaFail } from '../../domain/errors.js';
+import { QNA_CURRENT_HIP_PROCEDURE } from '../../domain/services/LiquidacionQnaContracts.js';
 import { QnaOfficialSnapshotV5Factory, type QnaNotApplicableApproval } from '../../domain/services/QnaOfficialSnapshotV5Factory.js';
 import type { AppendQnaDecisionCommand } from './AppendQnaDecisionCommand.js';
 import type { PromoteQnaSnapshotCommand } from './PromoteQnaSnapshotCommand.js';
@@ -56,6 +57,27 @@ export class CreateAndPromoteQnaCandidateCommand {
     const approvals = input.notApplicableApprovals ?? [];
     if (approvals.length > 0 && !(input.roles ?? []).some((role) => role.trim().toLowerCase() === 'admin')) {
       qnaFail('La aprobacion NOT_APPLICABLE requiere rol administrativo', 'QNA_NOT_APPLICABLE_REQUIERE_ADMIN', 403);
+    }
+    const oficialExistente = await this.liquidacionQnaRepo.resolveOfficialByScope(scope);
+    if (oficialExistente) {
+      const periodo = `${String(scope.quincena).padStart(2, '0')}${String(scope.anio).slice(-2)}`;
+      const expectedHipSource = `FIREBIRD:${QNA_CURRENT_HIP_PROCEDURE}:${ambiente}:${periodo}:${scope.organica0}:${scope.organica1}`;
+      const hipSource = oficialExistente.fuentes.find((source) => source.dominio === 'HIP');
+      if (hipSource?.identificadorFuente === expectedHipSource) {
+        return {
+          liquidacionSnapshotId: oficialExistente.liquidacionSnapshotId,
+          revision: oficialExistente.revision,
+          hashContenido: oficialExistente.hashContenido,
+          idempotente: true,
+          promovido: true,
+          promoted: true,
+        };
+      }
+      const processState = await this.liquidacionQnaRepo.resolveProcessStateByScope(scope);
+      if (processState !== 'FIREBIRD_REVERTIDO') {
+        qnaFail('El snapshot oficial tiene una procedencia HIP incompatible y no puede reemplazarse',
+          'QNA_OFICIAL_HIP_INCOMPATIBLE', 409);
+      }
     }
     const candidate = await this.liquidacionQnaRepo.createOfficialV5FromCapture(scope, async () => {
       const capture = await this.captureQnaTenDomainsQuery.execute({ ...scope, ambiente, usuarioId: input.usuarioId });

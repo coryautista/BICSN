@@ -158,8 +158,11 @@ function parseDate(
   const year = Number(cleanValue.slice(0, 4));
   const month = Number(cleanValue.slice(4, 6));
   const day = Number(cleanValue.slice(6, 8));
-  const parsed = new Date(Date.UTC(year, month - 1, day));
-  if (parsed.getUTCFullYear() !== year || parsed.getUTCMonth() + 1 !== month || parsed.getUTCDate() !== day) {
+  // Fecha en hora local (medianoche local): el sistema legacy graba la fecha tal
+  // como viene en el TXT. Usar Date.UTC provocaba un dia menos al persistir en
+  // Firebird con zona horaria local (GMT-6).
+  const parsed = new Date(year, month - 1, day);
+  if (parsed.getFullYear() !== year || parsed.getMonth() + 1 !== month || parsed.getDate() !== day) {
     errores.push({ numeroLinea, campo, mensaje: `${campo} no es una fecha válida.` });
     return null;
   }

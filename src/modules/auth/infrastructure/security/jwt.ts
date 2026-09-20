@@ -10,6 +10,7 @@ type AccessClaims = {
   jti: string;
   iss: string;
   aud: string;
+  portal?: string;
   idOrganica0?: string | null;
   idOrganica1?: string | null;
   idOrganica2?: string | null;
@@ -23,7 +24,8 @@ export function signAccessToken(
   idOrganica0?: string | null,
   idOrganica1?: string | null,
   idOrganica2?: string | null,
-  idOrganica3?: string | null
+  idOrganica3?: string | null,
+  portal?: string
 ) {
   const jti = uuidv4();
   const payload: AccessClaims = {
@@ -33,6 +35,7 @@ export function signAccessToken(
     jti,
     iss: env.jwt.iss,
     aud: env.jwt.aud,
+    ...(portal ? { portal } : {}),
     idOrganica0,
     idOrganica1,
     idOrganica2,

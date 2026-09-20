@@ -4,6 +4,7 @@ import { signAccessToken, generateRefreshToken } from '../../infrastructure/secu
 import {
   InvalidCredentialsError,
   AccountLockedError,
+  AdminOrganicaNotAllowedError,
   LoginFailedError,
   RateLimitExceededError
 } from '../../domain/errors.js';
@@ -21,6 +22,7 @@ export interface LoginInput {
   password: string;
   ip?: string;
   userAgent?: string;
+  portal?: 'admin';
 }
 
 export interface LoginOutput {
@@ -106,13 +108,34 @@ export class LoginCommand {
         throw new InvalidCredentialsError({ reason: 'invalid_password' });
       }
 
-      // 4. Get roles
+      // 4. Portal restriction: admin portal only allows organica 04-24
+      if (input.portal === 'admin') {
+        const normalizeOrganica = (value?: string | null) =>
+          typeof value === 'string' ? value.trim().padStart(2, '0') : '';
+
+        const org0 = normalizeOrganica(user.idOrganica0);
+        const org1 = normalizeOrganica(user.idOrganica1);
+
+        if (org0 !== '04' || org1 !== '24') {
+          logger.warn('Intento de login admin rechazado por organica no permitida', {
+            userId: user.id,
+            username: user.username,
+            org0: user.idOrganica0,
+            org1: user.idOrganica1,
+            ip: input.ip,
+            userAgent: input.userAgent
+          });
+          throw new AdminOrganicaNotAllowedError({ portal: 'admin' });
+        }
+      }
+
+      // 5. Get roles
       logger.debug('Obteniendo roles del usuario');
       const roles = await this.authRepo.getUserRoles(user.id);
       const roleNames = roles.map(r => r.name);
       const isEntidades = roles.map(r => r.isEntidad);
 
-      // 5. Generate tokens
+      // 6. Generate tokens
       logger.debug('Generando tokens de acceso');
       const accessTokenData = signAccessToken(
         user.id,
@@ -121,12 +144,13 @@ export class LoginCommand {
         user.idOrganica0,
         user.idOrganica1,
         user.idOrganica2,
-        user.idOrganica3
+        user.idOrganica3,
+        input.portal
       );
 
       const { token: refreshToken, hash: refreshHash, ttlMinutes } = generateRefreshToken();
 
-      // 6. Store refresh token
+      // 7. Store refresh token
       logger.debug('Almacenando token de refresh');
       await this.authRepo.issueRefreshToken(
         user.id,
@@ -136,7 +160,7 @@ export class LoginCommand {
         input.userAgent
       );
 
-      // 7. Register successful login
+      // 8. Register successful login
       await this.authRepo.registerSuccessfulLogin(user.id);
 
       logger.info('Login exitoso', {
@@ -158,6 +182,7 @@ export class LoginCommand {
     } catch (error) {
       if (error instanceof InvalidCredentialsError ||
           error instanceof AccountLockedError ||
+          error instanceof AdminOrganicaNotAllowedError ||
           error instanceof RateLimitExceededError) {
         throw error;
       }

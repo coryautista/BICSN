@@ -15,8 +15,36 @@ El proposito es exclusivamente auditoria y trazabilidad. No es row-level securit
 1. **Sin fallback silencioso**: si una organica no tiene fila activa en el catalogo, la operacion se rechaza con error explicito (`FIREBIRD_CREDENCIAL_ORGANICA_NO_CONFIGURADA`) indicando que el DBA debe darla de alta. No se conecta con el usuario default.
 2. **Alcance total**: todas las llamadas Firebird (escritura y lectura) migran a conexion por organica en una sola entrega, no por fases de dominios.
 3. **Auditoria automatica**: la columna de auditoria se llena por `CURRENT_USER` sin intervencion del backend; la verificacion solo comprueba el usuario efectivo de la conexion.
-4. **Rol parametrizado**: `RolFirebird` es una columna del catalogo por fila. La primera fila se precarga con los datos actuales para `04`/`24` (usuario y rol vigentes en env, p. ej. DES + R_DESARROLLO en Desarrollo).
+4. **Rol parametrizado**: `RolFirebird` es una columna del catalogo por fila. Una semilla tecnica puede servir exclusivamente para validar infraestructura durante el rollout, pero antes de habilitar operaciones de negocio debe sustituirse por la cuenta Firebird propia de la organica.
 5. **Administracion**: el alta y rotacion de usuarios Firebird las realiza el DBA fuera del sistema; el backend solo lee el catalogo SQL y nunca crea usuarios.
+6. **Scope actor, no destino de datos**: la llave `org0`/`org1` del catalogo identifica a la dependencia autorizada que origina la operacion. Si los datos estan concentrados bajo otra organica, esa ubicacion se conserva en los parametros SQL pero no selecciona la credencial.
+
+### Regla para consultas con organicas distintas
+
+Una llamada puede manejar dos scopes independientes:
+
+| Scope | Proposito | Ejemplo transitorio de 04/24 |
+|---|---|---|
+| `credentialScope` | Seleccionar usuario, rol y attachment; determina `CURRENT_USER` | `04/24` |
+| `dataScope` | Localizar o filtrar los datos en Firebird | `04/60` |
+
+Para `PENSION_NOMINA_QNAL_TRANSITORIO`, `ORG0=04` y `ORG1=60` indican donde se
+concentran los pensionados; `ORG2=04` y `ORG3=24` identifican la organica
+solicitante. La conexion debe usar la credencial `04/24`. Dar de alta `04/60`
+para solventar este caso produciria una auditoria incorrecta porque
+`CURRENT_USER` dejaria de identificar a la dependencia solicitante.
+
+La credencial `04/24` debe resolver al usuario Firebird asignado por el DBA a
+esa entidad. No debe resolver a `DES`: guardar `DES` bajo la llave `04/24`
+selecciona el scope correcto, pero conserva una identidad de auditoria
+incorrecta. El usuario de ambiente permanece unicamente para health y
+diagnosticos tecnicos sin scope.
+
+Si `UsuarioFirebird` coincide con el usuario tecnico configurado en
+`FIREBIRD_USER`, el backend rechaza la operacion con
+`FIREBIRD_CREDENCIAL_ORGANICA_USUARIO_TECNICO`. La correccion operativa es que
+el DBA cree o asigne la cuenta propia, conceda el rol necesario y rote la fila
+del catalogo; no se permite desactivar la validacion ni usar fallback.
 
 ## Diseño
 
@@ -141,6 +169,8 @@ mezclarse con la habilitacion del catalogo Firebird en Calidad o Produccion.
 | Llamada olvidada sin scope | Tipado del scope + grep final sobre exports de `firebird.ts` |
 | Credencial rotada en catalogo sigue en cache | TTL maximo 5 min; rechazo 401 de Firebird fuerza re-lectura inmediata |
 | Organica sin alta produce fallo en operacion | Error explicito documentado; es el comportamiento acordado |
+| Destino de datos confundido con organica actora | Contratos y llamadas separan `credentialScope` de `dataScope`; prueba de regresion para actor 04/24 y datos 04/60 |
+| Fila de organica poblada con usuario tecnico | Verificar que `CURRENT_USER` sea la cuenta propia asignada por el DBA y no `DES` antes de habilitar negocio |
 | Mezcla con matriz de ambientes | Respetar `DATABASE_ENVIRONMENTS.md`; no alterar parejas SQL/Firebird |
 | Fuga de secretos | Cifrado AES-256-GCM; health y logs nunca exponen secretos ni ciphertext |
 

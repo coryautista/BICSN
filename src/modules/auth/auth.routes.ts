@@ -236,6 +236,98 @@ export default async function authRoutes(app: FastifyInstance) {
     }
   });
 
+  app.post('/auth/admin/login', {
+    schema: {
+      description: 'Login exclusivo del portal Administrador: exige organica 04-24',
+      tags: ['auth'],
+      body: {
+        type: 'object',
+        required: ['usernameOrEmail', 'password'],
+        properties: {
+          usernameOrEmail: { type: 'string', minLength: 3 },
+          password: { type: 'string', minLength: 1 }
+        }
+      },
+      response: {
+        200: {
+          type: 'object',
+          properties: {
+            ok: { type: 'boolean' },
+            data: {
+              type: 'object',
+              properties: {
+                userId: { type: 'string' },
+                username: { type: 'string' },
+                accessToken: { type: 'string' },
+                accessExp: { type: 'number' }
+              }
+            }
+          }
+        },
+        400: {
+          type: 'object',
+          properties: {
+            ok: { type: 'boolean' },
+            error: { type: 'object', properties: { code: { type: 'string' }, message: { type: 'string' } } }
+          }
+        },
+        401: {
+          type: 'object',
+          properties: {
+            ok: { type: 'boolean' },
+            error: { type: 'object', properties: { code: { type: 'string' }, message: { type: 'string' } } }
+          }
+        },
+        403: {
+          type: 'object',
+          properties: {
+            ok: { type: 'boolean' },
+            error: { type: 'object', properties: { code: { type: 'string' }, message: { type: 'string' } } }
+          }
+        },
+        423: {
+          type: 'object',
+          properties: {
+            ok: { type: 'boolean' },
+            error: { type: 'object', properties: { code: { type: 'string' }, message: { type: 'string' } } }
+          }
+        },
+        500: {
+          type: 'object',
+          properties: {
+            ok: { type: 'boolean' },
+            error: { type: 'object', properties: { code: { type: 'string' }, message: { type: 'string' } } }
+          }
+        }
+      }
+    }
+  }, async (req, reply) => {
+    const parsed = LoginSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return reply.code(400).send(fail(parsed.error.message));
+    }
+    try {
+      const ip = req.ip;
+      const ua = req.headers['user-agent'] as string | undefined;
+
+      const loginCommand = req.diScope.resolve<LoginCommand>('loginCommand');
+      const { userId, username, accessToken, accessExp, refreshToken } =
+        await loginCommand.execute({
+          usernameOrEmail: parsed.data.usernameOrEmail,
+          password: parsed.data.password,
+          ip,
+          userAgent: ua,
+          portal: 'admin'
+        });
+
+      setCookie(reply, 'refresh_token', refreshToken, '/v1/auth');
+      setCookie(reply, 'access_token', accessToken, '/');
+      return reply.send(ok({ userId, username, accessToken, accessExp }));
+    } catch (error) {
+      return handleAuthError(error, reply);
+    }
+  });
+
   app.post('/auth/refresh', {
     schema: {
       description: 'Refresh access token',

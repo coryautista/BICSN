@@ -17,6 +17,8 @@ assertDatabaseEnvironment('DESARROLLO', process.env.SQLSERVER_DB, process.env.FI
 const files = [
   '../database/migrations/20260902_24_create_firebird_organica_credential.sql',
   '../database/migrations/20260902_25_verify_firebird_organica_credential.sql',
+  '../database/migrations/20260913_26_add_firebird_organica_credential_rol_entidad.sql',
+  '../database/migrations/20260913_27_verify_firebird_organica_credential_rol_entidad.sql',
 ] as const;
 
 const { connectDatabase, closeDatabaseConnection } = await import('../src/db/mssql.js');

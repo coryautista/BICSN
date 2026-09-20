@@ -65,7 +65,7 @@ export interface AplicarQnaDependencies {
   clearHeartbeatInterval?: (timer: ReturnType<typeof setInterval>) => void;
 }
 
-export const aplicarQnaDependencies: AplicarQnaDependencies = {
+export const aplicarQnaDependenciesValues: AplicarQnaDependencies = {
   executeFirebirdTransaction: executeInTransactionWithOutcome,
   verificarAP_DN_APLICAR,
   ejecutarAP_DN_APLICAR,

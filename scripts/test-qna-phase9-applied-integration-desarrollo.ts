@@ -5,7 +5,6 @@ import { DATABASE_ENVIRONMENTS, assertDatabaseEnvironment } from '../src/config/
 const development = DATABASE_ENVIRONMENTS.DESARROLLO;
 process.env.SQLSERVER_DB = development.sqlDatabase;
 process.env.FIREBIRD_DATABASE = development.firebirdDatabase;
-process.env.QNA_HIP_LEGACY_PERIODS = 'NONE';
 assertDatabaseEnvironment('DESARROLLO', process.env.SQLSERVER_DB, process.env.FIREBIRD_DATABASE);
 
 const { connectDatabase, closeDatabaseConnection } = await import('../src/db/mssql.js');

@@ -29,7 +29,7 @@ const pool = await connectDatabase();
 try {
   const result = await pool.request().query(`
     SELECT Org0, Org1, UsuarioFirebird, CONVERT(VARCHAR(MAX), SecretoCifrado, 2) AS SecretoHex,
-      RolFirebird, Activo, FechaAlta, FechaRotacion, DATALENGTH(SecretoCifrado) AS SecretoBytes
+      RolFirebird, RolFirebirdEntidad, Activo, FechaAlta, FechaRotacion, DATALENGTH(SecretoCifrado) AS SecretoBytes
     FROM config.FirebirdOrganicaCredential
     ORDER BY Org0, Org1;
   `);
@@ -56,6 +56,7 @@ try {
     filas: rows.map((row) => ({
       org0: String(row.Org0), org1: String(row.Org1),
       usuario: String(row.UsuarioFirebird), rol: row.RolFirebird == null ? null : String(row.RolFirebird),
+      rolEntidad: row.RolFirebirdEntidad == null ? null : String(row.RolFirebirdEntidad),
       activo: Boolean(row.Activo), secretoBytes: Number(row.SecretoBytes),
       fechaAlta: row.FechaAlta, fechaRotacion: row.FechaRotacion,
     })),

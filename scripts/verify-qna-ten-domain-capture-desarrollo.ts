@@ -15,7 +15,6 @@ const scope = {
 process.env.SQLSERVER_DB = DEVELOPMENT.sqlDatabase;
 process.env.FIREBIRD_DATABASE = DEVELOPMENT.firebirdDatabase;
 process.env.FIREBIRD_READ_ONLY = 'true';
-process.env.QNA_HIP_LEGACY_PERIODS = '1526,1626';
 assertDatabaseEnvironment('DESARROLLO', process.env.SQLSERVER_DB, process.env.FIREBIRD_DATABASE);
 
 async function main(): Promise<void> {
@@ -43,7 +42,7 @@ async function main(): Promise<void> {
     const snapshotsAfter = await countSnapshots(pool);
 
     assert.equal(capture.periodo, '1526');
-    assert.equal(capture.hipProcedure, 'AP_S_COMP_QNA');
+    assert.equal(capture.hipProcedure, 'AP_S_HIP_QNA');
     assert.equal(snapshotsAfter, snapshotsBefore, 'La captura read-only no debe crear snapshots');
 
     console.log(JSON.stringify({

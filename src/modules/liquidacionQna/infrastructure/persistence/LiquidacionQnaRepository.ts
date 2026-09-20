@@ -1221,7 +1221,17 @@ export class LiquidacionQnaRepository implements ILiquidacionQnaRepository {
           legacyProjectionStatus: legacyProjection.status, legacyProjectionDetails: legacyProjection.details };
       }
       if (current && priorState !== 'OFICIAL') {
-        qnaFail('No se puede reemplazar una liquidacion cuyo procesamiento ya inicio', 'QNA_OFICIAL_PROCESAMIENTO_INICIADO', 409);
+        let rollbackReplaceable = false;
+        if (priorState === 'FIREBIRD_REVERTIDO') {
+          const openAttempt = await new sql.Request(transaction).input('ProcesoId', sql.BigInt, processId).query(`
+            SELECT TOP (1) QnaAplicacionIntentoId
+            FROM liquidacion.QnaAplicacionIntento WITH (UPDLOCK,HOLDLOCK)
+            WHERE QnaProcesoId=@ProcesoId AND (Activo=1 OR Estado<>'REVERTIDO');`);
+          rollbackReplaceable = openAttempt.recordset.length === 0;
+        }
+        if (!rollbackReplaceable) {
+          qnaFail('No se puede reemplazar una liquidacion cuyo procesamiento ya inicio', 'QNA_OFICIAL_PROCESAMIENTO_INICIADO', 409);
+        }
       }
       const type = current ? 'REEMPLAZADO' : 'SELECCIONADO';
       const eventResult = await new sql.Request(transaction).input('ProcesoId', sql.BigInt, processId).input('Id', sql.BigInt, id)
@@ -1274,6 +1284,17 @@ export class LiquidacionQnaRepository implements ILiquidacionQnaRepository {
         AND p.Organica0=@Organica0 AND p.Organica1=@Organica1 AND p.Organica2=@Organica2 AND p.Organica3=@Organica3`);
     const id = result.recordset[0]?.LiquidacionSnapshotId;
     return id ? this.resolveOfficialById(String(id)) : null;
+  }
+
+  async resolveProcessStateByScope(scope: QnaScope): Promise<QnaProcessState | null> {
+    const result = await this.scope(this.mssqlPool.request(), scope).query(`
+      SELECT TOP (1) t.EstadoDestino
+      FROM liquidacion.QnaProceso p
+      JOIN liquidacion.QnaProcesoTransicion t ON t.QnaProcesoId=p.QnaProcesoId
+      WHERE p.EntidadId=@EntidadId AND p.Anio=@Anio AND p.Quincena=@Quincena
+        AND p.Organica0=@Organica0 AND p.Organica1=@Organica1 AND p.Organica2=@Organica2 AND p.Organica3=@Organica3
+      ORDER BY t.FechaCreacion DESC,t.QnaProcesoTransicionId DESC;`);
+    return (result.recordset[0]?.EstadoDestino as QnaProcessState | undefined) ?? null;
   }
 
   async beginOrResumeApplication(id: string, requestedScope: QnaScope, usuarioId: string,ambientTransaction?:Transaction): Promise<QnaApplicationSnapshot> {

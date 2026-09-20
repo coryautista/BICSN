@@ -54,6 +54,18 @@ export class AccountDisabledError extends DomainError {
   }
 }
 
+// Errores de acceso por portal
+export class AdminOrganicaNotAllowedError extends DomainError {
+  constructor(details?: any) {
+    super(
+      'El acceso al sistema de administración está permitido únicamente para usuarios de la orgánica 04-24.',
+      'ADMIN_ORGANICA_NOT_ALLOWED',
+      403,
+      details
+    );
+  }
+}
+
 // Errores de tokens JWT
 export class InvalidTokenError extends DomainError {
   constructor(tokenType: string = 'token', details?: any) {

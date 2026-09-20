@@ -1,18 +1,6 @@
 import 'dotenv/config';
 import { resolveSqlDatabaseEnvironment } from './databaseEnvironments.js';
 
-export function parseQnaHipLegacyPeriods(value: string | undefined): string[] | null {
-  if (value === undefined) return null;
-  const normalized = value.trim().toUpperCase();
-  if (normalized === 'NONE') return [];
-  if (!normalized) throw new Error('QNA_HIP_LEGACY_PERIODS_INVALIDO');
-  const periods = normalized.split(',').map((period) => period.trim());
-  if (periods.some((period) => !/^(0[1-9]|1\d|2[0-4])\d{2}$/.test(period))) {
-    throw new Error('QNA_HIP_LEGACY_PERIODS_INVALIDO');
-  }
-  return [...new Set(periods)];
-}
-
 export function parseQnaLegacyDualWriteEnabled(value: string | undefined): boolean {
   if (value === undefined) return true;
   const normalized = value.trim().toLowerCase();
@@ -69,7 +57,6 @@ export const env = {
     snapshotCalculoV2OfficialReadEnabled: process.env.SNAPSHOT_CALCULO_V2_OFFICIAL_READ_ENABLED === 'true'
   },
   qna: {
-    hipLegacyPeriods: parseQnaHipLegacyPeriods(process.env.QNA_HIP_LEGACY_PERIODS),
     legacyDualWriteEnabled
   },
   firebirdCatalog: {
