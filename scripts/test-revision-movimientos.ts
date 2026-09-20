@@ -270,8 +270,9 @@ assert.match(routeSource, /error\.code === "REVISION_MOVIMIENTOS_GENERACION_ERRO
 assert.match(routeSource, /REVISION_MOVIMIENTOS_QNA_NO_DISPONIBLE[\s\S]*code\(409\)/);
 assert.match(routeSource, /entidadId: resultado\.entidadId/);
 for (const numeroConcepto of [1, 3, 4, 5]) {
-  assert.match(workerSource, new RegExp(`numeroConcepto: ${numeroConcepto}`), `El worker QNA debe recalcular el concepto ${numeroConcepto}`);
+  assert.doesNotMatch(workerSource, new RegExp(`numeroConcepto: ${numeroConcepto}[,\\s]`), `El worker QNA no debe recalcular el concepto ${numeroConcepto}`);
 }
+assert.match(workerSource, /conceptosGestionadosPorMovimientos = \[1, 3, 4, 5\]/);
 assert.match(revisionRepoSource, /INSERT INTO conciliacion\.RevisionHistorico[\s\S]*UPDATE conciliacion\.Revision/);
 assert.match(revisionRepoSource, /operacion: 'SIN_CAMBIOS'/);
 assert.match(qnaCommandSource, /scheduleRevisionFromSnapshot/);

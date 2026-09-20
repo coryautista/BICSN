@@ -77,11 +77,6 @@ export class RevisionWorker {
       const activos = new Map(catalogoActivo.map((item) => [item.numeroConcepto, item.concepto]));
       const definicionesDisponibles: DefinicionConcepto[] = [
         {
-          numeroConcepto: 1,
-          fuente: 'conciliacion.Revision (concepto 12 activo del período anterior)',
-          calcular: () => this.revisionRepo.calcularSaldoAnterior(tarea)
-        },
-        {
           numeroConcepto: 2,
           fuente: tarea.liquidacionSnapshotId
             ? 'liquidacion.QnaSnapshotTotal (snapshot oficial COMPLETE; importes A2)'
@@ -89,21 +84,6 @@ export class RevisionWorker {
           calcular: () => tarea.liquidacionSnapshotId
             ? this.revisionRepo.calcularAplicacionQuincenalSnapshot(tarea)
             : this.revisionRepo.calcularAplicacionQuincenal(tarea)
-        },
-        {
-          numeroConcepto: 3,
-          fuente: "AP_G_FONDOS_ALTBAJ (CVE_MOVIMIENTO = 'AL')",
-          calcular: () => this.revisionRepo.calcularAltasBajas(tarea, 'AL')
-        },
-        {
-          numeroConcepto: 4,
-          fuente: "AP_G_FONDOS_ALTBAJ (CVE_MOVIMIENTO = 'BA')",
-          calcular: () => this.revisionRepo.calcularAltasBajas(tarea, 'BA')
-        },
-        {
-          numeroConcepto: 5,
-          fuente: "AP_G_FONDOS_ALTBAJ (CVE_MOVIMIENTO = 'LB')",
-          calcular: () => this.revisionRepo.calcularAltasBajas(tarea, 'LB')
         },
         {
           numeroConcepto: 6,
@@ -148,9 +128,12 @@ export class RevisionWorker {
           calcular: () => this.revisionRepo.calcularLiberacionRetenciones(tarea)
         }
       ];
+      // Los conceptos 1, 3, 4 y 5 son evidencia del cierre de movimientos y QNA no debe recalcularlos.
+      const conceptosGestionadosPorMovimientos = [1, 3, 4, 5];
       // El concepto 14 se captura administrativamente y no participa en el cálculo automático.
       const conceptosDisponibles = new Set([
         ...definicionesDisponibles.map((definicion) => definicion.numeroConcepto),
+        ...conceptosGestionadosPorMovimientos,
         14
       ]);
       const activosSinImplementacion = [...activos.keys()].filter((numero) => !conceptosDisponibles.has(numero));
